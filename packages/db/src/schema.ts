@@ -261,3 +261,18 @@ export const jobPhotos = pgTable('job_photos', {
   type: varchar('type', { length: 50 }).notNull().default('progress'), // before, after, progress
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// Change orders
+export const changeOrders = pgTable('change_orders', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  estimateId: uuid('estimate_id').references(() => estimates.id).notNull(),
+  description: text('description').notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  status: varchar('status', { length: 50 }).notNull().default('pending'), // pending, approved, rejected, completed
+  requestedAt: timestamp('requested_at').defaultNow().notNull(),
+  approvedAt: timestamp('approved_at'),
+  createdBy: varchar('created_by', { length: 100 }).notNull(), // contractor or customer
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
