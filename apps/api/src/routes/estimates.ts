@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { estimates, leads } from '@paintflow/db/schema';
+import { estimates, leads, orgBranding } from '@paintflow/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -17,6 +17,10 @@ estimatesApp.get('/:id/public', async (c) => {
     where: eq(estimates.id, id),
   });
   
+  const branding = await db.query.orgBranding.findFirst({
+    where: eq(orgBranding.orgId, estimate.orgId),
+  });
+  
   if (!estimate) {
     return c.json({ error: 'Not found' }, 404);
   }
@@ -30,6 +34,11 @@ estimatesApp.get('/:id/public', async (c) => {
       createdAt: estimate.createdAt,
       signedName: estimate.signedName,
       signedAt: estimate.signedAt,
+      branding: branding ? {
+        logoUrl: branding.logoUrl,
+        primaryColor: branding.primaryColor,
+        companyName: branding.companyName,
+      } : null,
     }
   });
 });
