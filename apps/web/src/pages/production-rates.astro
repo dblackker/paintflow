@@ -1,13 +1,9 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Production Rates - PaintFlow</title>
-  </head>
-  <body class="min-h-screen bg-gray-50">
+<Base title="Production Rates">
+  <div class="min-h-screen bg-gray-50">
     <nav class="bg-white shadow-sm border-b">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16 items-center">
@@ -23,9 +19,12 @@
     </nav>
 
     <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">Production Rates</h2>
-        <p class="text-gray-600">Standard hours per unit for estimating</p>
+      <div class="flex justify-between items-center mb-6">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900">Production Rates</h2>
+          <p class="text-gray-600">Standard hours per unit for estimating</p>
+        </div>
+        <button id="add-rate" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Add Rate</button>
       </div>
 
       <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
@@ -36,41 +35,163 @@
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hours/Unit</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+              <th class="px-6 py-3"></th>
             </tr>
           </thead>
           <tbody id="rates-table" class="divide-y">
-            <tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">Loading...</td></tr>
+            <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">Loading...</td></tr>
           </tbody>
         </table>
       </div>
     </main>
 
-    <script>
-      const rates = [
-        { task: 'Interior Wall Painting', unit: 'sq ft', hours: 0.008, category: 'Interior' },
-        { task: 'Interior Ceiling Painting', unit: 'sq ft', hours: 0.010, category: 'Interior' },
-        { task: 'Interior Trim Painting', unit: 'lin ft', hours: 0.025, category: 'Interior' },
-        { task: 'Exterior Siding Painting', unit: 'sq ft', hours: 0.012, category: 'Exterior' },
-        { task: 'Exterior Trim Painting', unit: 'lin ft', hours: 0.030, category: 'Exterior' },
-        { task: 'Deck Staining', unit: 'sq ft', hours: 0.015, category: 'Exterior' },
-        { task: 'Cabinet Painting (per door)', unit: 'each', hours: 1.5, category: 'Cabinet' },
-        { task: 'Cabinet Painting (per drawer)', unit: 'each', hours: 0.75, category: 'Cabinet' },
-        { task: 'Wallpaper Removal', unit: 'sq ft', hours: 0.020, category: 'Prep' },
-        { task: 'Drywall Repair (small)', unit: 'each', hours: 0.5, category: 'Prep' },
-        { task: 'Drywall Repair (large)', unit: 'each', hours: 2.0, category: 'Prep' },
-        { task: 'Power Washing', unit: 'sq ft', hours: 0.005, category: 'Prep' },
-        { task: 'Caulking', unit: 'lin ft', hours: 0.010, category: 'Prep' },
-      ];
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-lg p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-4" id="modal-title">Add Production Rate</h3>
+        <form id="rate-form" class="space-y-4">
+          <input type="hidden" name="id" />
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Task *</label>
+            <input name="task" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
+              <input name="unit" required placeholder="sq ft" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Hours/Unit *</label>
+              <input name="hoursPerUnit" type="number" step="0.001" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <input name="category" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="flex gap-3 pt-4">
+            <button type="button" id="cancel" class="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
-      const tbody = document.getElementById('rates-table');
-      tbody.innerHTML = rates.map(r => `
-        <tr class="hover:bg-gray-50">
-          <td class="px-6 py-4 text-sm font-medium">${r.task}</td>
-          <td class="px-6 py-4 text-sm text-gray-600">${r.unit}</td>
-          <td class="px-6 py-4 text-sm">${r.hours}</td>
-          <td class="px-6 py-4 text-sm"><span class="px-2 py-1 text-xs rounded-full bg-gray-100">${r.category}</span></td>
-        </tr>
-      `).join('');
-    </script>
-  </body>
-</html>
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    let rates = [];
+    
+    async function loadRates() {
+      try {
+        const res = await fetch(`${API_URL}/v1/production-rates`, { credentials: 'include' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        const { data } = await res.json();
+        rates = data;
+        
+        const tbody = document.getElementById('rates-table');
+        if (rates.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">No rates yet. Add your first rate!</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = rates.map(r => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 text-sm font-medium">${r.task}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">${r.unit}</td>
+            <td class="px-6 py-4 text-sm">${parseFloat(r.hoursPerUnit).toFixed(3)}</td>
+            <td class="px-6 py-4 text-sm"><span class="px-2 py-1 text-xs rounded-full bg-gray-100">${r.category || '-'}</span></td>
+            <td class="px-6 py-4 text-right space-x-2">
+              <button onclick="editRate('${r.id}')" class="text-blue-600 hover:text-blue-700 text-sm">Edit</button>
+              <button onclick="deleteRate('${r.id}')" class="text-red-600 hover:text-red-700 text-sm">Delete</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load rates', err);
+        window.showToast('Failed to load rates', 'error');
+      }
+    }
+    
+    const modal = document.getElementById('modal');
+    const form = document.getElementById('rate-form');
+    
+    document.getElementById('add-rate')?.addEventListener('click', () => {
+      form.reset();
+      form.id.value = '';
+      document.getElementById('modal-title').textContent = 'Add Production Rate';
+      modal.classList.remove('hidden');
+    });
+    
+    document.getElementById('cancel')?.addEventListener('click', () => modal.classList.add('hidden'));
+    
+    window.editRate = (id) => {
+      const rate = rates.find(r => r.id === id);
+      if (!rate) return;
+      form.id.value = rate.id;
+      form.task.value = rate.task;
+      form.unit.value = rate.unit;
+      form.hoursPerUnit.value = rate.hoursPerUnit;
+      form.category.value = rate.category || '';
+      document.getElementById('modal-title').textContent = 'Edit Production Rate';
+      modal.classList.remove('hidden');
+    };
+    
+    window.deleteRate = async (id) => {
+      if (!confirm('Delete this rate?')) return;
+      try {
+        const res = await fetch(`${API_URL}/v1/production-rates/${id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          window.showToast('Rate deleted');
+          loadRates();
+        } else {
+          window.showToast('Failed to delete', 'error');
+        }
+      } catch (err) {
+        window.showToast('Failed to delete', 'error');
+      }
+    };
+    
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const data = {
+        task: formData.get('task'),
+        unit: formData.get('unit'),
+        hoursPerUnit: parseFloat(formData.get('hoursPerUnit')),
+        category: formData.get('category') || undefined,
+      };
+      
+      const id = formData.get('id');
+      const method = id ? 'PUT' : 'POST';
+      const url = id ? `${API_URL}/v1/production-rates/${id}` : `${API_URL}/v1/production-rates`;
+      
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(data),
+        });
+        
+        if (res.ok) {
+          window.showToast(id ? 'Rate updated' : 'Rate added');
+          modal.classList.add('hidden');
+          form.reset();
+          loadRates();
+        } else {
+          window.showToast('Failed to save', 'error');
+        }
+      } catch (err) {
+        window.showToast('Failed to save', 'error');
+      }
+    });
+    
+    loadRates();
+  </script>
+</Base>
