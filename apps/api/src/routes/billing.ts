@@ -4,12 +4,12 @@ import { estimates } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { createCheckoutSession, verifyWebhookSignature } from '../lib/stripe';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-billing.use('*', authMiddleware);
+billing.use('/checkout', authMiddleware);
 
-// POST /v1/billing/checkout
 billing.post('/checkout', async (c) => {
   const orgId = c.get('orgId');
   const { estimateId, packageName } = await c.req.json();
@@ -29,43 +29,61 @@ billing.post('/checkout', async (c) => {
     return c.json({ error: 'Package not found' }, 404);
   }
   
-  // Create Stripe Checkout Session
-  // const session = await stripe.checkout.sessions.create({
-  //   mode: 'payment',
-  //   line_items: [{
-  //     price_data: {
-  //       currency: 'usd',
-  //       product_data: { name: `${packageName} Package` },
-  //       unit_amount: Math.round(pkg.total * 100),
-  //     },
-  //     quantity: 1,
-  //   }],
-  //   success_url: `${c.env.APP_URL}/estimates/${estimateId}/success`,
-  //   cancel_url: `${c.env.APP_URL}/estimates/${estimateId}`,
-  //   metadata: { estimateId, orgId },
-  // });
-  
-  // For now, return mock
-  return c.json({ 
-    checkoutUrl: `https://checkout.stripe.com/pay/mock_${estimateId}`,
-    amount: pkg.total,
-  });
+  try {
+    const session = await createCheckoutSession(c.env, {
+      amount: pkg.total,
+      successUrl: `${c.env.APP_URL}/estimates/${estimateId}/success`,
+      cancelUrl: `${c.env.APP_URL}/estimates/${estimateId}`,
+      metadata: { estimateId, orgId, packageName },
+    });
+    
+    return c.json({ 
+      checkoutUrl: session.url,
+      sessionId: session.id,
+    });
+  } catch (err) {
+    console.error('Checkout error:', err);
+    return c.json({ error: 'Failed to create checkout session' }, 500);
+  }
 });
 
-// POST /v1/billing/webhook
 billing.post('/webhook', async (c) => {
-  // Verify Stripe signature
-  // const sig = c.req.header('stripe-signature');
-  // const body = await c.req.text();
+  const sig = c.req.header('stripe-signature');
+  const body = await c.req.text();
   
-  // const event = stripe.webhooks.constructEvent(body, sig, env.STRIPE_WEBHOOK_SECRET);
+  if (!sig) {
+    return c.json({ error: 'Missing signature' }, 400);
+  }
   
-  // if (event.type === 'checkout.session.completed') {
-  //   const { estimateId } = event.data.object.metadata;
-  //   await db.update(estimates).set({ status: 'accepted' }).where(eq(estimates.id, estimateId));
-  // }
-  
-  return c.json({ received: true });
+  try {
+    const isValid = await verifyWebhookSignature(
+      body,
+      sig,
+      c.env.STRIPE_WEBHOOK_SECRET
+    );
+    
+    if (!isValid) {
+      return c.json({ error: 'Invalid signature' }, 400);
+    }
+    
+    const event = JSON.parse(body);
+    
+    if (event.type === 'checkout.session.completed') {
+      const { estimateId } = event.data.object.metadata;
+      
+      const db = createDb(c.env.DATABASE_URL);
+      await db.update(estimates)
+        .set({ status: 'accepted' })
+        .where(eq(estimates.id, estimateId));
+      
+      console.log(`Estimate ${estimateId} marked as accepted`);
+    }
+    
+    return c.json({ received: true });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    return c.json({ error: 'Webhook handler failed' }, 500);
+  }
 });
 
 export default billing;
