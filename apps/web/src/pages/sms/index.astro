@@ -1,13 +1,9 @@
 ---
+import Base from '../../layouts/Base.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>SMS - PaintFlow</title>
-  </head>
-  <body class="min-h-screen bg-gray-50">
+<Base title="SMS">
+  <div class="min-h-screen bg-gray-50">
     <nav class="bg-white shadow-sm border-b">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16 items-center">
@@ -25,17 +21,15 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="grid grid-cols-12 gap-6 h-[calc(100vh-12rem)]">
-        <!-- Conversations list -->
         <div class="col-span-4 bg-white rounded-lg shadow-sm border flex flex-col">
           <div class="p-4 border-b">
             <h2 class="font-semibold">Conversations</h2>
           </div>
           <div id="conversations" class="flex-1 overflow-y-auto divide-y">
-            <div class="p-8 text-center text-gray-500">No messages yet</div>
+            <div class="p-8 text-center text-gray-500">Loading...</div>
           </div>
         </div>
 
-        <!-- Message thread -->
         <div class="col-span-8 bg-white rounded-lg shadow-sm border flex flex-col">
           <div class="p-4 border-b">
             <h3 class="font-semibold" id="thread-name">Select a conversation</h3>
@@ -52,37 +46,111 @@
         </div>
       </div>
     </main>
+  </div>
 
-    <script>
-      const API_URL = 'http://localhost:8787';
-      let selectedLeadId = null;
-      
-      async function loadConversations() {
-        // TODO: Fetch conversations from API
-        // For now, show empty state
-      }
-      
-      document.getElementById('send-form')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const input = document.getElementById('message-input');
-        const body = input.value.trim();
-        if (!body || !selectedLeadId) return;
-        
-        try {
-          await fetch(`${API_URL}/v1/sms/send`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ body, leadId: selectedLeadId }),
-          });
-          input.value = '';
-          // Reload messages
-        } catch (err) {
-          console.error('Failed to send message', err);
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    let selectedLeadId = null;
+    let allMessages = [];
+    
+    async function loadConversations() {
+      try {
+        const res = await fetch(`${API_URL}/v1/sms/inbox`, { credentials: 'include' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
         }
-      });
+        const { data } = await res.json();
+        allMessages = data;
+        
+        // Group by lead
+        const conversations = {};
+        data.forEach(msg => {
+          if (msg.leadId) {
+            if (!conversations[msg.leadId]) {
+              conversations[msg.leadId] = { leadId: msg.leadId, messages: [], lastMessage: null };
+            }
+            conversations[msg.leadId].messages.push(msg);
+            if (!conversations[msg.leadId].lastMessage || new Date(msg.createdAt) > new Date(conversations[msg.leadId].lastMessage.createdAt)) {
+              conversations[msg.leadId].lastMessage = msg;
+            }
+          }
+        });
+        
+        const container = document.getElementById('conversations');
+        const convArray = Object.values(conversations).sort((a, b) => 
+          new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt)
+        );
+        
+        if (convArray.length === 0) {
+          container.innerHTML = '<div class="p-8 text-center text-gray-500">No messages yet</div>';
+          return;
+        }
+        
+        container.innerHTML = convArray.map(conv => `
+          <div class="p-4 hover:bg-gray-50 cursor-pointer" onclick="selectConversation('${conv.leadId}')">
+            <p class="font-medium text-sm">Lead ${conv.leadId.slice(0,8)}</p>
+            <p class="text-sm text-gray-600 truncate">${conv.lastMessage.body}</p>
+            <p class="text-xs text-gray-500 mt-1">${new Date(conv.lastMessage.createdAt).toLocaleDateString()}</p>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load conversations', err);
+        window.showToast('Failed to load messages', 'error');
+      }
+    }
+    
+    window.selectConversation = (leadId) => {
+      selectedLeadId = leadId;
+      const messages = allMessages.filter(m => m.leadId === leadId).sort((a, b) => 
+        new Date(a.createdAt) - new Date(b.createdAt)
+      );
       
-      loadConversations();
-    </script>
-  </body>
-</html>
+      document.getElementById('thread-name').textContent = `Lead ${leadId.slice(0,8)}`;
+      document.getElementById('message-input').disabled = false;
+      document.querySelector('#send-form button').disabled = false;
+      
+      const container = document.getElementById('messages');
+      container.innerHTML = messages.map(msg => `
+        <div class="flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
+          <div class="max-w-xs px-3 py-2 rounded-lg ${msg.direction === 'outbound' ? 'bg-blue-600 text-white' : 'bg-gray-200'}">
+            <p class="text-sm">${msg.body}</p>
+            <p class="text-xs mt-1 opacity-70">${new Date(msg.createdAt).toLocaleTimeString()}</p>
+          </div>
+        </div>
+      `).join('');
+      
+      container.scrollTop = container.scrollHeight;
+    };
+    
+    document.getElementById('send-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('message-input');
+      const body = input.value.trim();
+      if (!body || !selectedLeadId) return;
+      
+      try {
+        const res = await fetch(`${API_URL}/v1/sms/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ body, leadId: selectedLeadId, to: '' }),
+        });
+        
+        if (res.ok) {
+          input.value = '';
+          loadConversations();
+          setTimeout(() => window.selectConversation(selectedLeadId), 500);
+        } else {
+          window.showToast('Failed to send message', 'error');
+        }
+      } catch (err) {
+        console.error('Failed to send message', err);
+        window.showToast('Failed to send message', 'error');
+      }
+    });
+    
+    loadConversations();
+    setInterval(loadConversations, 10000);
+  </script>
+</Base>
