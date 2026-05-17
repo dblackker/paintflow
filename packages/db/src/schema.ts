@@ -138,3 +138,13 @@ export const productionRates = pgTable('production_rates', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const orgBranding = pgTable('org_branding', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull().unique(),
+  logoUrl: text('logo_url'),
+  primaryColor: varchar('primary_color', { length: 7 }),
+  companyName: varchar('company_name', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
