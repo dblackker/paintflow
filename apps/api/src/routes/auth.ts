@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { createSession } from '../auth';
 import type { Env } from '../types';
+import { createDb } from '@paintflow/db';
+import { users, organizations, memberships } from '@paintflow/db/schema';
+import { eq } from 'drizzle-orm';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -12,11 +15,42 @@ auth.post('/magic-link', async (c) => {
     return c.json({ error: 'Email required' }, 400);
   }
   
-  // TODO: Lookup or create user in DB
-  // const user = await findOrCreateUser(email);
-  // For now, mock user/org IDs
-  const userId = '00000000-0000-0000-0000-000000000001';
-  const orgId = '00000000-0000-0000-0000-000000000001';
+  const db = createDb(c.env.DATABASE_URL);
+  
+  // Find or create user
+  let user = await db.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase()),
+  });
+  
+  let orgId: string;
+  
+  if (!user) {
+    // Create new user and org
+    const [newUser] = await db.insert(users).values({
+      email: email.toLowerCase(),
+      name: email.split('@')[0],
+    }).returning();
+    
+    const [org] = await db.insert(organizations).values({
+      name: `${newUser.name}'s Painting Co`,
+      slug: `org-${crypto.randomUUID().slice(0, 8)}`,
+    }).returning();
+    
+    await db.insert(memberships).values({
+      userId: newUser.id,
+      orgId: org.id,
+      role: 'owner',
+    });
+    
+    user = newUser;
+    orgId = org.id;
+  } else {
+    // Get user's org
+    const membership = await db.query.memberships.findFirst({
+      where: eq(memberships.userId, user.id),
+    });
+    orgId = membership?.orgId || '';
+  }
   
   // Generate magic link token
   const token = crypto.randomUUID();
@@ -24,15 +58,13 @@ auth.post('/magic-link', async (c) => {
   // Store in KV with 15 min TTL
   await c.env.KV.put(
     `magic:${token}`,
-    JSON.stringify({ email, userId, orgId }),
+    JSON.stringify({ email, userId: user.id, orgId }),
     { expirationTtl: 900 }
   );
   
   // TODO: Send email via Resend
   // const magicLink = `${c.env.APP_URL}/auth/verify?token=${token}`;
-  // await resend.emails.send({...});
   
-  // For dev, return token in response
   return c.json({ 
     success: true, 
     message: 'Magic link sent to email',
@@ -48,7 +80,6 @@ auth.get('/verify', async (c) => {
     return c.json({ error: 'Token required' }, 400);
   }
   
-  // Verify token from KV
   const data = await c.env.KV.get(`magic:${token}`);
   
   if (!data) {
@@ -57,16 +88,12 @@ auth.get('/verify', async (c) => {
   
   const { email, userId, orgId } = JSON.parse(data);
   
-  // Delete used token
   await c.env.KV.delete(`magic:${token}`);
   
-  // Create session
   const sessionToken = await createSession(c.env, userId, orgId, email);
   
-  // Set cookie
   c.header('Set-Cookie', `session=${sessionToken}; HttpOnly; Secure; SameSite=Lax; Max-Age=604800; Path=/`);
   
-  // Redirect to app
   return c.redirect('/dashboard');
 });
 

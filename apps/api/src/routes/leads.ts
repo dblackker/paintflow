@@ -1,7 +1,15 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { createDb } from '@paintflow/db';
+import { leads } from '@paintflow/db/schema';
+import { eq, desc } from 'drizzle-orm';
+import type { Env, Variables } from '../types';
+import { authMiddleware } from '../middleware/tenant';
 
-const leads = new Hono();
+const leadsApp = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// All routes require auth
+leadsApp.use('*', authMiddleware);
 
 const createLeadSchema = z.object({
   name: z.string().min(1),
@@ -10,18 +18,25 @@ const createLeadSchema = z.object({
   source: z.string().optional(),
 });
 
-leads.get('/', async (c) => {
-  // TODO: Get orgId from context, query DB with RLS
-  // const orgId = c.get('orgId');
-  // const leads = await db.select().from(leads).where(eq(leads.orgId, orgId));
+leadsApp.get('/', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const results = await db
+    .select()
+    .from(leads)
+    .where(eq(leads.orgId, orgId))
+    .orderBy(desc(leads.createdAt))
+    .limit(50);
   
   return c.json({
-    data: [],
-    meta: { total: 0 }
+    data: results,
+    meta: { total: results.length }
   });
 });
 
-leads.post('/', async (c) => {
+leadsApp.post('/', async (c) => {
+  const orgId = c.get('orgId');
   const body = await c.req.json();
   const parsed = createLeadSchema.safeParse(body);
   
@@ -29,12 +44,15 @@ leads.post('/', async (c) => {
     return c.json({ error: 'Validation failed', details: parsed.error }, 400);
   }
   
-  // TODO: Insert into DB
-  // const lead = await db.insert(leads).values({ ...parsed.data, orgId }).returning();
+  const db = createDb(c.env.DATABASE_URL);
   
-  return c.json({ 
-    data: { id: 'temp-id', ...parsed.data, status: 'new' }
-  }, 201);
+  const [lead] = await db.insert(leads).values({
+    orgId,
+    ...parsed.data,
+    status: 'new',
+  }).returning();
+  
+  return c.json({ data: lead }, 201);
 });
 
-export default leads;
+export default leadsApp;
