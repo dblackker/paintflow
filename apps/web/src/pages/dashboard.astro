@@ -62,22 +62,43 @@
       <div class="flex gap-2">
         <button id="install-btn" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded text-sm">Install</button>
         <button id="dismiss-install" class="px-3 py-2 border rounded text-sm">Later</button>
-      </div>
-    </div>
-    
     <script>
-      // Check onboarding status
+      // Check onboarding status and show progress widget
       (async () => {
         try {
           const res = await fetch('http://localhost:8787/v1/settings/org', { credentials: 'include' });
           if (res.ok) {
             const { data } = await res.json();
-            if (!data.companyName) {
+            const completed = data.onboardingCompletedAt;
+            const hasCompany = !!data.companyName;
+            
+            if (!hasCompany && !completed) {
               window.location.href = '/onboarding';
+              return;
+            }
+            
+            if (!completed) {
+              const progress = document.createElement('div');
+              progress.className = 'bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6';
+              progress.innerHTML = `
+                <div class="flex items-start gap-3">
+                  <span class="text-2xl">⚠️</span>
+                  <div class="flex-1">
+                    <p class="font-medium text-yellow-900">Complete your setup</p>
+                    <p class="text-sm text-yellow-800 mt-1">Finish configuring PaintFlow</p>
+                    <a href="/onboarding" class="inline-block mt-2 text-sm font-medium text-yellow-900 hover:underline">Continue setup →</a>
+                  </div>
+                </div>
+              `;
+              document.querySelector('main').prepend(progress);
             }
           }
         } catch (err) {
           console.error('Failed to check onboarding status', err);
+        }
+      })();
+
+      let deferredPrompt;
         }
       })();
 

@@ -204,6 +204,9 @@ export const orgSettings = pgTable('org_settings', {
   acceptChecks: boolean('accept_checks').default(true),
   acceptCash: boolean('accept_cash').default(true),
   
+  // Onboarding
+  onboardingCompletedAt: timestamp('onboarding_completed_at'),
+  
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
@@ -244,3 +247,5 @@ export const messageTemplates = pgTable('message_templates', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// Add onboardingCompletedAt to orgSettings
