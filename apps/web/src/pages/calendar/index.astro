@@ -1,0 +1,145 @@
+---
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Calendar - PaintFlow</title>
+  </head>
+  <body class="min-h-screen bg-gray-50">
+    <nav class="bg-white shadow-sm border-b">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <div class="flex items-center space-x-8">
+            <h1 class="text-xl font-semibold">PaintFlow</h1>
+            <nav class="flex space-x-4">
+              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
+              <a href="/jobs" class="text-gray-600 hover:text-gray-900">Jobs</a>
+              <a href="/calendar" class="text-blue-600 font-medium">Calendar</a>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="mb-6 flex justify-between items-center">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900">Schedule</h2>
+          <p class="text-gray-600">Manage job scheduling</p>
+        </div>
+        <button id="sync-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          Sync with Google
+        </button>
+      </div>
+
+      <div class="grid grid-cols-12 gap-6">
+        <!-- Week view -->
+        <div class="col-span-8 bg-white rounded-lg shadow-sm border">
+          <div class="p-4 border-b flex justify-between items-center">
+            <h3 class="font-semibold">Week View</h3>
+            <div class="flex gap-2">
+              <button id="prev-week" class="px-3 py-1 text-sm border rounded hover:bg-gray-50">←</button>
+              <button id="next-week" class="px-3 py-1 text-sm border rounded hover:bg-gray-50">→</button>
+            </div>
+          </div>
+          <div id="calendar-grid" class="p-4">
+            <div class="text-center text-gray-500 py-12">Loading calendar...</div>
+          </div>
+        </div>
+
+        <!-- Job list -->
+        <div class="col-span-4 bg-white rounded-lg shadow-sm border">
+          <div class="p-4 border-b">
+            <h3 class="font-semibold">Unscheduled Jobs</h3>
+          </div>
+          <div id="unscheduled-jobs" class="p-4 space-y-3">
+            <div class="text-center text-gray-500 py-8">Loading jobs...</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const API_URL = 'http://localhost:8787';
+      let currentWeekStart = getWeekStart(new Date());
+      
+      function getWeekStart(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        return new Date(d.setDate(diff));
+      }
+      
+      async function loadCalendar() {
+        try {
+          const res = await fetch(`${API_URL}/v1/calendar/events`, { credentials: 'include' });
+          if (res.status === 401) {
+            window.location.href = '/login';
+            return;
+          }
+          const { data } = await res.json();
+          
+          // Render week view
+          const grid = document.getElementById('calendar-grid');
+          const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+          
+          grid.innerHTML = `
+            <div class="grid grid-cols-7 gap-2 mb-4">
+              ${days.map(day => `<div class="text-center text-sm font-medium text-gray-600">${day}</div>`).join('')}
+            </div>
+            <div class="grid grid-cols-7 gap-2">
+              ${Array(7).fill(0).map((_, i) => `
+                <div class="min-h-[120px] border rounded p-2 bg-gray-50">
+                  <div class="text-xs text-gray-600 mb-1">${new Date(currentWeekStart.getTime() + i * 86400000).getDate()}</div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        } catch (err) {
+          console.error('Failed to load calendar', err);
+        }
+      }
+      
+      async function loadJobs() {
+        try {
+          const res = await fetch(`${API_URL}/v1/jobs`, { credentials: 'include' });
+          const { data } = await res.json();
+          const container = document.getElementById('unscheduled-jobs');
+          
+          if (data.length === 0) {
+            container.innerHTML = '<div class="text-center text-gray-500 py-8">No jobs yet</div>';
+            return;
+          }
+          
+          container.innerHTML = data.map(job => `
+            <div class="p-3 border rounded hover:bg-gray-50 cursor-pointer" draggable="true">
+              <p class="font-medium text-sm">${job.name}</p>
+              <p class="text-xs text-gray-600">${job.status}</p>
+            </div>
+          `).join('');
+        } catch (err) {
+          console.error('Failed to load jobs', err);
+        }
+      }
+      
+      document.getElementById('prev-week')?.addEventListener('click', () => {
+        currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+        loadCalendar();
+      });
+      
+      document.getElementById('next-week')?.addEventListener('click', () => {
+        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+        loadCalendar();
+      });
+      
+      document.getElementById('sync-btn')?.addEventListener('click', () => {
+        alert('Google Calendar sync - OAuth flow would start here');
+      });
+      
+      loadCalendar();
+      loadJobs();
+    </script>
+  </body>
+</html>

@@ -9,6 +9,7 @@ import billingRoutes from './routes/billing';
 import jobsRoutes from './routes/jobs';
 import smsRoutes from './routes/sms';
 import pdfRoutes from './routes/pdf';
+import calendarRoutes from './routes/calendar';
 
 const app = new Hono();
 
@@ -40,6 +41,7 @@ app.route('/v1/estimates', estimatesRoutes);
 app.route('/v1/billing', billingRoutes);
 app.route('/v1/jobs', jobsRoutes);
 app.route('/v1/pdf', pdfRoutes);
+app.route('/v1/calendar', calendarRoutes);
 
 // Scheduled events
 export async function scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
