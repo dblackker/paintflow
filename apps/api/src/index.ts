@@ -14,7 +14,10 @@ import uploadsRoutes from './routes/uploads';
 import settingsRoutes from './routes/settings';
 import quickbooksRoutes from './routes/quickbooks';
 import productionRatesRoutes from './routes/production-rates';
+import dashboardRoutes from './routes/dashboard';
+import reviewsRoutes from './routes/reviews';
 
+import templatesRoutes from './routes/templates';
 const app = new Hono();
 
 app.use('*', cors({
@@ -47,9 +50,7 @@ app.route('/v1/uploads', uploadsRoutes);
 app.route('/v1/settings', settingsRoutes);
 app.route('/v1/quickbooks', quickbooksRoutes);
 app.route('/v1/production-rates', productionRatesRoutes);
+app.route('/v1/dashboard', dashboardRoutes);
+app.route('/v1/reviews', reviewsRoutes);
+app.route('/v1/templates', templatesRoutes);
 
-export async function scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
-  ctx.waitUntil(processDrips(env));
-}
-
-export default app;
