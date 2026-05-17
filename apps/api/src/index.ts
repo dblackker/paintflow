@@ -5,6 +5,7 @@ import { processDrips } from './cron/drips';
 import authRoutes from './routes/auth';
 import leadsRoutes from './routes/leads';
 import estimatesRoutes from './routes/estimates';
+import billingRoutes from './routes/billing';
 
 const app = new Hono();
 
@@ -17,6 +18,7 @@ app.use('*', tenantMiddleware);
 
 // Public routes
 app.route('/v1/auth', authRoutes);
+app.route('/v1/billing/webhook', billingRoutes);
 
 // Health check
 app.get('/health', (c) => {
@@ -31,8 +33,9 @@ app.get('/health', (c) => {
 // Protected routes
 app.route('/v1/leads', leadsRoutes);
 app.route('/v1/estimates', estimatesRoutes);
+app.route('/v1/billing', billingRoutes);
 
-// Scheduled events (Cloudflare Cron)
+// Scheduled events
 export async function scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
   ctx.waitUntil(processDrips(env));
 }
