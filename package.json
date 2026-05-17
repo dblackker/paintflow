@@ -1,1 +1,20 @@
-{"devDependencies":{"prettier":"^3.0.0","turbo":"^2.0.0"},"name":"paintflow","packageManager":"pnpm@9.0.0","private":true,"scripts":{"build":"turbo run build","dev":"turbo run dev","lint":"turbo run lint","test":"turbo run test"},"version":"0.1.0"}
+{
+  "name": "paintflow",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "deploy:api": "cd apps/api && wrangler deploy",
+    "deploy:web": "cd apps/web && astro build && wrangler pages deploy dist",
+    "db:push": "cd packages/db && drizzle-kit push",
+    "db:studio": "cd packages/db && drizzle-kit studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

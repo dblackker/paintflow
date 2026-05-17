@@ -1,6 +1,24 @@
 name = "paintflow-api"
 main = "src/index.ts"
-compatibility_date = "2026-05-17"
+compatibility_date = "2024-01-01"
+
+[vars]
+APP_URL = "https://paintflow.app"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "your_kv_namespace_id"
+preview_id = "your_preview_kv_namespace_id"
+
+[triggers]
+crons = ["0 9 * * *"]
 
 [env.production]
-vars = { ENVIRONMENT = "production" }
+vars = { APP_URL = "https://paintflow.app" }
+
+[env.production.kv_namespaces]
+binding = "KV"
+id = "prod_kv_namespace_id"
+
+[env.staging]
+vars = { APP_URL = "https://staging.paintflow.app" }
