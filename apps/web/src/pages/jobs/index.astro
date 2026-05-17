@@ -110,6 +110,25 @@ import Base from '../../layouts/Base.astro';
                 </div>
                 
                 <div class="flex gap-2">
+              <div class="pt-4 border-t mt-4">
+                <div class="flex justify-between items-center mb-3">
+                  <h4 class="font-medium">Photos</h4>
+                  <button onclick="document.getElementById('photo-upload-${job.id}').classList.toggle('hidden')" class="text-sm text-blue-600 hover:text-blue-700">+ Upload</button>
+                </div>
+                
+                <div id="photo-upload-${job.id}" class="hidden mb-4 p-4 bg-gray-50 rounded-lg space-y-2">
+                  <input type="file" accept="image/*" id="photo-file-${job.id}" class="text-sm">
+                  <select id="photo-type-${job.id}" class="w-full px-2 py-1 border rounded text-sm">
+                    <option value="before">Before</option>
+                    <option value="progress">Progress</option>
+                    <option value="after">After</option>
+                  </select>
+                  <input type="text" id="photo-caption-${job.id}" placeholder="Caption (optional)" class="w-full px-2 py-1 border rounded text-sm">
+                  <button onclick="uploadPhoto('${job.id}')" class="px-3 py-1 bg-blue-600 text-white rounded text-sm">Upload Photo</button>
+                </div>
+                
+                <div id="photos-${job.id}" class="grid grid-cols-3 gap-2"></div>
+              </div>
                   <button onclick="markComplete('${job.id}')" class="px-3 py-1 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200">
                     Mark Complete
                   </button>
@@ -195,3 +214,52 @@ import Base from '../../layouts/Base.astro';
     loadJobs();
   </script>
 </Base>
+
+    window.uploadPhoto = async (jobId) => {
+      const fileInput = document.getElementById(`photo-file-${jobId}`);
+      const file = fileInput.files[0];
+      if (!file) return alert('Select a photo');
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('jobId', jobId);
+      formData.append('type', document.getElementById(`photo-type-${jobId}`).value);
+      formData.append('caption', document.getElementById(`photo-caption-${jobId}`).value);
+      
+      try {
+        const res = await fetch(`${API_URL}/v1/uploads/photo`, {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        });
+        if (res.ok) {
+          window.showToast('Photo uploaded!', 'success');
+          fileInput.value = '';
+          loadJobPhotos(jobId);
+        }
+      } catch (err) {
+        window.showToast('Upload failed', 'error');
+      }
+    };
+    
+    async function loadJobPhotos(jobId) {
+      try {
+        const res = await fetch(`${API_URL}/v1/uploads/photos/${jobId}`, { credentials: 'include' });
+        const { data } = await res.json();
+        const container = document.getElementById(`photos-${jobId}`);
+        if (data.length === 0) {
+          container.innerHTML = '<p class="text-xs text-gray-500 col-span-3">No photos yet</p>';
+          return;
+        }
+        container.innerHTML = data.map(p => `
+          <div class="relative group">
+            <img src="${p.url}" class="w-full h-24 object-cover rounded" />
+            <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-xs px-1 py-0.5 rounded-b">
+              ${p.type}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load photos', err);
+      }
+    }
