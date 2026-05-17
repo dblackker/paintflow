@@ -75,6 +75,17 @@ estimatesApp.post('/:id/sign', async (c) => {
     where: eq(leads.id, estimate.leadId),
   });
   
+  // Auto-create job from accepted estimate
+  const pkg = estimate.packages.find((p: any) => p.name === packageName) || estimate.packages[0];
+  await db.insert(jobs).values({
+    orgId: estimate.orgId,
+    leadId: estimate.leadId,
+    estimateId: estimate.id,
+    name: `${lead?.name || 'Customer'} - ${pkg.name} Package`,
+    status: 'scheduled',
+    budget: pkg.total.toString(),
+  }).onConflictDoNothing();
+
   if (lead?.email) {
     try {
       const pkg = estimate.packages.find((p: any) => p.name === packageName) || estimate.packages[0];
