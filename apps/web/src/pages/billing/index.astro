@@ -1,0 +1,125 @@
+---
+import Layout from '../../components/Layout.astro';
+---
+
+<Layout title="Billing & Subscription">
+  <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-gray-900">Billing & Subscription</h1>
+      <p class="text-gray-600">Manage your PaintFlow plan</p>
+    </div>
+
+    <div id="current-plan" class="bg-white rounded-lg shadow-sm border p-6 mb-8"></div>
+
+    <h2 class="text-2xl font-bold mb-6">Upgrade Your Plan</h2>
+    <div class="grid grid-cols-3 gap-6">
+      <div class="bg-white rounded-lg shadow-sm border p-6">
+        <h3 class="text-xl font-bold">Starter</h3>
+        <div class="mt-4 mb-6">
+          <span class="text-4xl font-bold">$49</span>
+          <span class="text-gray-600">/month</span>
+        </div>
+        <ul class="space-y-2 text-sm mb-6">
+          <li>✓ Up to 3 team members</li>
+          <li>✓ 100 leads/month</li>
+          <li>✓ E-signatures</li>
+          <li>✓ Basic reports</li>
+        </ul>
+        <button onclick="subscribe('starter')" class="w-full py-2 bg-blue-600 text-white rounded-lg">Choose Starter</button>
+      </div>
+      
+      <div class="bg-white rounded-lg shadow-sm border-2 border-blue-600 p-6 relative">
+        <span class="absolute top-0 right-0 bg-blue-600 text-white text-xs px-3 py-1 rounded-bl-lg">POPULAR</span>
+        <h3 class="text-xl font-bold">Pro</h3>
+        <div class="mt-4 mb-6">
+          <span class="text-4xl font-bold">$149</span>
+          <span class="text-gray-600">/month</span>
+        </div>
+        <ul class="space-y-2 text-sm mb-6">
+          <li>✓ Unlimited team</li>
+          <li>✓ Unlimited leads</li>
+          <li>✓ QuickBooks sync</li>
+          <li>✓ Advanced reporting</li>
+          <li>✓ Priority support</li>
+        </ul>
+        <button onclick="subscribe('pro')" class="w-full py-2 bg-blue-600 text-white rounded-lg">Choose Pro</button>
+      </div>
+      
+      <div class="bg-white rounded-lg shadow-sm border p-6">
+        <h3 class="text-xl font-bold">Enterprise</h3>
+        <div class="mt-4 mb-6">
+          <span class="text-4xl font-bold">$399</span>
+          <span class="text-gray-600">/month</span>
+        </div>
+        <ul class="space-y-2 text-sm mb-6">
+          <li>✓ Everything in Pro</li>
+          <li>✓ White-label</li>
+          <li>✓ API access</li>
+          <li>✓ Dedicated CSM</li>
+        </ul>
+        <button onclick="subscribe('enterprise')" class="w-full py-2 bg-blue-600 text-white rounded-lg">Contact Sales</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    
+    async function loadSubscription() {
+      try {
+        const res = await fetch(`${API_URL}/v1/billing/subscription`, { credentials: 'include' });
+        const { data } = await res.json();
+        const container = document.getElementById('current-plan');
+        
+        if (!data) {
+          container.innerHTML = '<p class="text-gray-600">No active subscription. You are on a 14-day free trial.</p>';
+          return;
+        }
+        
+        container.innerHTML = `
+          <div class="flex justify-between items-center">
+            <div>
+              <h3 class="text-xl font-bold">${data.plan.name}</h3>
+              <p class="text-gray-600">$${data.plan.price}/month • ${data.status}</p>
+              <p class="text-sm text-gray-500 mt-1">Renews ${new Date(data.currentPeriodEnd).toLocaleDateString()}</p>
+            </div>
+            <button onclick="manageBilling()" class="px-4 py-2 border rounded-lg">Manage Billing</button>
+          </div>
+        `;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    
+    window.subscribe = async (plan) => {
+      if (plan === 'enterprise') {
+        window.location.href = 'mailto:sales@paintflow.app';
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${API_URL}/v1/billing/create-checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ plan }),
+        });
+        const { url } = await res.json();
+        window.location.href = url;
+      } catch (err) {
+        alert('Failed to start checkout');
+      }
+    };
+    
+    window.manageBilling = async () => {
+      const res = await fetch(`${API_URL}/v1/billing/portal`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const { url } = await res.json();
+      window.location.href = url;
+    };
+    
+    loadSubscription();
+  </script>
+</Layout>
