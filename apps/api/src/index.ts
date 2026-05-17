@@ -17,6 +17,7 @@ import productionRatesRoutes from './routes/production-rates';
 import dashboardRoutes from './routes/dashboard';
 import reviewsRoutes from './routes/reviews';
 
+import changeOrdersRoute from './routes/change-orders';
 import templatesRoutes from './routes/templates';
 const app = new Hono();
 
@@ -53,4 +54,5 @@ app.route('/v1/production-rates', productionRatesRoutes);
 app.route('/v1/dashboard', dashboardRoutes);
 app.route('/v1/reviews', reviewsRoutes);
 app.route('/v1/templates', templatesRoutes);
+app.route('/v1/change-orders', changeOrdersRoute);
 
