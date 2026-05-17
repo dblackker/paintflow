@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { tenantMiddleware } from './middleware/tenant';
+import { processDrips } from './cron/drips';
 import authRoutes from './routes/auth';
 import leadsRoutes from './routes/leads';
 import estimatesRoutes from './routes/estimates';
@@ -30,5 +31,10 @@ app.get('/health', (c) => {
 // Protected routes
 app.route('/v1/leads', leadsRoutes);
 app.route('/v1/estimates', estimatesRoutes);
+
+// Scheduled events (Cloudflare Cron)
+export async function scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
+  ctx.waitUntil(processDrips(env));
+}
 
 export default app;
