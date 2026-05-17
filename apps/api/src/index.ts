@@ -10,6 +10,7 @@ import jobsRoutes from './routes/jobs';
 import smsRoutes from './routes/sms';
 import pdfRoutes from './routes/pdf';
 import calendarRoutes from './routes/calendar';
+import uploadsRoutes from './routes/uploads';
 
 const app = new Hono();
 
@@ -20,12 +21,10 @@ app.use('*', cors({
 
 app.use('*', tenantMiddleware);
 
-// Public routes
 app.route('/v1/auth', authRoutes);
 app.route('/v1/billing/webhook', billingRoutes);
 app.route('/v1/sms', smsRoutes);
 
-// Health check
 app.get('/health', (c) => {
   return c.json({ 
     status: 'ok', 
@@ -35,15 +34,14 @@ app.get('/health', (c) => {
   });
 });
 
-// Protected routes
 app.route('/v1/leads', leadsRoutes);
 app.route('/v1/estimates', estimatesRoutes);
 app.route('/v1/billing', billingRoutes);
 app.route('/v1/jobs', jobsRoutes);
 app.route('/v1/pdf', pdfRoutes);
 app.route('/v1/calendar', calendarRoutes);
+app.route('/v1/uploads', uploadsRoutes);
 
-// Scheduled events
 export async function scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
   ctx.waitUntil(processDrips(env));
 }
