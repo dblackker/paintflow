@@ -50,6 +50,9 @@ export const estimates = pgTable('estimates', {
   sentAt: timestamp('sent_at'),
   qboInvoiceId: varchar('qbo_invoice_id', { length: 50 }),
   qboPaymentId: varchar('qbo_payment_id', { length: 50 }),
+  signedName: varchar('signed_name', { length: 255 }),
+  signatureData: text('signature_data'),
+  signedAt: timestamp('signed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

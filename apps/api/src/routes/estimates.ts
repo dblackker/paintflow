@@ -9,6 +9,7 @@ import { sendEmail, estimateEmailTemplate } from '../lib/email';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+// Public endpoint - no auth
 estimatesApp.get('/:id/public', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
@@ -28,8 +29,38 @@ estimatesApp.get('/:id/public', async (c) => {
       total: estimate.total,
       status: estimate.status,
       createdAt: estimate.createdAt,
+      signedName: estimate.signedName,
+      signedAt: estimate.signedAt,
     }
   });
+});
+
+// Sign estimate - public endpoint
+estimatesApp.post('/:id/sign', async (c) => {
+  const id = c.req.param('id');
+  const { name, signatureData, packageName } = await c.req.json();
+  
+  if (!name || !signatureData) {
+    return c.json({ error: 'Name and signature required' }, 400);
+  }
+  
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const [estimate] = await db.update(estimates)
+    .set({
+      signedName: name,
+      signatureData,
+      signedAt: new Date(),
+      status: 'accepted',
+    })
+    .where(eq(estimates.id, id))
+    .returning();
+  
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  
+  return c.json({ data: estimate });
 });
 
 estimatesApp.use('*', authMiddleware);
