@@ -66,6 +66,21 @@
     </div>
     
     <script>
+      // Check onboarding status
+      (async () => {
+        try {
+          const res = await fetch('http://localhost:8787/v1/settings/org', { credentials: 'include' });
+          if (res.ok) {
+            const { data } = await res.json();
+            if (!data.companyName) {
+              window.location.href = '/onboarding';
+            }
+          }
+        } catch (err) {
+          console.error('Failed to check onboarding status', err);
+        }
+      })();
+
       let deferredPrompt;
       const prompt = document.getElementById('install-prompt');
       
