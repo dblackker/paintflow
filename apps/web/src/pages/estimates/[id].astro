@@ -128,6 +128,18 @@ export async function getStaticPaths() {
           
           const { data } = await res.json();
           
+          // Apply branding
+          if (data.branding?.primaryColor) {
+            document.documentElement.style.setProperty('--brand-color', data.branding.primaryColor);
+          }
+          if (data.branding?.logoUrl) {
+            const logoHtml = `<img src="${data.branding.logoUrl}" class="h-12 mb-4" alt="Logo" />`;
+            document.querySelector('h1').insertAdjacentHTML('beforebegin', logoHtml);
+          }
+          if (data.branding?.companyName) {
+            document.title = `${data.branding.companyName} - Estimate`;
+          }
+          
           if (data.signedAt) {
             document.getElementById('loading').innerHTML = '<p class="text-green-600 font-medium">✓ This estimate has been signed</p><p class="text-sm text-gray-600 mt-2">Signed by ' + data.signedName + ' on ' + new Date(data.signedAt).toLocaleDateString() + '</p>';
             return;
