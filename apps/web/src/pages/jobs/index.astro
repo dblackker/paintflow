@@ -1,0 +1,112 @@
+---
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Jobs - PaintFlow</title>
+  </head>
+  <body class="min-h-screen bg-gray-50">
+    <nav class="bg-white shadow-sm border-b">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <div class="flex items-center space-x-8">
+            <h1 class="text-xl font-semibold">PaintFlow</h1>
+            <nav class="flex space-x-4">
+              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
+              <a href="/leads" class="text-gray-600 hover:text-gray-900">Leads</a>
+              <a href="/jobs" class="text-blue-600 font-medium">Jobs</a>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="mb-6">
+        <h2 class="text-2xl font-bold text-gray-900">Job Costing</h2>
+        <p class="text-gray-600">Track budget vs actual costs</p>
+      </div>
+
+      <div id="jobs-list" class="space-y-4">
+        <div class="p-8 text-center text-gray-500">Loading jobs...</div>
+      </div>
+    </main>
+
+    <script>
+      const API_URL = 'http://localhost:8787';
+      
+      async function loadJobs() {
+        try {
+          const res = await fetch(`${API_URL}/v1/jobs`, { credentials: 'include' });
+          if (res.status === 401) {
+            window.location.href = '/login';
+            return;
+          }
+          const { data } = await res.json();
+          const container = document.getElementById('jobs-list');
+          
+          if (data.length === 0) {
+            container.innerHTML = '<div class="p-8 text-center text-gray-500">No jobs yet. Create an estimate first!</div>';
+            return;
+          }
+          
+          // Load costs for each job
+          const jobsWithCosts = await Promise.all(data.map(async job => {
+            const costRes = await fetch(`${API_URL}/v1/jobs/${job.id}/costs`, { credentials: 'include' });
+            const { data: costs } = await costRes.json();
+            return { ...job, costs };
+          }));
+          
+          container.innerHTML = jobsWithCosts.map(job => {
+            const margin = parseFloat(job.costs.margin);
+            const marginColor = margin > 30 ? 'text-green-600' : margin > 15 ? 'text-yellow-600' : 'text-red-600';
+            
+            return `
+              <div class="bg-white rounded-lg shadow-sm border p-6">
+                <div class="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 class="text-lg font-semibold">${job.name}</h3>
+                    <p class="text-sm text-gray-600">${job.status}</p>
+                  </div>
+                  <span class="text-2xl font-bold ${marginColor}">${job.costs.margin}</span>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p class="text-gray-600">Budget</p>
+                    <p class="font-semibold">$${Number(job.costs.budget).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p class="text-gray-600">Actual Cost</p>
+                    <p class="font-semibold">$${Number(job.costs.costs.total).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p class="text-gray-600">Profit</p>
+                    <p class="font-semibold">$${Number(job.costs.profit).toFixed(2)}</p>
+                  </div>
+                </div>
+                
+                <div class="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p class="text-gray-600">Labor</p>
+                    <p class="font-medium">$${Number(job.costs.costs.labor).toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p class="text-gray-600">Materials</p>
+                    <p class="font-medium">$${Number(job.costs.costs.materials).toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } catch (err) {
+          console.error('Failed to load jobs', err);
+        }
+      }
+      
+      loadJobs();
+    </script>
+  </body>
+</html>
