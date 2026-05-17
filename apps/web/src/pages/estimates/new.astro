@@ -31,79 +31,97 @@
       <form id="estimate-form" class="space-y-6">
         <div class="bg-white rounded-lg shadow-sm border p-6">
           <label class="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-          <select name="leadId" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
-            <option value="">Select lead...</option>
+          <select name="leadId" id="lead-select" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+            <option value="">Loading leads...</option>
           </select>
         </div>
 
         <!-- Good Package -->
-        <div class="bg-white rounded-lg shadow-sm border p-6">
+        <div class="bg-white rounded-lg shadow-sm border p-6" data-package="good">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-900">Good Package</h3>
-            <span class="text-2xl font-bold" id="good-total">$0</span>
+            <span class="text-2xl font-bold" id="good-total">$0.00</span>
           </div>
-          <div id="good-items" class="space-y-3">
-            <div class="flex gap-3">
+          <div class="space-y-3" data-items>
+            <div class="flex gap-3 items-center">
               <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-              <input placeholder="Qty" type="number" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-              <input placeholder="Rate" type="number" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
+              <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
+              <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
             </div>
           </div>
-          <button type="button" data-add="good" class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
+          <button type="button" data-add class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
         </div>
 
         <!-- Better Package -->
-        <div class="bg-white rounded-lg shadow-sm border p-6">
+        <div class="bg-white rounded-lg shadow-sm border p-6 border-blue-200 ring-1 ring-blue-100" data-package="better">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-900">Better Package ⭐ Recommended</h3>
-            <span class="text-2xl font-bold" id="better-total">$0</span>
+            <span class="text-2xl font-bold" id="better-total">$0.00</span>
           </div>
-          <div id="better-items" class="space-y-3">
-            <div class="flex gap-3">
+          <div class="space-y-3" data-items>
+            <div class="flex gap-3 items-center">
               <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-              <input placeholder="Qty" type="number" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-              <input placeholder="Rate" type="number" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
+              <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
+              <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
             </div>
           </div>
-          <button type="button" data-add="better" class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
+          <button type="button" data-add class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
         </div>
 
         <!-- Best Package -->
-        <div class="bg-white rounded-lg shadow-sm border p-6">
+        <div class="bg-white rounded-lg shadow-sm border p-6" data-package="best">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-900">Best Package</h3>
-            <span class="text-2xl font-bold" id="best-total">$0</span>
+            <span class="text-2xl font-bold" id="best-total">$0.00</span>
           </div>
-          <div id="best-items" class="space-y-3">
-            <div class="flex gap-3">
+          <div class="space-y-3" data-items>
+            <div class="flex gap-3 items-center">
               <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-              <input placeholder="Qty" type="number" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-              <input placeholder="Rate" type="number" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
+              <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
+              <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
             </div>
           </div>
-          <button type="button" data-add="best" class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
+          <button type="button" data-add class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
         </div>
 
         <div class="flex gap-3">
           <button type="button" id="save-draft" class="flex-1 px-4 py-3 border rounded-lg hover:bg-gray-50">Save Draft</button>
-          <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Send Estimate</button>
+          <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create Estimate</button>
         </div>
       </form>
     </main>
 
     <script>
+      const API_URL = 'http://localhost:8787';
+      
+      // Load leads
+      async function loadLeads() {
+        try {
+          const res = await fetch(`${API_URL}/v1/leads`, { credentials: 'include' });
+          if (res.status === 401) {
+            window.location.href = '/login';
+            return;
+          }
+          const { data } = await res.json();
+          const select = document.getElementById('lead-select');
+          select.innerHTML = '<option value="">Select lead...</option>' + 
+            data.map(l => `<option value="${l.id}">${l.name} ${l.phone ? `(${l.phone})` : ''}</option>`).join('');
+        } catch (err) {
+          console.error('Failed to load leads', err);
+        }
+      }
+      
       // Add line items
       document.querySelectorAll('[data-add]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const pkg = btn.getAttribute('data-add');
-          const container = document.getElementById(`${pkg}-items`);
+          const container = btn.previousElementSibling;
           const div = document.createElement('div');
-          div.className = 'flex gap-3';
+          div.className = 'flex gap-3 items-center';
           div.innerHTML = `
             <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-            <input placeholder="Qty" type="number" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-            <input placeholder="Rate" type="number" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
-            <button type="button" class="text-red-600 hover:text-red-700" onclick="this.parentElement.remove(); calculateTotals()">×</button>
+            <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
+            <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
+            <button type="button" class="text-red-600 hover:text-red-700 px-2" onclick="this.parentElement.remove(); calculateTotals()">×</button>
           `;
           container.appendChild(div);
         });
@@ -112,9 +130,10 @@
       // Calculate totals
       function calculateTotals() {
         ['good', 'better', 'best'].forEach(pkg => {
-          const container = document.getElementById(`${pkg}-items`);
+          const section = document.querySelector(`[data-package="${pkg}"]`);
+          const items = section.querySelectorAll('[data-items] > div');
           let total = 0;
-          container.querySelectorAll('div').forEach(row => {
+          items.forEach(row => {
             const qty = parseFloat(row.querySelector('[data-field="qty"]')?.value || '0');
             const rate = parseFloat(row.querySelector('[data-field="rate"]')?.value || '0');
             total += qty * rate;
@@ -125,12 +144,67 @@
 
       document.addEventListener('input', calculateTotals);
 
+      // Collect package data
+      function collectPackages() {
+        const packages = [];
+        ['good', 'better', 'best'].forEach(pkg => {
+          const section = document.querySelector(`[data-package="${pkg}"]`);
+          const items = [];
+          section.querySelectorAll('[data-items] > div').forEach(row => {
+            const desc = row.querySelector('[data-field="desc"]')?.value;
+            const qty = parseFloat(row.querySelector('[data-field="qty"]')?.value || '0');
+            const rate = parseFloat(row.querySelector('[data-field="rate"]')?.value || '0');
+            if (desc && qty > 0 && rate > 0) {
+              items.push({ desc, qty, rate });
+            }
+          });
+          if (items.length > 0) {
+            const total = items.reduce((sum, i) => sum + i.qty * i.rate, 0);
+            packages.push({ name: pkg, items, total });
+          }
+        });
+        return packages;
+      }
+
       // Form submit
       document.getElementById('estimate-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        // TODO: Collect packages data and POST to /v1/estimates
-        alert('Estimate builder ready! API integration pending.');
+        const formData = new FormData(e.target);
+        const leadId = formData.get('leadId');
+        const packages = collectPackages();
+        
+        if (!leadId) {
+          alert('Please select a customer');
+          return;
+        }
+        
+        if (packages.length === 0) {
+          alert('Please add at least one line item');
+          return;
+        }
+        
+        try {
+          const res = await fetch(`${API_URL}/v1/estimates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ leadId, packages }),
+          });
+          
+          if (res.ok) {
+            const { data } = await res.json();
+            alert(`Estimate created! ID: ${data.id}`);
+            window.location.href = '/dashboard';
+          } else {
+            alert('Failed to create estimate');
+          }
+        } catch (err) {
+          console.error('Failed to create estimate', err);
+          alert('Error creating estimate');
+        }
       });
+      
+      loadLeads();
     </script>
   </body>
 </html>
