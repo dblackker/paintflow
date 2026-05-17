@@ -199,3 +199,65 @@ export async function getCompanyInfo(env: any, accessToken: string, realmId: str
   
   return await response.json();
 }
+
+export async function createQBPayment(env: any, orgId: string, estimate: any, amount: number, paymentDate: string) {
+  const accessToken = await getValidAccessToken(env, orgId);
+  const base = getQbBase(env);
+  
+  const connection = await createDb(env.DATABASE_URL).query.quickbooksConnections.findFirst({
+    where: eq(quickbooksConnections.orgId, orgId),
+  });
+  
+  if (!estimate.qboInvoiceId) {
+    throw new Error('Invoice must be synced before payment');
+  }
+  
+  const payload = {
+    CustomerRef: {
+      value: estimate.qboCustomerId || await createQBCustomer(env, orgId, await createDb(env.DATABASE_URL).query.leads.findFirst({ where: eq(leads.id, estimate.leadId) })),
+    },
+    TotalAmt: amount,
+    TxnDate: paymentDate,
+    Line: [
+      {
+        Amount: amount,
+        LinkedTxn: [
+          {
+            TxnId: estimate.qboInvoiceId,
+            TxnType: 'Invoice',
+          },
+        ],
+      },
+    ],
+  };
+  
+  const response = await fetch(
+    `${base}/v3/company/${connection!.realmId}/payment`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('QB payment create error:', error);
+    throw new Error('Failed to create QB payment');
+  }
+  
+  const result = await response.json();
+  const paymentId = result.Payment.Id;
+  
+  // Save payment ID
+  const db = createDb(env.DATABASE_URL);
+  await db.update(estimates)
+    .set({ qboPaymentId: paymentId })
+    .where(eq(estimates.id, estimate.id));
+  
+  return paymentId;
+}

@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createCheckoutSession, verifyWebhookSignature } from '../lib/stripe';
-import { createQBInvoice } from '../lib/quickbooks';
+import { createQBInvoice, createQBPayment } from '../lib/quickbooks';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -70,7 +70,8 @@ billing.post('/webhook', async (c) => {
     const event = JSON.parse(body);
     
     if (event.type === 'checkout.session.completed') {
-      const { estimateId, orgId } = event.data.object.metadata;
+      const { estimateId, orgId, packageName } = event.data.object.metadata;
+      const amountTotal = event.data.object.amount_total / 100;
       
       const db = createDb(c.env.DATABASE_URL);
       
@@ -96,8 +97,14 @@ billing.post('/webhook', async (c) => {
             where: eq(leads.id, estimate!.leadId),
           });
           
+          // Sync invoice
           const invoiceId = await createQBInvoice(c.env, orgId, estimate, lead);
           console.log(`Auto-synced invoice ${invoiceId} to QuickBooks`);
+          
+          // Sync payment
+          const paymentDate = new Date().toISOString().split('T')[0];
+          const paymentId = await createQBPayment(c.env, orgId, { ...estimate, qboInvoiceId: invoiceId }, amountTotal, paymentDate);
+          console.log(`Auto-synced payment ${paymentId} to QuickBooks`);
         } catch (qbErr) {
           console.error('QB auto-sync failed:', qbErr);
           // Don't fail webhook if QB sync fails

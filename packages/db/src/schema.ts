@@ -49,6 +49,7 @@ export const estimates = pgTable('estimates', {
   status: estimateStatusEnum('status').notNull().default('draft'),
   sentAt: timestamp('sent_at'),
   qboInvoiceId: varchar('qbo_invoice_id', { length: 50 }),
+  qboPaymentId: varchar('qbo_payment_id', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
