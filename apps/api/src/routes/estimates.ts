@@ -8,6 +8,31 @@ import { authMiddleware } from '../middleware/tenant';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+// Public route - no auth
+estimatesApp.get('/:id/public', async (c) => {
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const estimate = await db.query.estimates.findFirst({
+    where: eq(estimates.id, id),
+  });
+  
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  
+  // Only return safe fields
+  return c.json({ 
+    data: {
+      id: estimate.id,
+      packages: estimate.packages,
+      total: estimate.total,
+      status: estimate.status,
+      createdAt: estimate.createdAt,
+    }
+  });
+});
+
 estimatesApp.use('*', authMiddleware);
 
 const lineItemSchema = z.object({
@@ -71,13 +96,9 @@ estimatesApp.post('/:id/send', async (c) => {
   
   const db = createDb(c.env.DATABASE_URL);
   
-  // TODO: Update status to 'sent', trigger drip enrollment
   await db.update(estimates)
     .set({ status: 'sent', sentAt: new Date() })
     .where(eq(estimates.id, id));
-  
-  // TODO: Enqueue drip follow-up job
-  // await c.env.QUEUE.send({ type: 'estimate_sent', estimateId: id });
   
   return c.json({ success: true });
 });
