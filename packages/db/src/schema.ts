@@ -53,6 +53,8 @@ export const estimates = pgTable('estimates', {
   signedName: varchar('signed_name', { length: 255 }),
   signatureData: text('signature_data'),
   signedAt: timestamp('signed_at'),
+  signedIp: varchar('signed_ip', { length: 45 }),
+  signedUserAgent: text('signed_user_agent'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
