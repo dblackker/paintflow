@@ -1,0 +1,6 @@
+name = "paintflow-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-17"
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
