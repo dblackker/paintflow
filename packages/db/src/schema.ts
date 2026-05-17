@@ -148,3 +148,14 @@ export const orgBranding = pgTable('org_branding', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const googleCalendarConnections = pgTable('google_calendar_connections', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull().unique(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token').notNull(),
+  tokenExpiresAt: timestamp('token_expires_at').notNull(),
+  calendarId: varchar('calendar_id', { length: 255 }).notNull().default('primary'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
