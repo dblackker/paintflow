@@ -1,1 +1,75 @@
-# PaintFlow\n\nMulti-tenant SaaS for solopreneur painting contractors.
+# PaintFlow
+
+Multi-tenant SaaS for solopreneur painting contractors. Cloudflare-first, PWA, edge-native.
+
+**Repo:** https://github.com/dblackker/paintflow
+
+## Stack
+
+- **Frontend:** Astro 5 PWA
+- **API:** Cloudflare Workers + Hono
+- **DB:** Neon Postgres + Drizzle ORM
+- **Auth:** Magic links + Workers KV sessions
+- **Multi-tenancy:** RLS with `org_id`
+
+## Quick Start
+
+```bash
+pnpm install
+pnpm dev
+```
+
+## What's Built
+
+### ✅ Auth & Multi-tenancy
+- Magic link flow with KV sessions
+- Automatic user/org creation on first login
+- RLS policies for data isolation
+- HttpOnly secure cookies
+
+### ✅ Leads Pipeline
+- `GET/POST /v1/leads` API with auth
+- Pipeline UI with add modal
+- Tenant-isolated queries
+
+### ✅ Estimates
+- Good/Better/Best builder UI with live totals
+- API for CRUD estimates with packages
+- Send endpoint triggers drip enrollment
+
+### ✅ Drip Automation
+- Cloudflare Cron scheduled handler
+- Day 1/3/7 follow-up logic
+- KV-based deduplication
+
+## Environment Variables
+
+```
+DATABASE_URL=
+KV_NAMESPACE_ID=
+RESEND_API_KEY=
+STRIPE_SECRET_KEY=
+APP_URL=http://localhost:4321
+```
+
+## Project Structure
+
+```
+paintflow/
+├── apps/web/          # Astro PWA
+├── apps/api/          # Workers API
+├── packages/db/       # Drizzle schema
+└── packages/core/     # Business logic
+```
+
+## Next Steps
+
+- Stripe Checkout integration
+- PDF generation via Browser Rendering
+- Twilio 2-way SMS
+- Job costing dashboard
+- Google Calendar sync
+
+## License
+
+Proprietary
