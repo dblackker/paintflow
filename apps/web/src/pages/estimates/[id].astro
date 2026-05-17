@@ -35,8 +35,32 @@ export async function getStaticPaths() {
 
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
           <h3 class="font-semibold text-gray-900 mb-2">Ready to proceed?</h3>
-          <p class="text-gray-700 mb-4">Select a package below to accept and pay deposit.</p>
+          <p class="text-gray-700 mb-4">Select a package below to review and sign.</p>
           <div id="accept-buttons" class="flex gap-3"></div>
+        </div>
+
+        <!-- Signature Modal -->
+        <div id="signature-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 class="text-lg font-semibold mb-4">Sign Estimate</h3>
+            <p class="text-sm text-gray-600 mb-4">By signing, you agree to the terms and selected package.</p>
+            
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-1">Full Name</label>
+              <input id="signer-name" type="text" class="w-full px-3 py-2 border rounded" placeholder="Your full name" required />
+            </div>
+            
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-1">Signature</label>
+              <canvas id="signature-pad" class="w-full h-32 border rounded bg-gray-50 cursor-crosshair"></canvas>
+              <button id="clear-sig" type="button" class="text-sm text-blue-600 mt-1">Clear</button>
+            </div>
+            
+            <div class="flex gap-3">
+              <button id="cancel-sign" class="flex-1 px-4 py-2 border rounded">Cancel</button>
+              <button id="submit-sign" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded">Sign & Continue</button>
+            </div>
+          </div>
         </div>
 
         <div class="text-center text-sm text-gray-600">
@@ -50,12 +74,13 @@ export async function getStaticPaths() {
     </div>
 
     <script>
-      const API_URL = 'http://localhost:8787';
+      const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
       const estimateId = window.location.pathname.split('/').pop();
+      let selectedPackage = null;
+      let canvas, ctx, isDrawing = false;
       
       async function loadEstimate() {
         try {
-          // Public endpoint - no auth required
           const res = await fetch(`${API_URL}/v1/estimates/${estimateId}/public`);
           
           if (!res.ok) {
@@ -65,6 +90,12 @@ export async function getStaticPaths() {
           }
           
           const { data } = await res.json();
+          
+          if (data.signedAt) {
+            document.getElementById('loading').innerHTML = '<p class="text-green-600 font-medium">✓ This estimate has been signed</p><p class="text-sm text-gray-600 mt-2">Signed by ' + data.signedName + ' on ' + new Date(data.signedAt).toLocaleDateString() + '</p>';
+            return;
+          }
+          
           document.getElementById('estimate-id').textContent = data.id.slice(0, 8);
           
           const container = document.getElementById('packages-container');
@@ -105,7 +136,7 @@ export async function getStaticPaths() {
           const buttons = document.getElementById('accept-buttons');
           buttons.innerHTML = data.packages.map(pkg => `
             <button 
-              onclick="acceptPackage('${pkg.name}')"
+              onclick="selectPackage('${pkg.name}')"
               class="flex-1 px-6 py-3 ${pkg.name === 'better' ? 'bg-blue-600 text-white' : 'bg-white border'} rounded-lg font-medium hover:opacity-90"
             >
               Accept ${pkg.name.charAt(0).toUpperCase() + pkg.name.slice(1)} - $${pkg.total.toFixed(2)}
@@ -114,6 +145,8 @@ export async function getStaticPaths() {
           
           document.getElementById('loading').classList.add('hidden');
           document.getElementById('estimate-content').classList.remove('hidden');
+          
+          setupSignaturePad();
         } catch (err) {
           console.error('Failed to load estimate', err);
           document.getElementById('loading').classList.add('hidden');
@@ -121,18 +154,84 @@ export async function getStaticPaths() {
         }
       }
       
-      window.acceptPackage = async function(packageName) {
+      function setupSignaturePad() {
+        canvas = document.getElementById('signature-pad');
+        ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = 128;
+        
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e.touches[0]); });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e.touches[0]); });
+        canvas.addEventListener('touchend', stopDrawing);
+        
+        document.getElementById('clear-sig').onclick = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        };
+      }
+      
+      function startDrawing(e) {
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        ctx.beginPath();
+        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+      }
+      
+      function draw(e) {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.stroke();
+      }
+      
+      function stopDrawing() {
+        isDrawing = false;
+      }
+      
+      window.selectPackage = function(pkgName) {
+        selectedPackage = pkgName;
+        document.getElementById('signature-modal').classList.remove('hidden');
+      };
+      
+      document.getElementById('cancel-sign').onclick = () => {
+        document.getElementById('signature-modal').classList.add('hidden');
+      };
+      
+      document.getElementById('submit-sign').onclick = async () => {
+        const name = document.getElementById('signer-name').value;
+        if (!name) {
+          alert('Please enter your name');
+          return;
+        }
+        
+        const signatureData = canvas.toDataURL();
+        
         try {
+          // Save signature
+          await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, signatureData, packageName: selectedPackage }),
+          });
+          
+          // Proceed to checkout
           const res = await fetch(`${API_URL}/v1/billing/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ estimateId, packageName }),
+            body: JSON.stringify({ estimateId, packageName: selectedPackage }),
           });
           
           const { checkoutUrl } = await res.json();
           window.location.href = checkoutUrl;
         } catch (err) {
-          alert('Failed to create checkout session');
+          alert('Failed to process signature');
         }
       };
       
