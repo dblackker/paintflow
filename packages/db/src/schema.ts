@@ -276,3 +276,42 @@ export const changeOrders = pgTable('change_orders', {
   createdBy: varchar('created_by', { length: 100 }).notNull(), // contractor or customer
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// Lead sources
+export const leadSources = pgTable('lead_sources', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 100 }).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // google_ads, facebook, referral, website, etc.
+  cost: decimal('cost', { precision: 10, scale: 2 }).default('0'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Add sourceId to leads
+export const leadsEnhanced = pgTable('leads_enhanced', {
+  // This would alter leads table
+});
+
+// SaaS plans
+export const saasPlans = pgTable('saas_plans', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 50 }).notNull(),
+  price: decimal('price', { precision: 10, scale: 2 }).notNull(),
+  interval: varchar('interval', { length: 20 }).notNull().default('month'),
+  features: jsonb('features').notNull(),
+  stripePriceId: varchar('stripe_price_id', { length: 100 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Subscriptions
+export const subscriptions = pgTable('subscriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  planId: uuid('plan_id').references(() => saasPlans.id).notNull(),
+  stripeSubscriptionId: varchar('stripe_subscription_id', { length: 100 }),
+  status: varchar('status', { length: 50 }).notNull().default('trial'), // trial, active, past_due, canceled
+  currentPeriodStart: timestamp('current_period_start'),
+  currentPeriodEnd: timestamp('current_period_end'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
