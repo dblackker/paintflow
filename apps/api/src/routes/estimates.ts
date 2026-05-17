@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { estimates } from '@paintflow/db/schema';
+import { estimates, leads } from '@paintflow/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { sendEmail, estimateEmailTemplate } from '../lib/email';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Public route - no auth
 estimatesApp.get('/:id/public', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
@@ -21,7 +21,6 @@ estimatesApp.get('/:id/public', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
   
-  // Only return safe fields
   return c.json({ 
     data: {
       id: estimate.id,
@@ -96,9 +95,30 @@ estimatesApp.post('/:id/send', async (c) => {
   
   const db = createDb(c.env.DATABASE_URL);
   
+  const estimate = await db.query.estimates.findFirst({
+    where: eq(estimates.id, id),
+  });
+  
+  if (!estimate || estimate.orgId !== orgId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  
+  const lead = await db.query.leads.findFirst({
+    where: eq(leads.id, estimate.leadId),
+  });
+  
   await db.update(estimates)
     .set({ status: 'sent', sentAt: new Date() })
     .where(eq(estimates.id, id));
+  
+  if (lead?.email) {
+    try {
+      const html = estimateEmailTemplate(estimate.id, lead.name, estimate.total);
+      await sendEmail(c.env, lead.email, 'Your Painting Estimate', html);
+    } catch (err) {
+      console.error('Failed to send email:', err);
+    }
+  }
   
   return c.json({ success: true });
 });
