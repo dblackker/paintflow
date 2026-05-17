@@ -127,3 +127,14 @@ export const orgSettings = pgTable('org_settings', {
   qbItemId: varchar('qb_item_id', { length: 50 }),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const productionRates = pgTable('production_rates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  task: varchar('task', { length: 255 }).notNull(),
+  unit: varchar('unit', { length: 50 }).notNull(),
+  hoursPerUnit: decimal('hours_per_unit', { precision: 10, scale: 3 }).notNull(),
+  category: varchar('category', { length: 100 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
