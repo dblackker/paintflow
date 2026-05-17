@@ -13,6 +13,7 @@ import calendarRoutes from './routes/calendar';
 import uploadsRoutes from './routes/uploads';
 import settingsRoutes from './routes/settings';
 import quickbooksRoutes from './routes/quickbooks';
+import productionRatesRoutes from './routes/production-rates';
 
 const app = new Hono();
 
@@ -45,6 +46,7 @@ app.route('/v1/calendar', calendarRoutes);
 app.route('/v1/uploads', uploadsRoutes);
 app.route('/v1/settings', settingsRoutes);
 app.route('/v1/quickbooks', quickbooksRoutes);
+app.route('/v1/production-rates', productionRatesRoutes);
 
 export async function scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
   ctx.waitUntil(processDrips(env));
