@@ -1,13 +1,9 @@
 ---
+import Base from '../../layouts/Base.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Jobs - PaintFlow</title>
-  </head>
-  <body class="min-h-screen bg-gray-50">
+<Base title="Jobs">
+  <div class="min-h-screen bg-gray-50">
     <nav class="bg-white shadow-sm border-b">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16 items-center">
@@ -33,197 +29,169 @@
         <div class="p-8 text-center text-gray-500">Loading jobs...</div>
       </div>
     </main>
+  </div>
 
-    <script>
-      const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
-      
-      async function loadJobs() {
-        try {
-          const res = await fetch(`${API_URL}/v1/jobs`, { credentials: 'include' });
-          if (res.status === 401) {
-            window.location.href = '/login';
-            return;
-          }
-          const { data } = await res.json();
-          const container = document.getElementById('jobs-list');
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    
+    async function loadJobs() {
+      try {
+        const res = await fetch(`${API_URL}/v1/jobs`, { credentials: 'include' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        const { data } = await res.json();
+        const container = document.getElementById('jobs-list');
+        
+        if (data.length === 0) {
+          container.innerHTML = '<div class="p-8 text-center text-gray-500">No jobs yet. Create an estimate first!</div>';
+          return;
+        }
+        
+        const jobsWithCosts = await Promise.all(data.map(async job => {
+          const costRes = await fetch(`${API_URL}/v1/jobs/${job.id}/costs`, { credentials: 'include' });
+          const { data: costs } = await costRes.json();
+          return { ...job, costs };
+        }));
+        
+        container.innerHTML = jobsWithCosts.map(job => {
+          const margin = parseFloat(job.costs.margin);
+          const marginColor = margin > 30 ? 'text-green-600' : margin > 15 ? 'text-yellow-600' : 'text-red-600';
           
-          if (data.length === 0) {
-            container.innerHTML = '<div class="p-8 text-center text-gray-500">No jobs yet. Create an estimate first!</div>';
-            return;
-          }
-          
-          const jobsWithCosts = await Promise.all(data.map(async job => {
-            const costRes = await fetch(`${API_URL}/v1/jobs/${job.id}/costs`, { credentials: 'include' });
-            const { data: costs } = await costRes.json();
-            return { ...job, costs };
-          }));
-          
-          container.innerHTML = jobsWithCosts.map(job => {
-            const margin = parseFloat(job.costs.margin);
-            const marginColor = margin > 30 ? 'text-green-600' : margin > 15 ? 'text-yellow-600' : 'text-red-600';
-            
-            return `
-              <div class="bg-white rounded-lg shadow-sm border p-6">
-                <div class="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 class="text-lg font-semibold">${job.name}</h3>
-                    <p class="text-sm text-gray-600">${job.status}</p>
-                  </div>
+          return `
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+              <div class="flex justify-between items-start mb-4">
+                <div>
+                  <h3 class="text-lg font-semibold">${job.name}</h3>
+                  <p class="text-sm text-gray-600">${job.status}</p>
+                </div>
+                <div class="flex items-center gap-3">
+                  ${job.status === 'completed' ? `
+                    <button onclick="requestReview('${job.id}')" class="px-3 py-1 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200">
+                      Request Review
+                    </button>
+                  ` : ''}
                   <span class="text-2xl font-bold ${marginColor}">${job.costs.margin}</span>
                 </div>
-                
-                <div class="grid grid-cols-3 gap-4 text-sm mb-4">
-                  <div>
-                    <p class="text-gray-600">Budget</p>
-                    <p class="font-semibold">$${Number(job.costs.budget).toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p class="text-gray-600">Actual Cost</p>
-                    <p class="font-semibold">$${Number(job.costs.costs.total).toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p class="text-gray-600">Profit</p>
-                    <p class="font-semibold">$${Number(job.costs.profit).toFixed(2)}</p>
-                  </div>
+              </div>
+              
+              <div class="grid grid-cols-3 gap-4 text-sm mb-4">
+                <div>
+                  <p class="text-gray-600">Budget</p>
+                  <p class="font-semibold">$${Number(job.costs.budget).toFixed(2)}</p>
                 </div>
-                
-                <div class="pt-4 border-t mb-4">
-                  <div class="flex justify-between items-center mb-3">
-                    <h4 class="font-medium">Time Entries</h4>
-                    <button onclick="document.getElementById('time-${job.id}').classList.toggle('hidden')" class="text-sm text-blue-600 hover:text-blue-700">+ Log Time</button>
-                  </div>
-                  
-                  <div id="time-${job.id}" class="hidden mb-4 p-4 bg-gray-50 rounded-lg">
-                    <form class="time-form space-y-3" data-job-id="${job.id}">
-                      <div class="grid grid-cols-2 gap-3">
-                        <input type="number" step="0.25" name="hours" placeholder="Hours" required class="px-3 py-2 border rounded text-sm" />
-                        <input type="number" step="0.01" name="rate" placeholder="Rate" value="65" required class="px-3 py-2 border rounded text-sm" />
-                      </div>
-                      <input type="date" name="date" required class="w-full px-3 py-2 border rounded text-sm" />
-                      <input type="text" name="description" placeholder="Description" class="w-full px-3 py-2 border rounded text-sm" />
-                      <button type="submit" class="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Log Time</button>
-                    </form>
-                  </div>
-                  
-                  <div class="space-y-2 max-h-40 overflow-y-auto mb-4">
-                    ${job.costs.timeEntries && job.costs.timeEntries.length > 0 
-                      ? job.costs.timeEntries.map(entry => `
-                        <div class="flex justify-between items-center text-sm py-2 border-b last:border-0">
-                          <div class="flex-1">
-                            <p class="font-medium">${entry.hours}h @ $${Number(entry.rate).toFixed(2)}/hr = $${Number(entry.cost).toFixed(2)}</p>
-                            <p class="text-xs text-gray-600">${entry.description || 'No description'} • ${new Date(entry.date).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-                      `).join('')
-                      : '<p class="text-sm text-gray-500">No time entries yet</p>'
-                    }
-                  </div>
+                <div>
+                  <p class="text-gray-600">Actual Cost</p>
+                  <p class="font-semibold">$${Number(job.costs.costs.total).toFixed(2)}</p>
                 </div>
-                
-                <div class="pt-4 border-t">
-                  <div class="flex justify-between items-center mb-3">
-                    <h4 class="font-medium">Expenses</h4>
-                    <button onclick="document.getElementById('upload-${job.id}').classList.toggle('hidden')" class="text-sm text-blue-600 hover:text-blue-700">+ Add Receipt</button>
-                  </div>
-                  
-                  <div id="upload-${job.id}" class="hidden mb-4 p-4 bg-gray-50 rounded-lg">
-                    <form class="expense-form space-y-3" data-job-id="${job.id}">
-                      <div class="grid grid-cols-2 gap-3">
-                        <input type="number" step="0.01" name="amount" placeholder="Amount" required class="px-3 py-2 border rounded text-sm" />
-                        <select name="category" class="px-3 py-2 border rounded text-sm">
-                          <option value="materials">Materials</option>
-                          <option value="supplies">Supplies</option>
-                          <option value="equipment">Equipment</option>
-                          <option value="other">Other</option>
-                        </select>
-                      </div>
-                      <input type="text" name="description" placeholder="Description" class="w-full px-3 py-2 border rounded text-sm" />
-                      <input type="file" name="file" accept="image/*,.pdf" required class="w-full text-sm" />
-                      <button type="submit" class="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Upload Receipt</button>
-                    </form>
-                  </div>
-                  
-                  <div class="space-y-2 max-h-40 overflow-y-auto">
-                    ${job.costs.expenses && job.costs.expenses.length > 0 
-                      ? job.costs.expenses.map(exp => `
-                        <div class="flex justify-between items-center text-sm py-2 border-b last:border-0">
-                          <div class="flex-1">
-                            <p class="font-medium">$${Number(exp.amount).toFixed(2)} - ${exp.category}</p>
-                            <p class="text-xs text-gray-600">${exp.description || 'No description'}</p>
-                          </div>
-                          ${exp.receiptUrl ? `<a href="${exp.receiptUrl}" target="_blank" class="text-blue-600 hover:underline text-xs">Receipt</a>` : ''}
-                        </div>
-                      `).join('')
-                      : '<p class="text-sm text-gray-500">No expenses yet</p>'
-                    }
-                  </div>
+                <div>
+                  <p class="text-gray-600">Profit</p>
+                  <p class="font-semibold">$${Number(job.costs.profit).toFixed(2)}</p>
                 </div>
               </div>
-            `;
-          }).join('');
-          
-          // Add form handlers
-          document.querySelectorAll('.time-form').forEach(form => {
-            form.addEventListener('submit', async (e) => {
-              e.preventDefault();
-              const jobId = form.dataset.jobId;
-              const formData = new FormData(form);
-              const data = {
-                hours: parseFloat(formData.get('hours')),
-                rate: parseFloat(formData.get('rate')),
-                date: formData.get('date'),
-                description: formData.get('description')
-              };
               
-              try {
-                const res = await fetch(`${API_URL}/v1/jobs/${jobId}/time-entries`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'include',
-                  body: JSON.stringify(data),
-                });
+              <div class="pt-4 border-t">
+                <div class="flex justify-between items-center mb-3">
+                  <h4 class="font-medium">Time Entries</h4>
+                  <button onclick="document.getElementById('time-${job.id}').classList.toggle('hidden')" class="text-sm text-blue-600 hover:text-blue-700">+ Log Time</button>
+                </div>
                 
-                if (res.ok) {
-                  alert('Time logged!');
-                  loadJobs();
-                }
-              } catch (err) {
-                console.error('Time log failed', err);
-                alert('Failed to log time');
-              }
-            });
-          });
+                <div id="time-${job.id}" class="hidden mb-4 p-4 bg-gray-50 rounded-lg">
+                  <form class="time-form space-y-3" data-job-id="${job.id}">
+                    <div class="grid grid-cols-2 gap-3">
+                      <input type="number" step="0.25" name="hours" placeholder="Hours" required class="px-3 py-2 border rounded text-sm" />
+                      <input type="number" step="0.01" name="rate" placeholder="Rate" value="65" required class="px-3 py-2 border rounded text-sm" />
+                    </div>
+                    <input type="date" name="date" required class="w-full px-3 py-2 border rounded text-sm" />
+                    <input type="text" name="description" placeholder="Description" class="w-full px-3 py-2 border rounded text-sm" />
+                    <button type="submit" class="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Log Time</button>
+                  </form>
+                </div>
+                
+                <div class="flex gap-2">
+                  <button onclick="markComplete('${job.id}')" class="px-3 py-1 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200">
+                    Mark Complete
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        document.querySelectorAll('.time-form').forEach(form => {
+          form.querySelector('input[name="date"]').valueAsDate = new Date();
           
-          document.querySelectorAll('.expense-form').forEach(form => {
-            form.addEventListener('submit', async (e) => {
-              e.preventDefault();
-              const jobId = form.dataset.jobId;
-              const formData = new FormData(form);
-              formData.append('jobId', jobId);
-              
-              try {
-                const res = await fetch(`${API_URL}/v1/uploads/receipt`, {
-                  method: 'POST',
-                  credentials: 'include',
-                  body: formData,
-                });
-                
-                if (res.ok) {
-                  alert('Receipt uploaded!');
-                  loadJobs();
-                }
-              } catch (err) {
-                console.error('Upload failed', err);
-                alert('Upload failed');
-              }
-            });
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const jobId = e.target.dataset.jobId;
+            
+            try {
+              await fetch(`${API_URL}/v1/jobs/${jobId}/time-entries`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  hours: parseFloat(formData.get('hours')),
+                  rate: parseFloat(formData.get('rate')),
+                  description: formData.get('description'),
+                  date: formData.get('date'),
+                }),
+              });
+              window.showToast('Time logged', 'success');
+              loadJobs();
+            } catch (err) {
+              console.error(err);
+              window.showToast('Failed to log time', 'error');
+            }
           });
-        } catch (err) {
-          console.error('Failed to load jobs', err);
-        }
+        });
+      } catch (err) {
+        console.error(err);
       }
+    }
+    
+    window.markComplete = async (jobId) => {
+      if (!confirm('Mark this job as completed?')) return;
       
-      loadJobs();
-    </script>
-  </body>
-</html>
+      try {
+        await fetch(`${API_URL}/v1/jobs/${jobId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ status: 'completed', completedAt: new Date().toISOString() }),
+        });
+        window.showToast('Job marked complete', 'success');
+        loadJobs();
+      } catch (err) {
+        console.error(err);
+        window.showToast('Failed to update job', 'error');
+      }
+    };
+    
+    window.requestReview = async (jobId) => {
+      if (!confirm('Send review request to customer?')) return;
+      
+      try {
+        const res = await fetch(`${API_URL}/v1/reviews/request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ jobId }),
+        });
+        
+        if (res.ok) {
+          window.showToast('Review request sent!', 'success');
+        } else {
+          window.showToast('Failed to send request', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        window.showToast('Failed to send request', 'error');
+      }
+    };
+    
+    loadJobs();
+  </script>
+</Base>
