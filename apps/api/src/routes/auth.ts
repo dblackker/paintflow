@@ -7,6 +7,28 @@ import { eq } from 'drizzle-orm';
 
 const auth = new Hono<{ Bindings: Env }>();
 
+// Email template for magic link
+const magicLinkEmail = (magicLink: string) => ({
+  personalizations: [{ to: [{ email: '' }] }],
+  from: { email: 'noreply@paintflow.app', name: 'PaintFlow' },
+  subject: 'Sign in to PaintFlow',
+  content: [
+    {
+      type: 'text/plain',
+      value: `Sign in to PaintFlow\n\nClick: ${magicLink}\n\nExpires in 15 min.`
+    },
+    {
+      type: 'text/html',
+      value: `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+<h1 style="color: #1a1a1a;">PaintFlow</h1>
+<p>Click below to sign in:</p>
+<p><a href="${magicLink}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Sign in</a></p>
+<p style="color: #999; font-size: 13px;">Link expires in 15 minutes.</p>
+</body></html>`
+    }
+  ]
+});
+
 // POST /v1/auth/magic-link
 auth.post('/magic-link', async (c) => {
   const { email } = await c.req.json();
@@ -23,9 +45,10 @@ auth.post('/magic-link', async (c) => {
   });
   
   let orgId: string;
+  let isNewUser = false;
   
   if (!user) {
-    // Create new user and org
+    isNewUser = true;
     const [newUser] = await db.insert(users).values({
       email: email.toLowerCase(),
       name: email.split('@')[0],
@@ -45,7 +68,6 @@ auth.post('/magic-link', async (c) => {
     user = newUser;
     orgId = org.id;
   } else {
-    // Get user's org
     const membership = await db.query.memberships.findFirst({
       where: eq(memberships.userId, user.id),
     });
@@ -55,20 +77,31 @@ auth.post('/magic-link', async (c) => {
   // Generate magic link token
   const token = crypto.randomUUID();
   
-  // Store in KV with 15 min TTL
   await c.env.KV.put(
     `magic:${token}`,
-    JSON.stringify({ email, userId: user.id, orgId }),
+    JSON.stringify({ email, userId: user.id, orgId, isNewUser }),
     { expirationTtl: 900 }
   );
   
-  // TODO: Send email via Resend
-  // const magicLink = `${c.env.APP_URL}/auth/verify?token=${token}`;
+  // Send email via MailChannels
+  const magicLink = `${c.env.APP_URL}/auth/verify?token=${token}`;
+  const emailPayload = magicLinkEmail(magicLink);
+  emailPayload.personalizations[0].to[0].email = email;
+  
+  try {
+    await fetch('https://api.mailchannels.net/tx/v1/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(emailPayload),
+    });
+  } catch (err) {
+    console.error('Failed to send email:', err);
+  }
   
   return c.json({ 
     success: true, 
     message: 'Magic link sent to email',
-    devToken: token // Remove in production
+    devToken: c.env.ENVIRONMENT === 'development' ? token : undefined
   });
 });
 
@@ -86,13 +119,35 @@ auth.get('/verify', async (c) => {
     return c.json({ error: 'Invalid or expired token' }, 400);
   }
   
-  const { email, userId, orgId } = JSON.parse(data);
+  const { email, userId, orgId, isNewUser } = JSON.parse(data);
   
   await c.env.KV.delete(`magic:${token}`);
   
   const sessionToken = await createSession(c.env, userId, orgId, email);
   
   c.header('Set-Cookie', `session=${sessionToken}; HttpOnly; Secure; SameSite=Lax; Max-Age=604800; Path=/`);
+  
+  // Send welcome email for new users (fire and forget)
+  if (isNewUser) {
+    const welcomePayload = {
+      personalizations: [{ to: [{ email }] }],
+      from: { email: 'welcome@paintflow.app', name: 'PaintFlow' },
+      subject: 'Welcome to PaintFlow! 🎨',
+      content: [{
+        type: 'text/html',
+        value: `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+<h1>Welcome to PaintFlow!</h1>
+<p>You're all set. <a href="${c.env.APP_URL}/onboarding">Start onboarding →</a></p>
+</body></html>`
+      }]
+    };
+    
+    fetch('https://api.mailchannels.net/tx/v1/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(welcomePayload),
+    }).catch(() => {});
+  }
   
   return c.redirect('/dashboard');
 });
