@@ -1,0 +1,160 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Settings">
+  <div class="min-h-screen bg-gray-50">
+    <nav class="bg-white shadow-sm border-b">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <div class="flex items-center space-x-8">
+            <h1 class="text-xl font-semibold">PaintFlow</h1>
+            <nav class="flex space-x-4">
+              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
+              <a href="/settings" class="text-blue-600 font-medium">Settings</a>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <h2 class="text-2xl font-bold mb-6">Settings</h2>
+
+      <div class="space-y-6">
+        <!-- Business Info -->
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-4">Business Information</h3>
+          <form id="business-form" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <input name="companyName" placeholder="Company Name" class="px-3 py-2 border rounded-lg">
+              <input name="phone" placeholder="Phone" class="px-3 py-2 border rounded-lg">
+            </div>
+            <input name="email" placeholder="Email" type="email" class="w-full px-3 py-2 border rounded-lg">
+            <input name="address" placeholder="Address" class="w-full px-3 py-2 border rounded-lg">
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
+          </form>
+        </div>
+
+        <!-- Pricing -->
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-4">Pricing & Tax</h3>
+          <form id="pricing-form" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-sm text-gray-600">Labor Rate ($/hr)</label>
+                <input name="defaultLaborRate" type="number" step="0.01" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-sm text-gray-600">Material Markup (%)</label>
+                <input name="materialMarkupPercent" type="number" step="0.1" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-sm text-gray-600">Sales Tax (%)</label>
+                <input name="salesTaxRate" type="number" step="0.01" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="text-sm text-gray-600">Deposit (%)</label>
+                <input name="depositPercent" type="number" step="0.1" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+            </div>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
+          </form>
+        </div>
+
+        <!-- Connectors -->
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-4">Connectors</h3>
+          <div class="space-y-3" id="connectors">
+            <div class="flex justify-between items-center p-3 border rounded-lg">
+              <span>Stripe</span>
+              <span class="text-sm text-gray-600" id="stripe-status">Checking...</span>
+            </div>
+            <div class="flex justify-between items-center p-3 border rounded-lg">
+              <span>QuickBooks</span>
+              <span class="text-sm text-gray-600" id="qb-status">Checking...</span>
+            </div>
+            <div class="flex justify-between items-center p-3 border rounded-lg">
+              <span>Google Calendar</span>
+              <span class="text-sm text-gray-600" id="calendar-status">Checking...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Review URLs -->
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-4">Review Links</h3>
+          <form id="reviews-form" class="space-y-4">
+            <input name="googleReviewUrl" placeholder="Google Business Review URL" class="w-full px-3 py-2 border rounded-lg">
+            <input name="yelpReviewUrl" placeholder="Yelp Review URL (optional)" class="w-full px-3 py-2 border rounded-lg">
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+
+    async function loadSettings() {
+      const res = await fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' });
+      const { data } = await res.json();
+      
+      // Populate forms
+      ['business-form', 'pricing-form', 'reviews-form'].forEach(formId => {
+        const form = document.getElementById(formId);
+        Array.from(form.elements).forEach(el => {
+          if (el.name && data[el.name] !== undefined) {
+            el.value = data[el.name];
+          }
+        });
+      });
+
+      // Check connectors
+      const calRes = await fetch(`${API_URL}/v1/calendar/status`, { credentials: 'include' });
+      const { connected } = await calRes.json();
+      document.getElementById('calendar-status').textContent = connected ? '✓ Connected' : 'Not connected';
+      document.getElementById('stripe-status').textContent = 'Configure in Stripe dashboard';
+      document.getElementById('qb-status').textContent = 'Check QuickBooks settings';
+    }
+
+    document.getElementById('business-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = Object.fromEntries(new FormData(e.target));
+      await fetch(`${API_URL}/v1/settings/org`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(formData),
+      });
+      window.showToast('Business info saved', 'success');
+    });
+
+    document.getElementById('pricing-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = Object.fromEntries(new FormData(e.target));
+      await fetch(`${API_URL}/v1/settings/org`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(formData),
+      });
+      window.showToast('Pricing saved', 'success');
+    });
+
+    document.getElementById('reviews-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = Object.fromEntries(new FormData(e.target));
+      await fetch(`${API_URL}/v1/settings/org`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(formData),
+      });
+      window.showToast('Review links saved', 'success');
+    });
+
+    loadSettings();
+  </script>
+</Base>
