@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import leadsRoutes from './routes/leads';
 import estimatesRoutes from './routes/estimates';
 import billingRoutes from './routes/billing';
+import jobsRoutes from './routes/jobs';
 
 const app = new Hono();
 
@@ -34,6 +35,7 @@ app.get('/health', (c) => {
 app.route('/v1/leads', leadsRoutes);
 app.route('/v1/estimates', estimatesRoutes);
 app.route('/v1/billing', billingRoutes);
+app.route('/v1/jobs', jobsRoutes);
 
 // Scheduled events
 export async function scheduled(event: ScheduledEvent, env: any, ctx: ExecutionContext) {
