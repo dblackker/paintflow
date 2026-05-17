@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { organizations } from '@paintflow/db/schema';
+import { orgSettings, serviceAreas, teamMembers, orgBranding } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -9,52 +9,87 @@ const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 settings.use('*', authMiddleware);
 
-// GET /v1/settings/company
-settings.get('/company', async (c) => {
+// GET /v1/settings/org
+settings.get('/org', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  const org = await db.query.organizations.findFirst({
-    where: eq(organizations.id, orgId),
+  let settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
   });
   
-  return c.json({ data: org });
+  // Create default if not exists
+  if (!settings) {
+    [settings] = await db.insert(orgSettings).values({ orgId }).returning();
+  }
+  
+  return c.json({ data: settings });
 });
 
-// PUT /v1/settings/company
-settings.put('/company', async (c) => {
+// PATCH /v1/settings/org
+settings.patch('/org', async (c) => {
   const orgId = c.get('orgId');
   const body = await c.req.json();
   const db = createDb(c.env.DATABASE_URL);
   
-  const [org] = await db.update(organizations)
-    .set({
-      name: body.name,
-      // TODO: Add more fields to schema
+  const [settings] = await db
+    .insert(orgSettings)
+    .values({ orgId, ...body })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { ...body, updatedAt: new Date() },
     })
-    .where(eq(organizations.id, orgId))
     .returning();
   
-  return c.json({ data: org });
+  return c.json({ data: settings });
 });
 
-// GET /v1/settings/pricing
-settings.get('/pricing', async (c) => {
-  // TODO: Fetch from org settings table
-  return c.json({ 
-    data: {
-      hourlyRate: 65.00,
-      markup: 20,
-      deposit: 50,
-    }
-  });
+// GET /v1/settings/service-areas
+settings.get('/service-areas', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const areas = await db.select().from(serviceAreas).where(eq(serviceAreas.orgId, orgId));
+  
+  return c.json({ data: areas });
 });
 
-// PUT /v1/settings/pricing
-settings.put('/pricing', async (c) => {
+// POST /v1/settings/service-areas
+settings.post('/service-areas', async (c) => {
+  const orgId = c.get('orgId');
+  const { zipCodes } = await c.req.json();
+  const db = createDb(c.env.DATABASE_URL);
+  
+  // Clear existing
+  await db.delete(serviceAreas).where(eq(serviceAreas.orgId, orgId));
+  
+  // Insert new
+  const areas = await db.insert(serviceAreas).values(
+    zipCodes.map((zip: string) => ({ orgId, zipCode: zip }))
+  ).returning();
+  
+  return c.json({ data: areas });
+});
+
+// GET /v1/settings/team
+settings.get('/team', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const members = await db.select().from(teamMembers).where(eq(teamMembers.orgId, orgId));
+  
+  return c.json({ data: members });
+});
+
+// POST /v1/settings/team
+settings.post('/team', async (c) => {
+  const orgId = c.get('orgId');
   const body = await c.req.json();
-  // TODO: Save to org settings table
-  return c.json({ data: body });
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const [member] = await db.insert(teamMembers).values({ orgId, ...body }).returning();
+  
+  return c.json({ data: member }, 201);
 });
 
 export default settings;
