@@ -122,13 +122,13 @@
             body: JSON.stringify(data),
           });
           
-          if (res.ok) {
+          if (res.ok) {\n            showToast('Lead created successfully');
             modal?.classList.add('hidden');
             form.reset();
             loadLeads();
           }
         } catch (err) {
-          console.error('Failed to create lead', err);
+          console.error('Failed to create lead', err);\n          showToast('Failed to create lead', 'error');
         }
       });
       
@@ -140,7 +140,30 @@
         window.location.href = '/login';
       });
       
+      function showToast(message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all ${
+          type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-gray-800'
+        }`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+      
+      // Override alert for toasts
+      window.addEventListener('error', (e) => {
+        showToast('An error occurred', 'error');
+      });
+      
       loadLeads();
     </script>
+  
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
   </body>
 </html>
