@@ -37,6 +37,7 @@ pnpm dev
 - API for CRUD estimates with packages
 - Lead selector with auto-load
 - Form validation and error handling
+- PDF generation via Cloudflare Browser Rendering
 - Send endpoint triggers drip enrollment
 
 ### ✅ Drip Automation
@@ -55,6 +56,12 @@ pnpm dev
 - Dashboard UI with budget vs actual
 - Color-coded margin indicators (>30% green, >15% yellow, <15% red)
 
+### ✅ 2-Way SMS
+- Twilio webhook for inbound messages
+- Messages table with lead association
+- Send API endpoint
+- Inbox UI with conversation list
+
 ## Environment Variables
 
 ```
@@ -65,6 +72,9 @@ STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
+TWILIO_PHONE_NUMBER=
+CF_ACCOUNT_ID=
+CF_API_TOKEN=
 APP_URL=http://localhost:4321
 ```
 
@@ -77,25 +87,43 @@ paintflow/
 │   ├── src/pages/dashboard.astro
 │   ├── src/pages/leads.astro
 │   ├── src/pages/estimates/new.astro
-│   └── src/pages/jobs/index.astro
+│   ├── src/pages/jobs/index.astro
+│   └── src/pages/sms/index.astro
 ├── apps/api/          # Workers API
 │   ├── src/routes/auth.ts
 │   ├── src/routes/leads.ts
 │   ├── src/routes/estimates.ts
 │   ├── src/routes/billing.ts
 │   ├── src/routes/jobs.ts
+│   ├── src/routes/sms.ts
+│   ├── src/routes/pdf.ts
 │   └── src/cron/drips.ts
 ├── packages/db/       # Drizzle schema
 └── packages/core/     # Business logic
 ```
 
+## API Endpoints
+
+- `POST /v1/auth/magic-link` - Send magic link
+- `GET /v1/auth/verify?token=...` - Verify token
+- `GET/POST /v1/leads` - Leads CRUD
+- `GET/POST /v1/estimates` - Estimates CRUD
+- `POST /v1/estimates/:id/send` - Send estimate
+- `POST /v1/billing/checkout` - Create Stripe session
+- `POST /v1/billing/webhook` - Stripe webhook
+- `GET/POST /v1/jobs` - Jobs CRUD
+- `GET /v1/jobs/:id/costs` - Cost breakdown
+- `POST /v1/sms/inbound` - Twilio webhook
+- `POST /v1/sms/send` - Send SMS
+- `POST /v1/pdf/estimate/:id` - Generate PDF
+
 ## Next Steps
 
-- PDF generation via Cloudflare Browser Rendering
-- Twilio 2-way SMS inbox
 - Google Calendar sync
 - Production rates database
 - Public estimate accept page
+- Email sending via Resend
+- File uploads to R2
 
 ## License
 
