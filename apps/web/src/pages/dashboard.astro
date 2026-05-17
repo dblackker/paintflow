@@ -6,6 +6,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
     <title>Dashboard - PaintFlow</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2563eb" />
   </head>
   <body class="min-h-screen bg-gray-50">
     <nav class="bg-white shadow-sm border-b">
@@ -53,5 +55,39 @@
         window.location.href = '/login';
       });
     </script>
+  
+    <div id="install-prompt" class="hidden fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-white rounded-lg shadow-lg border p-4 z-50">
+      <p class="font-medium mb-2">Install PaintFlow</p>
+      <p class="text-sm text-gray-600 mb-3">Add to home screen for quick access</p>
+      <div class="flex gap-2">
+        <button id="install-btn" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded text-sm">Install</button>
+        <button id="dismiss-install" class="px-3 py-2 border rounded text-sm">Later</button>
+      </div>
+    </div>
+    
+    <script>
+      let deferredPrompt;
+      const prompt = document.getElementById('install-prompt');
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        prompt.classList.remove('hidden');
+      });
+      
+      document.getElementById('install-btn')?.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log('Install outcome:', outcome);
+        deferredPrompt = null;
+        prompt.classList.add('hidden');
+      });
+      
+      document.getElementById('dismiss-install')?.addEventListener('click', () => {
+        prompt.classList.add('hidden');
+      });
+    </script>
+
   </body>
 </html>
