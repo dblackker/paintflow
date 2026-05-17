@@ -91,3 +91,34 @@ reviews.get('/pending', async (c) => {
 });
 
 export default reviews;
+
+// POST /v1/reviews/:id/rate (public, no auth)
+reviews.post('/:id/rate', async (c) => {
+  const id = c.req.param('id');
+  const { rating, feedback } = await c.req.json();
+  
+  const db = createDb(c.env.DATABASE_URL);
+  const request = await db.query.reviewRequests.findFirst({
+    where: eq(reviewRequests.id, id),
+  });
+  
+  if (!request) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  
+  await db.update(reviewRequests)
+    .set({
+      rating,
+      status: rating >= 4 ? 'redirected_to_google' : 'feedback_collected',
+      respondedAt: new Date(),
+    })
+    .where(eq(reviewRequests.id, id));
+  
+  // Store feedback separately if needed
+  if (feedback && rating < 4) {
+    // Could insert into a feedback table or log
+    console.log(`Feedback for request ${id}:`, feedback);
+  }
+  
+  return c.json({ success: true, redirect: rating >= 4 });
+});
