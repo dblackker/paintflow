@@ -122,3 +122,41 @@ reviews.post('/:id/rate', async (c) => {
   
   return c.json({ success: true, redirect: rating >= 4 });
 });
+
+// GET /v1/reviews/stats
+reviews.get('/stats', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const requests = await db
+    .select()
+    .from(reviewRequests)
+    .where(eq(reviewRequests.orgId, orgId));
+  
+  const total = requests.length;
+  const responded = requests.filter(r => r.rating).length;
+  const responseRate = total > 0 ? Math.round((responded / total) * 100) : 0;
+  const avgRating = responded > 0 ? requests.filter(r => r.rating).reduce((sum, r) => sum + parseFloat(r.rating || '0'), 0) / responded : 0;
+  const fiveStar = requests.filter(r => r.rating === '5').length;
+  
+  // Get lead/job names
+  const requestsWithNames = await Promise.all(requests.slice(0, 20).map(async req => {
+    const lead = await db.query.leads.findFirst({ where: eq(leads.id, req.leadId) });
+    const job = await db.query.jobs.findFirst({ where: eq(jobs.id, req.jobId) });
+    return {
+      ...req,
+      leadName: lead?.name,
+      jobName: job?.name,
+    };
+  }));
+  
+  return c.json({
+    data: {
+      total,
+      responseRate,
+      avgRating,
+      fiveStar,
+      requests: requestsWithNames,
+    }
+  });
+});

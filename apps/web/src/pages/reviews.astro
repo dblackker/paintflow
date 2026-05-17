@@ -1,0 +1,112 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Reviews">
+  <div class="min-h-screen bg-gray-50">
+    <nav class="bg-white shadow-sm border-b">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <div class="flex items-center space-x-8">
+            <h1 class="text-xl font-semibold">PaintFlow</h1>
+            <nav class="flex space-x-4">
+              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
+              <a href="/leads" class="text-gray-600 hover:text-gray-900">Leads</a>
+              <a href="/jobs" class="text-gray-600 hover:text-gray-900">Jobs</a>
+              <a href="/reviews" class="text-blue-600 font-medium">Reviews</a>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="mb-6">
+        <h2 class="text-2xl font-bold text-gray-900">Review Analytics</h2>
+        <p class="text-gray-600">Track review requests and customer feedback</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <p class="text-sm text-gray-600 mb-1">Total Requests</p>
+          <p class="text-3xl font-bold" id="total-requests">-</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <p class="text-sm text-gray-600 mb-1">Response Rate</p>
+          <p class="text-3xl font-bold" id="response-rate">-</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <p class="text-sm text-gray-600 mb-1">Avg Rating</p>
+          <p class="text-3xl font-bold" id="avg-rating">-</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <p class="text-sm text-gray-600 mb-1">5-Star Reviews</p>
+          <p class="text-3xl font-bold" id="five-star">-</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border">
+        <div class="p-4 border-b">
+          <h3 class="font-semibold">Recent Review Requests</h3>
+        </div>
+        <div id="requests-list" class="divide-y">
+          <div class="p-8 text-center text-gray-500">Loading...</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    
+    async function loadAnalytics() {
+      try {
+        const res = await fetch(`${API_URL}/v1/reviews/stats`, { credentials: 'include' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        const { data } = await res.json();
+        
+        document.getElementById('total-requests').textContent = data.total;
+        document.getElementById('response-rate').textContent = `${data.responseRate}%`;
+        document.getElementById('avg-rating').textContent = data.avgRating.toFixed(1);
+        document.getElementById('five-star').textContent = data.fiveStar;
+        
+        const container = document.getElementById('requests-list');
+        if (data.requests.length === 0) {
+          container.innerHTML = '<div class="p-8 text-center text-gray-500">No review requests yet</div>';
+          return;
+        }
+        
+        container.innerHTML = data.requests.map(req => {
+          const statusColors = {
+            pending: 'bg-gray-100 text-gray-800',
+            sent: 'bg-blue-100 text-blue-800',
+            responded: 'bg-green-100 text-green-800',
+            redirected_to_google: 'bg-yellow-100 text-yellow-800',
+            feedback_collected: 'bg-red-100 text-red-800',
+          };
+          
+          return `
+            <div class="p-4 flex justify-between items-center">
+              <div>
+                <p class="font-medium text-sm">${req.leadName || 'Customer'}</p>
+                <p class="text-sm text-gray-600">${req.jobName || 'Job'}</p>
+                <p class="text-xs text-gray-500">${new Date(req.createdAt).toLocaleDateString()}</p>
+              </div>
+              <div class="flex items-center gap-3">
+                ${req.rating ? `<div class="text-yellow-500">${'⭐'.repeat(parseInt(req.rating))}</div>` : ''}
+                <span class="px-2 py-1 text-xs rounded ${statusColors[req.status] || 'bg-gray-100'}">${req.status}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    
+    loadAnalytics();
+  </script>
+</Base>
