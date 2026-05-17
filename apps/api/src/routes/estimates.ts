@@ -9,7 +9,6 @@ import { sendEmail, estimateEmailTemplate } from '../lib/email';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-// Public endpoint - no auth
 estimatesApp.get('/:id/public', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
@@ -35,7 +34,6 @@ estimatesApp.get('/:id/public', async (c) => {
   });
 });
 
-// Sign estimate - public endpoint
 estimatesApp.post('/:id/sign', async (c) => {
   const id = c.req.param('id');
   const { name, signatureData, packageName } = await c.req.json();
@@ -45,6 +43,8 @@ estimatesApp.post('/:id/sign', async (c) => {
   }
   
   const db = createDb(c.env.DATABASE_URL);
+  const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
+  const userAgent = c.req.header('User-Agent') || 'unknown';
   
   const [estimate] = await db.update(estimates)
     .set({
@@ -58,6 +58,46 @@ estimatesApp.post('/:id/sign', async (c) => {
   
   if (!estimate) {
     return c.json({ error: 'Not found' }, 404);
+  }
+  
+  const lead = await db.query.leads.findFirst({
+    where: eq(leads.id, estimate.leadId),
+  });
+  
+  if (lead?.email) {
+    try {
+      const pkg = estimate.packages.find((p: any) => p.name === packageName) || estimate.packages[0];
+      const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #2563eb;">Estimate Signed ✓</h1>
+  <p>Hi ${lead.name},</p>
+  <p>Thank you for signing your painting estimate!</p>
+  
+  <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <h2 style="margin-top: 0;">Signed Details</h2>
+    <p><strong>Package:</strong> ${pkg.name.charAt(0).toUpperCase() + pkg.name.slice(1)}</p>
+    <p><strong>Total:</strong> $${pkg.total.toFixed(2)}</p>
+    <p><strong>Signed by:</strong> ${name}</p>
+    <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+  </div>
+  
+  <p>We'll be in touch shortly to schedule your project. A deposit invoice will be sent separately.</p>
+  
+  <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+    This agreement is legally binding. By signing, you agreed to our terms and conditions including payment terms (50% deposit), warranty (2 years workmanship), and cancellation policy (3 business days).
+  </p>
+  
+  <p>Questions? Reply to this email.</p>
+</body>
+</html>
+      `;
+      await sendEmail(c.env, lead.email, 'Estimate Signed - Next Steps', html);
+      console.log(`Signed estimate ${id} from IP ${ip}, UA: ${userAgent}`);
+    } catch (err) {
+      console.error('Failed to send signed confirmation:', err);
+    }
   }
   
   return c.json({ data: estimate });
@@ -106,7 +146,6 @@ estimatesApp.post('/', async (c) => {
   }
   
   const db = createDb(c.env.DATABASE_URL);
-  
   const total = Math.max(...parsed.data.packages.map(p => p.total));
   
   const [estimate] = await db.insert(estimates).values({
