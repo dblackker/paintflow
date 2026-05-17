@@ -1,22 +1,25 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { leads } from '@paintflow/db/schema';
-import { eq, or, ilike } from 'drizzle-orm';
+import { leads, messages } from '@paintflow/db/schema';
+import { eq, or, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { sendSMS, formatPhoneNumber } from '../lib/twilio';
 
 const sms = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 sms.use('/inbox', authMiddleware);
+sms.use('/send', authMiddleware);
 
-// POST /v1/sms/inbound - Twilio webhook
 sms.post('/inbound', async (c) => {
   const formData = await c.req.formData();
   const from = formData.get('From') as string;
   const body = formData.get('Body') as string;
+  const sid = formData.get('MessageSid') as string;
+  
+  const db = createDb(c.env.DATABASE_URL);
   
   // Find lead by phone
-  const db = createDb(c.env.DATABASE_URL);
   const lead = await db.query.leads.findFirst({
     where: or(
       eq(leads.phone, from),
@@ -24,13 +27,19 @@ sms.post('/inbound', async (c) => {
     ),
   });
   
-  // Store message
-  // TODO: Insert into messages table
-  
-  // Auto-respond or notify owner
+  // Store inbound message
   if (lead) {
+    await db.insert(messages).values({
+      orgId: lead.orgId,
+      leadId: lead.id,
+      direction: 'inbound',
+      fromNumber: from,
+      toNumber: c.env.TWILIO_PHONE_NUMBER,
+      body,
+      twilioSid: sid,
+    });
+    
     console.log(`SMS from ${lead.name}: ${body}`);
-    // TODO: Create notification or auto-reply
   }
   
   return c.text('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200, {
@@ -38,28 +47,46 @@ sms.post('/inbound', async (c) => {
   });
 });
 
-// GET /v1/sms/inbox
 sms.get('/inbox', async (c) => {
   const orgId = c.get('orgId');
-  // TODO: Fetch messages for org
-  return c.json({ data: [] });
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const msgs = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.orgId, orgId))
+    .orderBy(desc(messages.createdAt))
+    .limit(50);
+  
+  return c.json({ data: msgs });
 });
 
-// POST /v1/sms/send
 sms.post('/send', async (c) => {
+  const orgId = c.get('orgId');
   const { to, body, leadId } = await c.req.json();
   
-  // TODO: Send via Twilio
-  // await twilio.messages.create({
-  //   to,
-  //   from: c.env.TWILIO_PHONE_NUMBER,
-  //   body,
-  // });
+  const db = createDb(c.env.DATABASE_URL);
   
-  // Log in DB
-  console.log(`SMS to ${to}: ${body}`);
-  
-  return c.json({ success: true, messageId: `mock_${Date.now()}` });
+  try {
+    const formattedTo = formatPhoneNumber(to);
+    const result = await sendSMS(c.env, formattedTo, body);
+    
+    // Log outbound message
+    await db.insert(messages).values({
+      orgId,
+      leadId,
+      direction: 'outbound',
+      fromNumber: c.env.TWILIO_PHONE_NUMBER,
+      toNumber: formattedTo,
+      body,
+      twilioSid: result.sid,
+    });
+    
+    return c.json({ success: true, messageId: result.sid });
+  } catch (err) {
+    console.error('SMS send error:', err);
+    return c.json({ error: 'Failed to send SMS' }, 500);
+  }
 });
 
 export default sms;
