@@ -1,8 +1,9 @@
-import { pgTable, uuid, varchar, text, timestamp, decimal, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, decimal, jsonb, pgEnum, boolean } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['owner', 'member']);
 export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'estimate_sent', 'won', 'lost']);
 export const estimateStatusEnum = pgEnum('estimate_status', ['draft', 'sent', 'accepted', 'declined']);
+export const messageDirectionEnum = pgEnum('message_direction', ['inbound', 'outbound']);
 
 export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -83,5 +84,18 @@ export const expenses = pgTable('expenses', {
   description: text('description'),
   receiptUrl: text('receipt_url'),
   date: timestamp('date').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const messages = pgTable('messages', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id),
+  direction: messageDirectionEnum('direction').notNull(),
+  fromNumber: varchar('from_number', { length: 50 }).notNull(),
+  toNumber: varchar('to_number', { length: 50 }).notNull(),
+  body: text('body').notNull(),
+  twilioSid: varchar('twilio_sid', { length: 100 }),
+  read: boolean('read').notNull().default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
