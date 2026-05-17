@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { leads } from '@paintflow/db/schema';
+import { leads, quickbooksConnections } from '@paintflow/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { createQBCustomer } from '../lib/quickbooks';
 
 const leadsApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -51,6 +52,21 @@ leadsApp.post('/', async (c) => {
     ...parsed.data,
     status: 'new',
   }).returning();
+  
+  // Auto-sync to QuickBooks if connected
+  const qbConnection = await db.query.quickbooksConnections.findFirst({
+    where: eq(quickbooksConnections.orgId, orgId),
+  });
+  
+  if (qbConnection) {
+    try {
+      await createQBCustomer(c.env, orgId, lead);
+      console.log(`Auto-synced lead ${lead.id} to QuickBooks`);
+    } catch (qbErr) {
+      console.error('QB auto-sync failed:', qbErr);
+      // Don't fail lead creation if QB sync fails
+    }
+  }
   
   return c.json({ data: lead }, 201);
 });
