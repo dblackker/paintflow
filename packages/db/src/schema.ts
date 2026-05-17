@@ -59,6 +59,7 @@ export const estimates = pgTable('estimates', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+ 
 export const jobs = pgTable('jobs', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
@@ -67,7 +68,9 @@ export const jobs = pgTable('jobs', {
   name: varchar('name', { length: 255 }).notNull(),
   status: varchar('status', { length: 50 }).notNull().default('scheduled'),
   budget: decimal('budget', { precision: 10, scale: 2 }),
+  completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 export const timeEntries = pgTable('time_entries', {
