@@ -35,6 +35,7 @@ export const leads = pgTable('leads', {
   email: varchar('email', { length: 255 }),
   source: varchar('source', { length: 100 }),
   status: leadStatusEnum('status').notNull().default('new'),
+  qboCustomerId: varchar('qbo_customer_id', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -47,6 +48,7 @@ export const estimates = pgTable('estimates', {
   total: decimal('total', { precision: 10, scale: 2 }).notNull(),
   status: estimateStatusEnum('status').notNull().default('draft'),
   sentAt: timestamp('sent_at'),
+  qboInvoiceId: varchar('qbo_invoice_id', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -98,4 +100,16 @@ export const messages = pgTable('messages', {
   twilioSid: varchar('twilio_sid', { length: 100 }),
   read: boolean('read').notNull().default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const quickbooksConnections = pgTable('quickbooks_connections', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull().unique(),
+  realmId: varchar('realm_id', { length: 255 }).notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token').notNull(),
+  tokenExpiresAt: timestamp('token_expires_at').notNull(),
+  companyName: varchar('company_name', { length: 255 }),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

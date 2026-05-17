@@ -113,6 +113,17 @@ Best regards,
           <div class="space-y-4">
             <div class="flex items-center justify-between p-4 border rounded-lg">
               <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-600 rounded flex items-center justify-center text-white font-bold">Q</div>
+                <div>
+                  <p class="font-medium">QuickBooks Online</p>
+                  <p class="text-sm text-gray-600" id="qb-status">Sync customers and invoices</p>
+                </div>
+              </div>
+              <button id="qb-connect-btn" class="px-4 py-2 border rounded-lg hover:bg-gray-50">Connect</button>
+            </div>
+            
+            <div class="flex items-center justify-between p-4 border rounded-lg">
+              <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-red-500 rounded flex items-center justify-center text-white font-bold">G</div>
                 <div>
                   <p class="font-medium">Google Calendar</p>
@@ -166,6 +177,8 @@ Best regards,
     </main>
 
     <script>
+      const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+      
       document.getElementById('company-form')?.addEventListener('submit', (e) => {
         e.preventDefault();
         alert('Company info saved! (API integration pending)');
@@ -175,6 +188,36 @@ Best regards,
         e.preventDefault();
         alert('Pricing defaults saved! (API integration pending)');
       });
+      
+      // QuickBooks connection
+      async function checkQBStatus() {
+        try {
+          const res = await fetch(`${API_URL}/v1/quickbooks/status`, { credentials: 'include' });
+          const data = await res.json();
+          const btn = document.getElementById('qb-connect-btn');
+          const status = document.getElementById('qb-status');
+          
+          if (data.connected) {
+            btn.textContent = 'Disconnect';
+            btn.onclick = disconnectQB;
+            status.textContent = 'Connected to ' + data.companyName;
+            status.className = 'text-sm text-green-600';
+          } else {
+            btn.textContent = 'Connect';
+            btn.onclick = () => window.location.href = `${API_URL}/v1/quickbooks/connect`;
+          }
+        } catch (err) {
+          console.error('QB status check failed', err);
+        }
+      }
+      
+      async function disconnectQB() {
+        if (!confirm('Disconnect QuickBooks?')) return;
+        await fetch(`${API_URL}/v1/quickbooks/disconnect`, { method: 'POST', credentials: 'include' });
+        checkQBStatus();
+      }
+      
+      checkQBStatus();
     </script>
   </body>
 </html>
