@@ -1,0 +1,1 @@
+{"name":"@paintflow/db","private":true,"scripts":{"db:generate":"drizzle-kit generate","db:migrate":"drizzle-kit migrate","db:studio":"drizzle-kit studio"},"type":"module","version":"0.1.0"}
