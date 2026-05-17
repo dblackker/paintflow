@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { jobs, timeEntries, expenses } from '@paintflow/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -50,20 +50,24 @@ jobsApp.get('/:id/costs', async (c) => {
   
   if (!job) return c.json({ error: 'Not found' }, 404);
   
-  // Aggregate costs
-  const timeResult = await db
-    .select({ total: sql<number>`SUM(cost)` })
+  // Get time entries
+  const timeList = await db
+    .select()
     .from(timeEntries)
-    .where(and(eq(timeEntries.jobId, id), eq(timeEntries.orgId, orgId)));
+    .where(and(eq(timeEntries.jobId, id), eq(timeEntries.orgId, orgId)))
+    .orderBy(desc(timeEntries.date));
   
-  const expenseResult = await db
-    .select({ total: sql<number>`SUM(amount)` })
+  // Get expenses
+  const expenseList = await db
+    .select()
     .from(expenses)
-    .where(and(eq(expenses.jobId, id), eq(expenses.orgId, orgId)));
+    .where(and(eq(expenses.jobId, id), eq(expenses.orgId, orgId)))
+    .orderBy(desc(expenses.date));
   
-  const laborCost = timeResult[0]?.total || 0;
-  const materialCost = expenseResult[0]?.total || 0;
-  const totalCost = Number(laborCost) + Number(materialCost);
+  // Aggregate costs
+  const laborCost = timeList.reduce((sum, t) => sum + Number(t.cost), 0);
+  const materialCost = expenseList.reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalCost = laborCost + materialCost;
   const budget = Number(job.budget || 0);
   const margin = budget > 0 ? ((budget - totalCost) / budget * 100).toFixed(1) : 0;
   
@@ -78,8 +82,58 @@ jobsApp.get('/:id/costs', async (c) => {
       budget,
       margin: `${margin}%`,
       profit: budget - totalCost,
+      timeEntries: timeList,
+      expenses: expenseList,
     }
   });
+});
+
+// Time entries
+const timeEntrySchema = z.object({
+  hours: z.number().positive(),
+  rate: z.number().positive(),
+  description: z.string().optional(),
+  date: z.string(),
+});
+
+jobsApp.post('/:id/time-entries', async (c) => {
+  const orgId = c.get('orgId');
+  const jobId = c.req.param('id');
+  const body = await c.req.json();
+  
+  const parsed = timeEntrySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed' }, 400);
+  }
+  
+  const { hours, rate, description, date } = parsed.data;
+  const cost = hours * rate;
+  const userId = c.get('userId') || '00000000-0000-0000-0000-000000000000';
+  
+  const db = createDb(c.env.DATABASE_URL);
+  const [entry] = await db.insert(timeEntries).values({
+    orgId,
+    jobId,
+    userId,
+    hours: hours.toString(),
+    rate: rate.toString(),
+    cost: cost.toString(),
+    description,
+    date: new Date(date),
+  }).returning();
+  
+  return c.json({ data: entry }, 201);
+});
+
+jobsApp.delete('/:id/time-entries/:entryId', async (c) => {
+  const orgId = c.get('orgId');
+  const entryId = c.req.param('entryId');
+  
+  const db = createDb(c.env.DATABASE_URL);
+  await db.delete(timeEntries)
+    .where(and(eq(timeEntries.id, entryId), eq(timeEntries.orgId, orgId)));
+  
+  return c.json({ success: true });
 });
 
 export default jobsApp;
