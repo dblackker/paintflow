@@ -249,3 +249,15 @@ export const messageTemplates = pgTable('message_templates', {
 });
 
 // Add onboardingCompletedAt to orgSettings
+
+// Job photos
+export const jobPhotos = pgTable('job_photos', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  url: text('url').notNull(),
+  key: varchar('key', { length: 500 }).notNull(),
+  caption: text('caption'),
+  type: varchar('type', { length: 50 }).notNull().default('progress'), // before, after, progress
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
