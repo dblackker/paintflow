@@ -137,3 +137,25 @@ jobsApp.delete('/:id/time-entries/:entryId', async (c) => {
 });
 
 export default jobsApp;
+
+// Update job
+jobsApp.patch('/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const { status, completedAt } = await c.req.json();
+  
+  const db = createDb(c.env.DATABASE_URL);
+  const [job] = await db
+    .update(jobs)
+    .set({ 
+      status, 
+      completedAt: completedAt ? new Date(completedAt) : undefined,
+      updatedAt: new Date()
+    })
+    .where(and(eq(jobs.id, id), eq(jobs.orgId, orgId)))
+    .returning();
+  
+  if (!job) return c.json({ error: 'Not found' }, 404);
+  
+  return c.json({ data: job });
+});
