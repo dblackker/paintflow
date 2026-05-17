@@ -58,3 +58,52 @@ uploads.get('/:key', async (c) => {
 });
 
 export default uploads;
+
+// POST /v1/uploads/photo
+uploads.post('/photo', async (c) => {
+  const orgId = c.get('orgId');
+  const formData = await c.req.formData();
+  const file = formData.get('file') as File;
+  const jobId = formData.get('jobId') as string;
+  const caption = formData.get('caption') as string;
+  const type = formData.get('type') as string || 'progress';
+  
+  if (!file || !jobId) {
+    return c.json({ error: 'Missing file or jobId' }, 400);
+  }
+  
+  // Upload to R2 (mock for now)
+  const key = `photos/${jobId}/${Date.now()}-${file.name}`;
+  const url = `https://cdn.paintflow.app/${key}`;
+  
+  // Save to DB
+  const { jobPhotos } = await import('@paintflow/db/schema');
+  const db = createDb(c.env.DATABASE_URL);
+  const [photo] = await db.insert(jobPhotos).values({
+    orgId,
+    jobId,
+    url,
+    key,
+    caption,
+    type,
+  }).returning();
+  
+  return c.json({ success: true, photo });
+});
+
+// GET /v1/uploads/photos/:jobId
+uploads.get('/photos/:jobId', async (c) => {
+  const orgId = c.get('orgId');
+  const jobId = c.req.param('jobId');
+  const { jobPhotos } = await import('@paintflow/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+  
+  const db = createDb(c.env.DATABASE_URL);
+  const photos = await db.select().from(jobPhotos)
+    .where(and(eq(jobPhotos.orgId, orgId), eq(jobPhotos.jobId, jobId)))
+    .orderBy(jobPhotos.createdAt);
+  
+  return c.json({ data: photos });
+});
+
+export default uploads;
