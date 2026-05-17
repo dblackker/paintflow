@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { tenantMiddleware } from './middleware/tenant';
 import authRoutes from './routes/auth';
 import leadsRoutes from './routes/leads';
+import estimatesRoutes from './routes/estimates';
 
 const app = new Hono();
 
@@ -26,7 +27,8 @@ app.get('/health', (c) => {
   });
 });
 
-// Protected routes (TODO: add auth middleware)
+// Protected routes
 app.route('/v1/leads', leadsRoutes);
+app.route('/v1/estimates', estimatesRoutes);
 
 export default app;
