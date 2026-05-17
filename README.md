@@ -1,130 +1,318 @@
 # PaintFlow
 
-Multi-tenant SaaS for solopreneur painting contractors. Cloudflare-first, PWA, edge-native.
+**CRM built specifically for painting contractors.**
 
-**Repo:** https://github.com/dblackker/paintflow
+PaintFlow handles the entire workflow from lead capture to final payment, with features tailored to painting businesses (job costing, production rates, before/after photos, review automation).
 
-## Stack
+## Tech Stack
 
-- **Frontend:** Astro 5 PWA
-- **API:** Cloudflare Workers + Hono
-- **DB:** Neon Postgres + Drizzle ORM
-- **Auth:** Magic links + Workers KV sessions
-- **Multi-tenancy:** RLS with `org_id`
+- **Frontend:** Astro, TypeScript, Tailwind CSS
+- **Backend:** Hono on Cloudflare Workers
+- **Database:** Drizzle ORM + PostgreSQL (Neon)
+- **Auth:** Magic links via MailChannels
+- **Payments:** Stripe
+- **E-signature:** Documenso
+- **Calendar:** Google Calendar API
+- **SMS:** Twilio
+- **Accounting:** QuickBooks Online
+- **Storage:** Cloudflare R2
+- **Monorepo:** npm workspaces
 
 ## Quick Start
 
+### Prerequisites
+
+- Node.js 20+
+- Cloudflare account
+- Neon Postgres database
+- MailChannels (free, via Cloudflare)
+
+### Setup
+
+1. **Clone and install:**
 ```bash
-pnpm install
-pnpm dev
+git clone https://github.com/dblackker/paintflow.git
+cd paintflow
+npm install
 ```
 
-## What's Built
-
-### ✅ Auth & Multi-tenancy
-- Magic link flow with KV sessions
-- Automatic user/org creation on first login
-- RLS policies for data isolation
-- HttpOnly secure cookies
-
-### ✅ Leads Pipeline
-- `GET/POST /v1/leads` API with auth
-- Pipeline UI with add modal
-- Tenant-isolated queries
-
-### ✅ Estimates
-- Good/Better/Best builder UI with live totals
-- API for CRUD estimates with packages
-- Lead selector with auto-load
-- Form validation and error handling
-- PDF generation via Cloudflare Browser Rendering
-- Send endpoint triggers drip enrollment
-
-### ✅ Drip Automation
-- Cloudflare Cron scheduled handler
-- Day 1/3/7 follow-up logic
-- KV-based deduplication
-
-### ✅ Stripe Billing
-- Checkout session creation for estimates
-- Webhook handler for payment success
-- Updates estimate status to 'accepted'
-
-### ✅ Job Costing
-- Schema: jobs, time_entries, expenses
-- API with margin calculations
-- Dashboard UI with budget vs actual
-- Color-coded margin indicators (>30% green, >15% yellow, <15% red)
-
-### ✅ 2-Way SMS
-- Twilio webhook for inbound messages
-- Messages table with lead association
-- Send API endpoint
-- Inbox UI with conversation list
-
-## Environment Variables
-
-```
-DATABASE_URL=
-KV_NAMESPACE_ID=
-RESEND_API_KEY=
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_PHONE_NUMBER=
-CF_ACCOUNT_ID=
-CF_API_TOKEN=
+2. **Environment variables:**
+Copy `.env.example` to `.env` and fill in:
+```bash
+DATABASE_URL=postgresql://...
+CLOUDFLARE_API_TOKEN=...
+STRIPE_SECRET_KEY=sk_test_...
+GOOGLE_CLIENT_ID=...
+TWILIO_ACCOUNT_SID=...
 APP_URL=http://localhost:4321
+ENVIRONMENT=development
 ```
 
-## Project Structure
+3. **Database setup:**
+```bash
+npm run db:push
+npm run db:seed
+```
+
+4. **Run dev servers:**
+```bash
+# Terminal 1: API
+cd apps/api
+npm run dev
+
+# Terminal 2: Web
+cd apps/web
+npm run dev
+```
+
+Visit `http://localhost:4321`
+
+## Architecture
+
+### Monorepo Structure
 
 ```
 paintflow/
-├── apps/web/          # Astro PWA
-│   ├── src/pages/login.astro
-│   ├── src/pages/dashboard.astro
-│   ├── src/pages/leads.astro
-│   ├── src/pages/estimates/new.astro
-│   ├── src/pages/jobs/index.astro
-│   └── src/pages/sms/index.astro
-├── apps/api/          # Workers API
-│   ├── src/routes/auth.ts
-│   ├── src/routes/leads.ts
-│   ├── src/routes/estimates.ts
-│   ├── src/routes/billing.ts
-│   ├── src/routes/jobs.ts
-│   ├── src/routes/sms.ts
-│   ├── src/routes/pdf.ts
-│   └── src/cron/drips.ts
-├── packages/db/       # Drizzle schema
-└── packages/core/     # Business logic
+├── apps/
+│   ├── api/          # Hono API (Cloudflare Workers)
+│   └── web/          # Astro frontend
+├── packages/
+│   └── db/           # Drizzle schema + migrations
+└── package.json
 ```
 
-## API Endpoints
+### Database Schema
 
-- `POST /v1/auth/magic-link` - Send magic link
-- `GET /v1/auth/verify?token=...` - Verify token
-- `GET/POST /v1/leads` - Leads CRUD
-- `GET/POST /v1/estimates` - Estimates CRUD
-- `POST /v1/estimates/:id/send` - Send estimate
-- `POST /v1/billing/checkout` - Create Stripe session
-- `POST /v1/billing/webhook` - Stripe webhook
-- `GET/POST /v1/jobs` - Jobs CRUD
-- `GET /v1/jobs/:id/costs` - Cost breakdown
-- `POST /v1/sms/inbound` - Twilio webhook
-- `POST /v1/sms/send` - Send SMS
-- `POST /v1/pdf/estimate/:id` - Generate PDF
+Key tables:
+- `organizations` – Tenant isolation
+- `users` + `memberships` – Auth & RBAC
+- `leads` – Lead management
+- `estimates` – Good/Better/Best pricing
+- `jobs` – Job tracking with costing
+- `change_orders` – Post-signature modifications
+- `job_photos` – Before/progress/after
+- `message_templates` – Email/SMS templates
+- `subscriptions` – SaaS billing
 
-## Next Steps
+See `packages/db/src/schema.ts` for full schema.
 
-- Google Calendar sync
-- Production rates database
-- Public estimate accept page
-- Email sending via Resend
-- File uploads to R2
+### API Routes
+
+- `POST /v1/auth/magic-link` – Request sign-in link
+- `GET /v1/auth/verify` – Verify magic link token
+- `GET /v1/leads` – List leads
+- `POST /v1/estimates` – Create estimate
+- `POST /v1/estimates/:id/sign` – E-signature
+- `GET /v1/jobs` – List jobs
+- `POST /v1/uploads/photo` – Upload job photos
+- `POST /v1/billing/create-checkout` – Stripe checkout
+- `GET /v1/templates` – Message templates
+- `POST /v1/change-orders` – Create change order
+
+Full API docs: [OpenAPI spec](./docs/api.yaml)
+
+## Features
+
+### Core CRM
+- ✅ Lead management with source tracking
+- ✅ Good/Better/Best estimates
+- ✅ E-signature via Documenso
+- ✅ Stripe payments (50% deposit)
+- ✅ Job costing & time tracking
+- ✅ Production rate calculator
+
+### Scheduling
+- ✅ Week view calendar
+- ✅ Google Calendar sync
+- ✅ Drag-drop job scheduling
+- ✅ Unscheduled jobs queue
+
+### Communication
+- ✅ Magic link auth (no passwords)
+- ✅ SMS inbox (Twilio)
+- ✅ Email templates (customizable)
+- ✅ Automated review requests
+
+### Accounting
+- ✅ QuickBooks Online sync
+- ✅ Expense tracking
+- ✅ Receipt uploads
+
+### SaaS Billing
+- ✅ Starter ($49/mo), Pro ($149/mo), Enterprise ($399/mo)
+- ✅ Stripe Checkout + Customer Portal
+- ✅ Free trial support
+
+## Deployment
+
+### Environments
+
+- **Development:** Local, `ENVIRONMENT=development`
+- **Staging:** `staging.paintflow.app`, auto-deploy from `develop` branch
+- **Production:** `app.paintflow.app`, manual approval from `main` branch
+
+### Deploy to Cloudflare
+
+```bash
+# Staging
+git push origin develop
+# Auto-deploys to staging.paintflow.app
+
+# Production
+git checkout main
+git merge develop
+git push origin main
+# Requires approval, deploys to app.paintflow.app
+```
+
+### DNS Setup for MailChannels
+
+Add these DNS records to `paintflow.app`:
+
+```
+_mailchannels.paintflow.app TXT "v=mc1 cfid=paintflow.workers.dev"
+```
+
+This enables magic link emails via MailChannels (free).
+
+### Stripe Webhooks
+
+Configure in Stripe Dashboard:
+- Endpoint: `https://app.paintflow.app/v1/billing/webhook`
+- Events: `checkout.session.completed`, `customer.subscription.updated`, `invoice.payment_failed`
+
+## Architectural Decisions
+
+### Why Magic Links Instead of Passwords?
+
+**Decision:** Use magic link authentication (no passwords)
+
+**Rationale:**
+- Painting contractors use mobile devices on job sites
+- Password managers uncommon in this demographic
+- Reduces support burden (no "forgot password" tickets)
+- More secure (no password breaches, phishing-resistant)
+- Better UX (one click vs typing password)
+
+**Trade-offs:**
+- Email deliverability dependency
+- 15-minute token expiration
+- Requires email provider (MailChannels)
+
+### Why Hono on Cloudflare Workers?
+
+**Decision:** Edge runtime instead of traditional server
+
+**Rationale:**
+- Global low-latency for contractors in field
+- Auto-scaling, no server management
+- Cost-effective (millions of requests free)
+- Integrates with Cloudflare ecosystem (R2, KV, D1)
+
+**Trade-offs:**
+- No Node.js APIs (use Web Standards)
+- 10ms CPU limit per request
+- Cold starts (minimal with Workers)
+
+### Why Drizzle ORM?
+
+**Decision:** Drizzle over Prisma
+
+**Rationale:**
+- Smaller bundle size (critical for Workers)
+- SQL-like, less abstraction
+- Better TypeScript inference
+- Faster queries
+
+**Trade-offs:**
+- Smaller community
+- Fewer convenience methods
+
+### Why Monorepo?
+
+**Decision:** npm workspaces with `apps/` and `packages/`
+
+**Rationale:**
+- Shared types between API and web
+- Atomic changes across stack
+- Single CI/CD pipeline
+- Easier refactoring
+
+**Trade-offs:**
+- Larger repo size
+- Requires workspace-aware tooling
+
+### Why Good/Better/Best Estimates?
+
+**Decision:** Tiered pricing built into core product
+
+**Rationale:**
+- Industry standard for painting (upsell strategy)
+- Increases average job value 20-30%
+- Differentiator vs generic CRMs
+- Painters think in tiers (basic paint vs premium)
+
+### Why 50% Deposit?
+
+**Decision:** Default 50% deposit on estimate acceptance
+
+**Rationale:**
+- Industry standard for painting
+- Covers material costs
+- Reduces no-shows
+- Configurable per org
+
+## Development
+
+### Running Tests
+
+```bash
+npm test                 # Unit tests
+npm run test:e2e        # Playwright E2E
+npm run test:api        # API integration tests
+```
+
+### Database Migrations
+
+```bash
+npm run db:generate     # Generate migration
+npm run db:push         # Push to database
+npm run db:studio       # Open Drizzle Studio
+```
+
+### Code Style
+
+- TypeScript strict mode
+- ESLint + Prettier
+- Conventional commits
+- Feature flags for risky changes
+
+## Monitoring
+
+Production monitoring (optional, $200/mo for enterprise):
+
+- **Sentry** – Error tracking
+- **Better Uptime** – Uptime monitoring + status page
+- **Axiom** – Log aggregation
+- **Checkly** – Synthetic monitoring
+- **Metabase** – Business metrics
+
+See [Monitoring Guide](./docs/monitoring.md)
+
+## Contributing
+
+1. Branch from `develop`: `git checkout -b feature/my-feature`
+2. Make changes + tests
+3. PR to `develop`
+4. Auto-deploys to staging
+5. After QA, merge to `main` for production
 
 ## License
 
-Proprietary
+Proprietary – All rights reserved
+
+## Support
+
+- Docs: https://paintflow.app/docs
+- Email: support@paintflow.app
+- Issues: GitHub Issues
