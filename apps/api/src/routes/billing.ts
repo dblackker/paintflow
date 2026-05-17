@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { estimates } from '@paintflow/db/schema';
+import { estimates, leads, quickbooksConnections } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createCheckoutSession, verifyWebhookSignature } from '../lib/stripe';
+import { createQBInvoice } from '../lib/quickbooks';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -69,14 +70,39 @@ billing.post('/webhook', async (c) => {
     const event = JSON.parse(body);
     
     if (event.type === 'checkout.session.completed') {
-      const { estimateId } = event.data.object.metadata;
+      const { estimateId, orgId } = event.data.object.metadata;
       
       const db = createDb(c.env.DATABASE_URL);
+      
+      // Mark estimate as accepted
       await db.update(estimates)
         .set({ status: 'accepted' })
         .where(eq(estimates.id, estimateId));
       
       console.log(`Estimate ${estimateId} marked as accepted`);
+      
+      // Auto-sync to QuickBooks if connected
+      const qbConnection = await db.query.quickbooksConnections.findFirst({
+        where: eq(quickbooksConnections.orgId, orgId),
+      });
+      
+      if (qbConnection) {
+        try {
+          const estimate = await db.query.estimates.findFirst({
+            where: eq(estimates.id, estimateId),
+          });
+          
+          const lead = await db.query.leads.findFirst({
+            where: eq(leads.id, estimate!.leadId),
+          });
+          
+          const invoiceId = await createQBInvoice(c.env, orgId, estimate, lead);
+          console.log(`Auto-synced invoice ${invoiceId} to QuickBooks`);
+        } catch (qbErr) {
+          console.error('QB auto-sync failed:', qbErr);
+          // Don't fail webhook if QB sync fails
+        }
+      }
     }
     
     return c.json({ received: true });
