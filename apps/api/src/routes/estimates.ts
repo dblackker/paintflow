@@ -51,6 +51,8 @@ estimatesApp.post('/:id/sign', async (c) => {
       signedName: name,
       signatureData,
       signedAt: new Date(),
+      signedIp: ip,
+      signedUserAgent: userAgent,
       status: 'accepted',
     })
     .where(eq(estimates.id, id))
@@ -68,7 +70,6 @@ estimatesApp.post('/:id/sign', async (c) => {
     try {
       const pkg = estimate.packages.find((p: any) => p.name === packageName) || estimate.packages[0];
       
-      // Generate PDF with signature
       const pdfHtml = generateSignedEstimateHTML(estimate, lead, pkg, name);
       let pdfAttachment = null;
       
