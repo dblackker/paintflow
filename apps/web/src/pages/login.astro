@@ -1,0 +1,94 @@
+---
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Sign in - PaintFlow</title>
+  </head>
+  <body class="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div class="max-w-md w-full space-y-8">
+      <div class="text-center">
+        <h1 class="text-3xl font-bold text-gray-900">PaintFlow</h1>
+        <p class="mt-2 text-gray-600">Sign in to your account</p>
+      </div>
+      
+      <form id="login-form" class="mt-8 space-y-6">
+        <div>
+          <label for="email" class="sr-only">Email address</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            class="appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Email address"
+          />
+        </div>
+
+        <div>
+          <button
+            type="submit"
+            class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            Send magic link
+          </button>
+        </div>
+      </form>
+
+      <div id="message" class="hidden mt-4 p-4 rounded-lg"></div>
+    </div>
+
+    <script>
+      const form = document.getElementById('login-form') as HTMLFormElement;
+      const message = document.getElementById('message') as HTMLDivElement;
+      
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const email = formData.get('email') as string;
+        
+        const button = form.querySelector('button') as HTMLButtonElement;
+        button.disabled = true;
+        button.textContent = 'Sending...';
+        
+        try {
+          const res = await fetch('http://localhost:8787/v1/auth/magic-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+            credentials: 'include',
+          });
+          
+          const data = await res.json();
+          
+          if (res.ok) {
+            message.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-800';
+            message.textContent = 'Check your email for the magic link!';
+            message.classList.remove('hidden');
+            form.reset();
+            
+            // Dev mode: show token
+            if (data.devToken) {
+              const devLink = document.createElement('a');
+              devLink.href = `http://localhost:8787/v1/auth/verify?token=${data.devToken}`;
+              devLink.textContent = 'Dev: Click to verify';
+              devLink.className = 'block mt-2 text-sm underline';
+              message.appendChild(devLink);
+            }
+          } else {
+            throw new Error(data.error || 'Failed to send magic link');
+          }
+        } catch (err) {
+          message.className = 'mt-4 p-4 rounded-lg bg-red-50 text-red-800';
+          message.textContent = err instanceof Error ? err.message : 'Something went wrong';
+          message.classList.remove('hidden');
+        } finally {
+          button.disabled = false;
+          button.textContent = 'Send magic link';
+        }
+      });
+    </script>
+  </body>
+</html>

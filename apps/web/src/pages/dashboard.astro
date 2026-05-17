@@ -1,0 +1,57 @@
+---
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Dashboard - PaintFlow</title>
+  </head>
+  <body class="min-h-screen bg-gray-50">
+    <nav class="bg-white shadow-sm border-b">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16 items-center">
+          <h1 class="text-xl font-semibold">PaintFlow</h1>
+          <button id="logout" class="text-sm text-gray-600 hover:text-gray-900">Sign out</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="mb-8">
+        <h2 class="text-2xl font-bold text-gray-900">Welcome back!</h2>
+        <p class="text-gray-600">Here's what's happening with your painting business</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+          <p class="text-sm text-gray-600">Active Leads</p>
+          <p class="text-3xl font-bold mt-2">12</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+          <p class="text-sm text-gray-600">Estimates Sent</p>
+          <p class="text-3xl font-bold mt-2">5</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-sm border">
+          <p class="text-sm text-gray-600">Jobs This Month</p>
+          <p class="text-3xl font-bold mt-2">8</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border p-6">
+        <h3 class="text-lg font-semibold mb-4">Recent Activity</h3>
+        <p class="text-gray-600">No recent activity. Start by adding your first lead!</p>
+      </div>
+    </main>
+
+    <script>
+      document.getElementById('logout')?.addEventListener('click', async () => {
+        await fetch('http://localhost:8787/v1/auth/logout', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        window.location.href = '/login';
+      });
+    </script>
+  </body>
+</html>
