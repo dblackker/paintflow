@@ -7,6 +7,7 @@ import leadsRoutes from './routes/leads';
 import estimatesRoutes from './routes/estimates';
 import billingRoutes from './routes/billing';
 import jobsRoutes from './routes/jobs';
+import smsRoutes from './routes/sms';
 
 const app = new Hono();
 
@@ -20,6 +21,7 @@ app.use('*', tenantMiddleware);
 // Public routes
 app.route('/v1/auth', authRoutes);
 app.route('/v1/billing/webhook', billingRoutes);
+app.route('/v1/sms', smsRoutes);
 
 // Health check
 app.get('/health', (c) => {
