@@ -67,6 +67,42 @@ estimatesApp.post('/:id/sign', async (c) => {
   if (lead?.email) {
     try {
       const pkg = estimate.packages.find((p: any) => p.name === packageName) || estimate.packages[0];
+      
+      // Generate PDF with signature
+      const pdfHtml = generateSignedEstimateHTML(estimate, lead, pkg, name);
+      let pdfAttachment = null;
+      
+      if (c.env.CF_ACCOUNT_ID && c.env.CF_API_TOKEN) {
+        try {
+          const pdfRes = await fetch(
+            `https://api.cloudflare.com/client/v4/accounts/${c.env.CF_ACCOUNT_ID}/browser-rendering/pdf`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${c.env.CF_API_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                html: pdfHtml,
+                format: 'A4',
+                printBackground: true,
+              }),
+            }
+          );
+          
+          if (pdfRes.ok) {
+            const pdfBuffer = await pdfRes.arrayBuffer();
+            const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
+            pdfAttachment = {
+              filename: `estimate-${estimate.id.slice(0,8)}.pdf`,
+              content: pdfBase64,
+            };
+          }
+        } catch (pdfErr) {
+          console.error('PDF generation failed:', pdfErr);
+        }
+      }
+      
       const html = `
 <!DOCTYPE html>
 <html>
@@ -84,6 +120,7 @@ estimatesApp.post('/:id/sign', async (c) => {
   </div>
   
   <p>We'll be in touch shortly to schedule your project. A deposit invoice will be sent separately.</p>
+  <p><strong>Attached:</strong> Signed copy of your estimate</p>
   
   <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
     This agreement is legally binding. By signing, you agreed to our terms and conditions including payment terms (50% deposit), warranty (2 years workmanship), and cancellation policy (3 business days).
@@ -93,8 +130,9 @@ estimatesApp.post('/:id/sign', async (c) => {
 </body>
 </html>
       `;
-      await sendEmail(c.env, lead.email, 'Estimate Signed - Next Steps', html);
-      console.log(`Signed estimate ${id} from IP ${ip}, UA: ${userAgent}`);
+      
+      await sendEmail(c.env, lead.email, 'Estimate Signed - Next Steps', html, pdfAttachment);
+      console.log(`Signed estimate ${id} from IP ${ip}`);
     } catch (err) {
       console.error('Failed to send signed confirmation:', err);
     }
@@ -102,6 +140,78 @@ estimatesApp.post('/:id/sign', async (c) => {
   
   return c.json({ data: estimate });
 });
+
+function generateSignedEstimateHTML(estimate: any, lead: any, pkg: any, signerName: string) {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #111; }
+    h1 { color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px; }
+    .header { margin-bottom: 30px; }
+    .package { border: 2px solid #2563eb; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .total { font-size: 24px; font-weight: bold; color: #2563eb; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; }
+    .terms { margin-top: 40px; padding: 20px; background: #f9fafb; border-radius: 8px; font-size: 12px; }
+    .signature { margin-top: 40px; padding: 20px; border: 2px solid #e5e7eb; border-radius: 8px; }
+    .signature img { max-width: 300px; border-bottom: 1px solid #000; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Painting Estimate & Agreement</h1>
+    <p><strong>Customer:</strong> ${lead?.name || 'Customer'}</p>
+    <p><strong>Estimate #:</strong> ${estimate.id.slice(0, 8).toUpperCase()}</p>
+    <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+  </div>
+  
+  <div class="package">
+    <h2>${pkg.name.charAt(0).toUpperCase() + pkg.name.slice(1)} Package <span class="total">$${pkg.total.toFixed(2)}</span></h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th style="text-align: right;">Qty</th>
+          <th style="text-align: right;">Rate</th>
+          <th style="text-align: right;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pkg.items.map((item: any) => `
+          <tr>
+            <td>${item.desc}</td>
+            <td style="text-align: right;">${item.qty}</td>
+            <td style="text-align: right;">$${item.rate.toFixed(2)}</td>
+            <td style="text-align: right;">$${(item.qty * item.rate).toFixed(2)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="terms">
+    <h3>Terms & Conditions</h3>
+    <p><strong>Scope:</strong> Professional painting services as described.</p>
+    <p><strong>Payment:</strong> 50% deposit required, balance on completion.</p>
+    <p><strong>Warranty:</strong> 2 years workmanship.</p>
+    <p><strong>Cancellation:</strong> 3 business days for full refund.</p>
+  </div>
+  
+  <div class="signature">
+    <h3>Customer Acceptance</h3>
+    <p><strong>Signed by:</strong> ${signerName}</p>
+    <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+    ${estimate.signatureData ? `<img src="${estimate.signatureData}" alt="Signature" />` : ''}
+    <p style="margin-top: 20px; font-style: italic;">By signing, customer agrees to terms and authorizes work.</p>
+  </div>
+</body>
+</html>
+  `;
+}
 
 estimatesApp.use('*', authMiddleware);
 
