@@ -159,3 +159,16 @@ export const googleCalendarConnections = pgTable('google_calendar_connections', 
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const reviewRequests = pgTable('review_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id).notNull(),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  rating: varchar('rating', { length: 10 }),
+  reviewUrl: text('review_url'),
+  sentAt: timestamp('sent_at'),
+  respondedAt: timestamp('responded_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
