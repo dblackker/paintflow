@@ -32,7 +32,7 @@ billing.post('/checkout', async (c) => {
   
   try {
     const session = await createCheckoutSession(c.env, {
-      amount: pkg.total,
+      amount: Math.round(pkg.total * 0.5 * 100) / 100,
       successUrl: `${c.env.APP_URL}/estimates/${estimateId}/success`,
       cancelUrl: `${c.env.APP_URL}/estimates/${estimateId}`,
       metadata: { estimateId, orgId, packageName },
