@@ -1,13 +1,9 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Leads - PaintFlow</title>
-  </head>
-  <body class="min-h-screen bg-gray-50">
+<Base title="Leads">
+  <div class="min-h-screen bg-gray-50">
     <nav class="bg-white shadow-sm border-b">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16 items-center">
@@ -36,7 +32,6 @@
       </div>
     </main>
 
-    <!-- Add Lead Modal -->
     <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
       <div class="bg-white rounded-lg p-6 w-full max-w-md">
         <h3 class="text-lg font-semibold mb-4">Add New Lead</h3>
@@ -60,6 +55,7 @@
         </form>
       </div>
     </div>
+  </div>
 
     <script>
       const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
@@ -97,21 +93,17 @@
           `).join('');
         } catch (err) {
           console.error('Failed to load leads', err);
+          window.showToast('Failed to load leads', 'error');
         }
       }
       
-      // Modal handling
       const modal = document.getElementById('modal');
-      const addBtn = document.getElementById('add-lead');
-      const cancelBtn = document.getElementById('cancel');
-      const form = document.getElementById('lead-form');
+      document.getElementById('add-lead')?.addEventListener('click', () => modal?.classList.remove('hidden'));
+      document.getElementById('cancel')?.addEventListener('click', () => modal?.classList.add('hidden'));
       
-      addBtn?.addEventListener('click', () => modal?.classList.remove('hidden'));
-      cancelBtn?.addEventListener('click', () => modal?.classList.add('hidden'));
-      
-      form?.addEventListener('submit', async (e) => {
+      document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const formData = new FormData(form);
+        const formData = new FormData(e.target);
         const data = Object.fromEntries(formData);
         
         try {
@@ -122,13 +114,18 @@
             body: JSON.stringify(data),
           });
           
-          if (res.ok) {\n            showToast('Lead created successfully');
+          if (res.ok) {
+            window.showToast('Lead created successfully');
             modal?.classList.add('hidden');
-            form.reset();
+            e.target.reset();
             loadLeads();
+          } else {
+            const err = await res.json();
+            window.showToast(err.error || 'Failed to create lead', 'error');
           }
         } catch (err) {
-          console.error('Failed to create lead', err);\n          showToast('Failed to create lead', 'error');
+          console.error('Failed to create lead', err);
+          window.showToast('Failed to create lead', 'error');
         }
       });
       
@@ -140,30 +137,6 @@
         window.location.href = '/login';
       });
       
-      function showToast(message, type = 'success') {
-        const container = document.getElementById('toast-container');
-        const toast = document.createElement('div');
-        toast.className = `px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium transition-all ${
-          type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-gray-800'
-        }`;
-        toast.textContent = message;
-        container.appendChild(toast);
-        setTimeout(() => {
-          toast.style.opacity = '0';
-          setTimeout(() => toast.remove(), 300);
-        }, 3000);
-      }
-      
-      // Override alert for toasts
-      window.addEventListener('error', (e) => {
-        showToast('An error occurred', 'error');
-      });
-      
       loadLeads();
     </script>
-  
-    <!-- Toast Container -->
-    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
-
-  </body>
-</html>
+</Base>
