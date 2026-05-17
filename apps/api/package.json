@@ -1,0 +1,1 @@
+{"name":"@paintflow/api","private":true,"scripts":{"build":"tsc","dev":"wrangler dev"},"type":"module","version":"0.1.0"}

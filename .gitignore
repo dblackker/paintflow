@@ -1,0 +1,11 @@
+node_modules
+dist
+.build
+.astro
+.next
+.turbo
+.env
+.env.local
+.DS_Store
+*.log
+.wrangler
