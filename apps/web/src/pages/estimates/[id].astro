@@ -39,6 +39,43 @@ export async function getStaticPaths() {
           <div id="accept-buttons" class="flex gap-3"></div>
         </div>
 
+        <!-- Terms Modal -->
+        <div id="terms-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-semibold mb-4">Terms & Conditions</h3>
+            <div class="prose prose-sm text-gray-700 space-y-3 mb-6">
+              <div>
+                <h4 class="font-semibold text-gray-900">Scope of Work</h4>
+                <p>Contractor agrees to perform painting services as described in the selected package. All work will be completed in a professional manner using quality materials.</p>
+              </div>
+              <div>
+                <h4 class="font-semibold text-gray-900">Payment Terms</h4>
+                <p>50% deposit required to schedule work. Final payment due upon completion. We accept credit cards, checks, and cash.</p>
+              </div>
+              <div>
+                <h4 class="font-semibold text-gray-900">Change Orders</h4>
+                <p>Any changes to scope must be approved in writing and may affect price and timeline.</p>
+              </div>
+              <div>
+                <h4 class="font-semibold text-gray-900">Warranty</h4>
+                <p>We warranty our workmanship for 2 years. Paint manufacturer warranties apply to materials.</p>
+              </div>
+              <div>
+                <h4 class="font-semibold text-gray-900">Cancellation</h4>
+                <p>Customer may cancel within 3 business days of signing for full refund of deposit.</p>
+              </div>
+              <div>
+                <h4 class="font-semibold text-gray-900">Access</h4>
+                <p>Customer agrees to provide reasonable access to property during business hours (8am-6pm).</p>
+              </div>
+            </div>
+            <div class="flex gap-3">
+              <button id="decline-terms" class="flex-1 px-4 py-2 border rounded">Cancel</button>
+              <button id="accept-terms" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded font-medium">I Agree to Terms</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Signature Modal -->
         <div id="signature-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div class="bg-white rounded-lg p-6 w-full max-w-md">
@@ -57,8 +94,8 @@ export async function getStaticPaths() {
             </div>
             
             <div class="flex gap-3">
-              <button id="cancel-sign" class="flex-1 px-4 py-2 border rounded">Cancel</button>
-              <button id="submit-sign" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded">Sign & Continue</button>
+              <button id="cancel-sign" class="flex-1 px-4 py-2 border rounded">Back</button>
+              <button id="submit-sign" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded">Sign & Pay Deposit</button>
             </div>
           </div>
         </div>
@@ -197,11 +234,22 @@ export async function getStaticPaths() {
       
       window.selectPackage = function(pkgName) {
         selectedPackage = pkgName;
+        document.getElementById('terms-modal').classList.remove('hidden');
+      };
+      
+      document.getElementById('decline-terms').onclick = () => {
+        document.getElementById('terms-modal').classList.add('hidden');
+        selectedPackage = null;
+      };
+      
+      document.getElementById('accept-terms').onclick = () => {
+        document.getElementById('terms-modal').classList.add('hidden');
         document.getElementById('signature-modal').classList.remove('hidden');
       };
       
       document.getElementById('cancel-sign').onclick = () => {
         document.getElementById('signature-modal').classList.add('hidden');
+        document.getElementById('terms-modal').classList.remove('hidden');
       };
       
       document.getElementById('submit-sign').onclick = async () => {
@@ -214,14 +262,12 @@ export async function getStaticPaths() {
         const signatureData = canvas.toDataURL();
         
         try {
-          // Save signature
           await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, signatureData, packageName: selectedPackage }),
           });
           
-          // Proceed to checkout
           const res = await fetch(`${API_URL}/v1/billing/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
