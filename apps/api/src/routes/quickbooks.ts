@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { quickbooksConnections, leads, estimates } from '@paintflow/db/schema';
+import { quickbooksConnections, leads, estimates, orgSettings } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
-import { getCompanyInfo, createQBCustomer, createQBInvoice } from '../lib/quickbooks';
+import { getCompanyInfo, createQBCustomer, createQBInvoice, getTaxCodes, getItems } from '../lib/quickbooks';
 
 const qb = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -12,6 +12,9 @@ qb.use('/connect', authMiddleware);
 qb.use('/status', authMiddleware);
 qb.use('/sync/*', authMiddleware);
 qb.use('/disconnect', authMiddleware);
+qb.use('/tax-codes', authMiddleware);
+qb.use('/items', authMiddleware);
+qb.use('/settings', authMiddleware);
 
 // GET /v1/quickbooks/connect
 qb.get('/connect', async (c) => {
@@ -39,7 +42,6 @@ qb.get('/callback', async (c) => {
   }
   
   try {
-    // Exchange code for tokens
     const tokenResponse = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
       method: 'POST',
       headers: {
@@ -61,16 +63,11 @@ qb.get('/callback', async (c) => {
     }
     
     const tokens = await tokenResponse.json();
-    
-    // Get company info
     const companyInfo = await getCompanyInfo(c.env, tokens.access_token, realmId);
     const companyName = companyInfo.CompanyInfo?.CompanyName || 'QuickBooks Company';
-    
-    // Parse state to get orgId
     const stateData = JSON.parse(atob(state!));
     const orgId = stateData.orgId;
     
-    // Save connection
     const db = createDb(c.env.DATABASE_URL);
     await db.insert(quickbooksConnections)
       .values({
@@ -118,6 +115,67 @@ qb.get('/status', async (c) => {
     companyName: connection.companyName,
     connectedAt: connection.connectedAt,
   });
+});
+
+// GET /v1/quickbooks/tax-codes
+qb.get('/tax-codes', async (c) => {
+  const orgId = c.get('orgId');
+  try {
+    const taxCodes = await getTaxCodes(c.env, orgId);
+    return c.json({ data: taxCodes });
+  } catch (err) {
+    console.error('QB tax codes error:', err);
+    return c.json({ error: 'Failed to fetch tax codes' }, 500);
+  }
+});
+
+// GET /v1/quickbooks/items
+qb.get('/items', async (c) => {
+  const orgId = c.get('orgId');
+  try {
+    const items = await getItems(c.env, orgId);
+    return c.json({ data: items });
+  } catch (err) {
+    console.error('QB items error:', err);
+    return c.json({ error: 'Failed to fetch items' }, 500);
+  }
+});
+
+// GET /v1/quickbooks/settings
+qb.get('/settings', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  
+  return c.json({ data: settings || {} });
+});
+
+// PUT /v1/quickbooks/settings
+qb.put('/settings', async (c) => {
+  const orgId = c.get('orgId');
+  const body = await c.req.json();
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const [settings] = await db.insert(orgSettings)
+    .values({
+      orgId,
+      qbTaxCode: body.qbTaxCode,
+      qbItemId: body.qbItemId,
+    })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: {
+        qbTaxCode: body.qbTaxCode,
+        qbItemId: body.qbItemId,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  
+  return c.json({ data: settings });
 });
 
 // POST /v1/quickbooks/sync/customer/:leadId
@@ -183,6 +241,64 @@ qb.post('/disconnect', async (c) => {
     .where(eq(quickbooksConnections.orgId, orgId));
   
   return c.json({ success: true });
+});
+
+
+// POST /v1/quickbooks/webhook
+qb.post('/webhook', async (c) => {
+  const signature = c.req.header('intuit-signature');
+  const body = await c.req.text();
+  
+  // Verify webhook signature if verifier token is set
+  if (c.env.QB_WEBHOOK_VERIFIER_TOKEN && signature) {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(c.env.QB_WEBHOOK_VERIFIER_TOKEN),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
+    const expectedSig = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+    
+    if (expectedSig !== signature) {
+      return c.json({ error: 'Invalid signature' }, 401);
+    }
+  }
+  
+  try {
+    const event = JSON.parse(body);
+    
+    // Process events
+    for (const notification of event.eventNotifications || []) {
+      const realmId = notification.realmId;
+      
+      for (const dataChange of notification.dataChangeEvent?.entities || []) {
+        const { name, id, operation } = dataChange;
+        
+        console.log(`QB webhook: ${operation} ${name} ${id} for realm ${realmId}`);
+        
+        // Handle payment updates
+        if (name === 'Payment' && operation === 'Create') {
+          // Could sync payment status back to PaintFlow
+          // For now, just log
+          console.log(`Payment created in QB: ${id}`);
+        }
+        
+        // Handle invoice updates
+        if (name === 'Invoice' && operation === 'Update') {
+          console.log(`Invoice updated in QB: ${id}`);
+        }
+      }
+    }
+    
+    return c.json({ received: true });
+  } catch (err) {
+    console.error('QB webhook error:', err);
+    return c.json({ error: 'Webhook failed' }, 500);
+  }
 });
 
 export default qb;

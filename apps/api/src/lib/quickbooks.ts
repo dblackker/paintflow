@@ -261,3 +261,55 @@ export async function createQBPayment(env: any, orgId: string, estimate: any, am
   
   return paymentId;
 }
+
+export async function getTaxCodes(env: any, orgId: string) {
+  const accessToken = await getValidAccessToken(env, orgId);
+  const base = getQbBase(env);
+  
+  const connection = await createDb(env.DATABASE_URL).query.quickbooksConnections.findFirst({
+    where: eq(quickbooksConnections.orgId, orgId),
+  });
+  
+  const response = await fetch(
+    `${base}/v3/company/${connection!.realmId}/query?query=select * from TaxCode`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json',
+      },
+    }
+  );
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch tax codes');
+  }
+  
+  const result = await response.json();
+  return result.QueryResponse.TaxCode || [];
+}
+
+export async function getItems(env: any, orgId: string) {
+  const accessToken = await getValidAccessToken(env, orgId);
+  const base = getQbBase(env);
+  
+  const connection = await createDb(env.DATABASE_URL).query.quickbooksConnections.findFirst({
+    where: eq(quickbooksConnections.orgId, orgId),
+  });
+  
+  const response = await fetch(
+    `${base}/v3/company/${connection!.realmId}/query?query=select * from Item where Type='Service'`,
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json',
+      },
+    }
+  );
+  
+  if (!response.ok) {
+    throw new Error('Failed to fetch items');
+  }
+  
+  const result = await response.json();
+  return result.QueryResponse.Item || [];
+}

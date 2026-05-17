@@ -114,3 +114,11 @@ export const quickbooksConnections = pgTable('quickbooks_connections', {
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const orgSettings = pgTable('org_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull().unique(),
+  qbTaxCode: varchar('qb_tax_code', { length: 50 }),
+  qbItemId: varchar('qb_item_id', { length: 50 }),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
