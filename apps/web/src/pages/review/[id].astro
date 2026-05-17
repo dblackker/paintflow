@@ -61,33 +61,47 @@ export async function getStaticPaths() {
         btn.addEventListener('click', async () => {
           selectedRating = parseInt(btn.dataset.rating);
           
-          // Highlight stars
           document.querySelectorAll('#stars button').forEach((b, i) => {
             b.style.opacity = i < selectedRating ? '1' : '0.3';
           });
           
           setTimeout(async () => {
+            try {
+              await fetch(`${API_URL}/v1/reviews/${requestId}/rate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rating: selectedRating }),
+              });
+            } catch (err) {
+              console.error('Failed to submit rating:', err);
+            }
+            
             if (selectedRating >= 4) {
-              // Happy customer - send to Google
               document.getElementById('rating-step').classList.add('hidden');
               document.getElementById('thankyou-step').classList.remove('hidden');
               document.getElementById('thankyou-message').textContent = "We're thrilled you had a great experience! Would you mind sharing your feedback publicly?";
               document.getElementById('review-link').href = 'https://g.page/r/YOUR_GOOGLE_BUSINESS_ID/review';
-              document.getElementById('review-link').textContent = 'Review on Google';
             } else {
-              // Unhappy - collect feedback internally
               document.getElementById('rating-step').classList.add('hidden');
               document.getElementById('feedback-step').classList.remove('hidden');
             }
-            
-            // Track rating (optional - could POST to API)
-            console.log('Rating:', selectedRating);
           }, 300);
         });
       });
       
-      document.getElementById('submit-feedback')?.addEventListener('click', () => {
+      document.getElementById('submit-feedback')?.addEventListener('click', async () => {
         const feedback = document.getElementById('feedback-text').value;
+        
+        try {
+          await fetch(`${API_URL}/v1/reviews/${requestId}/rate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: selectedRating, feedback }),
+          });
+        } catch (err) {
+          console.error('Failed to submit feedback:', err);
+        }
+        
         document.getElementById('feedback-step').innerHTML = `
           <div class="text-6xl mb-4">✓</div>
           <h2 class="text-xl font-bold mb-2">Thank you for your feedback</h2>
