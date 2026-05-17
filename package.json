@@ -11,10 +11,13 @@
     "deploy:api": "cd apps/api && wrangler deploy",
     "deploy:web": "cd apps/web && astro build && wrangler pages deploy dist",
     "db:push": "cd packages/db && drizzle-kit push",
-    "db:studio": "cd packages/db && drizzle-kit studio"
+    "db:studio": "cd packages/db && drizzle-kit studio",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "@playwright/test": "^1.44.0"
   },
   "packageManager": "pnpm@9.0.0"
 }
