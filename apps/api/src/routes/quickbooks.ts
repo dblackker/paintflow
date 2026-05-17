@@ -237,19 +237,12 @@ qb.post('/disconnect', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  await db.delete(quickbooksConnections)
-    .where(eq(quickbooksConnections.orgId, orgId));
-  
-  return c.json({ success: true });
-});
-
 
 // POST /v1/quickbooks/webhook
 qb.post('/webhook', async (c) => {
   const signature = c.req.header('intuit-signature');
   const body = await c.req.text();
   
-  // Verify webhook signature if verifier token is set
   if (c.env.QB_WEBHOOK_VERIFIER_TOKEN && signature) {
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
@@ -270,24 +263,61 @@ qb.post('/webhook', async (c) => {
   
   try {
     const event = JSON.parse(body);
+    const db = createDb(c.env.DATABASE_URL);
     
-    // Process events
     for (const notification of event.eventNotifications || []) {
       const realmId = notification.realmId;
+      
+      const connection = await db.query.quickbooksConnections.findFirst({
+        where: eq(quickbooksConnections.realmId, realmId),
+      });
+      
+      if (!connection) continue;
       
       for (const dataChange of notification.dataChangeEvent?.entities || []) {
         const { name, id, operation } = dataChange;
         
         console.log(`QB webhook: ${operation} ${name} ${id} for realm ${realmId}`);
         
-        // Handle payment updates
         if (name === 'Payment' && operation === 'Create') {
-          // Could sync payment status back to PaintFlow
-          // For now, just log
-          console.log(`Payment created in QB: ${id}`);
+          try {
+            const paymentRes = await fetch(
+              `https://quickbooks.api.intuit.com/v3/company/${realmId}/payment/${id}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${connection.accessToken}`,
+                  'Accept': 'application/json',
+                },
+              }
+            );
+            
+            if (paymentRes.ok) {
+              const payment = await paymentRes.json();
+              const linkedInvoiceId = payment.QueryResponse?.Payment?.[0]?.Line?.[0]?.LinkedTxn?.[0]?.TxnId;
+              
+              if (linkedInvoiceId) {
+                const estimate = await db.query.estimates.findFirst({
+                  where: eq(estimates.qboInvoiceId, linkedInvoiceId),
+                });
+                
+                if (estimate) {
+                  await db.update(estimates)
+                    .set({ 
+                      qboPaymentId: id,
+                      status: 'accepted',
+                      updatedAt: new Date()
+                    })
+                    .where(eq(estimates.id, estimate.id));
+                  
+                  console.log(`Synced payment ${id} to estimate ${estimate.id}`);
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Failed to sync payment:', err);
+          }
         }
         
-        // Handle invoice updates
         if (name === 'Invoice' && operation === 'Update') {
           console.log(`Invoice updated in QB: ${id}`);
         }
