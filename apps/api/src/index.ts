@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { tenantMiddleware } from './middleware/tenant';
+import authRoutes from './routes/auth';
 
 const app = new Hono();
 
@@ -11,6 +12,10 @@ app.use('*', cors({
 
 app.use('*', tenantMiddleware);
 
+// Public routes
+app.route('/v1/auth', authRoutes);
+
+// Health check
 app.get('/health', (c) => {
   return c.json({ 
     status: 'ok', 
@@ -20,10 +25,8 @@ app.get('/health', (c) => {
   });
 });
 
+// Protected routes (TODO: add auth middleware)
 app.get('/v1/leads', (c) => {
-  // TODO: Implement with RLS
-  // const orgId = c.get('orgId');
-  // const leads = await db.select().from(leads).where(eq(leads.orgId, orgId));
   return c.json({ data: [], meta: { total: 0 } });
 });
 
