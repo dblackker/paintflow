@@ -263,3 +263,52 @@ import Base from '../../layouts/Base.astro';
         console.error('Failed to load photos', err);
       }
     }
+
+    // Change orders
+    async function loadChangeOrders(jobId) {
+      try {
+        const res = await fetch(`${API_URL}/v1/change-orders?jobId=${jobId}`, { credentials: 'include' });
+        const { data } = await res.json();
+        const container = document.getElementById(`change-orders-${jobId}`);
+        if (data.length === 0) {
+          container.innerHTML = '<p class="text-xs text-gray-500">No change orders</p>';
+          return;
+        }
+        container.innerHTML = data.map(co => `
+          <div class="text-sm p-2 border rounded ${co.status === 'approved' ? 'bg-green-50' : ''}">
+            <div class="flex justify-between">
+              <span class="font-medium">$${Number(co.amount).toFixed(2)}</span>
+              <span class="text-xs px-2 py-0.5 rounded ${co.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${co.status}</span>
+            </div>
+            <p class="text-xs text-gray-600 mt-1">${co.description}</p>
+            ${co.status === 'pending' ? `<button onclick="approveChangeOrder('${co.id}', '${jobId}')" class="mt-1 text-xs text-blue-600">Approve</button>` : ''}
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    
+    window.approveChangeOrder = async (id, jobId) => {
+      await fetch(`${API_URL}/v1/change-orders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'approved' }),
+      });
+      loadChangeOrders(jobId);
+    };
+    
+    window.createChangeOrder = async (jobId, estimateId) => {
+      const desc = prompt('Description:');
+      const amount = prompt('Amount:');
+      if (!desc || !amount) return;
+      
+      await fetch(`${API_URL}/v1/change-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ jobId, estimateId, description: desc, amount: parseFloat(amount), createdBy: 'contractor' }),
+      });
+      loadChangeOrders(jobId);
+    };
