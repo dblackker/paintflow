@@ -175,3 +175,78 @@ export const reviewRequests = pgTable('review_requests', {
   respondedAt: timestamp('responded_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// Organization settings
+export const orgSettings = pgTable('org_settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull().unique(),
+  
+  // Business info
+  companyName: varchar('company_name', { length: 255 }),
+  phone: varchar('phone', { length: 50 }),
+  email: varchar('email', { length: 255 }),
+  address: text('address'),
+  website: varchar('website', { length: 255 }),
+  
+  // Pricing
+  defaultLaborRate: decimal('default_labor_rate', { precision: 10, scale: 2 }).default('65.00'),
+  materialMarkupPercent: decimal('material_markup_percent', { precision: 5, scale: 2 }).default('30.00'),
+  salesTaxRate: decimal('sales_tax_rate', { precision: 5, scale: 4 }).default('0.0920'),
+  depositPercent: decimal('deposit_percent', { precision: 5, scale: 2 }).default('50.00'),
+  
+  // Business hours (JSON: { mon: { open: '07:00', close: '17:00', closed: false }, ... })
+  businessHours: jsonb('business_hours'),
+  
+  // Reviews
+  googleReviewUrl: text('google_review_url'),
+  yelpReviewUrl: text('yelp_review_url'),
+  reviewRequestDelayHours: integer('review_request_delay_hours').default(24),
+  
+  // Estimates
+  estimateValidDays: integer('estimate_valid_days').default(30),
+  
+  // Payment
+  paymentTerms: varchar('payment_terms', { length: 50 }).default('Due on completion'),
+  acceptChecks: boolean('accept_checks').default(true),
+  acceptCash: boolean('accept_cash').default(true),
+  
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Service areas
+export const serviceAreas = pgTable('service_areas', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  zipCode: varchar('zip_code', { length: 10 }).notNull(),
+  city: varchar('city', { length: 100 }),
+  state: varchar('state', { length: 2 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Team members
+export const teamMembers = pgTable('team_members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  userId: uuid('user_id').references(() => users.id),
+  email: varchar('email', { length: 255 }).notNull(),
+  name: varchar('name', { length: 255 }),
+  role: varchar('role', { length: 50 }).notNull().default('crew'), // owner, admin, estimator, crew
+  phone: varchar('phone', { length: 50 }),
+  hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Message templates
+export const messageTemplates = pgTable('message_templates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // estimate_followup_1, estimate_followup_2, review_request, etc.
+  channel: varchar('channel', { length: 20 }).notNull(), // sms, email
+  subject: varchar('subject', { length: 255 }),
+  body: text('body').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  delayDays: integer('delay_days').default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
