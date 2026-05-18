@@ -363,3 +363,16 @@ export const estimatePhotos = pgTable('estimate_photos', {
   annotations: jsonb('annotations'), // [{x, y, text, color}, ...]
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const auditLogs = pgTable('audit_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  userId: uuid('user_id').references(() => users.id),
+  action: varchar('action', { length: 100 }).notNull(), // 'estimate.signed', 'estimate.sent', etc.
+  entityType: varchar('entity_type', { length: 50 }).notNull(),
+  entityId: uuid('entity_id').notNull(),
+  metadata: jsonb('metadata'),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
