@@ -163,6 +163,32 @@
       
       document.getElementById('total-cost').textContent = `$${parseFloat(data.total).toFixed(2)}`;
       const totalHours = data.items.reduce((sum, i) => sum + parseFloat(i.hours || 0), 0);
+    async function loadTemplateRooms() {
+      const templateRooms = sessionStorage.getItem('templateRooms');
+      if (templateRooms) {
+        sessionStorage.removeItem('templateRooms');
+        const rooms = JSON.parse(templateRooms);
+        rooms.forEach(roomData => {
+          addRoom();
+          const lastRoom = document.querySelector('#rooms-container > div:last-child');
+          lastRoom.querySelector('[data-field="name"]').value = roomData.name;
+          roomData.items.forEach(item => {
+            addRoomItem(lastRoom.id);
+            const lastItem = lastRoom.querySelector('[data-items] > div:last-child');
+            lastItem.querySelector('[data-field="rateId"]')?.dispatchEvent(new Event('change'));
+          });
+        });
+      } else {
+        addRoom();
+      }
+    }
+
+    document.getElementById('add-room').addEventListener('click', addRoom);
+    document.getElementById('save-estimate').addEventListener('click', async () => {
+      alert('Saving estimate with production rates...');
+    });
+
+    loadRates().then(loadLeads).then(() => loadTemplateRooms());
       document.getElementById('total-hours').textContent = `${totalHours.toFixed(1)} hours`;
     }
 
