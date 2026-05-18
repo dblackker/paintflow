@@ -1,0 +1,145 @@
+---
+---
+
+<div class="fixed inset-0 bg-black bg-opacity-90 z-50 hidden" id="annotator-modal">
+  <div class="h-full flex flex-col">
+    <div class="bg-white p-4 flex justify-between items-center">
+      <h3 class="font-semibold">Annotate Photo</h3>
+      <button onclick="closeAnnotator()" class="text-gray-600">✕</button>
+    </div>
+    <div class="flex-1 relative overflow-hidden bg-gray-900 flex items-center justify-center">
+      <canvas id="annotation-canvas" class="max-w-full max-h-full cursor-crosshair"></canvas>
+      <img id="annotation-image" class="hidden">
+    </div>
+    <div class="bg-white p-4 space-y-3">
+      <div class="flex gap-2">
+        <input id="annotation-text" placeholder="Add note..." class="flex-1 px-3 py-2 border rounded-lg">
+        <button onclick="addAnnotation()" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Add</button>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="setColor('#ff0000')" class="w-8 h-8 rounded-full bg-red-500 border-2 border-transparent data-[active=true]:border-black" data-color="#ff0000" data-active="true"></button>
+        <button onclick="setColor('#00ff00')" class="w-8 h-8 rounded-full bg-green-500 border-2 border-transparent data-[active=true]:border-black" data-color="#00ff00"></button>
+        <button onclick="setColor('#0000ff')" class="w-8 h-8 rounded-full bg-blue-500 border-2 border-transparent data-[active=true]:border-black" data-color="#0000ff"></button>
+        <button onclick="setColor('#ffff00')" class="w-8 h-8 rounded-full bg-yellow-500 border-2 border-transparent data-[active=true]:border-black" data-color="#ffff00"></button>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="undoAnnotation()" class="flex-1 py-2 border rounded-lg">Undo</button>
+        <button onclick="clearAnnotations()" class="flex-1 py-2 border rounded-lg">Clear All</button>
+        <button onclick="saveAnnotations()" class="flex-1 py-2 bg-green-600 text-white rounded-lg">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let annotations = [];
+  let currentColor = '#ff0000';
+  let canvas, ctx, img;
+  let scale = 1;
+  let offsetX = 0, offsetY = 0;
+
+  function openAnnotator(imageUrl, existingAnnotations = []) {
+    annotations = [...existingAnnotations];
+    document.getElementById('annotator-modal').classList.remove('hidden');
+    
+    canvas = document.getElementById('annotation-canvas');
+    ctx = canvas.getContext('2d');
+    img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const maxWidth = window.innerWidth * 0.9;
+      const maxHeight = window.innerHeight * 0.6;
+      scale = Math.min(maxWidth / img.width, maxHeight / img.height);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      redraw();
+    };
+    img.src = imageUrl;
+    
+    canvas.addEventListener('click', handleCanvasClick);
+  }
+
+  function closeAnnotator() {
+    document.getElementById('annotator-modal').classList.add('hidden');
+  }
+
+  function handleCanvasClick(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+    const text = document.getElementById('annotation-text').value.trim();
+    if (!text) {
+      alert('Enter text first');
+      return;
+    }
+    annotations.push({ x, y, text, color: currentColor });
+    document.getElementById('annotation-text').value = '';
+    redraw();
+  }
+
+  function redraw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    
+    annotations.forEach(ann => {
+      const x = ann.x * scale;
+      const y = ann.y * scale;
+      
+      // Draw circle
+      ctx.beginPath();
+      ctx.arc(x, y, 20, 0, 2 * Math.PI);
+      ctx.fillStyle = ann.color + '40';
+      ctx.fill();
+      ctx.strokeStyle = ann.color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      
+      // Draw text background
+      ctx.font = '14px sans-serif';
+      const textWidth = ctx.measureText(ann.text).width;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(x + 25, y - 20, textWidth + 10, 24);
+      ctx.strokeStyle = ann.color;
+      ctx.strokeRect(x + 25, y - 20, textWidth + 10, 24);
+      
+      // Draw text
+      ctx.fillStyle = 'black';
+      ctx.fillText(ann.text, x + 30, y - 3);
+    });
+  }
+
+  function setColor(color) {
+    currentColor = color;
+    document.querySelectorAll('[data-color]').forEach(btn => {
+      btn.dataset.active = btn.dataset.color === color;
+    });
+  }
+
+  function addAnnotation() {
+    const text = document.getElementById('annotation-text').value.trim();
+    if (text) {
+      alert('Click on the photo to place the annotation');
+    }
+  }
+
+  function undoAnnotation() {
+    annotations.pop();
+    redraw();
+  }
+
+  function clearAnnotations() {
+    if (confirm('Clear all annotations?')) {
+      annotations = [];
+      redraw();
+    }
+  }
+
+  function saveAnnotations() {
+    window.dispatchEvent(new CustomEvent('annotations-saved', { detail: annotations }));
+    closeAnnotator();
+  }
+
+  // Expose globally
+  window.openAnnotator = openAnnotator;
+  window.closeAnnotator = closeAnnotator;
+</script>
