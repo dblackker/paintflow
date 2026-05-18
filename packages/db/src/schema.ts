@@ -392,3 +392,34 @@ export const estimateTemplates = pgTable('estimate_templates', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const materials = pgTable('materials', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  category: varchar('category', { length: 100 }).notNull(), // 'paint', 'primer', 'supplies'
+  brand: varchar('brand', { length: 100 }),
+  unit: varchar('unit', { length: 20 }).notNull(), // 'gallon', 'quart', 'each'
+  costPerUnit: decimal('cost_per_unit', { precision: 10, scale: 2 }).notNull(),
+  markupPercent: decimal('markup_percent', { precision: 5, scale: 2 }).notNull().default('30.00'),
+  coverageSqFt: decimal('coverage_sq_ft', { precision: 10, scale: 2 }), // per unit
+  supplier: varchar('supplier', { length: 255 }),
+  sku: varchar('sku', { length: 100 }),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const estimateMaterials = pgTable('estimate_materials', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  estimateId: uuid('estimate_id').references(() => estimates.id).notNull(),
+  materialId: uuid('material_id').references(() => materials.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  quantity: decimal('quantity', { precision: 10, scale: 2 }).notNull(),
+  unit: varchar('unit', { length: 20 }).notNull(),
+  costPerUnit: decimal('cost_per_unit', { precision: 10, scale: 2 }).notNull(),
+  markupPercent: decimal('markup_percent', { precision: 5, scale: 2 }).notNull(),
+  totalCost: decimal('total_cost', { precision: 10, scale: 2 }).notNull(),
+  totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
