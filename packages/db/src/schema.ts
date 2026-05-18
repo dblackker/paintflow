@@ -423,3 +423,29 @@ export const estimateMaterials = pgTable('estimate_materials', {
   totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const materialPurchases = pgTable('material_purchases', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id),
+  supplier: varchar('supplier', { length: 255 }).notNull(),
+  invoiceNumber: varchar('invoice_number', { length: 100 }),
+  invoiceDate: timestamp('invoice_date'),
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }),
+  fileUrl: text('file_url'), // PDF/CSV
+  parsedData: jsonb('parsed_data'), // Line items
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const jobCosts = pgTable('job_costs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  category: varchar('category', { length: 50 }).notNull(), // 'labor', 'materials', 'supplies'
+  description: varchar('description', { length: 255 }).notNull(),
+  quantity: decimal('quantity', { precision: 10, scale: 2 }).notNull(),
+  unitCost: decimal('unit_cost', { precision: 10, scale: 2 }).notNull(),
+  totalCost: decimal('total_cost', { precision: 10, scale: 2 }).notNull(),
+  materialPurchaseId: uuid('material_purchase_id').references(() => materialPurchases.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
