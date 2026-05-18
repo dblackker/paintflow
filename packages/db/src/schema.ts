@@ -449,3 +449,26 @@ export const jobCosts = pgTable('job_costs', {
   materialPurchaseId: uuid('material_purchase_id').references(() => materialPurchases.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const teamMembers = pgTable('team_members', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  role: varchar('role', { length: 100 }).notNull(), // 'painter', 'foreman', 'helper'
+  hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }).notNull(),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const timeEntries = pgTable('time_entries', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  teamMemberId: uuid('team_member_id').references(() => teamMembers.id).notNull(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  hours: decimal('hours', { precision: 10, scale: 2 }).notNull(),
+  date: timestamp('date').notNull(),
+  description: text('description'),
+  hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }).notNull(),
+  totalCost: decimal('total_cost', { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
