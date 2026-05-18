@@ -21,7 +21,9 @@ const materialSchema = z.object({
   sku: z.string().optional(),
 });
 
-const DEFAULT_MATERIALS = [
+import { flattenCatalog } from '../lib/materials-catalog';
+
+const DEFAULT_MATERIALS = flattenCatalog().slice(0, 20);
   { name: 'Sherwin Williams SuperPaint', category: 'paint', brand: 'Sherwin Williams', unit: 'gallon', costPerUnit: 65, markupPercent: 30, coverageSqFt: 350 },
   { name: 'Benjamin Moore Regal Select', category: 'paint', brand: 'Benjamin Moore', unit: 'gallon', costPerUnit: 70, markupPercent: 30, coverageSqFt: 400 },
   { name: 'Kilz 2 Primer', category: 'primer', brand: 'Kilz', unit: 'gallon', costPerUnit: 25, markupPercent: 30, coverageSqFt: 300 },
