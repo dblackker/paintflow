@@ -8,94 +8,132 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Production Rate Estimate - PaintFlow</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/styles/mobile.css">
 </head>
-<body class="bg-gray-50 min-h-screen has-bottom-nav">
+<body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16 items-center">
         <h1 class="text-xl font-semibold">Production Estimate</h1>
-        <button onclick="history.back()" class="text-sm text-gray-600">Cancel</button>
+        <a href="/estimates" class="text-sm text-gray-600">Estimates</a>
       </div>
     </div>
   </nav>
 
-  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
-    <div class="bg-white rounded-lg shadow-sm border p-4 mb-4">
-      <label class="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-      <select id="lead-select" class="w-full px-3 py-2 border rounded-lg text-base">
-        <option>Loading...</option>
-      </select>
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="grid lg:grid-cols-[1fr_340px] gap-5">
+      <section class="space-y-4">
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Customer</label>
+          <select id="lead-select" class="w-full px-3 py-3 border rounded-lg text-base">
+            <option>Loading...</option>
+          </select>
+        </div>
+
+        <div id="rooms-container" class="space-y-4"></div>
+        <button id="add-room" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600">
+          Add Room or Area
+        </button>
+      </section>
+
+      <aside class="space-y-4 lg:sticky lg:top-20 self-start">
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <h2 class="font-semibold text-gray-900 mb-3">Estimate Summary</h2>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-gray-600">Labor hours</span><span id="total-hours" class="font-medium">0.0</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Labor</span><span id="labor-total" class="font-medium">$0.00</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Materials</span><span id="materials-total" class="font-medium">$0.00</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Tax</span><span id="tax-total" class="font-medium">$0.00</span></div>
+            <div class="flex justify-between border-t pt-2 text-base"><span class="font-semibold">Better package</span><span id="total-cost" class="font-bold text-blue-600">$0.00</span></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <h2 class="font-semibold text-gray-900 mb-3">Package Multipliers</h2>
+          <div class="grid grid-cols-3 gap-2 text-sm">
+            <label><span class="text-gray-600">Good</span><input id="good-multiplier" type="number" step="0.01" value="0.90" class="mt-1 w-full px-2 py-2 border rounded"></label>
+            <label><span class="text-gray-600">Better</span><input id="better-multiplier" type="number" step="0.01" value="1.00" class="mt-1 w-full px-2 py-2 border rounded"></label>
+            <label><span class="text-gray-600">Best</span><input id="best-multiplier" type="number" step="0.01" value="1.18" class="mt-1 w-full px-2 py-2 border rounded"></label>
+          </div>
+          <button id="save-estimate" class="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">
+            Create Estimate
+          </button>
+        </div>
+      </aside>
     </div>
-
-    <div id="rooms-container" class="space-y-4">
-      <!-- Rooms added here -->
-    </div>
-
-    <button id="add-room" class="w-full mt-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 touch-feedback">
-      + Add Room
-    </button>
-
-    <div class="bg-white rounded-lg shadow-sm border p-4 mt-6 sticky bottom-20">
-      <div class="flex justify-between items-center">
-        <span class="text-lg font-semibold">Total Labor</span>
-        <span class="text-2xl font-bold text-blue-600" id="total-cost">$0.00</span>
-      </div>
-      <div class="text-sm text-gray-600 mt-1" id="total-hours">0 hours</div>
-    </div>
-
-    <button id="save-estimate" class="w-full mt-4 py-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 touch-feedback">
-      Create Estimate
-    </button>
   </main>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const prepMultipliers = { none: 0.8, light: 1, standard: 1.2, heavy: 1.5 };
     let rates = [];
+    let settings = {};
     let roomCounter = 0;
 
-    async function loadRates() {
-      const res = await fetch(`${API_URL}/v1/production-rates`, { credentials: 'include' });
-      const { data } = await res.json();
-      rates = data;
+    function money(value) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     }
 
-    async function loadLeads() {
-      const res = await fetch(`${API_URL}/v1/leads`, { credentials: 'include' });
-      const { data } = await res.json();
-      document.getElementById('lead-select').innerHTML = 
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function apiJson(url, options = {}) {
+      const res = await fetch(url, { credentials: 'include', ...options });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    async function loadSetup() {
+      const [ratesRes, leadsRes, settingsRes] = await Promise.all([
+        apiJson(`${API_URL}/v1/production-rates`),
+        apiJson(`${API_URL}/v1/leads?limit=200`),
+        apiJson(`${API_URL}/v1/settings/org`),
+      ]);
+      rates = ratesRes.data;
+      settings = settingsRes.data;
+      document.getElementById('lead-select').innerHTML =
         '<option value="">Select customer...</option>' +
-        data.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+        leadsRes.data.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)}</option>`).join('');
+      addRoom('Interior');
+      calculateTotal();
     }
 
-    function addRoom() {
+    function rateOptions() {
+      return rates.map(rate => `<option value="${rate.id}">${escapeHtml(rate.description || `${rate.category} ${rate.surfaceType}`)} (${rate.ratePerHour} ${rate.unit}/hr)</option>`).join('');
+    }
+
+    function addRoom(name = '') {
       roomCounter++;
       const roomId = `room-${roomCounter}`;
       const div = document.createElement('div');
       div.className = 'bg-white rounded-lg shadow-sm border p-4';
       div.id = roomId;
       div.innerHTML = `
-        <div class="flex justify-between items-start mb-3">
-          <input placeholder="Room name (e.g. Master Bedroom)" class="text-lg font-semibold bg-transparent border-b border-transparent focus:border-blue-500 outline-none flex-1" data-field="name">
-          <button onclick="this.closest('div').remove(); calculateTotal()" class="text-gray-400 hover:text-red-600 ml-2">×</button>
+        <div class="flex gap-3 items-center mb-3">
+          <input value="${escapeHtml(name)}" placeholder="Room or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
+          <button type="button" class="remove-room text-sm text-red-600">Remove</button>
         </div>
         <div class="space-y-3" data-items></div>
-        <button onclick="addRoomItem('${roomId}')" class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add surface</button>
+        <button type="button" class="add-surface mt-3 text-sm text-blue-600">Add surface</button>
       `;
       document.getElementById('rooms-container').appendChild(div);
-      addRoomItem(roomId);
+      addSurface(roomId);
     }
 
-    function addRoomItem(roomId) {
-      const room = document.getElementById(roomId);
-      const container = room.querySelector('[data-items]');
+    function addSurface(roomId) {
+      const container = document.querySelector(`#${roomId} [data-items]`);
       const div = document.createElement('div');
       div.className = 'border rounded-lg p-3 bg-gray-50';
       div.innerHTML = `
-        <div class="grid grid-cols-2 gap-2 mb-2">
-          <select class="px-2 py-2 border rounded text-sm" data-field="rateId" onchange="updateRateInfo(this)">
+        <div class="grid sm:grid-cols-2 gap-2 mb-2">
+          <select class="px-2 py-2 border rounded text-sm" data-field="rateId">
             <option value="">Select surface...</option>
-            ${rates.map(r => `<option value="${r.id}" data-rate="${r.ratePerHour}" data-unit="${r.unit}">${r.category} - ${r.surfaceType} (${r.ratePerHour} ${r.unit}/hr)</option>`).join('')}
+            ${rateOptions()}
           </select>
           <select class="px-2 py-2 border rounded text-sm" data-field="prepLevel">
             <option value="none">No prep</option>
@@ -105,99 +143,124 @@
           </select>
         </div>
         <div class="grid grid-cols-3 gap-2 mb-2">
-          <input type="number" step="0.1" placeholder="Width (ft)" class="px-2 py-2 border rounded text-sm" data-field="width" oninput="updateQuantity(this)">
-          <input type="number" step="0.1" placeholder="Height (ft)" class="px-2 py-2 border rounded text-sm" data-field="height" oninput="updateQuantity(this)">
-          <input type="number" step="0.1" placeholder="Qty" class="px-2 py-2 border rounded text-sm" data-field="quantity" readonly>
+          <input type="number" step="0.1" placeholder="Width" class="px-2 py-2 border rounded text-sm" data-field="width">
+          <input type="number" step="0.1" placeholder="Height" class="px-2 py-2 border rounded text-sm" data-field="height">
+          <input type="number" step="0.1" placeholder="Qty" class="px-2 py-2 border rounded text-sm" data-field="quantity">
         </div>
         <div class="flex justify-between items-center text-sm">
-          <span class="text-gray-600" data-info></span>
-          <button onclick="this.closest('div').remove(); calculateTotal()" class="text-red-600">Remove</button>
+          <span class="text-gray-600" data-line-total>$0.00</span>
+          <button type="button" class="remove-surface text-red-600">Remove</button>
         </div>
       `;
       container.appendChild(div);
     }
 
-    function updateQuantity(input) {
-      const div = input.closest('div').parentElement;
-      const width = parseFloat(div.querySelector('[data-field="width"]')?.value || '0');
-      const height = parseFloat(div.querySelector('[data-field="height"]')?.value || '0');
-      const qtyInput = div.querySelector('[data-field="quantity"]');
-      if (width && height) qtyInput.value = (width * height).toFixed(1);
-      calculateTotal();
-    }
-
-    function updateRateInfo(select) {
-      const div = select.closest('div').parentElement;
-      const option = select.selectedOptions[0];
-      const info = div.querySelector('[data-info]');
-      if (option.dataset.rate) {
-        info.textContent = `${option.dataset.rate} ${option.dataset.unit}/hr`;
-      }
-      calculateTotal();
-    }
-
-    async function calculateTotal() {
+    function collectItems(multiplier = 1) {
+      const taxRate = Number(settings.salesTaxRate || 0);
+      const materialMarkup = Number(settings.materialMarkupPercent || 0) / 100;
       const items = [];
-      document.querySelectorAll('[data-items] > div').forEach(div => {
-        const rateId = div.querySelector('[data-field="rateId"]')?.value;
-        const quantity = div.querySelector('[data-field="quantity"]')?.value;
-        const prepLevel = div.querySelector('[data-field="prepLevel"]')?.value;
-        if (rateId && quantity) {
-          items.push({ productionRateId: rateId, quantity, prepLevel });
-        }
-      });
+      let labor = 0;
+      let materials = 0;
+      let hours = 0;
 
-      if (items.length === 0) {
-        document.getElementById('total-cost').textContent = '$0.00';
-        document.getElementById('total-hours').textContent = '0 hours';
-        return;
-      }
+      document.querySelectorAll('#rooms-container > div').forEach(room => {
+        const roomName = room.querySelector('[data-room-name]').value.trim() || 'Area';
+        room.querySelectorAll('[data-items] > div').forEach(surface => {
+          const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
+          if (!rate) return;
+          const width = Number(surface.querySelector('[data-field="width"]').value || 0);
+          const height = Number(surface.querySelector('[data-field="height"]').value || 0);
+          const manualQty = Number(surface.querySelector('[data-field="quantity"]').value || 0);
+          const quantity = manualQty || (width && height ? width * height : 0);
+          if (quantity <= 0) return;
+          if (!manualQty && width && height) surface.querySelector('[data-field="quantity"]').value = quantity.toFixed(1);
 
-      const res = await fetch(`${API_URL}/v1/production-rates/calculate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ items }),
-      });
-      const { data } = await res.json();
-      
-      document.getElementById('total-cost').textContent = `$${parseFloat(data.total).toFixed(2)}`;
-      const totalHours = data.items.reduce((sum, i) => sum + parseFloat(i.hours || 0), 0);
-    async function loadTemplateRooms() {
-      const templateRooms = sessionStorage.getItem('templateRooms');
-      if (templateRooms) {
-        sessionStorage.removeItem('templateRooms');
-        const rooms = JSON.parse(templateRooms);
-        rooms.forEach(roomData => {
-          addRoom();
-          const lastRoom = document.querySelector('#rooms-container > div:last-child');
-          lastRoom.querySelector('[data-field="name"]').value = roomData.name;
-          roomData.items.forEach(item => {
-            addRoomItem(lastRoom.id);
-            const lastItem = lastRoom.querySelector('[data-items] > div:last-child');
-            lastItem.querySelector('[data-field="rateId"]')?.dispatchEvent(new Event('change'));
+          const prep = surface.querySelector('[data-field="prepLevel"]').value;
+          const itemHours = (quantity / Number(rate.ratePerHour || 1)) * Number(rate.coats || 2) * (prepMultipliers[prep] || 1.2);
+          const itemLabor = itemHours * Number(rate.hourlyRate || settings.defaultLaborRate || 65);
+          const materialUnit = Number(rate.hourlyRate || settings.defaultLaborRate || 65) * 0.12;
+          const itemMaterials = quantity * materialUnit * (1 + materialMarkup);
+          const itemTotal = (itemLabor + itemMaterials) * multiplier;
+
+          hours += itemHours;
+          labor += itemLabor * multiplier;
+          materials += itemMaterials * multiplier;
+          items.push({
+            desc: `${roomName}: ${rate.description || `${rate.category} ${rate.surfaceType}`}`,
+            qty: 1,
+            rate: Number(itemTotal.toFixed(2)),
+            category: rate.unit,
+            notes: `${quantity.toFixed(1)} ${rate.unit}, ${itemHours.toFixed(1)} labor hours, ${prep} prep`,
           });
+          surface.querySelector('[data-line-total]').textContent = money(itemTotal);
         });
-      } else {
-        addRoom();
+      });
+
+      const subtotal = labor + materials;
+      const tax = subtotal * taxRate;
+      return { items, hours, labor, materials, tax, total: subtotal + tax };
+    }
+
+    function buildPackages() {
+      return ['good', 'better', 'best'].map(name => {
+        const multiplier = Number(document.getElementById(`${name}-multiplier`).value || 1);
+        const result = collectItems(multiplier);
+        return {
+          name,
+          subtotal: Number((result.labor + result.materials).toFixed(2)),
+          tax: Number(result.tax.toFixed(2)),
+          total: Number(result.total.toFixed(2)),
+          items: result.items,
+          lineItems: result.items,
+        };
+      }).filter(pkg => pkg.items.length > 0);
+    }
+
+    function calculateTotal() {
+      const result = collectItems(1);
+      document.getElementById('total-hours').textContent = result.hours.toFixed(1);
+      document.getElementById('labor-total').textContent = money(result.labor);
+      document.getElementById('materials-total').textContent = money(result.materials);
+      document.getElementById('tax-total').textContent = money(result.tax);
+      document.getElementById('total-cost').textContent = money(result.total);
+    }
+
+    document.getElementById('add-room').addEventListener('click', () => addRoom());
+    document.getElementById('rooms-container').addEventListener('click', (event) => {
+      if (event.target.classList.contains('remove-room')) event.target.closest('#rooms-container > div').remove();
+      if (event.target.classList.contains('add-surface')) addSurface(event.target.closest('#rooms-container > div').id);
+      if (event.target.classList.contains('remove-surface')) event.target.closest('[data-items] > div').remove();
+      calculateTotal();
+    });
+    document.addEventListener('input', (event) => {
+      if (event.target.closest('main')) calculateTotal();
+    });
+    document.addEventListener('change', (event) => {
+      if (event.target.closest('main')) calculateTotal();
+    });
+
+    document.getElementById('save-estimate').addEventListener('click', async () => {
+      const leadId = document.getElementById('lead-select').value;
+      const packages = buildPackages();
+      if (!leadId) return alert('Select a customer first');
+      if (packages.length === 0) return alert('Add at least one measured surface');
+
+      try {
+        const { data } = await apiJson(`${API_URL}/v1/estimates`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ leadId, packages }),
+        });
+        window.location.href = `/estimates/${data.id}`;
+      } catch (err) {
+        alert(err.message || 'Failed to create estimate');
       }
-    }
-
-    document.getElementById('add-room').addEventListener('click', addRoom);
-    document.getElementById('save-estimate').addEventListener('click', async () => {
-      alert('Saving estimate with production rates...');
     });
 
-    loadRates().then(loadLeads).then(() => loadTemplateRooms());
-      document.getElementById('total-hours').textContent = `${totalHours.toFixed(1)} hours`;
-    }
-
-    document.getElementById('add-room').addEventListener('click', addRoom);
-    document.getElementById('save-estimate').addEventListener('click', async () => {
-      alert('Saving estimate with production rates...');
+    loadSetup().catch((err) => {
+      console.error('Failed to load production estimator', err);
+      alert('Failed to load estimator setup');
     });
-
-    loadRates().then(loadLeads).then(() => addRoom());
   </script>
 </body>
 </html>

@@ -29,6 +29,10 @@ photosApp.get('/:estimateId', async (c) => {
   const estimate = await db.query.estimates.findFirst({
     where: and(eq(estimates.id, estimateId), eq(estimates.orgId, orgId)),
   });
+
+  if (!estimate) {
+    return c.json({ error: 'Estimate not found' }, 404);
+  }
   
   const photos = await db.query.estimatePhotos.findMany({
     where: eq(estimatePhotos.estimateId, estimateId),
@@ -70,6 +74,21 @@ photosApp.put('/:id', async (c) => {
   const body = await c.req.json();
   const parsed = photoSchema.partial().parse(body);
   const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.estimatePhotos.findFirst({
+    where: eq(estimatePhotos.id, id),
+  });
+
+  if (!existing) {
+    return c.json({ error: 'Photo not found' }, 404);
+  }
+
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, existing.estimateId), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) {
+    return c.json({ error: 'Photo not found' }, 404);
+  }
   
   const [photo] = await db.update(estimatePhotos)
     .set({
@@ -86,6 +105,21 @@ photosApp.delete('/:id', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.estimatePhotos.findFirst({
+    where: eq(estimatePhotos.id, id),
+  });
+
+  if (!existing) {
+    return c.json({ error: 'Photo not found' }, 404);
+  }
+
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, existing.estimateId), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) {
+    return c.json({ error: 'Photo not found' }, 404);
+  }
   
   await db.delete(estimatePhotos).where(eq(estimatePhotos.id, id));
   
