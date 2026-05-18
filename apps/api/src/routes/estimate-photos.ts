@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { estimatePhotos } from '@paintflow/db/schema';
+import { estimatePhotos, estimates } from '@paintflow/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -27,7 +27,7 @@ photosApp.get('/:estimateId', async (c) => {
   
   // Verify estimate belongs to org
   const estimate = await db.query.estimates.findFirst({
-    where: eq(estimates.orgId, orgId),
+    where: and(eq(estimates.id, estimateId), eq(estimates.orgId, orgId)),
   });
   
   const photos = await db.query.estimatePhotos.findMany({
@@ -47,7 +47,7 @@ photosApp.post('/:estimateId', async (c) => {
   
   // Verify estimate belongs to org
   const estimate = await db.query.estimates.findFirst({
-    where: eq(estimates.orgId, orgId),
+    where: and(eq(estimates.id, estimateId), eq(estimates.orgId, orgId)),
   });
   
   if (!estimate) {
