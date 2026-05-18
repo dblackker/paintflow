@@ -1,0 +1,138 @@
+---
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports - PaintFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <h1 class="text-xl font-semibold">Reports</h1>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-white rounded-lg shadow-sm border">
+        <div class="p-4 border-b">
+          <h2 class="font-semibold">Win Rate by Source</h2>
+        </div>
+        <div id="win-rate" class="p-4"></div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border">
+        <div class="p-4 border-b">
+          <h2 class="font-semibold">Crew Performance</h2>
+        </div>
+        <div id="crew" class="p-4"></div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow-sm border lg:col-span-2">
+        <div class="p-4 border-b">
+          <h2 class="font-semibold">Profit Margins</h2>
+        </div>
+        <div id="margins" class="p-4"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+
+    async function loadReports() {
+      const [dashboard, winRate, crew, margins] = await Promise.all([
+        fetch(`${API_URL}/v1/reports/dashboard`, { credentials: 'include' }).then(r => r.json()),
+        fetch(`${API_URL}/v1/reports/win-rate-by-source`, { credentials: 'include' }).then(r => r.json()),
+        fetch(`${API_URL}/v1/reports/crew-performance`, { credentials: 'include' }).then(r => r.json()),
+        fetch(`${API_URL}/v1/reports/profit-margins`, { credentials: 'include' }).then(r => r.json()),
+      ]);
+
+      renderStats(dashboard.data);
+      renderWinRate(winRate.data);
+      renderCrew(crew.data);
+      renderMargins(margins.data);
+    }
+
+    function renderStats(stats) {
+      document.getElementById('stats').innerHTML = `
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <p class="text-sm text-gray-600">Win Rate</p>
+          <p class="text-2xl font-bold">${stats.winRate}%</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <p class="text-sm text-gray-600">Revenue</p>
+          <p class="text-2xl font-bold">$${(stats.totalRevenue || 0).toLocaleString()}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <p class="text-sm text-gray-600">Profit</p>
+          <p class="text-2xl font-bold">$${(stats.profit || 0).toLocaleString()}</p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <p class="text-sm text-gray-600">Margin</p>
+          <p class="text-2xl font-bold">${stats.margin}%</p>
+        </div>
+      `;
+    }
+
+    function renderWinRate(data) {
+      if (!data.length) {
+        document.getElementById('win-rate').innerHTML = '<p class="text-gray-500 text-sm">No data</p>';
+        return;
+      }
+      document.getElementById('win-rate').innerHTML = data.map(r => `
+        <div class="flex justify-between py-2 border-b last:border-0">
+          <span>${r.source}</span>
+          <span class="font-semibold">${r.winRate}% (${r.won}/${r.total})</span>
+        </div>
+      `).join('');
+    }
+
+    function renderCrew(data) {
+      if (!data.length) {
+        document.getElementById('crew').innerHTML = '<p class="text-gray-500 text-sm">No data</p>';
+        return;
+      }
+      document.getElementById('crew').innerHTML = data.map(r => `
+        <div class="flex justify-between py-2 border-b last:border-0">
+          <span>${r.name}</span>
+          <span class="text-sm">${Math.round(r.totalHours)} hrs</span>
+        </div>
+      `).join('');
+    }
+
+    function renderMargins(data) {
+      if (!data.length) {
+        document.getElementById('margins').innerHTML = '<p class="text-gray-500 text-sm">No data</p>';
+        return;
+      }
+      document.getElementById('margins').innerHTML = `
+        <div class="space-y-2">
+          ${data.map(r => `
+            <div class="flex justify-between py-2 border-b last:border-0">
+              <div>
+                <p class="font-medium">${r.title}</p>
+                <p class="text-xs text-gray-600">$${r.revenue.toLocaleString()} revenue</p>
+              </div>
+              <div class="text-right">
+                <p class="font-semibold ${r.margin >= 30 ? 'text-green-600' : r.margin >= 15 ? 'text-yellow-600' : 'text-red-600'}">${r.margin}%</p>
+                <p class="text-xs text-gray-600">$${r.profit.toLocaleString()} profit</p>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    loadReports();
+  </script>
+</body>
+</html>
