@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { securityHeaders } from './middleware/security';
 import { tenantMiddleware } from './middleware/tenant';
 import { processDrips } from './cron/drips';
 import authRoutes from './routes/auth';
@@ -16,53 +17,26 @@ import quickbooksRoutes from './routes/quickbooks';
 import productionRatesRoutes from './routes/production-rates';
 import dashboardRoutes from './routes/dashboard';
 import reviewsRoutes from './routes/reviews';
-
 import changeOrdersRoute from './routes/change-orders';
 import templatesRoutes from './routes/templates';
-const app = new Hono();
 import leadSourcesRoute from './routes/lead-sources';
 import saasBillingRoutes from './routes/saas-billing';
+import materialsRoutes from './routes/materials';
+import invoicesRoutes from './routes/invoices';
+
+const app = new Hono();
 
 app.use('*', cors({
   origin: ['http://localhost:4321', 'https://paintflow.app'],
   credentials: true,
 }));
 
-import { securityHeaders } from './middleware/security';
-
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import { tenantMiddleware } from './middleware/tenant';
-import { processDrips } from './cron/drips';
-import authRoutes from './routes/auth';
-import leadsRoutes from './routes/leads';
-import estimatesRoutes from './routes/estimates';
-import billingRoutes from './routes/billing';
-import jobsRoutes from './routes/jobs';
-import smsRoutes from './routes/sms';
-import pdfRoutes from './routes/pdf';
-import calendarRoutes from './routes/calendar';
-import uploadsRoutes from './routes/uploads';
-import settingsRoutes from './routes/settings';
-import quickbooksRoutes from './routes/quickbooks';
-import productionRatesRoutes from './routes/production-rates';
-import dashboardRoutes from './routes/dashboard';
-import reviewsRoutes from './routes/reviews';
-
-import changeOrdersRoute from './routes/change-orders';
-import templatesRoutes from './routes/templates';
-const app = new Hono();
-import leadSourcesRoute from './routes/lead-sources';
-import saasBillingRoutes from './routes/saas-billing';
-
-
 app.use('*', securityHeaders);
-
 app.use('*', tenantMiddleware);
 
 app.route('/v1/auth', authRoutes);
-app.route('/v1/billing/webhook', billingRoutes);
 app.route('/v1/sms', smsRoutes);
+app.route('/v1/billing/webhook', billingRoutes);
 
 app.get('/health', (c) => {
   return c.json({ 
@@ -89,4 +63,16 @@ app.route('/v1/templates', templatesRoutes);
 app.route('/v1/change-orders', changeOrdersRoute);
 app.route('/v1/billing', saasBillingRoutes);
 app.route('/v1/lead-sources', leadSourcesRoute);
+app.route('/v1/materials', materialsRoutes);
+app.route('/v1/invoices', invoicesRoutes);
 
+app.get('/api/cron/drips', async (c) => {
+  const authHeader = c.req.header('authorization');
+  if (!authHeader || authHeader !== `Bearer ${c.env.CRON_SECRET}`) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const result = await processDrips(c.env.DATABASE_URL, c);
+  return c.json(result);
+});
+
+export default app;
