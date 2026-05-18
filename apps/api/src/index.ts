@@ -28,6 +28,36 @@ app.use('*', cors({
   credentials: true,
 }));
 
+import { securityHeaders } from './middleware/security';
+
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { tenantMiddleware } from './middleware/tenant';
+import { processDrips } from './cron/drips';
+import authRoutes from './routes/auth';
+import leadsRoutes from './routes/leads';
+import estimatesRoutes from './routes/estimates';
+import billingRoutes from './routes/billing';
+import jobsRoutes from './routes/jobs';
+import smsRoutes from './routes/sms';
+import pdfRoutes from './routes/pdf';
+import calendarRoutes from './routes/calendar';
+import uploadsRoutes from './routes/uploads';
+import settingsRoutes from './routes/settings';
+import quickbooksRoutes from './routes/quickbooks';
+import productionRatesRoutes from './routes/production-rates';
+import dashboardRoutes from './routes/dashboard';
+import reviewsRoutes from './routes/reviews';
+
+import changeOrdersRoute from './routes/change-orders';
+import templatesRoutes from './routes/templates';
+const app = new Hono();
+import leadSourcesRoute from './routes/lead-sources';
+import saasBillingRoutes from './routes/saas-billing';
+
+
+app.use('*', securityHeaders);
+
 app.use('*', tenantMiddleware);
 
 app.route('/v1/auth', authRoutes);
