@@ -52,14 +52,26 @@ const magicLinkEmail = (magicLink: string) => ({
 
 // POST /v1/auth/magic-link
 auth.post('/magic-link', async (c) => {
-  const { email } = await c.req.json();
+  const { email, name, companyName } = await c.req.json();
   
   if (!email || typeof email !== 'string') {
     return c.json({ error: 'Email required' }, 400);
   }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return c.json({ error: 'Email required' }, 400);
+  }
+
+  const displayName = typeof name === 'string' && name.trim()
+    ? name.trim()
+    : normalizedEmail.split('@')[0];
+  const workspaceName = typeof companyName === 'string' && companyName.trim()
+    ? companyName.trim()
+    : `${displayName}'s Painting Co`;
   
   // Rate limiting: max 3 magic links per hour per email
-  const rateLimitKey = `ratelimit:magic-link:${email.toLowerCase()}`;
+  const rateLimitKey = `ratelimit:magic-link:${normalizedEmail}`;
   const rateLimit = await c.env.KV.get(rateLimitKey);
   const count = rateLimit ? parseInt(rateLimit) : 0;
   if (count >= 3) {
@@ -72,7 +84,7 @@ auth.post('/magic-link', async (c) => {
   
   // Find or create user
   let user = await db.query.users.findFirst({
-    where: eq(users.email, email.toLowerCase()),
+    where: eq(users.email, normalizedEmail),
   });
   
   let orgId: string;
@@ -81,12 +93,12 @@ auth.post('/magic-link', async (c) => {
   if (!user) {
     isNewUser = true;
     const [newUser] = await db.insert(users).values({
-      email: email.toLowerCase(),
-      name: email.split('@')[0],
+      email: normalizedEmail,
+      name: displayName,
     }).returning();
     
     const [org] = await db.insert(organizations).values({
-      name: `${newUser.name}'s Painting Co`,
+      name: workspaceName,
       slug: `org-${crypto.randomUUID().slice(0, 8)}`,
     }).returning();
     
@@ -110,14 +122,14 @@ auth.post('/magic-link', async (c) => {
   
   await c.env.KV.put(
     `magic:${token}`,
-    JSON.stringify({ email, userId: user.id, orgId, isNewUser }),
+    JSON.stringify({ email: normalizedEmail, userId: user.id, orgId, isNewUser }),
     { expirationTtl: 900 }
   );
   
   // Send email via MailChannels
   const magicLink = `${c.env.APP_URL}/v1/auth/verify?token=${token}`;
   const emailPayload = magicLinkEmail(magicLink);
-  emailPayload.personalizations[0].to[0].email = email;
+  emailPayload.personalizations[0].to[0].email = normalizedEmail;
   
   try {
     await fetch('https://api.mailchannels.net/tx/v1/send', {
