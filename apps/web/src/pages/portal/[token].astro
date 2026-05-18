@@ -1,0 +1,60 @@
+---
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customer Portal - PaintFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <h1 class="text-xl font-semibold">Customer Portal</h1>
+        <div class="text-sm text-gray-600" id="customer-info"></div>
+      </div>
+    </div>
+  </nav>
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div id="portal-content">
+      <div class="text-center py-12 text-gray-500">Loading...</div>
+    </div>
+  </main>
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const token = window.location.pathname.split('/').pop();
+    async function loadPortal() {
+      const res = await fetch(`${API_URL}/v1/portal/${token}`, { credentials: 'include' });
+      if (!res.ok) {
+        document.getElementById('portal-content').innerHTML = '<div class="text-center py-12 text-red-600">Invalid or expired link</div>';
+        return;
+      }
+      const { data } = await res.json();
+      renderPortal(data);
+    }
+    function renderPortal(data) {
+      const { customer, estimate } = data;
+      document.getElementById('customer-info').textContent = customer.name;
+      if (estimate && !estimate.signedAt) {
+        document.getElementById('portal-content').innerHTML = `
+          <div class="bg-white rounded-lg shadow-sm border p-6">
+            <h2 class="text-2xl font-bold mb-2">${estimate.title}</h2>
+            <p class="text-3xl font-bold">$${parseFloat(estimate.total).toFixed(2)}</p>
+            <div class="mt-6 flex gap-3">
+              <button onclick="approve()" class="flex-1 py-3 bg-blue-600 text-white rounded-lg">Approve</button>
+            </div>
+          </div>
+        `;
+      }
+    }
+    window.approve = async () => {
+      await fetch(`${API_URL}/v1/portal/${token}/approve`, { method: 'POST', credentials: 'include' });
+      alert('Approved!'); location.reload();
+    };
+    loadPortal();
+  </script>
+</body>
+</html>
