@@ -23,6 +23,7 @@ import leadSourcesRoute from './routes/lead-sources';
 import saasBillingRoutes from './routes/saas-billing';
 import materialsRoutes from './routes/materials';
 import invoicesRoutes from './routes/invoices';
+import teamRoutes from './routes/team';
 
 const app = new Hono();
 
@@ -65,6 +66,7 @@ app.route('/v1/billing', saasBillingRoutes);
 app.route('/v1/lead-sources', leadSourcesRoute);
 app.route('/v1/materials', materialsRoutes);
 app.route('/v1/invoices', invoicesRoutes);
+app.route('/v1/team', teamRoutes);
 
 app.get('/api/cron/drips', async (c) => {
   const authHeader = c.req.header('authorization');
