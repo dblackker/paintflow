@@ -1,23 +1,59 @@
 ---
-import Toast from '../components/Toast.astro';
-
-export interface Props {
-  title: string;
+interface Props {
+  title?: string;
 }
-const { title } = Astro.props;
+
+const { title = 'PaintFlow' } = Astro.props;
 ---
 
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>{title} - PaintFlow</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  </head>
-  <body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <div class="flex items-center space-x-8">
+          <h1 class="text-xl font-semibold">PaintFlow</h1>
+          <div class="hidden md:flex space-x-4">
+            <a href="/dashboard" class="text-sm text-gray-600 hover:text-gray-900">Dashboard</a>
+            <a href="/leads" class="text-sm text-gray-600 hover:text-gray-900">Leads</a>
+            <a href="/estimates" class="text-sm text-gray-600 hover:text-gray-900">Estimates</a>
+            <a href="/jobs" class="text-sm text-gray-600 hover:text-gray-900">Jobs</a>
+            <a href="/reports" class="text-sm text-gray-600 hover:text-gray-900">Reports</a>
+            <a href="/team" class="text-sm text-gray-600 hover:text-gray-900">Team</a>
+          </div>
+        </div>
+        <button id="mobile-menu" class="md:hidden">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="mobile-nav" class="hidden md:hidden border-t">
+      <div class="px-4 py-2 space-y-1">
+        <a href="/dashboard" class="block py-2 text-sm">Dashboard</a>
+        <a href="/leads" class="block py-2 text-sm">Leads</a>
+        <a href="/estimates" class="block py-2 text-sm">Estimates</a>
+        <a href="/jobs" class="block py-2 text-sm">Jobs</a>
+        <a href="/reports" class="block py-2 text-sm">Reports</a>
+        <a href="/team" class="block py-2 text-sm">Team</a>
+      </div>
+    </div>
+  </nav>
+  <main>
     <slot />
-    <Toast />
-  </body>
+  </main>
+  <script>
+    document.getElementById('mobile-menu')?.addEventListener('click', () => {
+      document.getElementById('mobile-nav')?.classList.toggle('hidden');
+    });
+  </script>
+</body>
 </html>
