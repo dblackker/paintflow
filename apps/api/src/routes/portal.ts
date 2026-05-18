@@ -65,3 +65,35 @@ portalApp.post('/:token/approve', async (c) => {
 });
 
 export default portalApp;
+
+portalApp.post('/:token/pay', async (c) => {
+  const token = c.req.param('token');
+  const body = await c.req.json();
+  const { amount } = body;
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const portalToken = await db.query.portalTokens.findFirst({
+    where: eq(portalTokens.token, token),
+    with: { customer: true },
+  });
+  
+  if (!portalToken || new Date() > portalToken.expiresAt) {
+    return c.json({ error: 'Invalid token' }, 404);
+  }
+  
+  // Create Stripe payment intent
+  const stripe = new (await import('stripe')).default(c.env.STRIPE_SECRET_KEY, {
+    apiVersion: '2024-06-20',
+  });
+  
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: Math.round(amount * 100),
+    currency: 'usd',
+    metadata: {
+      customerId: portalToken.customerId,
+      portalToken: token,
+    },
+  });
+  
+  return c.json({ data: { clientSecret: paymentIntent.client_secret } });
+});
