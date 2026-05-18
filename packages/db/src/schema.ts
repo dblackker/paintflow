@@ -221,19 +221,6 @@ export const serviceAreas = pgTable('service_areas', {
 });
 
 // Team members
-export const teamMembers = pgTable('team_members', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  orgId: uuid('org_id').references(() => organizations.id).notNull(),
-  userId: uuid('user_id').references(() => users.id),
-  email: varchar('email', { length: 255 }).notNull(),
-  name: varchar('name', { length: 255 }),
-  role: varchar('role', { length: 50 }).notNull().default('crew'), // owner, admin, estimator, crew
-  phone: varchar('phone', { length: 50 }),
-  hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }),
-  active: boolean('active').notNull().default(true),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
 // Message templates
 export const messageTemplates = pgTable('message_templates', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -454,6 +441,8 @@ export const teamMembers = pgTable('team_members', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
+  userId: uuid('user_id').references(() => users.id),
+  email: varchar('email', { length: 255 }),
   role: varchar('role', { length: 100 }).notNull(), // 'painter', 'foreman', 'helper'
   hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }).notNull(),
   burdenRate: decimal('burden_rate', { precision: 5, scale: 2 }).notNull().default('30'), // percent

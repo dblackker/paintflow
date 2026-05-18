@@ -1,13 +1,28 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { teamMembers, timeEntries, jobCosts } from '@paintflow/db/schema';
+import { teamMembers, timeEntries, jobCosts, userRoles, roles } from '@paintflow/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
 const teamApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 teamApp.use('*', authMiddleware);
+
+async function hasPermission(c, permission) {
+  const userId = c.get('userId');
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const userRole = await db.query.userRoles.findFirst({
+    where: and(eq(userRoles.userId, userId), eq(userRoles.orgId, orgId)),
+    with: { role: true },
+  });
+  
+  if (!userRole) return false;
+  const permissions = userRole.role.permissions;
+  return permissions.includes(permission) || permissions.includes('all');
+}
 
 teamApp.get('/members', async (c) => {
   const orgId = c.get('orgId');
@@ -26,9 +41,14 @@ const createMemberSchema = z.object({
   role: z.string().min(1),
   hourlyRate: z.number().positive(),
   burdenRate: z.number().min(0).max(100).default(30),
+  email: z.string().email().optional(),
 });
 
 teamApp.post('/members', async (c) => {
+  if (!await hasPermission(c, 'manage_team')) {
+    return c.json({ error: 'Insufficient permissions' }, 403);
+  }
+  
   const orgId = c.get('orgId');
   const body = await c.req.json();
   const data = createMemberSchema.parse(body);
@@ -40,6 +60,7 @@ teamApp.post('/members', async (c) => {
     role: data.role,
     hourlyRate: data.hourlyRate.toString(),
     burdenRate: data.burdenRate.toString(),
+    email: data.email,
   }).returning();
   
   return c.json({ data: member }, 201);
@@ -55,6 +76,7 @@ const createTimeEntrySchema = z.object({
 
 teamApp.post('/time', async (c) => {
   const orgId = c.get('orgId');
+  const userId = c.get('userId');
   const body = await c.req.json();
   const data = createTimeEntrySchema.parse(body);
   const db = createDb(c.env.DATABASE_URL);
@@ -63,7 +85,15 @@ teamApp.post('/time', async (c) => {
     where: eq(teamMembers.id, data.teamMemberId),
   });
   
-  if (!member) return c.json({ error: 'Team member not found' }, 404);
+  if (!member || member.orgId !== orgId) {
+    return c.json({ error: 'Team member not found' }, 404);
+  }
+  
+  // Check permission: can log for self or has log_time_for_others permission
+  const canLogForOthers = await hasPermission(c, 'log_time_for_others');
+  if (member.userId !== userId && !canLogForOthers) {
+    return c.json({ error: 'Cannot log time for other team members' }, 403);
+  }
   
   const hourlyRate = parseFloat(member.hourlyRate);
   const burdenRate = parseFloat(member.burdenRate || '30');
@@ -78,7 +108,6 @@ teamApp.post('/time', async (c) => {
     date: new Date(data.date),
   }).returning();
   
-  // Also create job cost entry
   await db.insert(jobCosts).values({
     jobId: data.jobId,
     orgId,
@@ -94,13 +123,31 @@ teamApp.post('/time', async (c) => {
 
 teamApp.get('/time', async (c) => {
   const orgId = c.get('orgId');
+  const userId = c.get('userId');
   const jobId = c.req.query('jobId');
   const db = createDb(c.env.DATABASE_URL);
   
+  const canViewAll = await hasPermission(c, 'view_all_time');
+  
+  let where;
+  if (jobId) {
+    where = and(eq(timeEntries.orgId, orgId), eq(timeEntries.jobId, jobId));
+  } else if (!canViewAll) {
+    // Only show own time entries
+    const member = await db.query.teamMembers.findFirst({
+      where: and(eq(teamMembers.userId, userId), eq(teamMembers.orgId, orgId)),
+    });
+    if (member) {
+      where = and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, member.id));
+    } else {
+      return c.json({ data: [] });
+    }
+  } else {
+    where = eq(timeEntries.orgId, orgId);
+  }
+  
   const entries = await db.query.timeEntries.findMany({
-    where: jobId 
-      ? and(eq(timeEntries.orgId, orgId), eq(timeEntries.jobId, jobId))
-      : eq(timeEntries.orgId, orgId),
+    where,
     orderBy: (timeEntries, { desc }) => [desc(timeEntries.date)],
     limit: 100,
   });
