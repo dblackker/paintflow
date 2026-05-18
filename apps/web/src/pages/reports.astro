@@ -1,72 +1,77 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reports - PaintFlow</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <h1 class="text-xl font-semibold">Reports</h1>
+<Base title="Reports - PaintFlow">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div id="loading" class="text-center py-12">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+      <p class="mt-4 text-gray-600">Loading reports...</p>
+    </div>
+
+    <div id="content" class="hidden">
+      <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-lg shadow-sm border">
+          <div class="p-4 border-b">
+            <h2 class="font-semibold">Win Rate by Source</h2>
+          </div>
+          <div id="win-rate" class="p-4 min-h-[100px]"></div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border">
+          <div class="p-4 border-b">
+            <h2 class="font-semibold">Crew Performance</h2>
+          </div>
+          <div id="crew" class="p-4 min-h-[100px]"></div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border lg:col-span-2">
+          <div class="p-4 border-b">
+            <h2 class="font-semibold">Profit Margins</h2>
+          </div>
+          <div id="margins" class="p-4 min-h-[100px]"></div>
+        </div>
       </div>
     </div>
-  </nav>
 
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-    <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="bg-white rounded-lg shadow-sm border">
-        <div class="p-4 border-b">
-          <h2 class="font-semibold">Win Rate by Source</h2>
-        </div>
-        <div id="win-rate" class="p-4"></div>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border">
-        <div class="p-4 border-b">
-          <h2 class="font-semibold">Crew Performance</h2>
-        </div>
-        <div id="crew" class="p-4"></div>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border lg:col-span-2">
-        <div class="p-4 border-b">
-          <h2 class="font-semibold">Profit Margins</h2>
-        </div>
-        <div id="margins" class="p-4"></div>
-      </div>
+    <div id="error" class="hidden text-center py-12">
+      <p class="text-red-600">Failed to load reports</p>
+      <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Retry</button>
     </div>
-  </main>
+  </div>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
 
     async function loadReports() {
-      const [dashboard, winRate, crew, margins] = await Promise.all([
-        fetch(`${API_URL}/v1/reports/dashboard`, { credentials: 'include' }).then(r => r.json()),
-        fetch(`${API_URL}/v1/reports/win-rate-by-source`, { credentials: 'include' }).then(r => r.json()),
-        fetch(`${API_URL}/v1/reports/crew-performance`, { credentials: 'include' }).then(r => r.json()),
-        fetch(`${API_URL}/v1/reports/profit-margins`, { credentials: 'include' }).then(r => r.json()),
-      ]);
+      try {
+        const [dashboard, winRate, crew, margins] = await Promise.all([
+          fetch(`${API_URL}/v1/reports/dashboard`, { credentials: 'include' }).then(r => r.json()),
+          fetch(`${API_URL}/v1/reports/win-rate-by-source`, { credentials: 'include' }).then(r => r.json()),
+          fetch(`${API_URL}/v1/reports/crew-performance`, { credentials: 'include' }).then(r => r.json()),
+          fetch(`${API_URL}/v1/reports/profit-margins`, { credentials: 'include' }).then(r => r.json()),
+        ]);
 
-      renderStats(dashboard.data);
-      renderWinRate(winRate.data);
-      renderCrew(crew.data);
-      renderMargins(margins.data);
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('content').classList.remove('hidden');
+
+        renderStats(dashboard.data);
+        renderWinRate(winRate.data);
+        renderCrew(crew.data);
+        renderMargins(margins.data);
+      } catch (e) {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('error').classList.remove('hidden');
+      }
     }
 
     function renderStats(stats) {
       document.getElementById('stats').innerHTML = `
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <p class="text-sm text-gray-600">Win Rate</p>
-          <p class="text-2xl font-bold">${stats.winRate}%</p>
+          <p class="text-2xl font-bold">${stats.winRate || 0}%</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <p class="text-sm text-gray-600">Revenue</p>
@@ -78,53 +83,53 @@
         </div>
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <p class="text-sm text-gray-600">Margin</p>
-          <p class="text-2xl font-bold">${stats.margin}%</p>
+          <p class="text-2xl font-bold">${stats.margin || 0}%</p>
         </div>
       `;
     }
 
     function renderWinRate(data) {
-      if (!data.length) {
-        document.getElementById('win-rate').innerHTML = '<p class="text-gray-500 text-sm">No data</p>';
+      if (!data?.length) {
+        document.getElementById('win-rate').innerHTML = '<div class="text-center py-8 text-gray-500"><p class="text-sm">No data yet</p><p class="text-xs mt-1">Create estimates to see win rates</p></div>';
         return;
       }
       document.getElementById('win-rate').innerHTML = data.map(r => `
         <div class="flex justify-between py-2 border-b last:border-0">
-          <span>${r.source}</span>
-          <span class="font-semibold">${r.winRate}% (${r.won}/${r.total})</span>
+          <span class="text-sm">${r.source}</span>
+          <span class="font-semibold text-sm">${r.winRate}% <span class="text-gray-500 font-normal">(${r.won}/${r.total})</span></span>
         </div>
       `).join('');
     }
 
     function renderCrew(data) {
-      if (!data.length) {
-        document.getElementById('crew').innerHTML = '<p class="text-gray-500 text-sm">No data</p>';
+      if (!data?.length) {
+        document.getElementById('crew').innerHTML = '<div class="text-center py-8 text-gray-500"><p class="text-sm">No crew data</p><p class="text-xs mt-1">Log time to see performance</p></div>';
         return;
       }
       document.getElementById('crew').innerHTML = data.map(r => `
         <div class="flex justify-between py-2 border-b last:border-0">
-          <span>${r.name}</span>
-          <span class="text-sm">${Math.round(r.totalHours)} hrs</span>
+          <span class="text-sm">${r.name || 'Unknown'}</span>
+          <span class="text-sm font-medium">${Math.round(r.totalHours || 0)} hrs</span>
         </div>
       `).join('');
     }
 
     function renderMargins(data) {
-      if (!data.length) {
-        document.getElementById('margins').innerHTML = '<p class="text-gray-500 text-sm">No data</p>';
+      if (!data?.length) {
+        document.getElementById('margins').innerHTML = '<div class="text-center py-8 text-gray-500"><p class="text-sm">No jobs yet</p><p class="text-xs mt-1">Complete jobs to see margins</p></div>';
         return;
       }
       document.getElementById('margins').innerHTML = `
         <div class="space-y-2">
-          ${data.map(r => `
+          ${data.slice(0, 10).map(r => `
             <div class="flex justify-between py-2 border-b last:border-0">
-              <div>
-                <p class="font-medium">${r.title}</p>
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-sm truncate">${r.title}</p>
                 <p class="text-xs text-gray-600">$${r.revenue.toLocaleString()} revenue</p>
               </div>
-              <div class="text-right">
-                <p class="font-semibold ${r.margin >= 30 ? 'text-green-600' : r.margin >= 15 ? 'text-yellow-600' : 'text-red-600'}">${r.margin}%</p>
-                <p class="text-xs text-gray-600">$${r.profit.toLocaleString()} profit</p>
+              <div class="text-right ml-4">
+                <p class="font-semibold text-sm ${r.margin >= 30 ? 'text-green-600' : r.margin >= 15 ? 'text-yellow-600' : 'text-red-600'}">${r.margin}%</p>
+                <p class="text-xs text-gray-600">$${r.profit.toLocaleString()}</p>
               </div>
             </div>
           `).join('')}
@@ -134,5 +139,4 @@
 
     loadReports();
   </script>
-</body>
-</html>
+</Base>
