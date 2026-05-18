@@ -4,139 +4,253 @@ import Base from '../layouts/Base.astro';
 
 <Base title="Leads">
   <div class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/leads" class="text-blue-600 font-medium">Leads</a>
-            </nav>
-          </div>
-          <button id="logout" class="text-sm text-gray-600 hover:text-gray-900">Sign out</button>
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-900">Leads</h2>
+          <p class="text-sm text-gray-600 mt-1">Capture inquiries, qualify them, and keep follow-up moving.</p>
         </div>
-      </div>
-    </nav>
-
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">Leads</h2>
-        <button id="add-lead" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+        <button id="add-lead" class="w-full sm:w-auto bg-blue-600 text-white px-4 py-3 sm:py-2 rounded-lg hover:bg-blue-700 font-medium">
           Add Lead
         </button>
       </div>
 
-      <div id="leads-list" class="bg-white rounded-lg shadow-sm border divide-y">
-        <div class="p-8 text-center text-gray-500">Loading leads...</div>
+      <section class="bg-white border rounded-lg shadow-sm p-3 sm:p-4 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_160px_180px] gap-3">
+          <input id="search" placeholder="Search name, phone, or email" class="w-full px-3 py-2 border rounded-lg" />
+          <select id="status-filter" class="w-full px-3 py-2 border rounded-lg">
+            <option value="all">All statuses</option>
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="estimate_sent">Estimate sent</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+          <select id="source-filter" class="w-full px-3 py-2 border rounded-lg">
+            <option value="all">All sources</option>
+          </select>
+        </div>
+        <div id="lead-summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm"></div>
+      </section>
+
+      <div id="leads-list" class="grid gap-3">
+        <div class="bg-white border rounded-lg p-8 text-center text-gray-500">Loading leads...</div>
       </div>
     </main>
 
-    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-lg p-6 w-full max-w-md">
-        <h3 class="text-lg font-semibold mb-4">Add New Lead</h3>
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div class="bg-white rounded-t-lg sm:rounded-lg p-5 sm:p-6 w-full max-w-lg max-h-[92vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">Add Lead</h3>
+          <button id="cancel" class="text-sm text-gray-600 hover:text-gray-900">Close</button>
+        </div>
         <form id="lead-form" class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input name="name" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            <input name="name" required class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          </div>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <input name="phone" type="tel" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input name="email" type="email" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-            <input name="phone" type="tel" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input name="email" type="email" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            <label class="block text-sm font-medium text-gray-700 mb-1">Source</label>
+            <select name="source" id="lead-source" class="w-full px-3 py-3 border rounded-lg">
+              <option value="">Select source...</option>
+            </select>
           </div>
           <div class="flex gap-3 pt-4">
-            <button type="button" id="cancel" class="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
-            <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Lead</button>
+            <button type="button" id="cancel-bottom" class="flex-1 px-4 py-3 border rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Lead</button>
           </div>
         </form>
       </div>
     </div>
   </div>
 
-    <script>
-      const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
-      
-      async function loadLeads() {
-        try {
-          const res = await fetch(`${API_URL}/v1/leads`, {
-            credentials: 'include',
-          });
-          
-          if (res.status === 401) {
-            window.location.href = '/login';
-            return;
-          }
-          
-          const { data } = await res.json();
-          const list = document.getElementById('leads-list');
-          
-          if (data.length === 0) {
-            list.innerHTML = '<div class="p-8 text-center text-gray-500">No leads yet. Add your first lead!</div>';
-            return;
-          }
-          
-          list.innerHTML = data.map(lead => `
-            <div class="p-4 hover:bg-gray-50 flex justify-between items-center">
-              <div class="flex items-center gap-3">
-                <div>
-                  <p class="font-medium">${lead.name}</p>
-                  <p class="text-sm text-gray-600">${lead.phone || lead.email || ''}</p>
-                </div>
-                ${lead.qboCustomerId ? '<span class="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">QB ✓</span>' : ''}
-              </div>
-              <span class="px-2 py-1 text-xs rounded-full bg-gray-100">${lead.status}</span>
-            </div>
-          `).join('');
-        } catch (err) {
-          console.error('Failed to load leads', err);
-          window.showToast('Failed to load leads', 'error');
-        }
-      }
-      
-      const modal = document.getElementById('modal');
-      document.getElementById('add-lead')?.addEventListener('click', () => modal?.classList.remove('hidden'));
-      document.getElementById('cancel')?.addEventListener('click', () => modal?.classList.add('hidden'));
-      
-      document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const data = Object.fromEntries(formData);
-        
-        try {
-          const res = await fetch(`${API_URL}/v1/leads`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(data),
-          });
-          
-          if (res.ok) {
-            window.showToast('Lead created successfully');
-            modal?.classList.add('hidden');
-            e.target.reset();
-            loadLeads();
-          } else {
-            const err = await res.json();
-            window.showToast(err.error || 'Failed to create lead', 'error');
-          }
-        } catch (err) {
-          console.error('Failed to create lead', err);
-          window.showToast('Failed to create lead', 'error');
-        }
-      });
-      
-      document.getElementById('logout')?.addEventListener('click', async () => {
-        await fetch(`${API_URL}/v1/auth/logout`, {
-          method: 'POST',
-          credentials: 'include',
-        });
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const statusLabels = {
+      new: 'New',
+      contacted: 'Contacted',
+      estimate_sent: 'Estimate sent',
+      won: 'Won',
+      lost: 'Lost',
+    };
+    let leads = [];
+    let leadSources = [];
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function apiJson(url, options = {}) {
+      const res = await fetch(url, { credentials: 'include', ...options });
+      if (res.status === 401) {
         window.location.href = '/login';
-      });
-      
-      loadLeads();
-    </script>
+        throw new Error('Unauthorized');
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    async function loadSources() {
+      try {
+        const { data } = await apiJson(`${API_URL}/v1/lead-sources`);
+        leadSources = data.filter(source => source.isActive !== false);
+        const options = leadSources.map(source => `<option value="${escapeHtml(source.name)}">${escapeHtml(source.name)}</option>`).join('');
+        document.getElementById('lead-source').innerHTML = '<option value="">Select source...</option>' + options;
+        document.getElementById('source-filter').innerHTML = '<option value="all">All sources</option>' + options;
+      } catch (err) {
+        console.error('Failed to load lead sources', err);
+      }
+    }
+
+    async function loadLeads() {
+      try {
+        const params = new URLSearchParams();
+        const status = document.getElementById('status-filter').value;
+        const source = document.getElementById('source-filter').value;
+        const q = document.getElementById('search').value.trim();
+        if (status !== 'all') params.set('status', status);
+        if (source !== 'all') params.set('source', source);
+        if (q) params.set('q', q);
+        const { data } = await apiJson(`${API_URL}/v1/leads?${params.toString()}`);
+        leads = data;
+        renderLeads();
+      } catch (err) {
+        console.error('Failed to load leads', err);
+        window.showToast('Failed to load leads', 'error');
+      }
+    }
+
+    function renderSummary() {
+      const counts = leads.reduce((acc, lead) => {
+        acc[lead.status] = (acc[lead.status] || 0) + 1;
+        return acc;
+      }, {});
+      document.getElementById('lead-summary').innerHTML = [
+        ['new', 'New'],
+        ['contacted', 'Contacted'],
+        ['estimate_sent', 'Estimate sent'],
+        ['won', 'Won'],
+      ].map(([key, label]) => `
+        <div class="rounded-lg bg-gray-50 border px-3 py-2">
+          <p class="text-gray-500">${label}</p>
+          <p class="font-semibold text-gray-950">${counts[key] || 0}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderLeads() {
+      const list = document.getElementById('leads-list');
+      renderSummary();
+
+      if (leads.length === 0) {
+        list.innerHTML = '<div class="bg-white border rounded-lg p-8 text-center text-gray-500">No leads match this view. Add a lead or adjust filters.</div>';
+        return;
+      }
+
+      list.innerHTML = leads.map(lead => `
+        <article class="bg-white rounded-lg shadow-sm border p-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="font-semibold text-gray-950 truncate">${escapeHtml(lead.name)}</h3>
+                ${lead.qboCustomerId ? '<span class="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">QB</span>' : ''}
+              </div>
+              <p class="text-sm text-gray-600 mt-1">${escapeHtml(lead.phone || lead.email || 'No contact')}</p>
+              <p class="text-xs text-gray-500 mt-1">${escapeHtml(lead.source || 'No source')} - ${new Date(lead.createdAt).toLocaleDateString()}</p>
+            </div>
+            <select class="status-select w-full sm:w-44 px-3 py-2 border rounded-lg text-sm" data-id="${lead.id}">
+              ${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-4 text-sm">
+            <a class="text-center px-3 py-2 border rounded-lg ${lead.phone ? 'text-gray-800' : 'text-gray-400 pointer-events-none'}" href="${lead.phone ? `tel:${lead.phone}` : '#'}">Call</a>
+            <button class="quick-sms px-3 py-2 border rounded-lg ${lead.phone ? 'text-gray-800' : 'text-gray-400'}" data-id="${lead.id}" ${lead.phone ? '' : 'disabled'}>Text</button>
+            <a class="text-center px-3 py-2 border rounded-lg ${lead.email ? 'text-gray-800' : 'text-gray-400 pointer-events-none'}" href="${lead.email ? `mailto:${lead.email}` : '#'}">Email</a>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    const modal = document.getElementById('modal');
+    document.getElementById('add-lead')?.addEventListener('click', () => modal?.classList.remove('hidden'));
+    document.getElementById('cancel')?.addEventListener('click', () => modal?.classList.add('hidden'));
+    document.getElementById('cancel-bottom')?.addEventListener('click', () => modal?.classList.add('hidden'));
+    document.getElementById('status-filter')?.addEventListener('change', loadLeads);
+    document.getElementById('source-filter')?.addEventListener('change', loadLeads);
+    document.getElementById('search')?.addEventListener('input', () => {
+      clearTimeout(window.leadSearchTimer);
+      window.leadSearchTimer = setTimeout(loadLeads, 250);
+    });
+
+    document.getElementById('leads-list')?.addEventListener('change', async (e) => {
+      if (!e.target.classList.contains('status-select')) return;
+      try {
+        await apiJson(`${API_URL}/v1/leads/${e.target.dataset.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: e.target.value }),
+        });
+        window.showToast('Lead updated');
+        loadLeads();
+      } catch (err) {
+        window.showToast(err.message || 'Failed to update lead', 'error');
+      }
+    });
+
+    document.getElementById('leads-list')?.addEventListener('click', async (e) => {
+      if (!e.target.classList.contains('quick-sms')) return;
+      const lead = leads.find(item => item.id === e.target.dataset.id);
+      const body = window.prompt('Send a quick follow-up text:', `Hi ${lead?.name || ''}, thanks for reaching out. When is a good time for us to look at your painting project?`);
+      if (!body) return;
+      try {
+        await apiJson(`${API_URL}/v1/sms/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ leadId: e.target.dataset.id, body }),
+        });
+        await apiJson(`${API_URL}/v1/leads/${e.target.dataset.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'contacted' }),
+        });
+        window.showToast('Text sent');
+        loadLeads();
+      } catch (err) {
+        window.showToast(err.message || 'Failed to send text', 'error');
+      }
+    });
+
+    document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData);
+
+      try {
+        await apiJson(`${API_URL}/v1/leads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        window.showToast('Lead created successfully');
+        modal?.classList.add('hidden');
+        e.target.reset();
+        loadLeads();
+      } catch (err) {
+        window.showToast(err.message || 'Failed to create lead', 'error');
+      }
+    });
+
+    loadSources().then(loadLeads);
+  </script>
 </Base>

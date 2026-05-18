@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { leads, messages } from '@paintflow/db/schema';
-import { eq, or, desc } from 'drizzle-orm';
+import { and, eq, or, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendSMS, formatPhoneNumber } from '../lib/twilio';
@@ -10,6 +11,12 @@ const sms = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 sms.use('/inbox', authMiddleware);
 sms.use('/send', authMiddleware);
+
+const sendSchema = z.object({
+  leadId: z.string().uuid(),
+  body: z.string().trim().min(1).max(1000),
+  to: z.string().trim().optional(),
+});
 
 sms.post('/inbound', async (c) => {
   const formData = await c.req.formData();
@@ -63,9 +70,25 @@ sms.get('/inbox', async (c) => {
 
 sms.post('/send', async (c) => {
   const orgId = c.get('orgId');
-  const { to, body, leadId } = await c.req.json();
+  const parsed = sendSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  const { body, leadId } = parsed.data;
   
   const db = createDb(c.env.DATABASE_URL);
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, leadId), eq(leads.orgId, orgId)),
+  });
+
+  if (!lead) {
+    return c.json({ error: 'Lead not found' }, 404);
+  }
+
+  const to = parsed.data.to || lead.phone;
+  if (!to) {
+    return c.json({ error: 'Lead does not have a phone number' }, 400);
+  }
   
   try {
     const formattedTo = formatPhoneNumber(to);

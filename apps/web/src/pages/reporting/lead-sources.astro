@@ -96,7 +96,7 @@ import Layout from '../../components/Layout.astro';
         
         // Calculate metrics per source
         const sourceStats = sources.map(s => {
-          const sourceLeads = leads.filter(l => l.sourceId === s.id);
+          const sourceLeads = leads.filter(l => l.source === s.name);
           const sourceJobs = jobs.filter(j => sourceLeads.some(l => l.id === j.leadId));
           const revenue = sourceJobs.reduce((sum, j) => sum + Number(j.budget || 0), 0);
           const cost = Number(s.cost || 0);
