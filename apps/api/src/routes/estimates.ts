@@ -1,17 +1,18 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { estimates, leads, orgBranding, jobs } from '@paintflow/db/schema';
+import { estimates, leads, orgBranding, jobs, portalTokens, customers } from '@paintflow/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, estimateEmailTemplate } from '../lib/email';
+import { randomBytes } from 'crypto';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const signSchema = z.object({
   name: z.string().min(1).max(255),
-  signatureData: z.string().min(1).max(100000), // Base64 limit
+  signatureData: z.string().min(1).max(100000),
   packageName: z.string().optional(),
 });
 
@@ -80,10 +81,6 @@ estimatesApp.post('/:id/sign', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
   
-  const lead = await db.query.leads.findFirst({
-    where: eq(leads.id, estimate.leadId),
-  });
-  
   return c.json({ data: { id: estimate.id, status: 'accepted' } });
 });
 
@@ -103,6 +100,43 @@ estimatesApp.get('/', async (c) => {
   });
   
   return c.json({ data });
+});
+
+estimatesApp.post('/:id/portal-link', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const estimate = await db.query.estimates.findFirst({
+    where: eq(estimates.id, id),
+  });
+  
+  if (!estimate || estimate.orgId !== orgId) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  
+  const customer = await db.query.customers.findFirst({
+    where: eq(customers.id, estimate.customerId),
+  });
+  
+  if (!customer) {
+    return c.json({ error: 'Customer not found' }, 404);
+  }
+  
+  const token = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  
+  await db.insert(portalTokens).values({
+    customerId: customer.id,
+    orgId,
+    token,
+    expiresAt,
+  });
+  
+  const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
+  const link = `${baseUrl}/portal/${token}`;
+  
+  return c.json({ data: { link, token, expiresAt } });
 });
 
 export default estimatesApp;
