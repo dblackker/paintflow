@@ -1,16 +1,148 @@
 ---
 ---
+
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>PaintFlow</title>
-  </head>
-  <body class="min-h-screen bg-gray-50 flex items-center justify-center">
-    <div class="text-center">
-      <h1 class="text-4xl font-bold text-gray-900">PaintFlow</h1>
-      <p class="mt-2 text-gray-600">Multi-tenant SaaS for painting contractors</p>
-      <p class="mt-4 text-sm text-gray-500">PWA coming soon</p>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PaintFlow - CRM Built for Painting Contractors</title>
+  <meta name="description" content="All-in-one CRM for painting contractors. Manage leads, estimates, jobs, and payments. Good/Better/Best pricing, e-signatures, QuickBooks sync.">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-white">
+  <!-- Nav -->
+  <nav class="border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold">P</div>
+          <span class="text-xl font-semibold">PaintFlow</span>
+        </div>
+        <div class="flex items-center gap-4">
+          <a href="#pricing" class="text-gray-600 hover:text-gray-900">Pricing</a>
+          <a href="/login" class="px-4 py-2 border rounded-lg hover:bg-gray-50">Sign In</a>
+          <a href="/signup" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Start Free Trial</a>
+        </div>
+      </div>
     </div>
-  </body>
+  </nav>
+
+  <!-- Hero -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+    <div class="text-center max-w-3xl mx-auto">
+      <h1 class="text-5xl font-bold text-gray-900 mb-6">
+        The CRM Built for Painting Contractors
+      </h1>
+      <p class="text-xl text-gray-600 mb-8">
+        Stop losing jobs to slow follow-up. PaintFlow handles leads, estimates, scheduling, and payments — all in one place.
+      </p>
+      <div class="flex gap-4 justify-center">
+        <a href="/signup" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+          Start Free Trial →
+        </a>
+        <a href="#demo" class="px-6 py-3 border rounded-lg hover:bg-gray-50 font-medium">
+          Watch Demo
+        </a>
+      </div>
+      <p class="text-sm text-gray-500 mt-4">14-day free trial • No credit card required</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="bg-gray-50 py-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h2 class="text-3xl font-bold text-center mb-12">Everything you need to run your painting business</h2>
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="bg-white p-6 rounded-lg border">
+          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">📊</div>
+          <h3 class="font-semibold mb-2">Win More Jobs</h3>
+          <p class="text-gray-600 text-sm">Good/Better/Best estimates with e-signatures. Close 30% more deals.</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg border">
+          <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">📅</div>
+          <h3 class="font-semibold mb-2">Schedule Jobs</h3>
+          <p class="text-gray-600 text-sm">Drag-drop calendar with Google sync. Never double-book again.</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg border">
+          <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">💰</div>
+          <h3 class="font-semibold mb-2">Get Paid Faster</h3>
+          <p class="text-gray-600 text-sm">50% deposits via Stripe. QuickBooks sync for accounting.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section id="pricing" class="py-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h2 class="text-3xl font-bold text-center mb-12">Simple, transparent pricing</h2>
+      <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <div class="border rounded-lg p-6">
+          <h3 class="text-xl font-bold mb-2">Starter</h3>
+          <div class="mb-4"><span class="text-4xl font-bold">$49</span><span class="text-gray-600">/mo</span></div>
+          <ul class="space-y-2 text-sm mb-6">
+            <li>✓ Up to 3 team members</li>
+            <li>✓ 100 leads/month</li>
+            <li>✓ E-signatures</li>
+          </ul>
+          <a href="/signup?plan=starter" class="block w-full py-2 border rounded-lg text-center hover:bg-gray-50">Start Trial</a>
+        </div>
+        <div class="border-2 border-blue-600 rounded-lg p-6 relative">
+          <span class="absolute top-0 right-0 bg-blue-600 text-white text-xs px-3 py-1 rounded-bl-lg">POPULAR</span>
+          <h3 class="text-xl font-bold mb-2">Pro</h3>
+          <div class="mb-4"><span class="text-4xl font-bold">$149</span><span class="text-gray-600">/mo</span></div>
+          <ul class="space-y-2 text-sm mb-6">
+            <li>✓ Unlimited team</li>
+            <li>✓ Unlimited leads</li>
+            <li>✓ QuickBooks sync</li>
+            <li>✓ Priority support</li>
+          </ul>
+          <a href="/signup?plan=pro" class="block w-full py-2 bg-blue-600 text-white rounded-lg text-center hover:bg-blue-700">Start Trial</a>
+        </div>
+        <div class="border rounded-lg p-6">
+          <h3 class="text-xl font-bold mb-2">Enterprise</h3>
+          <div class="mb-4"><span class="text-4xl font-bold">$399</span><span class="text-gray-600">/mo</span></div>
+          <ul class="space-y-2 text-sm mb-6">
+            <li>✓ Everything in Pro</li>
+            <li>✓ White-label</li>
+            <li>✓ API access</li>
+            <li>✓ Dedicated CSM</li>
+          </ul>
+          <a href="mailto:sales@paintflow.app" class="block w-full py-2 border rounded-lg text-center hover:bg-gray-50">Contact Sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between">
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-sm font-bold">P</div>
+            <span class="font-semibold">PaintFlow</span>
+          </div>
+          <p class="text-sm text-gray-600">CRM for painting contractors</p>
+        </div>
+        <div class="flex gap-8 text-sm">
+          <div>
+            <p class="font-medium mb-2">Product</p>
+            <a href="#pricing" class="block text-gray-600 hover:text-gray-900">Pricing</a>
+            <a href="/help" class="block text-gray-600 hover:text-gray-900">Help</a>
+          </div>
+          <div>
+            <p class="font-medium mb-2">Company</p>
+            <a href="/about" class="block text-gray-600 hover:text-gray-900">About</a>
+            <a href="mailto:support@paintflow.app" class="block text-gray-600 hover:text-gray-900">Contact</a>
+          </div>
+        </div>
+      </div>
+      <div class="mt-8 pt-8 border-t text-sm text-gray-600">
+        © 2026 PaintFlow. All rights reserved.
+      </div>
+    </div>
+  </footer>
+</body>
 </html>
