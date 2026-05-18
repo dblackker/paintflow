@@ -315,3 +315,51 @@ export const subscriptions = pgTable('subscriptions', {
   currentPeriodEnd: timestamp('current_period_end'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const productionRates = pgTable('production_rates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  category: varchar('category', { length: 100 }).notNull(), // 'walls', 'ceilings', 'trim', 'cabinets', 'doors'
+  surfaceType: varchar('surface_type', { length: 100 }).notNull(), // 'drywall', 'wood', 'metal'
+  unit: varchar('unit', { length: 20 }).notNull().default('sqft'), // 'sqft', 'linear_ft', 'each'
+  ratePerHour: decimal('rate_per_hour', { precision: 10, scale: 2 }).notNull(), // sq ft per hour
+  hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }).notNull().default('50.00'),
+  prepMultiplier: decimal('prep_multiplier', { precision: 5, scale: 2 }).notNull().default('1.0'), // 1.5 = 50% more time
+  coats: integer('coats').notNull().default(2),
+  description: text('description'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const estimateRooms = pgTable('estimate_rooms', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  estimateId: uuid('estimate_id').references(() => estimates.id).notNull(),
+  name: varchar('name', { length: 255 }).notNull(), // 'Master Bedroom', 'Kitchen'
+  roomType: varchar('room_type', { length: 100 }), // 'bedroom', 'kitchen', 'bathroom'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const estimateRoomItems = pgTable('estimate_room_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  roomId: uuid('room_id').references(() => estimateRooms.id).notNull(),
+  productionRateId: uuid('production_rate_id').references(() => productionRates.id),
+  category: varchar('category', { length: 100 }).notNull(), // 'walls', 'ceiling', 'trim'
+  width: decimal('width', { precision: 10, scale: 2 }), // feet
+  height: decimal('height', { precision: 10, scale: 2 }), // feet
+  length: decimal('length', { precision: 10, scale: 2 }), // linear feet for trim
+  quantity: decimal('quantity', { precision: 10, scale: 2 }).notNull().default('1'), // sq ft or count
+  coats: integer('coats').notNull().default(2),
+  prepLevel: varchar('prep_level', { length: 50 }).notNull().default('standard'), // 'none', 'light', 'standard', 'heavy'
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const estimatePhotos = pgTable('estimate_photos', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  estimateId: uuid('estimate_id').references(() => estimates.id).notNull(),
+  roomId: uuid('room_id').references(() => estimateRooms.id),
+  url: text('url').notNull(),
+  annotations: jsonb('annotations'), // [{x, y, text, color}, ...]
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
