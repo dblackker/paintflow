@@ -6,148 +6,354 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Job - PaintFlow</title>
+  <title>Job Costing - PaintFlow</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16 items-center">
-        <a href="/jobs" class="text-gray-600">← Jobs</a>
-        <h1 class="text-xl font-semibold">Job Costs</h1>
-        <div class="w-20"></div>
+        <a href="/jobs" class="text-gray-600 hover:text-gray-900">&larr; Jobs</a>
+        <h1 class="text-xl font-semibold">Job Costing</h1>
+        <button id="complete-btn" class="hidden px-3 py-2 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200">Mark Complete</button>
       </div>
     </div>
   </nav>
 
-  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div id="job-header" class="bg-white rounded-lg shadow-sm border p-6 mb-6">
       <div class="text-center py-8 text-gray-500">Loading...</div>
     </div>
 
+    <div id="kpis" class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6"></div>
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 space-y-6">
-        <div class="bg-white rounded-lg shadow-sm border">
+        <section class="bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b flex justify-between items-center">
-            <h2 class="font-semibold">Labor Hours</h2>
-            <button id="add-labor" class="text-sm text-blue-600">Add Hours</button>
+            <div>
+              <h2 class="font-semibold">Actual Costs</h2>
+              <p class="text-xs text-gray-500">Labor, materials, supplies, subcontractors, equipment, and other job costs</p>
+            </div>
+            <button id="add-cost-btn" class="text-sm px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add Cost</button>
           </div>
-          <div id="labor-list" class="divide-y"></div>
-        </div>
+          <div id="cost-list" class="divide-y"></div>
+        </section>
 
-        <div class="bg-white rounded-lg shadow-sm border">
+        <section class="bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b flex justify-between items-center">
-            <h2 class="font-semibold">Material Costs</h2>
-            <button id="add-material-cost" class="text-sm text-blue-600">Add Cost</button>
+            <div>
+              <h2 class="font-semibold">Labor Entry</h2>
+              <p class="text-xs text-gray-500">Quick add actual crew hours when a full timecard workflow is not needed</p>
+            </div>
           </div>
-          <div id="material-costs-list" class="divide-y"></div>
-        </div>
+          <form id="labor-form" class="p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+            <input name="hours" type="number" min="0" step="0.25" required placeholder="Hours" class="px-3 py-2 border rounded">
+            <input name="rate" type="number" min="0" step="0.01" required placeholder="Burdened rate" class="px-3 py-2 border rounded">
+            <input name="date" type="date" class="px-3 py-2 border rounded">
+            <input name="description" type="text" placeholder="Description" class="px-3 py-2 border rounded md:col-span-1">
+            <button class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Log Labor</button>
+          </form>
+        </section>
+
+        <section class="bg-white rounded-lg shadow-sm border">
+          <div class="p-4 border-b flex justify-between items-center">
+            <h2 class="font-semibold">Change Orders</h2>
+            <button id="add-change-order-btn" class="text-sm text-blue-600">Add Change Order</button>
+          </div>
+          <div id="change-order-list" class="divide-y"></div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow-sm border">
+          <div class="p-4 border-b">
+            <h2 class="font-semibold">Material Purchases</h2>
+            <p class="text-xs text-gray-500">Imported invoices linked to this job</p>
+          </div>
+          <div id="purchase-list" class="divide-y"></div>
+        </section>
       </div>
 
-      <div class="space-y-6">
-        <div class="bg-white rounded-lg shadow-sm border p-6">
-          <h3 class="font-semibold mb-4">Profitability</h3>
-          <div id="margin-summary" class="space-y-3"></div>
-        </div>
+      <aside class="space-y-6">
+        <section class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-4">Cost Breakdown</h3>
+          <div id="breakdown" class="space-y-3"></div>
+        </section>
 
-        <div class="bg-white rounded-lg shadow-sm border p-6">
-          <h3 class="font-semibold mb-4">Estimated vs Actual</h3>
-          <div id="comparison" class="space-y-2 text-sm"></div>
-        </div>
-      </div>
+        <section class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-4">Budget Signals</h3>
+          <div id="budget-signals" class="space-y-3 text-sm"></div>
+        </section>
+      </aside>
     </div>
   </main>
+
+  <div id="cost-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-20 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+      <h3 class="text-lg font-semibold mb-4">Add Job Cost</h3>
+      <form id="cost-form" class="space-y-3">
+        <select name="category" required class="w-full px-3 py-2 border rounded">
+          <option value="materials">Materials</option>
+          <option value="supplies">Supplies</option>
+          <option value="labor">Labor</option>
+          <option value="subcontractor">Subcontractor</option>
+          <option value="equipment">Equipment</option>
+          <option value="other">Other</option>
+        </select>
+        <input name="description" required placeholder="Description" class="w-full px-3 py-2 border rounded">
+        <div class="grid grid-cols-2 gap-3">
+          <input name="quantity" type="number" min="0" step="0.01" required placeholder="Quantity" class="px-3 py-2 border rounded">
+          <input name="unitCost" type="number" min="0" step="0.01" required placeholder="Unit cost" class="px-3 py-2 border rounded">
+        </div>
+        <div class="flex gap-3 pt-3">
+          <button type="button" id="cancel-cost-btn" class="flex-1 px-4 py-2 border rounded">Cancel</button>
+          <button class="flex-1 px-4 py-2 bg-blue-600 text-white rounded">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
     const jobId = window.location.pathname.split('/').pop();
+    let costing = null;
 
-    async function loadJob() {
-      const res = await fetch(`${API_URL}/v1/jobs/${jobId}`, { credentials: 'include' });
-      const { data } = await res.json();
-      renderJob(data);
-      loadCosts();
+    const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
+    const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : '';
+    const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+    async function api(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
     }
 
-    function renderJob(job) {
+    async function loadCosting() {
+      const payload = await api(`/v1/jobs/${jobId}/costing`);
+      if (!payload) return;
+      costing = payload.data;
+      render();
+    }
+
+    function render() {
+      renderHeader();
+      renderKpis();
+      renderCosts();
+      renderChangeOrders();
+      renderPurchases();
+      renderBreakdown();
+      renderBudgetSignals();
+    }
+
+    function renderHeader() {
+      const { job, revenue } = costing;
+      document.getElementById('complete-btn').classList.toggle('hidden', job.status === 'completed');
       document.getElementById('job-header').innerHTML = `
-        <div class="flex justify-between items-start">
+        <div class="flex flex-col md:flex-row md:justify-between gap-4">
           <div>
-            <h2 class="text-xl font-semibold">${job.title}</h2>
-            <p class="text-gray-600">${job.clientName}</p>
+            <h2 class="text-2xl font-semibold">${escapeHtml(job.name)}</h2>
+            <p class="text-gray-600">${escapeHtml(job.leadName || 'No customer linked')}</p>
+            <p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium">${escapeHtml(job.status)}</span></p>
+          </div>
+          <div class="text-left md:text-right">
+            <p class="text-3xl font-bold">${currency(revenue.total)}</p>
+            <p class="text-sm text-gray-600">Total revenue with approved change orders</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKpis() {
+      const { revenue, costs, profitability, production } = costing;
+      const cards = [
+        ['Revenue', currency(revenue.total), 'Contract plus approved change orders'],
+        ['Actual Cost', currency(costs.total), 'All tracked costs'],
+        ['Gross Profit', currency(profitability.grossProfit), 'Revenue less actual costs'],
+        ['Gross Margin', percent(profitability.grossMargin), 'Gross profit divided by revenue'],
+        ['Labor Hours', Number(production.laborHours || 0).toFixed(2), `${currency(production.averageLaborRate)}/hr avg`],
+      ];
+      document.getElementById('kpis').innerHTML = cards.map(([label, value, help]) => `
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <p class="text-xs uppercase text-gray-500 font-semibold">${label}</p>
+          <p class="text-2xl font-bold mt-1">${value}</p>
+          <p class="text-xs text-gray-500 mt-1">${help}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderCosts() {
+      const costs = costing.lists.costs;
+      const container = document.getElementById('cost-list');
+      if (!costs.length) {
+        container.innerHTML = '<div class="p-6 text-sm text-gray-500">No actual job costs have been logged.</div>';
+        return;
+      }
+      container.innerHTML = costs.map((cost) => `
+        <div class="p-4 flex justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <p class="font-medium">${escapeHtml(cost.description)}</p>
+              <span class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(cost.category)}</span>
+            </div>
+            <p class="text-sm text-gray-600">${Number(cost.quantity).toFixed(2)} x ${currency(cost.unitCost)} · ${dateLabel(cost.createdAt)}</p>
+          </div>
+          <p class="font-semibold">${currency(cost.totalCost)}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderChangeOrders() {
+      const orders = costing.lists.changeOrders;
+      const container = document.getElementById('change-order-list');
+      if (!orders.length) {
+        container.innerHTML = '<div class="p-6 text-sm text-gray-500">No change orders yet.</div>';
+        return;
+      }
+      container.innerHTML = orders.map((order) => `
+        <div class="p-4 flex justify-between gap-4">
+          <div>
+            <p class="font-medium">${escapeHtml(order.description)}</p>
+            <p class="text-sm text-gray-600">${escapeHtml(order.createdBy)} · ${dateLabel(order.createdAt)}</p>
           </div>
           <div class="text-right">
-            <p class="text-2xl font-bold">$${parseFloat(job.totalAmount || 0).toFixed(2)}</p>
-            <p class="text-sm text-gray-600">Contract Value</p>
+            <p class="font-semibold">${currency(order.amount)}</p>
+            <span class="px-2 py-0.5 text-xs rounded ${order.status === 'approved' || order.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${escapeHtml(order.status)}</span>
           </div>
+        </div>
+      `).join('');
+    }
+
+    function renderPurchases() {
+      const purchases = costing.lists.materialPurchases;
+      const container = document.getElementById('purchase-list');
+      if (!purchases.length) {
+        container.innerHTML = '<div class="p-6 text-sm text-gray-500">No material invoices imported for this job.</div>';
+        return;
+      }
+      container.innerHTML = purchases.map((purchase) => `
+        <div class="p-4 flex justify-between gap-4">
+          <div>
+            <p class="font-medium">${escapeHtml(purchase.supplier)}</p>
+            <p class="text-sm text-gray-600">Invoice ${escapeHtml(purchase.invoiceNumber || 'not set')} · ${dateLabel(purchase.invoiceDate || purchase.createdAt)}</p>
+          </div>
+          <p class="font-semibold">${currency(purchase.totalAmount)}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderBreakdown() {
+      const { costs } = costing;
+      const rows = [
+        ['Labor', costs.labor],
+        ['Materials', costs.materials],
+        ['Supplies', costs.supplies],
+        ['Other', costs.expenses],
+      ];
+      document.getElementById('breakdown').innerHTML = rows.map(([label, value]) => `
+        <div>
+          <div class="flex justify-between text-sm mb-1">
+            <span class="text-gray-600">${label}</span>
+            <span class="font-medium">${currency(value)}</span>
+          </div>
+          <div class="h-2 bg-gray-100 rounded">
+            <div class="h-2 bg-blue-600 rounded" style="width:${costs.total > 0 ? Math.min(100, (value / costs.total) * 100) : 0}%"></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderBudgetSignals() {
+      const { budget, profitability } = costing;
+      const materialVariance = budget.materialVariance;
+      document.getElementById('budget-signals').innerHTML = `
+        <div class="flex justify-between">
+          <span class="text-gray-600">Estimated materials</span>
+          <span class="font-medium">${budget.estimatedMaterials == null ? 'Not estimated' : currency(budget.estimatedMaterials)}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Material variance</span>
+          <span class="font-medium ${materialVariance == null || materialVariance <= 0 ? 'text-green-600' : 'text-red-600'}">${materialVariance == null ? 'Not available' : currency(materialVariance)}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-gray-600">Cost to revenue</span>
+          <span class="font-medium">${percent(profitability.costToRevenue)}</span>
         </div>
       `;
     }
 
-    async function loadCosts() {
-      const res = await fetch(`${API_URL}/v1/jobs/${jobId}/costs`, { credentials: 'include' });
-      const { data } = await res.json();
-      renderCosts(data);
-    }
+    document.getElementById('add-cost-btn').addEventListener('click', () => {
+      document.getElementById('cost-modal').classList.remove('hidden');
+    });
 
-    function renderCosts(costs) {
-      const labor = costs.filter(c => c.category === 'labor');
-      const materials = costs.filter(c => c.category === 'materials');
-      
-      const laborTotal = labor.reduce((sum, c) => sum + parseFloat(c.totalCost), 0);
-      const materialsTotal = materials.reduce((sum, c) => sum + parseFloat(c.totalCost), 0);
-      const totalCost = laborTotal + materialsTotal;
-      
-      document.getElementById('labor-list').innerHTML = labor.length ? labor.map(c => `
-        <div class="p-4 flex justify-between">
-          <div>
-            <p class="font-medium">${c.description}</p>
-            <p class="text-sm text-gray-600">${c.quantity} hrs @ $${c.unitCost}/hr</p>
-          </div>
-          <p class="font-semibold">$${parseFloat(c.totalCost).toFixed(2)}</p>
-        </div>
-      `).join('') : '<div class="p-4 text-gray-500 text-sm">No labor costs tracked</div>';
-      
-      document.getElementById('material-costs-list').innerHTML = materials.length ? materials.map(c => `
-        <div class="p-4 flex justify-between">
-          <div>
-            <p class="font-medium">${c.description}</p>
-            <p class="text-sm text-gray-600">${c.quantity} units @ $${c.unitCost}</p>
-          </div>
-          <p class="font-semibold">$${parseFloat(c.totalCost).toFixed(2)}</p>
-        </div>
-      `).join('') : '<div class="p-4 text-gray-500 text-sm">No material costs tracked</div>';
-      
-      // Get job value
-      const jobValue = parseFloat(document.querySelector('#job-header .text-2xl')?.textContent?.replace('$', '') || '0');
-      const profit = jobValue - totalCost;
-      const margin = jobValue > 0 ? (profit / jobValue * 100) : 0;
-      
-      document.getElementById('margin-summary').innerHTML = `
-        <div class="flex justify-between">
-          <span class="text-gray-600">Labor</span>
-          <span class="font-semibold">$${laborTotal.toFixed(2)}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-gray-600">Materials</span>
-          <span class="font-semibold">$${materialsTotal.toFixed(2)}</span>
-        </div>
-        <div class="border-t pt-3 flex justify-between">
-          <span class="font-medium">Total Cost</span>
-          <span class="font-bold">$${totalCost.toFixed(2)}</span>
-        </div>
-        <div class="border-t pt-3 flex justify-between">
-          <span class="font-medium">Profit</span>
-          <span class="font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}">$${profit.toFixed(2)}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="font-medium">Margin</span>
-          <span class="font-bold ${margin >= 30 ? 'text-green-600' : margin >= 15 ? 'text-yellow-600' : 'text-red-600'}">${margin.toFixed(1)}%</span>
-        </div>
-      `;
-    }
+    document.getElementById('cancel-cost-btn').addEventListener('click', () => {
+      document.getElementById('cost-modal').classList.add('hidden');
+    });
 
-    loadJob();
+    document.getElementById('cost-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      await api(`/v1/jobs/${jobId}/costs`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      form.reset();
+      document.getElementById('cost-modal').classList.add('hidden');
+      await loadCosting();
+    });
+
+    document.getElementById('labor-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      await api(`/v1/jobs/${jobId}/time-entries`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      form.reset();
+      form.querySelector('input[name="date"]').valueAsDate = new Date();
+      await loadCosting();
+    });
+
+    document.getElementById('complete-btn').addEventListener('click', async () => {
+      if (!confirm('Mark this job completed?')) return;
+      await api(`/v1/jobs/${jobId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'completed', completedAt: new Date().toISOString() }),
+      });
+      await loadCosting();
+    });
+
+    document.getElementById('add-change-order-btn').addEventListener('click', async () => {
+      const description = prompt('Change order description:');
+      const amount = prompt('Amount:');
+      if (!description || !amount || !costing.job.estimateId) return;
+      await api('/v1/change-orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          jobId,
+          estimateId: costing.job.estimateId,
+          description,
+          amount: Number(amount),
+          createdBy: 'contractor',
+        }),
+      });
+      await loadCosting();
+    });
+
+    document.querySelector('#labor-form input[name="date"]').valueAsDate = new Date();
+    loadCosting().catch((err) => {
+      document.getElementById('job-header').innerHTML = `<div class="p-6 text-red-600">${escapeHtml(err.message)}</div>`;
+    });
   </script>
 </body>
 </html>
