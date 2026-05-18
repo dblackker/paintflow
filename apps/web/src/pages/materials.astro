@@ -68,25 +68,40 @@
               <p class="font-medium">${m.name}</p>
               <p class="text-sm text-gray-600">${m.brand || ''} • ${m.category}</p>
             </div>
-            <div class="text-right">
-              <p class="font-semibold">$${price}/${m.unit}</p>
-              <p class="text-xs text-gray-500">Cost: $${m.costPerUnit}</p>
+    function renderMaterials(materials) {
+      const list = document.getElementById('materials-list');
+      list.innerHTML = materials.map(m => {
+        const price = (parseFloat(m.costPerUnit) * (1 + parseFloat(m.markupPercent) / 100)).toFixed(2);
+        return `
+          <div class="p-4 flex justify-between items-center hover:bg-gray-50" data-id="${m.id}">
+            <div class="flex-1">
+              <p class="font-medium">${m.name}</p>
+              <p class="text-sm text-gray-600">${m.brand || ''} • ${m.category}</p>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="text-right">
+                <p class="font-semibold">$${price}/${m.unit}</p>
+                <p class="text-xs text-gray-500">Cost: $<span class="cost-value" data-field="costPerUnit">${m.costPerUnit}</span> • <span class="markup-value">${m.markupPercent}</span>% markup</p>
+              </div>
+              <button onclick="quickEdit('${m.id}')" class="text-sm text-blue-600 hover:text-blue-700">Edit</button>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    document.getElementById('add-material').addEventListener('click', () => {
-      document.getElementById('modal').classList.remove('hidden');
-    });
-
-    window.closeModal = () => document.getElementById('modal').classList.add('hidden');
-
-    document.getElementById('material-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = new FormData(e.target);
-      await fetch(`${API_URL}/v1/materials`, {
+    async function quickEdit(id) {
+      const cost = prompt('New cost per unit:');
+      if (!cost) return;
+      const markup = prompt('Markup %:', '30');
+      await fetch(`${API_URL}/v1/materials/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ costPerUnit: parseFloat(cost), markupPercent: parseFloat(markup) }),
+      });
+      loadMaterials();
+    }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
