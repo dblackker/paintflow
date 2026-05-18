@@ -25,7 +25,8 @@ billing.post('/checkout', async (c) => {
     return c.json({ error: 'Estimate not found' }, 404);
   }
   
-  const pkg = estimate.packages.find((p: any) => p.name === packageName);
+  const packages = estimate.packages as Array<{ name: string; total: number }>;
+  const pkg = packages.find((p) => p.name === packageName);
   if (!pkg) {
     return c.json({ error: 'Package not found' }, 404);
   }
@@ -33,8 +34,8 @@ billing.post('/checkout', async (c) => {
   try {
     const session = await createCheckoutSession(c.env, {
       amount: Math.round(pkg.total * 0.5 * 100) / 100,
-      successUrl: `${c.env.APP_URL}/estimates/${estimateId}/success`,
-      cancelUrl: `${c.env.APP_URL}/estimates/${estimateId}`,
+      successUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}/success`,
+      cancelUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}`,
       metadata: { estimateId, orgId, packageName },
     });
     

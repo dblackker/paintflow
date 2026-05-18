@@ -5,11 +5,13 @@ export interface Env {
   KV: KVNamespace;
   R2?: R2Bucket;
   PUBLIC_URL: string;
+  COOKIE_DOMAIN?: string;
   RESEND_API_KEY: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_STARTER_PRICE_ID: string;
   STRIPE_PRO_PRICE_ID: string;
+  STRIPE_ENTERPRISE_PRICE_ID: string;
   TWILIO_ACCOUNT_SID: string;
   TWILIO_AUTH_TOKEN: string;
   TWILIO_PHONE_NUMBER: string;

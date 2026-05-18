@@ -2,7 +2,7 @@
   "name": "@paintflow/api",
   "private": true,
   "scripts": {
-    "build": "tsc --noEmit --noCheck",
+    "build": "tsc --noEmit",
     "dev": "wrangler dev"
   },
   "dependencies": {

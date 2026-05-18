@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { teamMembers, timeEntries, jobCosts, userRoles, roles } from '@paintflow/db/schema';
@@ -9,7 +9,7 @@ import { authMiddleware } from '../middleware/tenant';
 const teamApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 teamApp.use('*', authMiddleware);
 
-async function hasPermission(c, permission) {
+async function hasPermission(c: Context<{ Bindings: Env; Variables: Variables }>, permission: string) {
   const userId = c.get('userId');
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
@@ -20,7 +20,7 @@ async function hasPermission(c, permission) {
   });
   
   if (!userRole) return false;
-  const permissions = userRole.role.permissions;
+  const permissions = userRole.role.permissions as string[];
   return permissions.includes(permission) || permissions.includes('all');
 }
 
@@ -102,7 +102,10 @@ teamApp.post('/time', async (c) => {
   
   const [entry] = await db.insert(timeEntries).values({
     orgId,
-    ...data,
+    jobId: data.jobId,
+    teamMemberId: data.teamMemberId,
+    hours: data.hours.toString(),
+    description: data.description,
     hourlyRate: burdenedRate.toString(),
     totalCost: totalCost.toString(),
     date: new Date(data.date),

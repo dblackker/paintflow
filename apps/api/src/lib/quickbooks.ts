@@ -63,7 +63,7 @@ export async function refreshAccessToken(env: any, refreshToken: string) {
     throw new Error('Failed to refresh QB token');
   }
   
-  return await response.json();
+  return await response.json() as { access_token: string; refresh_token: string; expires_in: number };
 }
 
 export async function createQBCustomer(env: any, orgId: string, lead: any) {
@@ -99,7 +99,7 @@ export async function createQBCustomer(env: any, orgId: string, lead: any) {
     throw new Error('Failed to create QB customer');
   }
   
-  const result = await response.json();
+  const result = await response.json() as any;
   const customerId = result.Customer.Id;
   
   // Save customer ID
@@ -168,7 +168,7 @@ export async function createQBInvoice(env: any, orgId: string, estimate: any, le
     throw new Error('Failed to create QB invoice');
   }
   
-  const result = await response.json();
+  const result = await response.json() as any;
   const invoiceId = result.Invoice.Id;
   
   // Save invoice ID
@@ -197,7 +197,7 @@ export async function getCompanyInfo(env: any, accessToken: string, realmId: str
     throw new Error('Failed to fetch company info');
   }
   
-  return await response.json();
+  return await response.json() as any;
 }
 
 export async function createQBPayment(env: any, orgId: string, estimate: any, amount: number, paymentDate: string) {
@@ -250,7 +250,7 @@ export async function createQBPayment(env: any, orgId: string, estimate: any, am
     throw new Error('Failed to create QB payment');
   }
   
-  const result = await response.json();
+  const result = await response.json() as any;
   const paymentId = result.Payment.Id;
   
   // Save payment ID
@@ -284,7 +284,7 @@ export async function getTaxCodes(env: any, orgId: string) {
     throw new Error('Failed to fetch tax codes');
   }
   
-  const result = await response.json();
+  const result = await response.json() as any;
   return result.QueryResponse.TaxCode || [];
 }
 
@@ -310,6 +310,6 @@ export async function getItems(env: any, orgId: string) {
     throw new Error('Failed to fetch items');
   }
   
-  const result = await response.json();
+  const result = await response.json() as any;
   return result.QueryResponse.Item || [];
 }

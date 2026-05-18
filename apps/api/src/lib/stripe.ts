@@ -32,7 +32,7 @@ export async function createCheckoutSession(env: any, params: {
     throw new Error('Failed to create checkout session');
   }
   
-  return await response.json();
+  return await response.json() as { id: string; url: string | null };
 }
 
 export async function verifyWebhookSignature(

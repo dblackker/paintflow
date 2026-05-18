@@ -235,16 +235,18 @@ export function flattenCatalog() {
   const materials = [];
   
   for (const [brandKey, brand] of Object.entries(PAINT_CATALOG)) {
-    for (const [lineKey, line] of Object.entries(brand.lines)) {
-      for (const [location, sheens] of Object.entries(line)) {
+    const brandCatalog = brand as any;
+    for (const [lineKey, line] of Object.entries(brandCatalog.lines)) {
+      const paintLine = line as any;
+      for (const [location, sheens] of Object.entries(paintLine)) {
         if (location === 'name' || location === 'tier') continue;
-        for (const [sheen, data] of Object.entries(sheens)) {
+        for (const [sheen, data] of Object.entries(sheens as Record<string, { price: number; coverage: number }>)) {
           materials.push({
-            name: `${brand.name} ${line.name} ${sheen}`,
-            brand: brand.name,
+            name: `${brandCatalog.name} ${paintLine.name} ${sheen}`,
+            brand: brandCatalog.name,
             category: 'paint',
-            line: line.name,
-            tier: line.tier,
+            line: paintLine.name,
+            tier: paintLine.tier,
             location,
             sheen,
             unit: 'gallon',
@@ -256,11 +258,11 @@ export function flattenCatalog() {
       }
     }
     
-    if (brand.primers) {
-      for (const [primerKey, primer] of Object.entries(brand.primers)) {
+    if (brandCatalog.primers) {
+      for (const [primerKey, primer] of Object.entries(brandCatalog.primers as Record<string, { price: number; coverage: number }>)) {
         materials.push({
-          name: `${brand.name} ${primerKey.replace(/-/g, ' ')}`,
-          brand: brand.name,
+          name: `${brandCatalog.name} ${primerKey.replace(/-/g, ' ')}`,
+          brand: brandCatalog.name,
           category: 'primer',
           unit: 'gallon',
           costPerUnit: primer.price,

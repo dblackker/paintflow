@@ -41,7 +41,15 @@ ratesApp.get('/', async (c) => {
   // Seed defaults if empty
   if (rates.length === 0) {
     const seeded = await db.insert(productionRates).values(
-      DEFAULT_RATES.map(r => ({ orgId, ...r }))
+      DEFAULT_RATES.map(r => ({
+        orgId,
+        category: r.category,
+        surfaceType: r.surfaceType,
+        unit: r.unit,
+        ratePerHour: r.ratePerHour.toString(),
+        hourlyRate: r.hourlyRate.toString(),
+        description: r.description,
+      }))
     ).returning();
     rates = seeded;
   }
@@ -57,7 +65,11 @@ ratesApp.post('/', async (c) => {
   
   const [rate] = await db.insert(productionRates).values({
     orgId,
-    ...parsed,
+    category: parsed.category,
+    surfaceType: parsed.surfaceType,
+    unit: parsed.unit,
+    coats: parsed.coats,
+    description: parsed.description,
     ratePerHour: parsed.ratePerHour.toString(),
     hourlyRate: parsed.hourlyRate.toString(),
     prepMultiplier: parsed.prepMultiplier.toString(),

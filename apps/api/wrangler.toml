@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 [vars]
-APP_URL = "https://app.paintflow.app"
+APP_URL = "http://localhost:8787"
 PUBLIC_URL = "https://app.paintflow.app"
 ENVIRONMENT = "development"
 
@@ -21,7 +21,7 @@ preview_bucket_name = "paintflow-uploads-preview"
 crons = ["0 9 * * *"]
 
 [env.production]
-vars = { APP_URL = "https://api.paintflow.app", PUBLIC_URL = "https://app.paintflow.app", ENVIRONMENT = "production" }
+vars = { APP_URL = "https://api.paintflow.app", PUBLIC_URL = "https://app.paintflow.app", ENVIRONMENT = "production", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter", STRIPE_PRO_PRICE_ID = "price_replace_pro", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise" }
 routes = [
   { pattern = "api.paintflow.app/*", zone_name = "paintflow.app" }
 ]
@@ -35,4 +35,4 @@ binding = "R2"
 bucket_name = "paintflow-uploads"
 
 [env.staging]
-vars = { APP_URL = "https://api-staging.paintflow.app", PUBLIC_URL = "https://staging.paintflow.app", ENVIRONMENT = "staging" }
+vars = { APP_URL = "https://api-staging.paintflow.app", PUBLIC_URL = "https://staging.paintflow.app", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter_test", STRIPE_PRO_PRICE_ID = "price_replace_pro_test", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise_test" }

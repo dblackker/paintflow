@@ -18,7 +18,7 @@ calendar.get('/connect', async (c) => {
   
   const params = new URLSearchParams({
     client_id: c.env.GOOGLE_CLIENT_ID,
-    redirect_uri: `${c.env.APP_URL}/api/v1/calendar/callback`,
+    redirect_uri: `${c.env.APP_URL}/v1/calendar/callback`,
     response_type: 'code',
     scope: 'https://www.googleapis.com/auth/calendar.events',
     access_type: 'offline',
@@ -51,13 +51,13 @@ calendar.get('/callback', async (c) => {
         code,
         client_id: c.env.GOOGLE_CLIENT_ID,
         client_secret: c.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: `${c.env.APP_URL}/api/v1/calendar/callback`,
+        redirect_uri: `${c.env.APP_URL}/v1/calendar/callback`,
         grant_type: 'authorization_code',
       }),
     });
     
     const orgId = stateData.orgId;
-    const tokens = await tokenRes.json();
+    const tokens = await tokenRes.json() as { access_token: string; refresh_token: string; expires_in: number };
     
     const db = createDb(c.env.DATABASE_URL);
     await db.insert(googleCalendarConnections)
@@ -77,7 +77,7 @@ calendar.get('/callback', async (c) => {
         },
       });
     
-    return c.redirect(`${c.env.APP_URL}/settings?calendar_connected=true`);
+    return c.redirect(`${c.env.PUBLIC_URL}/settings?calendar_connected=true`);
   } catch (err) {
     console.error('Google Calendar callback error:', err);
     return c.json({ error: 'Connection failed' }, 500);
@@ -124,7 +124,7 @@ calendar.get('/events', async (c) => {
       );
       
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { items?: unknown[] };
         googleEvents = data.items || [];
       }
     } catch (err) {
@@ -175,7 +175,7 @@ calendar.post('/sync-job', async (c) => {
       }
     );
     
-    const event = await eventRes.json();
+    const event = await eventRes.json() as { id: string };
     return c.json({ success: true, eventId: event.id });
   } catch (err) {
     console.error('Failed to create calendar event:', err);

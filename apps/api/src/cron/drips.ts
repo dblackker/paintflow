@@ -1,6 +1,7 @@
 import { createDb } from '@paintflow/db';
 import { estimates, leads } from '@paintflow/db/schema';
-import { eq, and, lte } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { sendSMS } from '../lib/twilio';
 
 // Drip schedule: Day 1, 3, 7 after estimate sent
 const DRIP_SCHEDULE = [1, 3, 7];
@@ -56,11 +57,11 @@ async function sendDripMessage(env: any, estimate: any, day: number) {
   
   const message = messages[day as keyof typeof messages];
   
-  // TODO: Send via Twilio
-  // await env.TWILIO.send({ to: lead.phone, body: message });
-  
-  console.log(`DRIP Day ${day} to ${lead.phone}: ${message}`);
-  
-  // Log activity
-  await db.insert({/* activities table */} as any);
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_PHONE_NUMBER) {
+    console.warn(`Skipping drip SMS for ${lead.id}: Twilio is not configured`);
+    return;
+  }
+
+  await sendSMS(env, lead.phone, message);
+  console.log(`DRIP Day ${day} sent to ${lead.phone}`);
 }

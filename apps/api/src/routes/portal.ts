@@ -82,9 +82,7 @@ portalApp.post('/:token/pay', async (c) => {
   }
   
   // Create Stripe payment intent
-  const stripe = new (await import('stripe')).default(c.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2024-06-20',
-  });
+  const stripe = new (await import('stripe')).default(c.env.STRIPE_SECRET_KEY);
   
   const paymentIntent = await stripe.paymentIntents.create({
     amount: Math.round(amount * 100),

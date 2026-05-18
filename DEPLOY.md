@@ -35,9 +35,24 @@ wrangler secret put TWILIO_PHONE_NUMBER
 # Stripe
 wrangler secret put STRIPE_SECRET_KEY
 wrangler secret put STRIPE_WEBHOOK_SECRET
+wrangler secret put STRIPE_STARTER_PRICE_ID
+wrangler secret put STRIPE_PRO_PRICE_ID
+wrangler secret put STRIPE_ENTERPRISE_PRICE_ID
 
 # Resend
 wrangler secret put RESEND_API_KEY
+
+# Auth and cron
+wrangler secret put SESSION_SECRET
+wrangler secret put CRON_SECRET
+
+# Google Calendar OAuth
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
+
+# QuickBooks OAuth
+wrangler secret put QB_CLIENT_ID
+wrangler secret put QB_CLIENT_SECRET
 
 # Cloudflare API (for Browser Rendering)
 wrangler secret put CF_ACCOUNT_ID
@@ -46,8 +61,10 @@ wrangler secret put CF_API_TOKEN
 
 ### 3. Deploy Database
 
+Run migrations against the target Neon database:
+
 ```bash
-pnpm db:push
+pnpm db:migrate
 ```
 
 ### 4. Deploy API
@@ -79,20 +96,23 @@ wrangler pages deploy dist --project-name=paintflow
 
 Set in Cloudflare dashboard or wrangler.toml:
 
-- `APP_URL` - Your app URL
+- `APP_URL` - API base URL, for example `https://api.paintflow.app`
 - `PUBLIC_URL` - Public web app URL
 - `PUBLIC_API_URL` - Public API URL used by the web app
+- `COOKIE_DOMAIN` - Cookie domain for shared auth, for example `.paintflow.app`
 - `DATABASE_URL` - Neon connection string
 - `KV` - KV namespace binding
 - `TWILIO_*` - Twilio credentials
 - `STRIPE_*` - Stripe keys
+- `GOOGLE_*` - Google OAuth client credentials
+- `QB_*` - QuickBooks OAuth client credentials
 - `RESEND_API_KEY` - Email API key
 - `CF_ACCOUNT_ID` - Cloudflare account ID
 - `CF_API_TOKEN` - Cloudflare API token
 
 ## Cron Jobs
 
-The API has a scheduled worker that runs daily at 9am for drip automation.
+The API has a scheduled worker that runs daily at 9am UTC for drip automation and review requests.
 
 Configure in wrangler.toml:
 ```toml
@@ -106,6 +126,14 @@ crons = ["0 9 * * *"]
 ```bash
 wrangler route add "api.paintflow.app/*" --zone-name=paintflow.app
 ```
+
+### Connector Redirects
+
+Configure connector redirect URLs exactly:
+
+- Google Calendar: `https://api.paintflow.app/v1/calendar/callback`
+- QuickBooks: `https://api.paintflow.app/v1/quickbooks/callback`
+- Stripe webhook: `https://api.paintflow.app/v1/billing/webhook`
 
 ### Web
 In Cloudflare Pages dashboard:

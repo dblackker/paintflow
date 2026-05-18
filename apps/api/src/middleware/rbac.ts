@@ -2,10 +2,10 @@ import type { Context, Next } from 'hono';
 import { createDb } from '@paintflow/db';
 import { userRoles, roles } from '@paintflow/db/schema';
 import { eq, and } from 'drizzle-orm';
-import type { Env } from '../types';
+import type { Env, Variables } from '../types';
 
 export async function requirePermission(permission: string) {
-  return async (c: Context<{ Bindings: Env }>, next: Next) => {
+  return async (c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) => {
     const userId = c.get('userId');
     const orgId = c.get('orgId');
     const db = createDb(c.env.DATABASE_URL);
@@ -32,7 +32,7 @@ export async function requirePermission(permission: string) {
   };
 }
 
-export async function canLogTimeFor(c: Context, teamMemberId: string): Promise<boolean> {
+export async function canLogTimeFor(c: Context<{ Bindings: Env; Variables: Variables }>, teamMemberId: string): Promise<boolean> {
   const userId = c.get('userId');
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);

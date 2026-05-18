@@ -133,7 +133,13 @@ templatesApp.post('/', async (c) => {
   const [template] = await db.insert(estimateTemplates).values({
     orgId,
     createdBy: userId,
-    ...parsed,
+    name: parsed.name,
+    description: parsed.description,
+    category: parsed.category,
+    isShared: parsed.isShared,
+    isSmart: parsed.isSmart,
+    rooms: parsed.rooms,
+    packages: parsed.packages,
   }).returning();
   
   return c.json({ data: template }, 201);

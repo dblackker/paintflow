@@ -36,7 +36,18 @@ materialsApp.get('/', async (c) => {
   
   if (data.length === 0) {
     const seeded = await db.insert(materials).values(
-      DEFAULT_MATERIALS.map(m => ({ orgId, ...m }))
+      DEFAULT_MATERIALS.map((m: any) => ({
+        orgId,
+        name: m.name,
+        category: m.category,
+        brand: m.brand,
+        unit: m.unit,
+        costPerUnit: String(m.costPerUnit),
+        markupPercent: String(m.markupPercent ?? 30),
+        coverageSqFt: m.coverageSqFt == null ? undefined : String(m.coverageSqFt),
+        supplier: m.supplier,
+        sku: m.sku,
+      }))
     ).returning();
     data = seeded;
   }
@@ -52,7 +63,12 @@ materialsApp.post('/', async (c) => {
   
   const [material] = await db.insert(materials).values({
     orgId,
-    ...parsed,
+    name: parsed.name,
+    category: parsed.category,
+    brand: parsed.brand,
+    unit: parsed.unit,
+    supplier: parsed.supplier,
+    sku: parsed.sku,
     costPerUnit: parsed.costPerUnit.toString(),
     markupPercent: parsed.markupPercent.toString(),
     coverageSqFt: parsed.coverageSqFt?.toString(),

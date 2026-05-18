@@ -8,6 +8,26 @@ import { eq } from 'drizzle-orm';
 
 const auth = new Hono<{ Bindings: Env }>();
 
+function sessionCookie(value: string, env: Env, maxAge: number) {
+  const parts = [
+    `session=${value}`,
+    'HttpOnly',
+    'Path=/',
+    `Max-Age=${maxAge}`,
+    'SameSite=Lax',
+  ];
+
+  if (env.ENVIRONMENT === 'production') {
+    parts.push('Secure');
+  }
+
+  if (env.COOKIE_DOMAIN) {
+    parts.push(`Domain=${env.COOKIE_DOMAIN}`);
+  }
+
+  return parts.join('; ');
+}
+
 // Email template for magic link
 const magicLinkEmail = (magicLink: string) => ({
   personalizations: [{ to: [{ email: '' }] }],
@@ -95,7 +115,7 @@ auth.post('/magic-link', async (c) => {
   );
   
   // Send email via MailChannels
-  const magicLink = `${c.env.APP_URL}/auth/verify?token=${token}`;
+  const magicLink = `${c.env.APP_URL}/v1/auth/verify?token=${token}`;
   const emailPayload = magicLinkEmail(magicLink);
   emailPayload.personalizations[0].to[0].email = email;
   
@@ -136,7 +156,7 @@ auth.get('/verify', async (c) => {
   
   const sessionToken = await createSession(c.env, userId, orgId, email);
   
-  c.header('Set-Cookie', `session=${sessionToken}; HttpOnly; Secure; SameSite=Lax; Max-Age=604800; Path=/`);
+  c.header('Set-Cookie', sessionCookie(sessionToken, c.env, 604800));
   
   // Send welcome email for new users (fire and forget)
   if (isNewUser) {
@@ -148,7 +168,7 @@ auth.get('/verify', async (c) => {
         type: 'text/html',
         value: `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
 <h1>Welcome to PaintFlow!</h1>
-<p>You're all set. <a href="${c.env.APP_URL}/onboarding">Start onboarding →</a></p>
+<p>You're all set. <a href="${c.env.PUBLIC_URL}/onboarding">Start onboarding →</a></p>
 </body></html>`
       }]
     };
@@ -160,7 +180,7 @@ auth.get('/verify', async (c) => {
     }).catch(() => {});
   }
   
-  return c.redirect('/dashboard');
+  return c.redirect(`${c.env.PUBLIC_URL}/dashboard`);
 });
 
 // POST /v1/auth/logout
@@ -171,7 +191,7 @@ auth.post('/logout', async (c) => {
     await c.env.KV.delete(`session:${token}`);
   }
   
-  c.header('Set-Cookie', 'session=; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Path=/');
+  c.header('Set-Cookie', sessionCookie('', c.env, 0));
   
   return c.json({ success: true });
 });

@@ -69,7 +69,7 @@ sms.post('/send', async (c) => {
   
   try {
     const formattedTo = formatPhoneNumber(to);
-    const result = await sendSMS(c.env, formattedTo, body);
+    const result = await sendSMS(c.env, formattedTo, body) as { sid: string };
     
     // Log outbound message
     await db.insert(messages).values({

@@ -4,22 +4,33 @@
 
 ### 1. Environment Setup
 - [ ] Create Neon Postgres database (production)
-- [ ] Run `pnpm db:push` to create tables
+- [ ] Run `pnpm db:migrate` to apply migrations
 - [ ] Set Cloudflare environment variables:
   ```
   DATABASE_URL=postgresql://...
   APP_URL=https://api.paintflow.app
   PUBLIC_URL=https://app.paintflow.app
   PUBLIC_API_URL=https://api.paintflow.app
+  COOKIE_DOMAIN=.paintflow.app
   ENVIRONMENT=production
+  SESSION_SECRET=...
+  CRON_SECRET=...
   STRIPE_SECRET_KEY=sk_live_...
   STRIPE_WEBHOOK_SECRET=whsec_...
+  STRIPE_STARTER_PRICE_ID=price_...
+  STRIPE_PRO_PRICE_ID=price_...
+  STRIPE_ENTERPRISE_PRICE_ID=price_...
   RESEND_API_KEY=re_...
+  GOOGLE_CLIENT_ID=...
+  GOOGLE_CLIENT_SECRET=...
+  QB_CLIENT_ID=...
+  QB_CLIENT_SECRET=...
   ```
 - [ ] Configure Cloudflare Workers:
   - [ ] Create KV namespace `PAINTFLOW_SESSIONS`
   - [ ] Bind KV to api worker
   - [ ] Set compatibility_date = "2024-01-01"
+  - [ ] Confirm scheduled trigger is active for daily drip and review automations
 
 ### 2. DNS Configuration
 - [ ] Add CNAME: `app.paintflow.app` → `paintflow.workers.dev`
@@ -46,22 +57,29 @@
 - [ ] Get production Client ID/Secret
 - [ ] Add to env vars
 
+### 5. Google Calendar Setup
+- [ ] Create OAuth client in Google Cloud Console
+- [ ] Set redirect URI: `https://api.paintflow.app/v1/calendar/callback`
+- [ ] Add production Client ID/Secret to env vars
+
 ## Deployment
 
-### 5. Deploy API
+### 6. Deploy API
 ```bash
 cd apps/api
 wrangler deploy --env production
 ```
 
-### 6. Deploy Web
+### 7. Deploy Web
 ```bash
 cd apps/web
+pnpm build
 wrangler pages deploy dist --project-name=paintflow
 ```
 
-### 7. Verify Deployment
+### 8. Verify Deployment
 - [ ] https://app.paintflow.app loads
+- [ ] https://api.paintflow.app/health returns `status: ok`
 - [ ] Landing page displays
 - [ ] Sign up flow works (magic link email sent)
 - [ ] Dashboard loads
@@ -71,7 +89,7 @@ wrangler pages deploy dist --project-name=paintflow
 
 ## Post-Deployment
 
-### 8. Test Critical Paths
+### 9. Test Critical Paths
 - [ ] **Signup:** New user → onboarding → dashboard
 - [ ] **Auth:** Magic link → session persists
 - [ ] **Estimate:** Create → send → e-sign
@@ -79,19 +97,19 @@ wrangler pages deploy dist --project-name=paintflow
 - [ ] **Calendar:** Drag job → Google sync
 - [ ] **Mobile:** Bottom nav works, PWA installable
 
-### 9. Monitoring
+### 10. Monitoring
 - [ ] Set up Cloudflare Analytics
 - [ ] Configure error tracking (Sentry optional)
 - [ ] Set up uptime monitoring
 - [ ] Create status page
 
-### 10. Documentation
+### 11. Documentation
 - [ ] Update README with production URL
 - [ ] Record demo video (use script)
 - [ ] Publish help docs
 - [ ] Create onboarding email sequence
 
-### 11. Launch
+### 12. Launch
 - [ ] Announce to painting forums (Reddit r/painting, Contractor Talk)
 - [ ] Email existing contacts
 - [ ] Product Hunt launch
@@ -138,7 +156,7 @@ pnpm --filter @paintflow/web deploy
 
 **Database migration:**
 ```bash
-pnpm db:push
+pnpm db:migrate
 ```
 
 **Seed data (optional):**

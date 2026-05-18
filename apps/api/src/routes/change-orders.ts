@@ -14,12 +14,11 @@ changeOrdersRoute.get('/', async (c) => {
   const jobId = c.req.query('jobId');
   const db = createDb(c.env.DATABASE_URL);
   
-  let query = db.select().from(changeOrders).where(eq(changeOrders.orgId, orgId));
-  if (jobId) {
-    query = query.where(and(eq(changeOrders.orgId, orgId), eq(changeOrders.jobId, jobId)));
-  }
+  const where = jobId
+    ? and(eq(changeOrders.orgId, orgId), eq(changeOrders.jobId, jobId))
+    : eq(changeOrders.orgId, orgId);
   
-  const data = await query.orderBy(desc(changeOrders.createdAt));
+  const data = await db.select().from(changeOrders).where(where).orderBy(desc(changeOrders.createdAt));
   return c.json({ data });
 });
 

@@ -34,7 +34,7 @@ reviews.post('/request', async (c) => {
     status: 'pending',
   }).returning();
   
-  const reviewUrl = `${c.env.APP_URL}/review/${request.id}`;
+  const reviewUrl = `${c.env.PUBLIC_URL}/review/${request.id}`;
   
   await db.update(reviewRequests)
     .set({ reviewUrl, sentAt: new Date(), status: 'sent' })

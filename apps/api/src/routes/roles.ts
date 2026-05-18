@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { roles, userRoles, users } from '@paintflow/db/schema';
+import { memberships, roles, userRoles, users } from '@paintflow/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -99,9 +99,9 @@ rolesApp.get('/users', async (c) => {
     roleId: userRoles.roleId,
     roleName: roles.name,
   }).from(users)
+  .innerJoin(memberships, and(eq(memberships.userId, users.id), eq(memberships.orgId, orgId)))
   .leftJoin(userRoles, and(eq(userRoles.userId, users.id), eq(userRoles.orgId, orgId)))
-  .leftJoin(roles, eq(roles.id, userRoles.roleId))
-  .where(eq(users.orgId, orgId));
+  .leftJoin(roles, eq(roles.id, userRoles.roleId));
   
   return c.json({ data });
 });

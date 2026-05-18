@@ -49,7 +49,10 @@ leadsApp.post('/', async (c) => {
   
   const [lead] = await db.insert(leads).values({
     orgId,
-    ...parsed.data,
+    name: parsed.data.name,
+    phone: parsed.data.phone,
+    email: parsed.data.email,
+    source: parsed.data.source,
     status: 'new',
   }).returning();
   

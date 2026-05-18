@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { securityHeaders } from './middleware/security';
 import { tenantMiddleware } from './middleware/tenant';
 import { processDrips } from './cron/drips';
+import { processReviewRequests } from './cron/reviewRequests';
 import type { Env, Variables } from './types';
 import authRoutes from './routes/auth';
 import leadsRoutes from './routes/leads';
@@ -85,4 +86,32 @@ app.get('/api/cron/drips', async (c) => {
   return c.json(result);
 });
 
-export default app;
+app.get('/api/cron/reviews', async (c) => {
+  const authHeader = c.req.header('authorization');
+  if (!authHeader || authHeader !== `Bearer ${c.env.CRON_SECRET}`) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const result = await processReviewRequests(c.env);
+  return c.json(result);
+});
+
+async function runScheduledJobs(env: Env) {
+  const [drips, reviews] = await Promise.allSettled([
+    processDrips(env),
+    processReviewRequests(env),
+  ]);
+
+  return {
+    drips: drips.status === 'fulfilled' ? drips.value : { error: drips.reason?.message || 'Drip processing failed' },
+    reviews: reviews.status === 'fulfilled' ? reviews.value : { error: reviews.reason?.message || 'Review processing failed' },
+  };
+}
+
+export default {
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    return app.fetch(request, env, ctx);
+  },
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduledJobs(env));
+  },
+};

@@ -26,7 +26,7 @@ qb.get('/connect', async (c) => {
   const authUrl = new URL('https://appcenter.intuit.com/connect/oauth2');
   authUrl.searchParams.set('client_id', c.env.QB_CLIENT_ID);
   authUrl.searchParams.set('scope', 'com.intuit.quickbooks.accounting');
-  authUrl.searchParams.set('redirect_uri', `${c.env.APP_URL}/api/v1/quickbooks/callback`);
+  authUrl.searchParams.set('redirect_uri', `${c.env.APP_URL}/v1/quickbooks/callback`);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('state', state);
   
@@ -59,7 +59,7 @@ qb.get('/callback', async (c) => {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: `${c.env.APP_URL}/api/v1/quickbooks/callback`,
+        redirect_uri: `${c.env.APP_URL}/v1/quickbooks/callback`,
       }),
     });
     
@@ -69,7 +69,7 @@ qb.get('/callback', async (c) => {
       return c.json({ error: 'Failed to get tokens' }, 500);
     }
     
-    const tokens = await tokenResponse.json();
+    const tokens = await tokenResponse.json() as { access_token: string; refresh_token: string; expires_in: number };
     const companyInfo = await getCompanyInfo(c.env, tokens.access_token, realmId);
     const companyName = companyInfo.CompanyInfo?.CompanyName || 'QuickBooks Company';
     const orgId = stateData.orgId;
@@ -96,7 +96,7 @@ qb.get('/callback', async (c) => {
         },
       });
     
-    return c.redirect(`${c.env.APP_URL}/settings?qb_connected=true`);
+    return c.redirect(`${c.env.PUBLIC_URL}/settings?qb_connected=true`);
   } catch (err) {
     console.error('QB callback error:', err);
     return c.json({ error: 'Connection failed' }, 500);
@@ -306,7 +306,7 @@ qb.post('/webhook', async (c) => {
             );
             
             if (paymentRes.ok) {
-              const payment = await paymentRes.json();
+              const payment = await paymentRes.json() as any;
               const linkedInvoiceId = payment.QueryResponse?.Payment?.[0]?.Line?.[0]?.LinkedTxn?.[0]?.TxnId;
               
               if (linkedInvoiceId) {

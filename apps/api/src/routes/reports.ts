@@ -14,8 +14,8 @@ reportsApp.get('/dashboard', async (c) => {
   
   const [stats] = await db.select({
     totalEstimates: sql<number>`count(distinct ${estimates.id})`,
-    approvedEstimates: sql<number>`count(distinct ${estimates.id}) filter (where ${estimates.status} = 'approved')`,
-    totalRevenue: sql<number>`coalesce(sum(${jobs.totalAmount}), 0)`,
+    approvedEstimates: sql<number>`count(distinct ${estimates.id}) filter (where ${estimates.status} = 'accepted')`,
+    totalRevenue: sql<number>`coalesce(sum(${estimates.total}), 0)`,
     totalCosts: sql<number>`coalesce(sum(${jobCosts.totalCost}), 0)`,
   }).from(estimates)
   .leftJoin(jobs, eq(jobs.estimateId, estimates.id))
@@ -41,7 +41,7 @@ reportsApp.get('/win-rate-by-source', async (c) => {
   const results = await db.select({
     source: leads.source,
     total: sql<number>`count(*)`,
-    won: sql<number>`count(*) filter (where ${estimates.status} = 'approved')`,
+    won: sql<number>`count(*) filter (where ${estimates.status} = 'accepted')`,
   }).from(leads)
   .leftJoin(estimates, eq(estimates.leadId, leads.id))
   .where(eq(leads.orgId, orgId))
@@ -82,13 +82,13 @@ reportsApp.get('/profit-margins', async (c) => {
   
   const results = await db.select({
     jobId: jobs.id,
-    title: jobs.title,
-    revenue: jobs.totalAmount,
+    title: jobs.name,
+    revenue: jobs.budget,
     costs: sql<number>`coalesce(sum(${jobCosts.totalCost}), 0)`,
   }).from(jobs)
   .leftJoin(jobCosts, eq(jobCosts.jobId, jobs.id))
   .where(eq(jobs.orgId, orgId))
-  .groupBy(jobs.id, jobs.title, jobs.totalAmount)
+  .groupBy(jobs.id, jobs.name, jobs.budget)
   .orderBy(desc(jobs.createdAt))
   .limit(20);
   

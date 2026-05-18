@@ -33,8 +33,8 @@ export async function sendEmail(env: any, to: string, subject: string, html: str
   return await res.json();
 }
 
-export function estimateEmailTemplate(estimateId: string, leadName: string, total: string) {
-  const url = `https://paintflow.app/estimates/${estimateId}`;
+export function estimateEmailTemplate(estimateId: string, leadName: string, total: string, baseUrl = 'https://app.paintflow.app') {
+  const url = `${baseUrl}/estimates/${estimateId}`;
   
   return `
 <!DOCTYPE html>

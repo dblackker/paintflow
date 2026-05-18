@@ -1,11 +1,13 @@
 import { createDb } from '@paintflow/db';
 import { jobs, reviewRequests, leads, orgBranding } from '@paintflow/db/schema';
-import { eq, and, isNull, lte } from 'drizzle-orm';
+import { eq, and, lte } from 'drizzle-orm';
 import { sendSMS } from '../lib/twilio';
 import { sendEmail } from '../lib/email';
 
 export async function processReviewRequests(env: any) {
   const db = createDb(env.DATABASE_URL);
+  let sent = 0;
+  let skipped = 0;
   
   // Find jobs completed 24 hours ago with no review request sent
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -26,13 +28,19 @@ export async function processReviewRequests(env: any) {
       where: eq(reviewRequests.jobId, job.id),
     });
     
-    if (existing) continue;
+    if (existing) {
+      skipped++;
+      continue;
+    }
     
     const lead = await db.query.leads.findFirst({
       where: eq(leads.id, job.leadId),
     });
     
-    if (!lead) continue;
+    if (!lead) {
+      skipped++;
+      continue;
+    }
     
     // Create review request
     const [request] = await db.insert(reviewRequests).values({
@@ -42,7 +50,7 @@ export async function processReviewRequests(env: any) {
       status: 'pending',
     }).returning();
     
-    const reviewUrl = `${env.APP_URL}/review/${request.id}`;
+    const reviewUrl = `${env.PUBLIC_URL}/review/${request.id}`;
     
     await db.update(reviewRequests)
       .set({ reviewUrl, sentAt: new Date(), status: 'sent' })
@@ -91,5 +99,8 @@ export async function processReviewRequests(env: any) {
     }
     
     console.log(`Review request sent for job ${job.id} to ${lead.name}`);
+    sent++;
   }
+
+  return { processed: completedJobs.length, sent, skipped };
 }

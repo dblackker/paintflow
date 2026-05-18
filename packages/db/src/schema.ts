@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, text, timestamp, decimal, jsonb, pgEnum, boolean, integer } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
 
 export const roleEnum = pgEnum('role', ['owner', 'member']);
 export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'estimate_sent', 'won', 'lost']);
@@ -272,6 +273,7 @@ export const subscriptions = pgTable('subscriptions', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
   planId: uuid('plan_id').references(() => saasPlans.id).notNull(),
+  stripeCustomerId: varchar('stripe_customer_id', { length: 100 }),
   stripeSubscriptionId: varchar('stripe_subscription_id', { length: 100 }),
   status: varchar('status', { length: 50 }).notNull().default('trial'), // trial, active, past_due, canceled
   currentPeriodStart: timestamp('current_period_start'),
@@ -465,6 +467,25 @@ export const userRoles = pgTable('user_roles', {
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const rolesRelations = relations(roles, ({ many }) => ({
+  userRoles: many(userRoles),
+}));
+
+export const userRolesRelations = relations(userRoles, ({ one }) => ({
+  role: one(roles, {
+    fields: [userRoles.roleId],
+    references: [roles.id],
+  }),
+  user: one(users, {
+    fields: [userRoles.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [userRoles.orgId],
+    references: [organizations.id],
+  }),
+}));
 
 export const jobAssignments = pgTable('job_assignments', {
   id: uuid('id').defaultRandom().primaryKey(),
