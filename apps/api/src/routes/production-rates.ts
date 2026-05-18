@@ -2,94 +2,141 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { productionRates } from '@paintflow/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+const ratesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
+ratesApp.use('*', authMiddleware);
 
-app.use('*', authMiddleware);
+const rateSchema = z.object({
+  category: z.string().min(1),
+  surfaceType: z.string().min(1),
+  unit: z.enum(['sqft', 'linear_ft', 'each']).default('sqft'),
+  ratePerHour: z.number().positive(),
+  hourlyRate: z.number().positive().default(50),
+  prepMultiplier: z.number().positive().default(1),
+  coats: z.number().int().positive().default(2),
+  description: z.string().optional(),
+});
 
-app.get('/', async (c) => {
+// Seed default rates
+const DEFAULT_RATES = [
+  { category: 'walls', surfaceType: 'drywall', unit: 'sqft', ratePerHour: 400, hourlyRate: 50, description: 'Interior walls - roll' },
+  { category: 'ceilings', surfaceType: 'drywall', unit: 'sqft', ratePerHour: 300, hourlyRate: 50, description: 'Ceilings - roll' },
+  { category: 'trim', surfaceType: 'wood', unit: 'linear_ft', ratePerHour: 80, hourlyRate: 50, description: 'Baseboards, crown molding' },
+  { category: 'doors', surfaceType: 'wood', unit: 'each', ratePerHour: 4, hourlyRate: 50, description: 'Interior door (both sides)' },
+  { category: 'cabinets', surfaceType: 'wood', unit: 'each', ratePerHour: 0.5, hourlyRate: 50, description: 'Cabinet door/drawer front' },
+  { category: 'exterior_siding', surfaceType: 'wood', unit: 'sqft', ratePerHour: 200, hourlyRate: 50, description: 'Exterior siding - spray' },
+];
+
+ratesApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  const rates = await db
-    .select()
-    .from(productionRates)
-    .where(eq(productionRates.orgId, orgId))
-    .orderBy(asc(productionRates.category), asc(productionRates.task));
+  let rates = await db.query.productionRates.findMany({
+    where: eq(productionRates.orgId, orgId),
+  });
+  
+  // Seed defaults if empty
+  if (rates.length === 0) {
+    const seeded = await db.insert(productionRates).values(
+      DEFAULT_RATES.map(r => ({ orgId, ...r }))
+    ).returning();
+    rates = seeded;
+  }
   
   return c.json({ data: rates });
 });
 
-const createSchema = z.object({
-  task: z.string().min(1),
-  unit: z.string().min(1),
-  hoursPerUnit: z.number().positive(),
-  category: z.string().optional(),
-});
-
-app.post('/', async (c) => {
+ratesApp.post('/', async (c) => {
   const orgId = c.get('orgId');
   const body = await c.req.json();
-  const parsed = createSchema.safeParse(body);
-  
-  if (!parsed.success) {
-    return c.json({ error: 'Validation failed' }, 400);
-  }
-  
+  const parsed = rateSchema.parse(body);
   const db = createDb(c.env.DATABASE_URL);
+  
   const [rate] = await db.insert(productionRates).values({
     orgId,
-    ...parsed.data,
-    hoursPerUnit: parsed.data.hoursPerUnit.toString(),
+    ...parsed,
+    ratePerHour: parsed.ratePerHour.toString(),
+    hourlyRate: parsed.hourlyRate.toString(),
+    prepMultiplier: parsed.prepMultiplier.toString(),
   }).returning();
   
   return c.json({ data: rate }, 201);
 });
 
-app.put('/:id', async (c) => {
+ratesApp.put('/:id', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
   const body = await c.req.json();
-  const parsed = createSchema.safeParse(body);
-  
-  if (!parsed.success) {
-    return c.json({ error: 'Validation failed' }, 400);
-  }
-  
+  const parsed = rateSchema.partial().parse(body);
   const db = createDb(c.env.DATABASE_URL);
+  
   const [rate] = await db.update(productionRates)
     .set({
-      ...parsed.data,
-      hoursPerUnit: parsed.data.hoursPerUnit.toString(),
+      ...parsed,
+      ratePerHour: parsed.ratePerHour?.toString(),
+      hourlyRate: parsed.hourlyRate?.toString(),
+      prepMultiplier: parsed.prepMultiplier?.toString(),
       updatedAt: new Date(),
     })
-    .where(eq(productionRates.id, id))
+    .where(and(eq(productionRates.id, id), eq(productionRates.orgId, orgId)))
     .returning();
-  
-  if (!rate || rate.orgId !== orgId) {
-    return c.json({ error: 'Not found' }, 404);
-  }
   
   return c.json({ data: rate });
 });
 
-app.delete('/:id', async (c) => {
+ratesApp.delete('/:id', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
   
-  const [rate] = await db.delete(productionRates)
-    .where(eq(productionRates.id, id))
-    .returning();
-  
-  if (!rate || rate.orgId !== orgId) {
-    return c.json({ error: 'Not found' }, 404);
-  }
+  await db.delete(productionRates)
+    .where(and(eq(productionRates.id, id), eq(productionRates.orgId, orgId)));
   
   return c.json({ success: true });
 });
 
-export default app;
+// Calculate estimate from room items
+ratesApp.post('/calculate', async (c) => {
+  const orgId = c.get('orgId');
+  const { items } = await c.req.json();
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const rateIds = [...new Set(items.map((i: any) => i.productionRateId).filter(Boolean))];
+  const rates = await db.query.productionRates.findMany({
+    where: and(
+      eq(productionRates.orgId, orgId),
+    ),
+  });
+  const rateMap = Object.fromEntries(rates.map(r => [r.id, r]));
+  
+  const prepMultipliers = { none: 0.8, light: 1.0, standard: 1.2, heavy: 1.5 };
+  
+  let total = 0;
+  const calculatedItems = items.map((item: any) => {
+    const rate = rateMap[item.productionRateId];
+    if (!rate) return item;
+    
+    const quantity = parseFloat(item.quantity || '0');
+    const coats = item.coats || rate.coats || 2;
+    const prepMult = prepMultipliers[item.prepLevel as keyof typeof prepMultipliers] || 1.2;
+    
+    const hours = (quantity / parseFloat(rate.ratePerHour)) * coats * prepMult;
+    const laborCost = hours * parseFloat(rate.hourlyRate);
+    
+    total += laborCost;
+    
+    return {
+      ...item,
+      hours: hours.toFixed(2),
+      laborCost: laborCost.toFixed(2),
+      rateName: `${rate.category} (${rate.surfaceType})`,
+    };
+  });
+  
+  return c.json({ data: { items: calculatedItems, total: total.toFixed(2) } });
+});
+
+export default ratesApp;
