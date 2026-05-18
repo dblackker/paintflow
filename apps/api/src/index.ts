@@ -24,6 +24,7 @@ import saasBillingRoutes from './routes/saas-billing';
 import materialsRoutes from './routes/materials';
 import invoicesRoutes from './routes/invoices';
 import teamRoutes from './routes/team';
+import portalRoutes from './routes/portal';
 
 const app = new Hono();
 
@@ -38,6 +39,7 @@ app.use('*', tenantMiddleware);
 app.route('/v1/auth', authRoutes);
 app.route('/v1/sms', smsRoutes);
 app.route('/v1/billing/webhook', billingRoutes);
+app.route('/v1/portal', portalRoutes);
 
 app.get('/health', (c) => {
   return c.json({ 
