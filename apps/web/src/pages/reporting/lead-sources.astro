@@ -1,0 +1,173 @@
+---
+import Layout from '../../components/Layout.astro';
+---
+
+<Layout title="Lead Source ROI">
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-gray-900">Lead Source ROI</h1>
+      <p class="text-gray-600">Track marketing performance and ROI by source</p>
+    </div>
+
+    <div class="grid grid-cols-4 gap-6 mb-8">
+      <div class="bg-white rounded-lg shadow-sm border p-6">
+        <p class="text-sm text-gray-600">Total Leads</p>
+        <p class="text-3xl font-bold" id="total-leads">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border p-6">
+        <p class="text-sm text-gray-600">Total Spent</p>
+        <p class="text-3xl font-bold" id="total-spent">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border p-6">
+        <p class="text-sm text-gray-600">Revenue</p>
+        <p class="text-3xl font-bold" id="total-revenue">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border p-6">
+        <p class="text-sm text-gray-600">ROI</p>
+        <p class="text-3xl font-bold" id="total-roi">-</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h2 class="font-semibold">Sources</h2>
+        <button onclick="document.getElementById('add-modal').classList.remove('hidden')" class="px-3 py-1 text-sm bg-blue-600 text-white rounded">+ Add Source</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="text-left px-4 py-3 text-sm font-medium text-gray-600">Source</th>
+              <th class="text-left px-4 py-3 text-sm font-medium text-gray-600">Type</th>
+              <th class="text-right px-4 py-3 text-sm font-medium text-gray-600">Leads</th>
+              <th class="text-right px-4 py-3 text-sm font-medium text-gray-600">Cost</th>
+              <th class="text-right px-4 py-3 text-sm font-medium text-gray-600">Revenue</th>
+              <th class="text-right px-4 py-3 text-sm font-medium text-gray-600">ROI</th>
+              <th class="text-right px-4 py-3 text-sm font-medium text-gray-600">CPL</th>
+            </tr>
+          </thead>
+          <tbody id="sources-table" class="divide-y">
+            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Add Source Modal -->
+    <div id="add-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-6 w-full max-w-md">
+        <h2 class="text-xl font-bold mb-4">Add Lead Source</h2>
+        <form id="source-form" class="space-y-4">
+          <input type="text" name="name" placeholder="Source name (e.g., Google Ads)" required class="w-full px-3 py-2 border rounded">
+          <select name="type" required class="w-full px-3 py-2 border rounded">
+            <option value="">Select type</option>
+            <option value="google_ads">Google Ads</option>
+            <option value="facebook">Facebook</option>
+            <option value="referral">Referral</option>
+            <option value="website">Website</option>
+            <option value="yelp">Yelp</option>
+            <option value="angie">Angi</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="number" step="0.01" name="cost" placeholder="Monthly cost ($)" class="w-full px-3 py-2 border rounded">
+          <div class="flex gap-3">
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded">Add Source</button>
+            <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')" class="px-4 py-2 border rounded">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    
+    async function loadSources() {
+      try {
+        const [sourcesRes, leadsRes, jobsRes] = await Promise.all([
+          fetch(`${API_URL}/v1/lead-sources`, { credentials: 'include' }),
+          fetch(`${API_URL}/v1/leads`, { credentials: 'include' }),
+          fetch(`${API_URL}/v1/jobs`, { credentials: 'include' })
+        ]);
+        
+        const { data: sources } = await sourcesRes.json();
+        const { data: leads } = await leadsRes.json();
+        const { data: jobs } = await jobsRes.json();
+        
+        // Calculate metrics per source
+        const sourceStats = sources.map(s => {
+          const sourceLeads = leads.filter(l => l.sourceId === s.id);
+          const sourceJobs = jobs.filter(j => sourceLeads.some(l => l.id === j.leadId));
+          const revenue = sourceJobs.reduce((sum, j) => sum + Number(j.budget || 0), 0);
+          const cost = Number(s.cost || 0);
+          const roi = cost > 0 ? ((revenue - cost) / cost * 100).toFixed(0) : 0;
+          const cpl = sourceLeads.length > 0 ? (cost / sourceLeads.length).toFixed(2) : 0;
+          
+          return {
+            ...s,
+            leads: sourceLeads.length,
+            revenue,
+            roi,
+            cpl
+          };
+        });
+        
+        // Update totals
+        const totalLeads = leads.length;
+        const totalSpent = sources.reduce((sum, s) => sum + Number(s.cost || 0), 0);
+        const totalRevenue = jobs.reduce((sum, j) => sum + Number(j.budget || 0), 0);
+        const totalRoi = totalSpent > 0 ? ((totalRevenue - totalSpent) / totalSpent * 100).toFixed(0) : 0;
+        
+        document.getElementById('total-leads').textContent = totalLeads;
+        document.getElementById('total-spent').textContent = `$${totalSpent.toFixed(0)}`;
+        document.getElementById('total-revenue').textContent = `$${totalRevenue.toFixed(0)}`;
+        document.getElementById('total-roi').textContent = `${totalRoi}%`;
+        
+        // Render table
+        const tbody = document.getElementById('sources-table');
+        if (sourceStats.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">No sources yet. Add your first lead source.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = sourceStats.map(s => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 font-medium">${s.name}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${s.type.replace('_', ' ')}</td>
+            <td class="px-4 py-3 text-right">${s.leads}</td>
+            <td class="px-4 py-3 text-right">$${Number(s.cost).toFixed(0)}</td>
+            <td class="px-4 py-3 text-right font-medium">$${s.revenue.toFixed(0)}</td>
+            <td class="px-4 py-3 text-right">
+              <span class="px-2 py-1 text-xs rounded ${Number(s.roi) >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${s.roi}%</span>
+            </td>
+            <td class="px-4 py-3 text-right text-sm text-gray-600">$${s.cpl}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load sources', err);
+      }
+    }
+    
+    document.getElementById('source-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const data = Object.fromEntries(formData);
+      
+      try {
+        await fetch(`${API_URL}/v1/lead-sources`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(data),
+        });
+        document.getElementById('add-modal').classList.add('hidden');
+        e.target.reset();
+        loadSources();
+      } catch (err) {
+        alert('Failed to add source');
+      }
+    });
+    
+    loadSources();
+  </script>
+</Layout>
