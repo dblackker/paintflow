@@ -1,33 +1,32 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Time Tracking - PaintFlow</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <h1 class="text-xl font-semibold">Time Tracking</h1>
-        <button id="add-time" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">+ Log Time</button>
-      </div>
+<Base title="Time Tracking - PaintFlow">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold">Time Tracking</h2>
+      <button id="add-time" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Log Time</button>
     </div>
-  </nav>
 
-  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div class="bg-white rounded-lg shadow-sm border p-4 mb-6 flex gap-4 items-center">
-      <button id="prev-week" class="px-3 py-1 border rounded">←</button>
+      <button id="prev-week" class="px-3 py-1 border rounded hover:bg-gray-50">←</button>
       <span id="week-range" class="flex-1 text-center font-medium"></span>
-      <button id="next-week" class="px-3 py-1 border rounded">→</button>
+      <button id="next-week" class="px-3 py-1 border rounded hover:bg-gray-50">→</button>
     </div>
 
-    <div id="timesheet" class="bg-white rounded-lg shadow-sm border divide-y"></div>
-  </main>
+    <div id="loading" class="text-center py-12">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+      <p class="mt-4 text-gray-600">Loading timesheet...</p>
+    </div>
+
+    <div id="timesheet" class="bg-white rounded-lg shadow-sm border divide-y hidden"></div>
+
+    <div id="empty" class="hidden bg-white rounded-lg shadow-sm border p-12 text-center">
+      <p class="text-gray-500">No time entries this week</p>
+      <button onclick="document.getElementById('add-time').click()" class="mt-4 text-blue-600 text-sm">Log your first entry →</button>
+    </div>
+  </div>
 
   <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-lg max-w-md w-full p-6">
@@ -43,8 +42,8 @@
         <input type="number" name="hours" step="0.25" placeholder="Hours (e.g. 8)" class="w-full px-3 py-2 border rounded-lg" required>
         <input type="text" name="description" placeholder="What did you work on?" class="w-full px-3 py-2 border rounded-lg">
         <div class="flex gap-3">
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
-          <button type="submit" class="flex-1 py-2 bg-blue-600 text-white rounded-lg">Save</button>
+          <button type="button" onclick="closeModal()" class="flex-1 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button type="submit" class="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
         </div>
       </form>
     </div>
@@ -66,25 +65,35 @@
     }
 
     async function loadData() {
-      const [members, jobs, time] = await Promise.all([
-        fetch(`${API_URL}/v1/team/members`, { credentials: 'include' }).then(r => r.json()),
-        fetch(`${API_URL}/v1/jobs`, { credentials: 'include' }).then(r => r.json()),
-        fetch(`${API_URL}/v1/team/time`, { credentials: 'include' }).then(r => r.json()),
-      ]);
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('timesheet').classList.add('hidden');
+      document.getElementById('empty').classList.add('hidden');
 
-      const memberSelect = document.getElementById('member-select');
-      memberSelect.innerHTML = '<option value="">Select crew member...</option>' + 
-        members.data.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+      try {
+        const [members, jobs, time] = await Promise.all([
+          fetch(`${API_URL}/v1/team/members`, { credentials: 'include' }).then(r => r.json()),
+          fetch(`${API_URL}/v1/jobs`, { credentials: 'include' }).then(r => r.json()),
+          fetch(`${API_URL}/v1/team/time`, { credentials: 'include' }).then(r => r.json()),
+        ]);
 
-      const jobSelect = document.getElementById('job-select');
-      jobSelect.innerHTML = '<option value="">Select job...</option>' + 
-        jobs.data.map(j => `<option value="${j.id}">${j.title}</option>`).join('');
+        const memberSelect = document.getElementById('member-select');
+        memberSelect.innerHTML = '<option value="">Select crew member...</option>' + 
+          members.data.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
 
-      renderTimesheet(time.data);
-      document.querySelector('input[name="date"]').value = formatDate(new Date());
+        const jobSelect = document.getElementById('job-select');
+        jobSelect.innerHTML = '<option value="">Select job...</option>' + 
+          jobs.data.map(j => `<option value="${j.id}">${j.title}</option>`).join('');
+
+        renderTimesheet(time.data);
+        document.querySelector('input[name="date"]').value = formatDate(new Date());
+      } catch (e) {
+        document.getElementById('loading').innerHTML = '<p class="text-red-600">Failed to load</p>';
+      }
     }
 
     function renderTimesheet(entries) {
+      document.getElementById('loading').classList.add('hidden');
+      
       const weekEnd = new Date(currentWeekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
       
@@ -97,10 +106,11 @@
       });
 
       if (!weekEntries.length) {
-        document.getElementById('timesheet').innerHTML = 
-          '<div class="p-8 text-center text-gray-500">No time entries this week</div>';
+        document.getElementById('empty').classList.remove('hidden');
         return;
       }
+
+      document.getElementById('timesheet').classList.remove('hidden');
 
       const grouped = {};
       weekEntries.forEach(e => {
@@ -113,15 +123,15 @@
       document.getElementById('timesheet').innerHTML = Object.values(grouped).map(g => {
         const first = g.entries[0];
         return `
-          <div class="p-4">
+          <div class="p-4 hover:bg-gray-50">
             <div class="flex justify-between">
-              <div>
-                <p class="font-medium">${first.description || 'Labor'}</p>
-                <p class="text-sm text-gray-600">${g.entries.length} entries</p>
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-sm truncate">${first.description || 'Labor'}</p>
+                <p class="text-xs text-gray-600">${g.entries.length} entries • ${new Date(first.date).toLocaleDateString()}</p>
               </div>
-              <div class="text-right">
-                <p class="font-semibold">${g.total.toFixed(2)} hrs</p>
-                <p class="text-sm text-gray-600">$${(g.total * parseFloat(first.hourlyRate)).toFixed(2)}</p>
+              <div class="text-right ml-4">
+                <p class="font-semibold text-sm">${g.total.toFixed(2)} hrs</p>
+                <p class="text-xs text-gray-600">$${(g.total * parseFloat(first.hourlyRate)).toFixed(2)}</p>
               </div>
             </div>
           </div>
@@ -142,15 +152,19 @@
       data.hours = parseFloat(data.hours);
       data.date = new Date(data.date).toISOString();
 
-      await fetch(`${API_URL}/v1/team/time`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(data),
-      });
-
-      closeModal();
-      loadData();
+      try {
+        await fetch(`${API_URL}/v1/team/time`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(data),
+        });
+        closeModal();
+        e.target.reset();
+        loadData();
+      } catch (e) {
+        alert('Failed to save time entry');
+      }
     });
 
     document.getElementById('prev-week').addEventListener('click', () => {
@@ -165,5 +179,4 @@
 
     loadData();
   </script>
-</body>
-</html>
+</Base>
