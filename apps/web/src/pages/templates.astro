@@ -1,0 +1,88 @@
+---
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Templates - PaintFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <h1 class="text-xl font-semibold">Estimate Templates</h1>
+        <div class="flex gap-2">
+          <a href="/estimates/production" class="text-sm text-blue-600">Use Templates →</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+      <p class="text-sm text-blue-800">💡 Save room configurations as templates to reuse on future estimates. Built-in templates for common rooms included.</p>
+    </div>
+
+    <div id="templates-grid" class="grid md:grid-cols-2 gap-4">
+      <!-- Templates here -->
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+
+    async function loadTemplates() {
+      const res = await fetch(`${API_URL}/v1/estimate-templates`, { credentials: 'include' });
+      const { data } = await res.json();
+      renderTemplates(data);
+    }
+
+    function renderTemplates(templates) {
+      const grid = document.getElementById('templates-grid');
+      grid.innerHTML = templates.map(t => `
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <h3 class="font-semibold">${t.name}</h3>
+              <p class="text-sm text-gray-600">${t.description || ''}</p>
+            </div>
+            ${t.isShared ? '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Built-in</span>' : ''}
+          </div>
+          <div class="text-xs text-gray-500 mb-3">
+            ${t.rooms.length} room(s) • Used ${t.usageCount}x
+          </div>
+          <div class="flex gap-2">
+            <button onclick="useTemplate('${t.id}')" class="flex-1 py-2 bg-blue-600 text-white rounded text-sm">Use Template</button>
+            <button onclick="deleteTemplate('${t.id}')" class="px-3 py-2 border rounded text-sm">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function useTemplate(id) {
+      const res = await fetch(`${API_URL}/v1/estimate-templates/${id}/use`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const { data } = await res.json();
+      // Store in session and redirect to estimate builder
+      sessionStorage.setItem('templateRooms', JSON.stringify(data.rooms));
+      window.location.href = '/estimates/production';
+    }
+
+    async function deleteTemplate(id) {
+      if (!confirm('Delete this template?')) return;
+      await fetch(`${API_URL}/v1/estimate-templates/${id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      loadTemplates();
+    }
+
+    loadTemplates();
+  </script>
+</body>
+</html>
