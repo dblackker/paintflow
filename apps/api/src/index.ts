@@ -27,6 +27,7 @@ import teamRoutes from './routes/team';
 import portalRoutes from './routes/portal';
 import reportsRoutes from './routes/reports';
 import payrollRoutes from './routes/payroll';
+import rolesRoutes from './routes/roles';
 
 const app = new Hono();
 
@@ -73,6 +74,7 @@ app.route('/v1/invoices', invoicesRoutes);
 app.route('/v1/team', teamRoutes);
 app.route('/v1/reports', reportsRoutes);
 app.route('/v1/payroll', payrollRoutes);
+app.route('/v1/roles', rolesRoutes);
 
 app.get('/api/cron/drips', async (c) => {
   const authHeader = c.req.header('authorization');
