@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { teamMembers, timeEntries, jobCosts, userRoles, roles } from '@paintflow/db/schema';
+import { teamMembers, timeEntries, jobCosts, userRoles, memberships, jobs } from '@paintflow/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -13,6 +13,12 @@ async function hasPermission(c: Context<{ Bindings: Env; Variables: Variables }>
   const userId = c.get('userId');
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
+
+  const membership = await db.query.memberships.findFirst({
+    where: and(eq(memberships.userId, userId), eq(memberships.orgId, orgId)),
+  });
+
+  if (membership?.role === 'owner') return true;
   
   const userRole = await db.query.userRoles.findFirst({
     where: and(eq(userRoles.userId, userId), eq(userRoles.orgId, orgId)),
@@ -39,8 +45,8 @@ teamApp.get('/members', async (c) => {
 const createMemberSchema = z.object({
   name: z.string().min(1),
   role: z.string().min(1),
-  hourlyRate: z.number().positive(),
-  burdenRate: z.number().min(0).max(100).default(30),
+  hourlyRate: z.coerce.number().positive(),
+  burdenRate: z.coerce.number().min(0).max(100).default(30),
   email: z.string().email().optional(),
 });
 
@@ -69,7 +75,7 @@ teamApp.post('/members', async (c) => {
 const createTimeEntrySchema = z.object({
   jobId: z.string().uuid(),
   teamMemberId: z.string().uuid(),
-  hours: z.number().positive(),
+  hours: z.coerce.number().positive(),
   date: z.string().datetime(),
   description: z.string().optional(),
 });
@@ -87,6 +93,14 @@ teamApp.post('/time', async (c) => {
   
   if (!member || member.orgId !== orgId) {
     return c.json({ error: 'Team member not found' }, 404);
+  }
+
+  const job = await db.query.jobs.findFirst({
+    where: and(eq(jobs.id, data.jobId), eq(jobs.orgId, orgId)),
+  });
+
+  if (!job) {
+    return c.json({ error: 'Job not found' }, 404);
   }
   
   // Check permission: can log for self or has log_time_for_others permission
@@ -155,7 +169,20 @@ teamApp.get('/time', async (c) => {
     limit: 100,
   });
   
-  return c.json({ data: entries });
+  const [members, jobList] = await Promise.all([
+    db.query.teamMembers.findMany({ where: eq(teamMembers.orgId, orgId) }),
+    db.query.jobs.findMany({ where: eq(jobs.orgId, orgId) }),
+  ]);
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const jobsById = new Map(jobList.map((job) => [job.id, job]));
+
+  return c.json({
+    data: entries.map((entry) => ({
+      ...entry,
+      teamMemberName: membersById.get(entry.teamMemberId)?.name ?? 'Crew member',
+      jobName: jobsById.get(entry.jobId)?.name ?? 'Job',
+    })),
+  });
 });
 
 export default teamApp;

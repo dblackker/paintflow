@@ -10,9 +10,9 @@ import Base from '../layouts/Base.astro';
     </div>
 
     <div class="bg-white rounded-lg shadow-sm border p-4 mb-6 flex gap-4 items-center">
-      <button id="prev-week" class="px-3 py-1 border rounded hover:bg-gray-50">←</button>
+      <button id="prev-week" class="px-3 py-1 border rounded hover:bg-gray-50">Previous</button>
       <span id="week-range" class="flex-1 text-center font-medium"></span>
-      <button id="next-week" class="px-3 py-1 border rounded hover:bg-gray-50">→</button>
+      <button id="next-week" class="px-3 py-1 border rounded hover:bg-gray-50">Next</button>
     </div>
 
     <div id="loading" class="text-center py-12">
@@ -24,7 +24,7 @@ import Base from '../layouts/Base.astro';
 
     <div id="empty" class="hidden bg-white rounded-lg shadow-sm border p-12 text-center">
       <p class="text-gray-500">No time entries this week</p>
-      <button onclick="document.getElementById('add-time').click()" class="mt-4 text-blue-600 text-sm">Log your first entry →</button>
+      <button onclick="document.getElementById('add-time').click()" class="mt-4 text-blue-600 text-sm">Log your first entry</button>
     </div>
   </div>
 
@@ -64,6 +64,16 @@ import Base from '../layouts/Base.astro';
       return date.toISOString().split('T')[0];
     }
 
+    async function apiJson(url) {
+      const res = await fetch(url, { credentials: 'include' });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) throw new Error('Request failed');
+      return res.json();
+    }
+
     async function loadData() {
       document.getElementById('loading').classList.remove('hidden');
       document.getElementById('timesheet').classList.add('hidden');
@@ -71,9 +81,9 @@ import Base from '../layouts/Base.astro';
 
       try {
         const [members, jobs, time] = await Promise.all([
-          fetch(`${API_URL}/v1/team/members`, { credentials: 'include' }).then(r => r.json()),
-          fetch(`${API_URL}/v1/jobs`, { credentials: 'include' }).then(r => r.json()),
-          fetch(`${API_URL}/v1/team/time`, { credentials: 'include' }).then(r => r.json()),
+          apiJson(`${API_URL}/v1/team/members`),
+          apiJson(`${API_URL}/v1/jobs`),
+          apiJson(`${API_URL}/v1/team/time`),
         ]);
 
         const memberSelect = document.getElementById('member-select');
@@ -82,7 +92,7 @@ import Base from '../layouts/Base.astro';
 
         const jobSelect = document.getElementById('job-select');
         jobSelect.innerHTML = '<option value="">Select job...</option>' + 
-          jobs.data.map(j => `<option value="${j.id}">${j.title}</option>`).join('');
+          jobs.data.map(j => `<option value="${j.id}">${j.name}</option>`).join('');
 
         renderTimesheet(time.data);
         document.querySelector('input[name="date"]').value = formatDate(new Date());
@@ -126,8 +136,9 @@ import Base from '../layouts/Base.astro';
           <div class="p-4 hover:bg-gray-50">
             <div class="flex justify-between">
               <div class="min-w-0 flex-1">
-                <p class="font-medium text-sm truncate">${first.description || 'Labor'}</p>
-                <p class="text-xs text-gray-600">${g.entries.length} entries • ${new Date(first.date).toLocaleDateString()}</p>
+                <p class="font-medium text-sm truncate">${first.jobName}</p>
+                <p class="text-xs text-gray-600">${first.teamMemberName} - ${g.entries.length} entries - ${new Date(first.date).toLocaleDateString()}</p>
+                ${first.description ? `<p class="text-xs text-gray-500 mt-1 truncate">${first.description}</p>` : ''}
               </div>
               <div class="text-right ml-4">
                 <p class="font-semibold text-sm">${g.total.toFixed(2)} hrs</p>
@@ -153,12 +164,13 @@ import Base from '../layouts/Base.astro';
       data.date = new Date(data.date).toISOString();
 
       try {
-        await fetch(`${API_URL}/v1/team/time`, {
+        const res = await fetch(`${API_URL}/v1/team/time`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify(data),
         });
+        if (!res.ok) throw new Error('Failed to save time entry');
         closeModal();
         e.target.reset();
         loadData();
