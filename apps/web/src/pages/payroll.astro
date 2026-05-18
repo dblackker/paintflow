@@ -1,0 +1,56 @@
+---
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payroll - PaintFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <h1 class="text-xl font-semibold">Payroll Export</h1>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="bg-white rounded-lg shadow-sm border p-6">
+      <h2 class="font-semibold mb-4">Export Time Entries</h2>
+      <form id="export-form" class="space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Start Date</label>
+            <input type="date" name="start" class="w-full px-3 py-2 border rounded-lg" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">End Date</label>
+            <input type="date" name="end" class="w-full px-3 py-2 border rounded-lg" required>
+          </div>
+        </div>
+        <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-lg font-medium">Download CSV</button>
+      </form>
+      
+      <div class="mt-6 p-4 bg-blue-50 rounded-lg">
+        <p class="text-sm text-blue-800"><strong>CSV Format:</strong> Employee, Date, Hours, Hourly Rate, Burden %, Burdened Rate, Total Pay, Description</p>
+        <p class="text-sm text-blue-800 mt-2">Import into QuickBooks Payroll, Gusto, or ADP</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    
+    document.getElementById('export-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const params = new URLSearchParams(form);
+      window.location.href = `${API_URL}/v1/payroll/export?${params}`;
+    });
+  </script>
+</body>
+</html>
