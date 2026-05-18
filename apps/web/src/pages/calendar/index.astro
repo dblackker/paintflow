@@ -275,3 +275,58 @@
       document.getElementById('week-view-btn').classList.add('bg-gray-100');
       loadCalendar();
     });
+
+      // Make job cards draggable
+      setTimeout(() => {
+        document.querySelectorAll('#unscheduled-jobs [draggable="true"]').forEach(el => {
+          el.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', el.dataset.jobId);
+            e.dataTransfer.effectAllowed = 'move';
+          });
+        });
+
+        // Add drop handlers to calendar cells
+        document.querySelectorAll('#calendar-grid [data-date]').forEach(cell => {
+          cell.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            cell.classList.add('bg-blue-100', 'border-blue-400');
+          });
+          
+          cell.addEventListener('dragleave', () => {
+            cell.classList.remove('bg-blue-100', 'border-blue-400');
+          });
+          
+          cell.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            cell.classList.remove('bg-blue-100', 'border-blue-400');
+            
+            const jobId = e.dataTransfer.getData('text/plain');
+            const date = cell.dataset.date;
+            
+            if (!jobId || !date) return;
+            
+            const startTime = `${date}T09:00:00`;
+            const endTime = `${date}T17:00:00`;
+            
+            try {
+              const res = await fetch(`${API_URL}/v1/calendar/sync-job`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ jobId, startTime, endTime }),
+              });
+              
+              if (res.ok) {
+                window.showToast('Job scheduled!', 'success');
+                loadCalendar();
+                loadJobs();
+              } else {
+                window.showToast('Failed to schedule job', 'error');
+              }
+            } catch (err) {
+              window.showToast('Failed to schedule job', 'error');
+            }
+          });
+        });
+      }, 100);
