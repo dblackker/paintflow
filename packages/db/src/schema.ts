@@ -473,3 +473,13 @@ export const timeEntries = pgTable('time_entries', {
   totalCost: decimal('total_cost', { precision: 10, scale: 2 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const portalTokens = pgTable('portal_tokens', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  customerId: uuid('customer_id').references(() => customers.id).notNull(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  token: varchar('token', { length: 255 }).notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  lastAccessedAt: timestamp('last_accessed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
