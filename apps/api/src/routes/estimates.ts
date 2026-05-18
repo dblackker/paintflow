@@ -48,25 +48,25 @@ estimatesApp.post('/:id/sign', async (c) => {
   const { name, signatureData, packageName } = await c.req.json();
   
   if (!name || !signatureData) {
-    return c.json({ error: 'Name and signature required' }, 400);
+estimatesApp.get('/:id/public', async (c) => {
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+  
+  const estimate = await db.query.estimates.findFirst({
+    where: eq(estimates.id, id),
+  });
+  
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
   }
   
-  const db = createDb(c.env.DATABASE_URL);
-  const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
-  const userAgent = c.req.header('User-Agent') || 'unknown';
+  const branding = await db.query.orgBranding.findFirst({
+    where: eq(orgBranding.orgId, estimate.orgId),
+  });
   
-  const [estimate] = await db.update(estimates)
-    .set({
-      signedName: name,
-      signatureData,
-      signedAt: new Date(),
-      signedIp: ip,
-      signedUserAgent: userAgent,
-      status: 'accepted',
-    })
-    .where(eq(estimates.id, id))
-    .returning();
-  
+  return c.json({ 
+    data: {
+      id: estimate.id,
   if (!estimate) {
     return c.json({ error: 'Not found' }, 404);
   }
