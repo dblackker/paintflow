@@ -8,6 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Customer Portal - PaintFlow</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b">
@@ -26,6 +27,8 @@
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
     const token = window.location.pathname.split('/').pop();
+    let stripe = null;
+    
     async function loadPortal() {
       const res = await fetch(`${API_URL}/v1/portal/${token}`, { credentials: 'include' });
       if (!res.ok) {
@@ -35,25 +38,73 @@
       const { data } = await res.json();
       renderPortal(data);
     }
+    
     function renderPortal(data) {
-      const { customer, estimate } = data;
+      const { customer, estimate, job } = data;
       document.getElementById('customer-info').textContent = customer.name;
+      
       if (estimate && !estimate.signedAt) {
-        document.getElementById('portal-content').innerHTML = `
-          <div class="bg-white rounded-lg shadow-sm border p-6">
-            <h2 class="text-2xl font-bold mb-2">${estimate.title}</h2>
-            <p class="text-3xl font-bold">$${parseFloat(estimate.total).toFixed(2)}</p>
-            <div class="mt-6 flex gap-3">
-              <button onclick="approve()" class="flex-1 py-3 bg-blue-600 text-white rounded-lg">Approve</button>
-            </div>
-          </div>
-        `;
+        renderEstimate(estimate);
+      } else if (job) {
+        renderJob(job);
+      } else {
+        document.getElementById('portal-content').innerHTML = '<div class="text-center py-12 text-gray-500">No active items</div>';
       }
     }
+    
+    function renderEstimate(estimate) {
+      document.getElementById('portal-content').innerHTML = `
+        <div class="bg-white rounded-lg shadow-sm border p-6 mb-6">
+          <h2 class="text-2xl font-bold mb-2">${estimate.title}</h2>
+          <p class="text-3xl font-bold">$${parseFloat(estimate.total).toFixed(2)}</p>
+          <div class="mt-6 flex gap-3">
+            <button onclick="approve()" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium">Approve Estimate</button>
+          </div>
+        </div>
+      `;
+    }
+    
+    function renderJob(job) {
+      const balance = parseFloat(job.balance || 0);
+      document.getElementById('portal-content').innerHTML = `
+        <div class="bg-white rounded-lg shadow-sm border p-6 mb-6">
+          <h2 class="text-2xl font-bold mb-2">${job.title}</h2>
+          <span class="inline-flex px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">${job.status}</span>
+        </div>
+        ${balance > 0 ? `
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-4">Outstanding Balance</h3>
+          <p class="text-3xl font-bold mb-4">$${balance.toFixed(2)}</p>
+          <div id="payment-element"></div>
+          <button id="pay-btn" onclick="pay(${balance})" class="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium">Pay Now</button>
+        </div>
+        ` : '<div class="bg-white rounded-lg shadow-sm border p-6 text-center text-gray-600">No balance due</div>'}
+      `;
+    }
+    
     window.approve = async () => {
       await fetch(`${API_URL}/v1/portal/${token}/approve`, { method: 'POST', credentials: 'include' });
-      alert('Approved!'); location.reload();
+      alert('Approved! We will contact you to schedule.');
+      location.reload();
     };
+    
+    window.pay = async (amount) => {
+      const res = await fetch(`${API_URL}/v1/portal/${token}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ amount })
+      });
+      const { data } = await res.json();
+      
+      if (!stripe) stripe = Stripe('pk_test_...');
+      const { error } = await stripe.confirmCardPayment(data.clientSecret);
+      if (!error) {
+        alert('Payment successful!');
+        location.reload();
+      }
+    };
+    
     loadPortal();
   </script>
 </body>
