@@ -20,6 +20,7 @@ import reviewsRoutes from './routes/reviews';
 import changeOrdersRoute from './routes/change-orders';
 import templatesRoutes from './routes/templates';
 const app = new Hono();
+import leadSourcesRoute from './routes/lead-sources';
 import saasBillingRoutes from './routes/saas-billing';
 
 app.use('*', cors({
@@ -57,4 +58,5 @@ app.route('/v1/reviews', reviewsRoutes);
 app.route('/v1/templates', templatesRoutes);
 app.route('/v1/change-orders', changeOrdersRoute);
 app.route('/v1/billing', saasBillingRoutes);
+app.route('/v1/lead-sources', leadSourcesRoute);
 
