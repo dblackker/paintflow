@@ -128,6 +128,20 @@ Best regards,
                 <div>
                   <p class="font-medium">Google Calendar</p>
                   <p class="text-sm text-gray-600">Sync jobs to your calendar</p>
+            <div class="flex items-center justify-between p-4 border rounded-lg">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-600 rounded flex items-center justify-center text-white font-bold">Q</div>
+                <div>
+                  <p class="font-medium">QuickBooks Online</p>
+                  <p class="text-sm text-gray-600" id="qb-status">Sync customers and invoices</p>
+                  <p class="text-xs text-gray-500 mt-1" id="qb-last-sync"></p>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button id="qb-sync-btn" class="px-3 py-1 text-sm border rounded hover:bg-gray-50 hidden">Sync Now</button>
+                <button id="qb-connect-btn" class="px-4 py-2 border rounded-lg hover:bg-gray-50">Connect</button>
+              </div>
+            </div>
                 </div>
               </div>
               <button class="px-4 py-2 border rounded-lg hover:bg-gray-50">Connect</button>
@@ -292,3 +306,31 @@ Best regards,
     </script>
   </body>
 </html>
+
+      // Sync Now button
+      document.getElementById('qb-sync-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('qb-sync-btn');
+        const originalText = btn.textContent;
+        btn.textContent = 'Syncing...';
+        btn.disabled = true;
+        
+        try {
+          const res = await fetch(`${API_URL}/v1/quickbooks/sync`, {
+            method: 'POST',
+            credentials: 'include'
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            alert(`Synced ${data.customers || 0} customers and ${data.invoices || 0} invoices`);
+            checkQBStatus();
+          } else {
+            alert('Sync failed');
+          }
+        } catch (err) {
+          alert('Sync failed');
+        } finally {
+          btn.textContent = originalText;
+          btn.disabled = false;
+        }
+      });
