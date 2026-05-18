@@ -36,6 +36,21 @@ auth.post('/magic-link', async (c) => {
   if (!email || typeof email !== 'string') {
     return c.json({ error: 'Email required' }, 400);
   }
+  const { email } = await c.req.json();
+  
+  if (!email || typeof email !== 'string') {
+    return c.json({ error: 'Email required' }, 400);
+  }
+  
+  // Rate limiting: max 3 magic links per hour per email
+  const rateLimitKey = `ratelimit:magic-link:${email.toLowerCase()}`;
+  const rateLimit = await c.env.KV.get(rateLimitKey);
+  const count = rateLimit ? parseInt(rateLimit) : 0;
+  if (count >= 3) {
+    return c.json({ error: 'Too many requests. Try again in an hour.' }, 429);
+  }
+  await c.env.KV.put(rateLimitKey, (count + 1).toString(), { expirationTtl: 3600 });
+  
   
   const db = createDb(c.env.DATABASE_URL);
   
