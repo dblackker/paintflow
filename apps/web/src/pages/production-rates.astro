@@ -1,197 +1,94 @@
 ---
-import Base from '../layouts/Base.astro';
 ---
 
-<Base title="Production Rates">
-  <div class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/production-rates" class="text-blue-600 font-medium">Production Rates</a>
-            </nav>
-          </div>
-        </div>
-      </div>
-    </nav>
-
-    <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex justify-between items-center mb-6">
-        <div>
-          <h2 class="text-2xl font-bold text-gray-900">Production Rates</h2>
-          <p class="text-gray-600">Standard hours per unit for estimating</p>
-        </div>
-        <button id="add-rate" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Add Rate</button>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
-        <table class="w-full">
-          <thead class="bg-gray-50 border-b">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Task</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hours/Unit</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-              <th class="px-6 py-3"></th>
-            </tr>
-          </thead>
-          <tbody id="rates-table" class="divide-y">
-            <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">Loading...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </main>
-
-    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-lg p-6 w-full max-w-md">
-        <h3 class="text-lg font-semibold mb-4" id="modal-title">Add Production Rate</h3>
-        <form id="rate-form" class="space-y-4">
-          <input type="hidden" name="id" />
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Task *</label>
-            <input name="task" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
-              <input name="unit" required placeholder="sq ft" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Hours/Unit *</label>
-              <input name="hoursPerUnit" type="number" step="0.001" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
-            <input name="category" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div class="flex gap-3 pt-4">
-            <button type="button" id="cancel" class="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
-            <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
-          </div>
-        </form>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Production Rates - PaintFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/styles/mobile.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <h1 class="text-xl font-semibold">Production Rates</h1>
+        <a href="/settings" class="text-sm text-gray-600">Back</a>
       </div>
     </div>
-  </div>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+    <p class="text-gray-600 mb-6">Set your production rates for accurate estimates. Rates are sq ft per hour.</p>
+
+    <div class="bg-white rounded-lg shadow-sm border divide-y" id="rates-list">
+      <div class="p-4 text-center text-gray-500">Loading...</div>
+    </div>
+
+    <button id="add-rate" class="w-full mt-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 touch-feedback">
+      + Add Custom Rate
+    </button>
+  </main>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
-    let rates = [];
-    
+
     async function loadRates() {
-      try {
-        const res = await fetch(`${API_URL}/v1/production-rates`, { credentials: 'include' });
-        if (res.status === 401) {
-          window.location.href = '/login';
-          return;
-        }
-        const { data } = await res.json();
-        rates = data;
-        
-        const tbody = document.getElementById('rates-table');
-        if (rates.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">No rates yet. Add your first rate!</td></tr>';
-          return;
-        }
-        
-        tbody.innerHTML = rates.map(r => `
-          <tr class="hover:bg-gray-50">
-            <td class="px-6 py-4 text-sm font-medium">${r.task}</td>
-            <td class="px-6 py-4 text-sm text-gray-600">${r.unit}</td>
-            <td class="px-6 py-4 text-sm">${parseFloat(r.hoursPerUnit).toFixed(3)}</td>
-            <td class="px-6 py-4 text-sm"><span class="px-2 py-1 text-xs rounded-full bg-gray-100">${r.category || '-'}</span></td>
-            <td class="px-6 py-4 text-right space-x-2">
-              <button onclick="editRate('${r.id}')" class="text-blue-600 hover:text-blue-700 text-sm">Edit</button>
-              <button onclick="deleteRate('${r.id}')" class="text-red-600 hover:text-red-700 text-sm">Delete</button>
-            </td>
-          </tr>
-        `).join('');
-      } catch (err) {
-        console.error('Failed to load rates', err);
-        window.showToast('Failed to load rates', 'error');
-      }
+      const res = await fetch(`${API_URL}/v1/production-rates`, { credentials: 'include' });
+      const { data } = await res.json();
+      renderRates(data);
     }
-    
-    const modal = document.getElementById('modal');
-    const form = document.getElementById('rate-form');
-    
-    document.getElementById('add-rate')?.addEventListener('click', () => {
-      form.reset();
-      form.id.value = '';
-      document.getElementById('modal-title').textContent = 'Add Production Rate';
-      modal.classList.remove('hidden');
-    });
-    
-    document.getElementById('cancel')?.addEventListener('click', () => modal.classList.add('hidden'));
-    
-    window.editRate = (id) => {
-      const rate = rates.find(r => r.id === id);
-      if (!rate) return;
-      form.id.value = rate.id;
-      form.task.value = rate.task;
-      form.unit.value = rate.unit;
-      form.hoursPerUnit.value = rate.hoursPerUnit;
-      form.category.value = rate.category || '';
-      document.getElementById('modal-title').textContent = 'Edit Production Rate';
-      modal.classList.remove('hidden');
-    };
-    
-    window.deleteRate = async (id) => {
+
+    function renderRates(rates) {
+      const container = document.getElementById('rates-list');
+      container.innerHTML = rates.map(r => `
+        <div class="p-4 flex items-center justify-between" data-id="${r.id}">
+          <div class="flex-1">
+            <p class="font-medium">${r.category} • ${r.surfaceType}</p>
+            <p class="text-sm text-gray-600">${r.ratePerHour} ${r.unit}/hr @ $${parseFloat(r.hourlyRate).toFixed(0)}/hr</p>
+            ${r.description ? `<p class="text-xs text-gray-500 mt-1">${r.description}</p>` : ''}
+          </div>
+          <div class="flex gap-2">
+            <button onclick="editRate('${r.id}')" class="text-sm text-blue-600">Edit</button>
+            <button onclick="deleteRate('${r.id}')" class="text-sm text-red-600">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function deleteRate(id) {
       if (!confirm('Delete this rate?')) return;
-      try {
-        const res = await fetch(`${API_URL}/v1/production-rates/${id}`, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
-        if (res.ok) {
-          window.showToast('Rate deleted');
-          loadRates();
-        } else {
-          window.showToast('Failed to delete', 'error');
-        }
-      } catch (err) {
-        window.showToast('Failed to delete', 'error');
-      }
-    };
-    
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(form);
-      const data = {
-        task: formData.get('task'),
-        unit: formData.get('unit'),
-        hoursPerUnit: parseFloat(formData.get('hoursPerUnit')),
-        category: formData.get('category') || undefined,
-      };
+      await fetch(`${API_URL}/v1/production-rates/${id}`, { method: 'DELETE', credentials: 'include' });
+      loadRates();
+    }
+
+    function editRate(id) {
+      alert('Edit functionality coming soon');
+    }
+
+    document.getElementById('add-rate').addEventListener('click', async () => {
+      const category = prompt('Category (walls, ceilings, trim, cabinets):');
+      if (!category) return;
+      const ratePerHour = prompt('Rate per hour (sq ft):');
+      if (!ratePerHour) return;
       
-      const id = formData.get('id');
-      const method = id ? 'PUT' : 'POST';
-      const url = id ? `${API_URL}/v1/production-rates/${id}` : `${API_URL}/v1/production-rates`;
-      
-      try {
-        const res = await fetch(url, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(data),
-        });
-        
-        if (res.ok) {
-          window.showToast(id ? 'Rate updated' : 'Rate added');
-          modal.classList.add('hidden');
-          form.reset();
-          loadRates();
-        } else {
-          window.showToast('Failed to save', 'error');
-        }
-      } catch (err) {
-        window.showToast('Failed to save', 'error');
-      }
+      await fetch(`${API_URL}/v1/production-rates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          category,
+          surfaceType: 'drywall',
+          ratePerHour: parseFloat(ratePerHour),
+          hourlyRate: 50,
+        }),
+      });
+      loadRates();
     });
-    
+
     loadRates();
   </script>
-</Base>
+</body>
+</html>
