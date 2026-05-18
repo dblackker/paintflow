@@ -1,0 +1,30 @@
+---
+const { current = 'dashboard' } = Astro.props;
+---
+<nav class="fixed bottom-0 left-0 right-0 bg-white border-t md:hidden z-50">
+  <div class="grid grid-cols-5 h-16">
+    <a href="/dashboard" class={`flex flex-col items-center justify-center ${current === 'dashboard' ? 'text-blue-600' : 'text-gray-600'}`}>
+      <span class="text-xl">📊</span>
+      <span class="text-xs mt-1">Home</span>
+    </a>
+    <a href="/leads" class={`flex flex-col items-center justify-center ${current === 'leads' ? 'text-blue-600' : 'text-gray-600'}`}>
+      <span class="text-xl">👤</span>
+      <span class="text-xs mt-1">Leads</span>
+    </a>
+    <a href="/estimates" class={`flex flex-col items-center justify-center ${current === 'estimates' ? 'text-blue-600' : 'text-gray-600'}`}>
+      <span class="text-xl">💰</span>
+      <span class="text-xs mt-1">Estimates</span>
+    </a>
+    <a href="/calendar" class={`flex flex-col items-center justify-center ${current === 'calendar' ? 'text-blue-600' : 'text-gray-600'}`}>
+      <span class="text-xl">📅</span>
+      <span class="text-xs mt-1">Jobs</span>
+    </a>
+    <a href="/settings" class={`flex flex-col items-center justify-center ${current === 'settings' ? 'text-blue-600' : 'text-gray-600'}`}>
+      <span class="text-xl">⚙️</span>
+      <span class="text-xs mt-1">More</span>
+    </a>
+  </div>
+</nav>
+<style>
+  nav { padding-bottom: env(safe-area-inset-bottom); }
+</style>
