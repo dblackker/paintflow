@@ -3,198 +3,250 @@ import Base from '../../layouts/Base.astro';
 ---
 
 <Base title="New Estimate">
-  <div class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/leads" class="text-gray-600 hover:text-gray-900">Leads</a>
-            </nav>
-          </div>
-        </div>
-      </div>
-    </nav>
-
-    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="mb-6">
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div>
         <h2 class="text-2xl font-bold text-gray-900">Create Estimate</h2>
-        <p class="text-gray-600">Build Good / Better / Best packages</p>
+        <p class="text-sm text-gray-600 mt-1">Build Good, Better, and Best options from one set of painting line items.</p>
       </div>
+      <a href="/estimates" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Back to estimates</a>
+    </div>
 
-      <form id="estimate-form" class="space-y-6">
-        <div class="bg-white rounded-lg shadow-sm border p-6">
+    <form id="estimate-form" class="grid lg:grid-cols-[1fr_340px] gap-5">
+      <section class="space-y-4">
+        <div class="bg-white rounded-lg shadow-sm border p-4 sm:p-5">
           <label class="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-          <select name="leadId" id="lead-select" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+          <select name="leadId" id="lead-select" required class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
             <option value="">Loading leads...</option>
           </select>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm border p-6" data-package="good">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">Good Package</h3>
-            <span class="text-2xl font-bold" id="good-total">$0.00</span>
-          </div>
-          <div class="space-y-3" data-items>
-            <div class="flex gap-3 items-center">
-              <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-              <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-              <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
+        <div class="bg-white rounded-lg shadow-sm border p-4 sm:p-5">
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 class="font-semibold text-gray-900">Scope Items</h3>
+              <p class="text-sm text-gray-600">Use quantities for rooms, square feet, linear feet, doors, or hours.</p>
             </div>
+            <button type="button" id="add-item" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Add Item</button>
           </div>
-          <button type="button" data-add class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
+          <div id="items" class="space-y-3"></div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm border p-6 border-blue-200 ring-1 ring-blue-100" data-package="better">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">Better Package Recommended</h3>
-            <span class="text-2xl font-bold" id="better-total">$0.00</span>
+        <div class="bg-white rounded-lg shadow-sm border p-4 sm:p-5">
+          <h3 class="font-semibold text-gray-900 mb-4">Package Adjustments</h3>
+          <div class="grid sm:grid-cols-3 gap-3">
+            <label class="block">
+              <span class="text-sm text-gray-600">Good multiplier</span>
+              <input id="good-multiplier" type="number" step="0.01" value="0.90" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            </label>
+            <label class="block">
+              <span class="text-sm text-gray-600">Better multiplier</span>
+              <input id="better-multiplier" type="number" step="0.01" value="1.00" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            </label>
+            <label class="block">
+              <span class="text-sm text-gray-600">Best multiplier</span>
+              <input id="best-multiplier" type="number" step="0.01" value="1.18" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            </label>
           </div>
-          <div class="space-y-3" data-items>
-            <div class="flex gap-3 items-center">
-              <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-              <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-              <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
-            </div>
+        </div>
+      </section>
+
+      <aside class="space-y-4 lg:sticky lg:top-20 self-start">
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <h3 class="font-semibold text-gray-900 mb-3">Owner Defaults</h3>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <label>
+              <span class="text-gray-600">Labor rate</span>
+              <input id="labor-rate" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            </label>
+            <label>
+              <span class="text-gray-600">Material markup %</span>
+              <input id="markup" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            </label>
+            <label>
+              <span class="text-gray-600">Sales tax %</span>
+              <input id="tax-rate" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            </label>
+            <label>
+              <span class="text-gray-600">Deposit %</span>
+              <input id="deposit-percent" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            </label>
           </div>
-          <button type="button" data-add class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm border p-6" data-package="best">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">Best Package</h3>
-            <span class="text-2xl font-bold" id="best-total">$0.00</span>
-          </div>
-          <div class="space-y-3" data-items>
-            <div class="flex gap-3 items-center">
-              <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-              <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-              <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
-            </div>
-          </div>
-          <button type="button" data-add class="mt-3 text-sm text-blue-600 hover:text-blue-700">+ Add line item</button>
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <h3 class="font-semibold text-gray-900 mb-3">Package Preview</h3>
+          <div id="package-preview" class="space-y-3"></div>
+          <button type="submit" class="w-full mt-4 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Create Estimate</button>
         </div>
-
-        <div class="flex gap-3">
-          <button type="button" id="save-draft" class="flex-1 px-4 py-3 border rounded-lg hover:bg-gray-50">Save Draft</button>
-          <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create Estimate</button>
-        </div>
-      </form>
-    </main>
-  </div>
+      </aside>
+    </form>
+  </main>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
-    
-    async function loadLeads() {
-      try {
-        const res = await fetch(`${API_URL}/v1/leads`, { credentials: 'include' });
-        if (res.status === 401) {
-          window.location.href = '/login';
-          return;
-        }
-        const { data } = await res.json();
-        const select = document.getElementById('lead-select');
-        select.innerHTML = '<option value="">Select lead...</option>' + 
-          data.map(l => `<option value="${l.id}">${l.name} ${l.phone ? `(${l.phone})` : ''}</option>`).join('');
-      } catch (err) {
-        console.error('Failed to load leads', err);
-        window.showToast('Failed to load leads', 'error');
-      }
+    const packageLabels = { good: 'Good', better: 'Better', best: 'Best' };
+    const defaultItems = [
+      { desc: 'Prep, patching, masking, and setup', qty: 1, unit: 'job', laborHours: 4, materialCost: 75 },
+      { desc: 'Paint walls and ceilings', qty: 1, unit: 'room', laborHours: 8, materialCost: 120 },
+    ];
+
+    function money(value) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     }
-    
-    document.querySelectorAll('[data-add]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const container = btn.previousElementSibling;
-        const div = document.createElement('div');
-        div.className = 'flex gap-3 items-center';
-        div.innerHTML = `
-          <input placeholder="Description" class="flex-1 px-3 py-2 border rounded-lg" data-field="desc" />
-          <input placeholder="Qty" type="number" step="0.1" class="w-20 px-3 py-2 border rounded-lg" data-field="qty" />
-          <input placeholder="Rate" type="number" step="0.01" class="w-24 px-3 py-2 border rounded-lg" data-field="rate" />
-          <button type="button" class="text-red-600 hover:text-red-700 px-2" onclick="this.parentElement.remove(); calculateTotals()">Remove</button>
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function apiJson(url, options = {}) {
+      const res = await fetch(url, { credentials: 'include', ...options });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    async function loadSetup() {
+      const [{ data: leads }, { data: settings }] = await Promise.all([
+        apiJson(`${API_URL}/v1/leads?status=new&limit=200`),
+        apiJson(`${API_URL}/v1/settings/org`),
+      ]);
+      const select = document.getElementById('lead-select');
+      select.innerHTML = '<option value="">Select lead...</option>' + leads.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)} ${lead.phone ? `(${escapeHtml(lead.phone)})` : ''}</option>`).join('');
+      document.getElementById('labor-rate').value = Number(settings.defaultLaborRate || 65).toFixed(2);
+      document.getElementById('markup').value = Number(settings.materialMarkupPercent || 30).toFixed(2);
+      document.getElementById('tax-rate').value = (Number(settings.salesTaxRate || 0.092) * 100).toFixed(2);
+      document.getElementById('deposit-percent').value = Number(settings.depositPercent || 50).toFixed(2);
+    }
+
+    function addItem(item = {}) {
+      const div = document.createElement('div');
+      div.className = 'grid gap-2 sm:grid-cols-[1fr_90px_90px_110px_110px_auto] items-end border rounded-lg p-3';
+      div.innerHTML = `
+        <label class="block sm:col-span-1">
+          <span class="text-xs text-gray-600">Description</span>
+          <input data-field="desc" value="${escapeHtml(item.desc || '')}" placeholder="Scope item" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Qty</span>
+          <input data-field="qty" type="number" step="0.01" value="${item.qty || 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Unit</span>
+          <input data-field="unit" value="${escapeHtml(item.unit || 'each')}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Labor hrs/unit</span>
+          <input data-field="laborHours" type="number" step="0.01" value="${item.laborHours || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Material $/unit</span>
+          <input data-field="materialCost" type="number" step="0.01" value="${item.materialCost || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <button type="button" class="remove-item px-3 py-2 border rounded-lg text-sm">Remove</button>
+      `;
+      document.getElementById('items').appendChild(div);
+      calculate();
+    }
+
+    function collectBaseItems() {
+      const laborRate = Number(document.getElementById('labor-rate').value || 0);
+      const markup = Number(document.getElementById('markup').value || 0);
+      return Array.from(document.querySelectorAll('#items > div')).map(row => {
+        const desc = row.querySelector('[data-field="desc"]').value.trim();
+        const qty = Number(row.querySelector('[data-field="qty"]').value || 0);
+        const unit = row.querySelector('[data-field="unit"]').value.trim() || 'each';
+        const laborHours = Number(row.querySelector('[data-field="laborHours"]').value || 0);
+        const materialCost = Number(row.querySelector('[data-field="materialCost"]').value || 0);
+        const laborPrice = laborHours * laborRate;
+        const materialPrice = materialCost * (1 + markup / 100);
+        const rate = laborPrice + materialPrice;
+        return { desc, qty, unit, laborHours, materialCost, rate };
+      }).filter(item => item.desc && item.qty > 0 && item.rate > 0);
+    }
+
+    function buildPackages() {
+      const baseItems = collectBaseItems();
+      const taxRate = Number(document.getElementById('tax-rate').value || 0) / 100;
+      return ['good', 'better', 'best'].map(name => {
+        const multiplier = Number(document.getElementById(`${name}-multiplier`).value || 1);
+        const items = baseItems.map(item => ({
+          desc: item.desc,
+          qty: item.qty,
+          rate: Number((item.rate * multiplier).toFixed(2)),
+          category: item.unit,
+          notes: `${item.laborHours} labor hrs/unit, ${money(item.materialCost)} materials/unit before markup`,
+        }));
+        const subtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
+        const tax = subtotal * taxRate;
+        const total = subtotal + tax;
+        return { name, subtotal, tax, total, items, lineItems: items };
+      }).filter(pkg => pkg.items.length > 0);
+    }
+
+    function calculate() {
+      const packages = buildPackages();
+      const depositPercent = Number(document.getElementById('deposit-percent').value || 0) / 100;
+      document.getElementById('package-preview').innerHTML = ['good', 'better', 'best'].map(name => {
+        const pkg = packages.find(item => item.name === name);
+        const total = pkg?.total || 0;
+        return `
+          <div class="border rounded-lg p-3 ${name === 'better' ? 'border-blue-300 bg-blue-50' : ''}">
+            <div class="flex items-center justify-between">
+              <p class="font-medium">${packageLabels[name]}</p>
+              <p class="font-semibold">${money(total)}</p>
+            </div>
+            <p class="text-xs text-gray-600 mt-1">Deposit: ${money(total * depositPercent)}</p>
+          </div>
         `;
-        container.appendChild(div);
-      });
+      }).join('');
+    }
+
+    document.getElementById('add-item').addEventListener('click', () => addItem());
+    document.getElementById('items').addEventListener('click', (event) => {
+      if (!event.target.classList.contains('remove-item')) return;
+      event.target.closest('#items > div').remove();
+      calculate();
+    });
+    document.addEventListener('input', (event) => {
+      if (event.target.closest('#estimate-form')) calculate();
     });
 
-    function calculateTotals() {
-      ['good', 'better', 'best'].forEach(pkg => {
-        const section = document.querySelector(`[data-package="${pkg}"]`);
-        const items = section.querySelectorAll('[data-items] > div');
-        let total = 0;
-        items.forEach(row => {
-          const qty = parseFloat(row.querySelector('[data-field="qty"]')?.value || '0');
-          const rate = parseFloat(row.querySelector('[data-field="rate"]')?.value || '0');
-          total += qty * rate;
-        });
-        document.getElementById(`${pkg}-total`).textContent = `$${total.toFixed(2)}`;
-      });
-    }
+    document.getElementById('estimate-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const leadId = new FormData(event.target).get('leadId');
+      const packages = buildPackages();
 
-    document.addEventListener('input', calculateTotals);
-
-    function collectPackages() {
-      const packages = [];
-      ['good', 'better', 'best'].forEach(pkg => {
-        const section = document.querySelector(`[data-package="${pkg}"]`);
-        const items = [];
-        section.querySelectorAll('[data-items] > div').forEach(row => {
-          const desc = row.querySelector('[data-field="desc"]')?.value;
-          const qty = parseFloat(row.querySelector('[data-field="qty"]')?.value || '0');
-          const rate = parseFloat(row.querySelector('[data-field="rate"]')?.value || '0');
-          if (desc && qty > 0 && rate > 0) {
-            items.push({ desc, qty, rate });
-          }
-        });
-        if (items.length > 0) {
-          const total = items.reduce((sum, i) => sum + i.qty * i.rate, 0);
-          packages.push({ name: pkg, items, total });
-        }
-      });
-      return packages;
-    }
-
-    document.getElementById('estimate-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const leadId = formData.get('leadId');
-      const packages = collectPackages();
-      
       if (!leadId) {
-        window.showToast('Please select a customer', 'error');
+        window.showToast('Select a customer first', 'error');
         return;
       }
-      
       if (packages.length === 0) {
-        window.showToast('Please add at least one line item', 'error');
+        window.showToast('Add at least one priced scope item', 'error');
         return;
       }
-      
+
       try {
-        const res = await fetch(`${API_URL}/v1/estimates`, {
+        const { data } = await apiJson(`${API_URL}/v1/estimates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify({ leadId, packages }),
         });
-        
-        if (res.ok) {
-          const { data } = await res.json();
-          window.showToast('Estimate created!');
-          setTimeout(() => window.location.href = '/dashboard', 1000);
-        } else {
-          const err = await res.json();
-          window.showToast(err.error || 'Failed to create estimate', 'error');
-        }
+        window.showToast('Estimate created');
+        window.location.href = `/estimates/${data.id}`;
       } catch (err) {
-        console.error('Failed to create estimate', err);
-        window.showToast('Error creating estimate', 'error');
+        window.showToast(err.message || 'Failed to create estimate', 'error');
       }
     });
-    
-    loadLeads();
+
+    defaultItems.forEach(addItem);
+    loadSetup().then(calculate).catch((err) => {
+      console.error('Failed to load estimate setup', err);
+      window.showToast('Failed to load estimate setup', 'error');
+    });
   </script>
 </Base>

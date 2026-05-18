@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, estimateEmailTemplate } from '../lib/email';
@@ -16,12 +16,38 @@ const signSchema = z.object({
   packageName: z.string().optional(),
 });
 
+const estimateLineItemSchema = z.object({
+  desc: z.string().trim().min(1).max(255),
+  qty: z.coerce.number().positive(),
+  rate: z.coerce.number().nonnegative(),
+  category: z.string().trim().max(80).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
 const estimatePackageSchema = z.object({
   name: z.string().min(1).max(100),
   subtotal: z.coerce.number().nonnegative().optional(),
   discount: z.coerce.number().nonnegative().optional(),
-  total: z.coerce.number().positive(),
-  lineItems: z.array(z.unknown()).optional(),
+  total: z.coerce.number().positive().optional(),
+  items: z.array(estimateLineItemSchema).min(1).optional(),
+  lineItems: z.array(estimateLineItemSchema).min(1).optional(),
+}).transform((pkg) => {
+  const items = pkg.items ?? pkg.lineItems ?? [];
+  const subtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
+  const discount = Number(pkg.discount ?? 0);
+  const computedTotal = Math.max(subtotal - discount, 0);
+
+  return {
+    name: pkg.name,
+    subtotal: Number(pkg.subtotal ?? subtotal),
+    discount,
+    total: Number(pkg.total ?? computedTotal),
+    items,
+    lineItems: items,
+  };
+}).refine((pkg) => pkg.items.length > 0, {
+  message: 'Each package needs at least one line item',
+  path: ['items'],
 });
 
 const createEstimateSchema = z.object({
@@ -112,12 +138,24 @@ estimatesApp.get('/', async (c) => {
   const offset = parseInt(c.req.query('offset') || '0');
   const db = createDb(c.env.DATABASE_URL);
   
-  const data = await db.query.estimates.findMany({
+  const rows = await db.query.estimates.findMany({
     where: eq(estimates.orgId, orgId),
     orderBy: [desc(estimates.createdAt)],
     limit,
     offset,
   });
+
+  const leadIds = [...new Set(rows.map((estimate) => estimate.leadId))];
+  const leadRows = leadIds.length
+    ? await db.select().from(leads).where(and(eq(leads.orgId, orgId), inArray(leads.id, leadIds)))
+    : [];
+  const leadsById = new Map(leadRows.map((lead) => [lead.id, lead]));
+  const data = rows.map((estimate) => ({
+    ...estimate,
+    leadName: leadsById.get(estimate.leadId)?.name ?? 'Customer',
+    leadPhone: leadsById.get(estimate.leadId)?.phone,
+    leadEmail: leadsById.get(estimate.leadId)?.email,
+  }));
   
   return c.json({ data });
 });

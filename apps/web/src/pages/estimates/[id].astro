@@ -3,298 +3,267 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
     <title>Estimate - PaintFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="min-h-screen bg-gray-50">
-    <div class="max-w-4xl mx-auto px-4 py-12">
+    <main class="max-w-5xl mx-auto px-4 py-6 sm:py-10">
       <div id="loading" class="text-center py-12">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
         <p class="mt-4 text-gray-600">Loading estimate...</p>
       </div>
 
-      <div id="estimate-content" class="hidden">
-        <div class="bg-white rounded-lg shadow-sm border p-8 mb-6">
-          <div class="flex justify-between items-start mb-6">
+      <section id="estimate-content" class="hidden space-y-5">
+        <div class="bg-white rounded-lg shadow-sm border p-5 sm:p-8">
+          <div id="brand-block" class="mb-5"></div>
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
             <div>
               <h1 class="text-3xl font-bold text-gray-900">Painting Estimate</h1>
-              <p class="text-gray-600 mt-2">Valid for 30 days</p>
+              <p class="text-gray-600 mt-2">Review the package options below and choose the one that fits your project.</p>
             </div>
-            <div class="text-right">
+            <div class="sm:text-right">
               <p class="text-sm text-gray-600">Estimate #</p>
               <p class="font-mono" id="estimate-id"></p>
             </div>
           </div>
-
-          <div id="packages-container" class="space-y-6"></div>
+          <div id="packages-container" class="grid lg:grid-cols-3 gap-4"></div>
         </div>
 
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-5">
           <h3 class="font-semibold text-gray-900 mb-2">Ready to proceed?</h3>
-          <p class="text-gray-700 mb-4">Select a package below to review and sign.</p>
-          <div id="accept-buttons" class="flex gap-3"></div>
-        </div>
-
-        <!-- Terms Modal -->
-        <div id="terms-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h3 class="text-xl font-semibold mb-4">Terms & Conditions</h3>
-            <div class="prose prose-sm text-gray-700 space-y-3 mb-6">
-              <div>
-                <h4 class="font-semibold text-gray-900">Scope of Work</h4>
-                <p>Contractor agrees to perform painting services as described in the selected package. All work will be completed in a professional manner using quality materials.</p>
-              </div>
-              <div>
-                <h4 class="font-semibold text-gray-900">Payment Terms</h4>
-                <p>50% deposit required to schedule work. Final payment due upon completion. We accept credit cards, checks, and cash.</p>
-              </div>
-              <div>
-                <h4 class="font-semibold text-gray-900">Change Orders</h4>
-                <p>Any changes to scope must be approved in writing and may affect price and timeline.</p>
-              </div>
-              <div>
-                <h4 class="font-semibold text-gray-900">Warranty</h4>
-                <p>We warranty our workmanship for 2 years. Paint manufacturer warranties apply to materials.</p>
-              </div>
-              <div>
-                <h4 class="font-semibold text-gray-900">Cancellation</h4>
-                <p>Customer may cancel within 3 business days of signing for full refund of deposit.</p>
-              </div>
-              <div>
-                <h4 class="font-semibold text-gray-900">Access</h4>
-                <p>Customer agrees to provide reasonable access to property during business hours (8am-6pm).</p>
-              </div>
-            </div>
-            <div class="flex gap-3">
-              <button id="decline-terms" class="flex-1 px-4 py-2 border rounded">Cancel</button>
-              <button id="accept-terms" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded font-medium">I Agree to Terms</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Signature Modal -->
-        <div id="signature-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div class="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 class="text-lg font-semibold mb-4">Sign Estimate</h3>
-            <p class="text-sm text-gray-600 mb-4">By signing, you agree to the terms and selected package.</p>
-            
-            <div class="mb-4">
-              <label class="block text-sm font-medium mb-1">Full Name</label>
-              <input id="signer-name" type="text" class="w-full px-3 py-2 border rounded" placeholder="Your full name" required />
-            </div>
-            
-            <div class="mb-4">
-              <label class="block text-sm font-medium mb-1">Signature</label>
-              <canvas id="signature-pad" class="w-full h-32 border rounded bg-gray-50 cursor-crosshair"></canvas>
-              <button id="clear-sig" type="button" class="text-sm text-blue-600 mt-1">Clear</button>
-            </div>
-            
-            <div class="flex gap-3">
-              <button id="cancel-sign" class="flex-1 px-4 py-2 border rounded">Back</button>
-              <button id="submit-sign" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded">Sign & Pay Deposit</button>
-            </div>
-          </div>
+          <p class="text-gray-700 mb-4">Select a package to review terms, sign, and pay the deposit.</p>
+          <div id="accept-buttons" class="grid sm:grid-cols-3 gap-3"></div>
         </div>
 
         <div class="text-center text-sm text-gray-600">
-          <p>Questions? Reply to the email or call us.</p>
+          <p>Questions? Reply to the estimate email or call your contractor.</p>
+        </div>
+      </section>
+
+      <section id="error" class="hidden text-center py-12 bg-white rounded-lg border">
+        <p class="text-red-600 font-medium">Estimate not found or expired.</p>
+      </section>
+    </main>
+
+    <div id="terms-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div class="bg-white rounded-t-lg sm:rounded-lg p-5 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <h3 class="text-xl font-semibold mb-4">Terms and Conditions</h3>
+        <div class="text-sm text-gray-700 space-y-4 mb-6">
+          <div><h4 class="font-semibold text-gray-900">Scope of Work</h4><p>Contractor agrees to perform painting services described in the selected package using professional practices and quality materials.</p></div>
+          <div><h4 class="font-semibold text-gray-900">Payment Terms</h4><p>Deposit is required to schedule work. Final payment is due upon completion unless otherwise agreed in writing.</p></div>
+          <div><h4 class="font-semibold text-gray-900">Change Orders</h4><p>Changes to scope must be approved in writing and may affect price and schedule.</p></div>
+          <div><h4 class="font-semibold text-gray-900">Warranty</h4><p>Workmanship warranty and material manufacturer warranties apply according to contractor policy and product terms.</p></div>
+          <div><h4 class="font-semibold text-gray-900">Access</h4><p>Customer agrees to provide reasonable access to the property and work areas during scheduled business hours.</p></div>
+        </div>
+        <div class="flex gap-3">
+          <button id="decline-terms" class="flex-1 px-4 py-3 border rounded-lg">Cancel</button>
+          <button id="accept-terms" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-medium">I Agree</button>
         </div>
       </div>
+    </div>
 
-      <div id="error" class="hidden text-center py-12">
-        <p class="text-red-600">Estimate not found or expired.</p>
+    <div id="signature-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+      <div class="bg-white rounded-t-lg sm:rounded-lg p-5 sm:p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-4">Sign Estimate</h3>
+        <p class="text-sm text-gray-600 mb-4">By signing, you agree to the terms and selected package.</p>
+        <label class="block mb-4">
+          <span class="block text-sm font-medium mb-1">Full Name</span>
+          <input id="signer-name" type="text" class="w-full px-3 py-3 border rounded-lg" placeholder="Your full name" required />
+        </label>
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-1">Signature</label>
+          <canvas id="signature-pad" class="w-full h-36 border rounded-lg bg-gray-50 cursor-crosshair touch-none"></canvas>
+          <button id="clear-sig" type="button" class="text-sm text-blue-600 mt-2">Clear signature</button>
+        </div>
+        <div class="flex gap-3">
+          <button id="cancel-sign" class="flex-1 px-4 py-3 border rounded-lg">Back</button>
+          <button id="submit-sign" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg">Sign and Pay Deposit</button>
+        </div>
       </div>
     </div>
 
     <script>
       const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
       const estimateId = window.location.pathname.split('/').pop();
+      const labels = { good: 'Good', better: 'Better', best: 'Best' };
       let selectedPackage = null;
-      let canvas, ctx, isDrawing = false;
-      
+      let canvas;
+      let ctx;
+      let isDrawing = false;
+      let hasSignature = false;
+
+      function money(value) {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      function packageItems(pkg) {
+        return Array.isArray(pkg.items) ? pkg.items : Array.isArray(pkg.lineItems) ? pkg.lineItems : [];
+      }
+
       async function loadEstimate() {
         try {
           const res = await fetch(`${API_URL}/v1/estimates/${estimateId}/public`);
-          
           if (!res.ok) {
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('error').classList.remove('hidden');
+            showError();
             return;
           }
-          
           const { data } = await res.json();
-          
-          // Apply branding
-          if (data.branding?.primaryColor) {
-            document.documentElement.style.setProperty('--brand-color', data.branding.primaryColor);
-          }
-          if (data.branding?.logoUrl) {
-            const logoHtml = `<img src="${data.branding.logoUrl}" class="h-12 mb-4" alt="Logo" />`;
-            document.querySelector('h1').insertAdjacentHTML('beforebegin', logoHtml);
-          }
+
           if (data.branding?.companyName) {
             document.title = `${data.branding.companyName} - Estimate`;
+            document.getElementById('brand-block').innerHTML = `<p class="text-sm font-semibold text-gray-700">${escapeHtml(data.branding.companyName)}</p>`;
           }
-          
+          if (data.branding?.logoUrl) {
+            document.getElementById('brand-block').innerHTML = `<img src="${escapeHtml(data.branding.logoUrl)}" class="h-12 mb-3" alt="Logo" />` + document.getElementById('brand-block').innerHTML;
+          }
+
           if (data.signedAt) {
-            document.getElementById('loading').innerHTML = '<p class="text-green-600 font-medium">✓ This estimate has been signed</p><p class="text-sm text-gray-600 mt-2">Signed by ' + data.signedName + ' on ' + new Date(data.signedAt).toLocaleDateString() + '</p>';
+            document.getElementById('loading').innerHTML = `<div class="bg-white border rounded-lg p-8"><p class="text-green-700 font-medium">This estimate has been signed.</p><p class="text-sm text-gray-600 mt-2">Signed by ${escapeHtml(data.signedName)} on ${new Date(data.signedAt).toLocaleDateString()}</p></div>`;
             return;
           }
-          
+
           document.getElementById('estimate-id').textContent = data.id.slice(0, 8);
-          
-          const container = document.getElementById('packages-container');
-          container.innerHTML = data.packages.map(pkg => `
-            <div class="border rounded-lg p-6 ${pkg.name === 'better' ? 'border-blue-500 ring-1 ring-blue-500' : ''}">
-              <div class="flex justify-between items-start mb-4">
-                <div>
-                  <h2 class="text-xl font-semibold capitalize">${pkg.name} Package ${pkg.name === 'better' ? '⭐' : ''}</h2>
-                  ${pkg.name === 'better' ? '<p class="text-sm text-blue-600 font-medium">Most Popular</p>' : ''}
-                </div>
-                <div class="text-right">
-                  <p class="text-3xl font-bold">$${pkg.total.toFixed(2)}</p>
-                </div>
-              </div>
-              <table class="w-full text-sm">
-                <thead>
-                  <tr class="border-b">
-                    <th class="text-left py-2">Item</th>
-                    <th class="text-right py-2">Qty</th>
-                    <th class="text-right py-2">Rate</th>
-                    <th class="text-right py-2">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${pkg.items.map(item => `
-                    <tr class="border-b">
-                      <td class="py-2">${item.desc}</td>
-                      <td class="text-right py-2">${item.qty}</td>
-                      <td class="text-right py-2">$${item.rate.toFixed(2)}</td>
-                      <td class="text-right py-2">$${(item.qty * item.rate).toFixed(2)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `).join('');
-          
-          const buttons = document.getElementById('accept-buttons');
-          buttons.innerHTML = data.packages.map(pkg => `
-            <button 
-              onclick="selectPackage('${pkg.name}')"
-              class="flex-1 px-6 py-3 ${pkg.name === 'better' ? 'bg-blue-600 text-white' : 'bg-white border'} rounded-lg font-medium hover:opacity-90"
-            >
-              Accept ${pkg.name.charAt(0).toUpperCase() + pkg.name.slice(1)} - $${pkg.total.toFixed(2)}
-            </button>
-          `).join('');
-          
+          renderPackages(data.packages || []);
           document.getElementById('loading').classList.add('hidden');
           document.getElementById('estimate-content').classList.remove('hidden');
-          
           setupSignaturePad();
         } catch (err) {
           console.error('Failed to load estimate', err);
-          document.getElementById('loading').classList.add('hidden');
-          document.getElementById('error').classList.remove('hidden');
+          showError();
         }
       }
-      
+
+      function renderPackages(packages) {
+        document.getElementById('packages-container').innerHTML = packages.map(pkg => {
+          const items = packageItems(pkg);
+          return `
+            <article class="border rounded-lg p-4 ${pkg.name === 'better' ? 'border-blue-500 ring-1 ring-blue-500' : ''}">
+              <div class="mb-4">
+                <p class="text-sm text-gray-500">${pkg.name === 'better' ? 'Recommended' : '&nbsp;'}</p>
+                <h2 class="text-xl font-semibold">${escapeHtml(labels[pkg.name] || pkg.name)} Package</h2>
+                <p class="text-3xl font-bold mt-2">${money(pkg.total)}</p>
+              </div>
+              <div class="space-y-2">
+                ${items.map(item => `
+                  <div class="border-t pt-2">
+                    <p class="font-medium text-sm">${escapeHtml(item.desc)}</p>
+                    <p class="text-xs text-gray-600">${Number(item.qty || 0)} x ${money(item.rate)}${item.category ? ` - ${escapeHtml(item.category)}` : ''}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </article>
+          `;
+        }).join('');
+
+        document.getElementById('accept-buttons').innerHTML = packages.map(pkg => `
+          <button onclick="selectPackage('${escapeHtml(pkg.name)}')" class="px-4 py-3 ${pkg.name === 'better' ? 'bg-blue-600 text-white' : 'bg-white border'} rounded-lg font-medium hover:opacity-90">
+            Accept ${escapeHtml(labels[pkg.name] || pkg.name)} - ${money(pkg.total)}
+          </button>
+        `).join('');
+      }
+
+      function showError() {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('error').classList.remove('hidden');
+      }
+
       function setupSignaturePad() {
         canvas = document.getElementById('signature-pad');
         ctx = canvas.getContext('2d');
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = 128;
-        
-        ctx.strokeStyle = '#000';
+        resizeCanvas();
+        ctx.strokeStyle = '#111827';
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
-        
         canvas.addEventListener('mousedown', startDrawing);
         canvas.addEventListener('mousemove', draw);
         canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e.touches[0]); });
-        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e.touches[0]); });
+        canvas.addEventListener('mouseleave', stopDrawing);
+        canvas.addEventListener('touchstart', (event) => { event.preventDefault(); startDrawing(event.touches[0]); });
+        canvas.addEventListener('touchmove', (event) => { event.preventDefault(); draw(event.touches[0]); });
         canvas.addEventListener('touchend', stopDrawing);
-        
         document.getElementById('clear-sig').onclick = () => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          hasSignature = false;
         };
       }
-      
-      function startDrawing(e) {
+
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = 144;
+      }
+
+      function startDrawing(event) {
         isDrawing = true;
         const rect = canvas.getBoundingClientRect();
         ctx.beginPath();
-        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.moveTo(event.clientX - rect.left, event.clientY - rect.top);
       }
-      
-      function draw(e) {
+
+      function draw(event) {
         if (!isDrawing) return;
         const rect = canvas.getBoundingClientRect();
-        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.lineTo(event.clientX - rect.left, event.clientY - rect.top);
         ctx.stroke();
+        hasSignature = true;
       }
-      
+
       function stopDrawing() {
         isDrawing = false;
       }
-      
+
       window.selectPackage = function(pkgName) {
         selectedPackage = pkgName;
         document.getElementById('terms-modal').classList.remove('hidden');
       };
-      
+
       document.getElementById('decline-terms').onclick = () => {
         document.getElementById('terms-modal').classList.add('hidden');
         selectedPackage = null;
       };
-      
       document.getElementById('accept-terms').onclick = () => {
         document.getElementById('terms-modal').classList.add('hidden');
         document.getElementById('signature-modal').classList.remove('hidden');
+        setTimeout(resizeCanvas, 0);
       };
-      
       document.getElementById('cancel-sign').onclick = () => {
         document.getElementById('signature-modal').classList.add('hidden');
         document.getElementById('terms-modal').classList.remove('hidden');
       };
-      
       document.getElementById('submit-sign').onclick = async () => {
-        const name = document.getElementById('signer-name').value;
-        if (!name) {
-          alert('Please enter your name');
-          return;
-        }
-        
-        const signatureData = canvas.toDataURL();
-        
+        const button = document.getElementById('submit-sign');
+        const name = document.getElementById('signer-name').value.trim();
+        if (!name) return alert('Please enter your name');
+        if (!hasSignature) return alert('Please add your signature');
+
         try {
+          button.disabled = true;
+          button.textContent = 'Processing...';
           const signRes = await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, signatureData, packageName: selectedPackage }),
+            body: JSON.stringify({ name, signatureData: canvas.toDataURL(), packageName: selectedPackage }),
           });
+          if (!signRes.ok) throw new Error('Failed to sign estimate');
 
-          if (!signRes.ok) {
-            throw new Error('Failed to sign estimate');
-          }
-          
-          const res = await fetch(`${API_URL}/v1/payments/checkout`, {
+          const checkoutRes = await fetch(`${API_URL}/v1/payments/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ estimateId, packageName: selectedPackage }),
           });
-          
-          const { checkoutUrl } = await res.json();
-          if (!res.ok || !checkoutUrl) {
-            throw new Error('Failed to create payment checkout');
-          }
-
+          const { checkoutUrl } = await checkoutRes.json();
+          if (!checkoutRes.ok || !checkoutUrl) throw new Error('Failed to create payment checkout');
           window.location.href = checkoutUrl;
         } catch (err) {
-          alert('Failed to process signature');
+          alert(err.message || 'Failed to process signature');
+          button.disabled = false;
+          button.textContent = 'Sign and Pay Deposit';
         }
       };
-      
+
       loadEstimate();
     </script>
   </body>

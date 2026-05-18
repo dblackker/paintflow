@@ -1,0 +1,121 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+
+<Base title="Estimates">
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">Estimates</h2>
+        <p class="text-sm text-gray-600 mt-1">Track sent, accepted, and declined painting proposals.</p>
+      </div>
+      <a href="/estimates/new" class="w-full sm:w-auto text-center bg-blue-600 text-white px-4 py-3 sm:py-2 rounded-lg hover:bg-blue-700 font-medium">New Estimate</a>
+    </div>
+
+    <section class="bg-white border rounded-lg shadow-sm p-3 sm:p-4 mb-4">
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
+        <input id="search" placeholder="Search customer, phone, or email" class="w-full px-3 py-2 border rounded-lg" />
+        <select id="status-filter" class="w-full px-3 py-2 border rounded-lg">
+          <option value="all">All statuses</option>
+          <option value="sent">Sent</option>
+          <option value="accepted">Accepted</option>
+          <option value="declined">Declined</option>
+          <option value="draft">Draft</option>
+        </select>
+      </div>
+      <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm"></div>
+    </section>
+
+    <div id="estimates-list" class="grid gap-3">
+      <div class="bg-white border rounded-lg p-8 text-center text-gray-500">Loading estimates...</div>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    let estimates = [];
+
+    function money(value) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function apiJson(url, options = {}) {
+      const res = await fetch(url, { credentials: 'include', ...options });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    async function loadEstimates() {
+      try {
+        const { data } = await apiJson(`${API_URL}/v1/estimates?limit=100`);
+        estimates = data;
+        render();
+      } catch (err) {
+        console.error('Failed to load estimates', err);
+        window.showToast('Failed to load estimates', 'error');
+      }
+    }
+
+    function filteredEstimates() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const status = document.getElementById('status-filter').value;
+      return estimates.filter((estimate) => {
+        const haystack = `${estimate.leadName || ''} ${estimate.leadPhone || ''} ${estimate.leadEmail || ''}`.toLowerCase();
+        return (!q || haystack.includes(q)) && (status === 'all' || estimate.status === status);
+      });
+    }
+
+    function renderSummary(list) {
+      const counts = list.reduce((acc, estimate) => {
+        acc[estimate.status] = (acc[estimate.status] || 0) + 1;
+        return acc;
+      }, {});
+      const totalValue = list.reduce((sum, estimate) => sum + Number(estimate.total || 0), 0);
+      document.getElementById('summary').innerHTML = `
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Sent</p><p class="font-semibold">${counts.sent || 0}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Accepted</p><p class="font-semibold">${counts.accepted || 0}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Total Value</p><p class="font-semibold">${money(totalValue)}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Win Rate</p><p class="font-semibold">${list.length ? Math.round(((counts.accepted || 0) / list.length) * 100) : 0}%</p></div>
+      `;
+    }
+
+    function render() {
+      const list = filteredEstimates();
+      renderSummary(list);
+      const container = document.getElementById('estimates-list');
+      if (list.length === 0) {
+        container.innerHTML = '<div class="bg-white border rounded-lg p-8 text-center text-gray-500">No estimates match this view.</div>';
+        return;
+      }
+
+      container.innerHTML = list.map((estimate) => `
+        <article class="bg-white rounded-lg shadow-sm border p-4">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="font-semibold text-gray-950 truncate">${escapeHtml(estimate.leadName)}</h3>
+              <p class="text-sm text-gray-600 mt-1">${escapeHtml(estimate.leadPhone || estimate.leadEmail || 'No contact')}</p>
+              <p class="text-xs text-gray-500 mt-1">${new Date(estimate.createdAt).toLocaleDateString()} - ${escapeHtml(estimate.status)}</p>
+            </div>
+            <div class="sm:text-right">
+              <p class="text-xl font-bold">${money(estimate.total)}</p>
+              <a href="/estimates/${estimate.id}" class="inline-block mt-2 px-3 py-2 border rounded-lg text-sm hover:bg-gray-50">Open</a>
+            </div>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    document.getElementById('search').addEventListener('input', render);
+    document.getElementById('status-filter').addEventListener('change', render);
+    loadEstimates();
+  </script>
+</Base>
