@@ -483,3 +483,29 @@ export const portalTokens = pgTable('portal_tokens', {
   lastAccessedAt: timestamp('last_accessed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const roles = pgTable('roles', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 50 }).notNull(), // 'owner', 'admin', 'foreman', 'crew'
+  permissions: jsonb('permissions').notNull().default([]), // ['view_reports', 'manage_team', 'log_time_for_others', ...]
+  isSystem: boolean('is_system').default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const userRoles = pgTable('user_roles', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  roleId: uuid('role_id').references(() => roles.id).notNull(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const jobAssignments = pgTable('job_assignments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  role: varchar('role', { length: 50 }).notNull(), // 'foreman', 'crew'
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  assignedAt: timestamp('assigned_at').defaultNow().notNull(),
+});
