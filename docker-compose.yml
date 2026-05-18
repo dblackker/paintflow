@@ -14,18 +14,27 @@ services:
       - ./.git/HEAD:/tmp/.git/HEAD:ro
 
   migrate:
-    image: node:20-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.local
     working_dir: /workspace
     depends_on:
       - db
     volumes:
       - .:/workspace
+      - node_modules:/workspace/node_modules
+      - api_node_modules:/workspace/apps/api/node_modules
+      - web_node_modules:/workspace/apps/web/node_modules
+      - db_node_modules:/workspace/packages/db/node_modules
     environment:
-      DATABASE_URL: postgres://neon:npg@db:5432/neondb?sslmode=require
+      CI: "true"
+      DATABASE_URL: postgres://neon:npg@db:5432/neondb?sslmode=no-verify
     command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @paintflow/db db:migrate"
 
   api:
-    image: node:20-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.local
     working_dir: /workspace
     depends_on:
       migrate:
@@ -34,8 +43,13 @@ services:
       - "8787:8787"
     volumes:
       - .:/workspace
+      - node_modules:/workspace/node_modules
+      - api_node_modules:/workspace/apps/api/node_modules
+      - web_node_modules:/workspace/apps/web/node_modules
+      - db_node_modules:/workspace/packages/db/node_modules
     environment:
-      DATABASE_URL: postgres://neon:npg@db:5432/neondb?sslmode=require
+      CI: "true"
+      DATABASE_URL: postgres://neon:npg@db:5432/neondb?sslmode=no-verify
       APP_URL: http://127.0.0.1:8787
       PUBLIC_URL: http://127.0.0.1:4321
       CORS_ORIGINS: http://localhost:4321,http://127.0.0.1:4321
@@ -46,10 +60,27 @@ services:
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
-    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @paintflow/api dev -- --ip 0.0.0.0 --port 8787"
+    command: >
+      sh -lc "corepack enable &&
+      corepack pnpm install --frozen-lockfile &&
+      cd apps/api &&
+      corepack pnpm exec wrangler dev --ip 0.0.0.0 --port 8787
+      --var DATABASE_URL:$$DATABASE_URL
+      --var APP_URL:$$APP_URL
+      --var PUBLIC_URL:$$PUBLIC_URL
+      --var CORS_ORIGINS:$$CORS_ORIGINS
+      --var ENVIRONMENT:$$ENVIRONMENT
+      --var CRON_SECRET:$$CRON_SECRET
+      --var STRIPE_SECRET_KEY:$$STRIPE_SECRET_KEY
+      --var STRIPE_WEBHOOK_SECRET:$$STRIPE_WEBHOOK_SECRET
+      --var TWILIO_ACCOUNT_SID:$$TWILIO_ACCOUNT_SID
+      --var TWILIO_AUTH_TOKEN:$$TWILIO_AUTH_TOKEN
+      --var TWILIO_PHONE_NUMBER:$$TWILIO_PHONE_NUMBER"
 
   web:
-    image: node:20-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.local
     working_dir: /workspace
     depends_on:
       - api
@@ -57,6 +88,17 @@ services:
       - "4321:4321"
     volumes:
       - .:/workspace
+      - node_modules:/workspace/node_modules
+      - api_node_modules:/workspace/apps/api/node_modules
+      - web_node_modules:/workspace/apps/web/node_modules
+      - db_node_modules:/workspace/packages/db/node_modules
     environment:
+      CI: "true"
       PUBLIC_API_URL: http://127.0.0.1:8787
-    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @paintflow/web dev -- --host 0.0.0.0 --port 4321"
+    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && cd apps/web && corepack pnpm exec astro dev --host 0.0.0.0 --port 4321"
+
+volumes:
+  node_modules:
+  api_node_modules:
+  web_node_modules:
+  db_node_modules:

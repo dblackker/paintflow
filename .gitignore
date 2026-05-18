@@ -10,4 +10,5 @@ dist
 *.log
 .wrangler
 .corepack
+.pnpm-store/
 .neon_local/

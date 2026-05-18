@@ -11,7 +11,8 @@
     "drizzle-orm": "^0.31.2"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.22.7"
+    "drizzle-kit": "^0.22.7",
+    "pg": "^8.21.0"
   },
   "exports": {
     ".": "./src/index.ts",
