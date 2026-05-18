@@ -38,13 +38,12 @@ import Base from '../layouts/Base.astro';
           <form id="add-member-form" class="space-y-4">
             <input name="name" placeholder="Full Name" required class="w-full px-3 py-2 border rounded-lg">
             <input name="email" type="email" placeholder="Email" required class="w-full px-3 py-2 border rounded-lg">
-            <input name="phone" placeholder="Phone (optional)" class="w-full px-3 py-2 border rounded-lg">
             <select name="role" class="w-full px-3 py-2 border rounded-lg">
               <option value="crew">Crew Member</option>
               <option value="estimator">Estimator</option>
               <option value="admin">Admin</option>
             </select>
-            <input name="hourlyRate" type="number" step="0.01" placeholder="Hourly Rate (optional)" class="w-full px-3 py-2 border rounded-lg">
+            <input name="hourlyRate" type="number" step="0.01" min="0" placeholder="Hourly Rate" class="w-full px-3 py-2 border rounded-lg">
             <div class="flex gap-3 pt-4">
               <button type="button" id="cancel-btn" class="flex-1 px-4 py-2 border rounded-lg">Cancel</button>
               <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg">Add Member</button>
@@ -80,7 +79,6 @@ import Base from '../layouts/Base.astro';
           <div>
             <p class="font-medium">${member.name || 'Unnamed'}</p>
             <p class="text-sm text-gray-600">${member.email}</p>
-            ${member.phone ? `<p class="text-sm text-gray-500">${member.phone}</p>` : ''}
           </div>
           <div class="flex items-center gap-3">
             ${member.hourlyRate ? `<span class="text-sm text-gray-600">$${member.hourlyRate}/hr</span>` : ''}
@@ -118,8 +116,9 @@ import Base from '../layouts/Base.astro';
 
     window.removeMember = async (id) => {
       if (!confirm('Remove this team member?')) return;
-      // TODO: Add DELETE endpoint
-      window.showToast('Remove feature coming soon', 'info');
+      await fetch(`${API_URL}/v1/settings/team/${id}`, { method: 'DELETE', credentials: 'include' });
+      window.showToast('Team member removed', 'success');
+      loadMembers();
     };
 
     loadMembers();

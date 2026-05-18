@@ -13,8 +13,8 @@ export async function tenantMiddleware(c: Context<{ Bindings: Env; Variables: Va
       c.set('userId', session.userId);
       c.set('orgId', session.orgId);
       
-      // TODO: Set Postgres RLS context
-      // await db.execute(sql`SELECT set_config('app.current_org_id', ${session.orgId}, true)`);
+      // Neon HTTP does not keep a per-request Postgres session. Routes must keep
+      // explicit org filters on tenant-owned data.
     }
   }
   

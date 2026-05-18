@@ -6,6 +6,7 @@ import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createOAuthState, consumeOAuthState } from '../auth';
 import { getCompanyInfo, createQBCustomer, createQBInvoice, getTaxCodes, getItems } from '../lib/quickbooks';
+import { timingSafeEqual } from '../lib/stripe';
 
 const qb = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -270,7 +271,7 @@ qb.post('/webhook', async (c) => {
     const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
     const expectedSig = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
     
-    if (expectedSig !== signature) {
+    if (!timingSafeEqual(expectedSig, signature)) {
       return c.json({ error: 'Invalid signature' }, 401);
     }
   }

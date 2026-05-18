@@ -5,6 +5,7 @@ export interface Env {
   KV: KVNamespace;
   R2?: R2Bucket;
   PUBLIC_URL: string;
+  CORS_ORIGINS?: string;
   COOKIE_DOMAIN?: string;
   RESEND_API_KEY: string;
   STRIPE_SECRET_KEY: string;

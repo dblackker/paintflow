@@ -68,13 +68,28 @@ billing.post('/webhook', async (c) => {
       return c.json({ error: 'Invalid signature' }, 400);
     }
     
-    const event = JSON.parse(body);
+    const event = JSON.parse(body) as {
+      type?: string;
+      data?: { object?: { metadata?: Record<string, string>; amount_total?: number } };
+    };
     
     if (event.type === 'checkout.session.completed') {
-      const { estimateId, orgId, packageName } = event.data.object.metadata;
-      const amountTotal = event.data.object.amount_total / 100;
+      const metadata = event.data?.object?.metadata;
+      const estimateId = metadata?.estimateId;
+      const orgId = metadata?.orgId;
+      const amountTotal = (event.data?.object?.amount_total ?? 0) / 100;
+      if (!estimateId || !orgId || amountTotal <= 0) {
+        return c.json({ error: 'Missing checkout metadata' }, 400);
+      }
       
       const db = createDb(c.env.DATABASE_URL);
+      const estimate = await db.query.estimates.findFirst({
+        where: eq(estimates.id, estimateId),
+      });
+
+      if (!estimate || estimate.orgId !== orgId) {
+        return c.json({ error: 'Estimate metadata mismatch' }, 400);
+      }
       
       // Mark estimate as accepted
       await db.update(estimates)
@@ -90,13 +105,12 @@ billing.post('/webhook', async (c) => {
       
       if (qbConnection) {
         try {
-          const estimate = await db.query.estimates.findFirst({
-            where: eq(estimates.id, estimateId),
-          });
-          
           const lead = await db.query.leads.findFirst({
-            where: eq(leads.id, estimate!.leadId),
+            where: eq(leads.id, estimate.leadId),
           });
+          if (!lead || lead.orgId !== orgId) {
+            throw new Error('Lead metadata mismatch');
+          }
           
           // Sync invoice
           const invoiceId = await createQBInvoice(c.env, orgId, estimate, lead);

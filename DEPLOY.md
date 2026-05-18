@@ -99,6 +99,7 @@ Set in Cloudflare dashboard or wrangler.toml:
 - `APP_URL` - API base URL, for example `https://api.paintflow.app`
 - `PUBLIC_URL` - Public web app URL
 - `PUBLIC_API_URL` - Public API URL used by the web app
+- `CORS_ORIGINS` - Comma-separated web origins allowed to call the API
 - `COOKIE_DOMAIN` - Cookie domain for shared auth, for example `.paintflow.app`
 - `DATABASE_URL` - Neon connection string
 - `KV` - KV namespace binding

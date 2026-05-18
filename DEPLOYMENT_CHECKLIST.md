@@ -11,6 +11,7 @@
   APP_URL=https://api.paintflow.app
   PUBLIC_URL=https://app.paintflow.app
   PUBLIC_API_URL=https://api.paintflow.app
+  CORS_ORIGINS=https://app.paintflow.app,https://paintflow.app
   COOKIE_DOMAIN=.paintflow.app
   ENVIRONMENT=production
   SESSION_SECRET=...

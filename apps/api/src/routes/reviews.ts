@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { reviewRequests, jobs, leads, orgBranding } from '@paintflow/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -9,7 +10,14 @@ import { sendSMS } from '../lib/twilio';
 
 const reviews = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-reviews.use('*', authMiddleware);
+reviews.use('/request', authMiddleware);
+reviews.use('/pending', authMiddleware);
+reviews.use('/stats', authMiddleware);
+
+const reviewRatingSchema = z.object({
+  rating: z.coerce.number().int().min(1).max(5),
+  feedback: z.string().max(5000).optional(),
+});
 
 // POST /v1/reviews/request
 reviews.post('/request', async (c) => {
@@ -77,25 +85,14 @@ reviews.post('/request', async (c) => {
   return c.json({ success: true, reviewUrl });
 });
 
-// GET /v1/reviews/pending
-reviews.get('/pending', async (c) => {
-  const orgId = c.get('orgId');
-  const db = createDb(c.env.DATABASE_URL);
-  
-  const requests = await db
-    .select()
-    .from(reviewRequests)
-    .where(and(eq(reviewRequests.orgId, orgId), eq(reviewRequests.status, 'pending')));
-  
-  return c.json({ data: requests });
-});
-
-export default reviews;
-
 // POST /v1/reviews/:id/rate (public, no auth)
 reviews.post('/:id/rate', async (c) => {
   const id = c.req.param('id');
-  const { rating, feedback } = await c.req.json();
+  const parsed = reviewRatingSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  const { rating, feedback } = parsed.data;
   
   const db = createDb(c.env.DATABASE_URL);
   const request = await db.query.reviewRequests.findFirst({
@@ -108,7 +105,7 @@ reviews.post('/:id/rate', async (c) => {
   
   await db.update(reviewRequests)
     .set({
-      rating,
+      rating: rating.toString(),
       status: rating >= 4 ? 'redirected_to_google' : 'feedback_collected',
       respondedAt: new Date(),
     })
@@ -121,6 +118,19 @@ reviews.post('/:id/rate', async (c) => {
   }
   
   return c.json({ success: true, redirect: rating >= 4 });
+});
+
+// GET /v1/reviews/pending
+reviews.get('/pending', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const requests = await db
+    .select()
+    .from(reviewRequests)
+    .where(and(eq(reviewRequests.orgId, orgId), eq(reviewRequests.status, 'pending')));
+
+  return c.json({ data: requests });
 });
 
 // GET /v1/reviews/stats
@@ -160,3 +170,5 @@ reviews.get('/stats', async (c) => {
     }
   });
 });
+
+export default reviews;

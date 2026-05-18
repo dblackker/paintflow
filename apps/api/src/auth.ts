@@ -41,7 +41,18 @@ export async function getSession(
   const data = await env.KV.get(`session:${token}`);
   if (!data) return null;
   
-  const session = JSON.parse(data) as Session;
+  let session: Session;
+  try {
+    session = JSON.parse(data) as Session;
+  } catch {
+    await env.KV.delete(`session:${token}`);
+    return null;
+  }
+
+  if (!session.userId || !session.orgId || !session.email || typeof session.expiresAt !== 'number') {
+    await env.KV.delete(`session:${token}`);
+    return null;
+  }
   
   // Check expiration
   if (session.expiresAt < Date.now()) {
@@ -84,7 +95,12 @@ export async function consumeOAuthState(
 
   await env.KV.delete(key);
 
-  const state = JSON.parse(data) as { orgId?: string; userId?: string; createdAt?: number };
+  let state: { orgId?: string; userId?: string; createdAt?: number };
+  try {
+    state = JSON.parse(data) as { orgId?: string; userId?: string; createdAt?: number };
+  } catch {
+    return null;
+  }
   if (!state.orgId || !state.createdAt || Date.now() - state.createdAt > 10 * 60 * 1000) {
     return null;
   }

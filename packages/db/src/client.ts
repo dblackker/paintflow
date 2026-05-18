@@ -5,18 +5,12 @@ import * as schema from './schema';
 // Configure Neon to use fetch
 neonConfig.fetchConnectionCache = true;
 
-export function createDb(url: string, orgId?: string) {
+export function createDb(url: string) {
   const sql = neon(url);
   const db = drizzle(sql, { schema });
   
-  // If orgId is provided, set RLS context
-  // Note: With HTTP driver, we need to set config per query
-  // This is a simplified version - in production, wrap queries to set config first
-  if (orgId) {
-    // TODO: Execute SET LOCAL app.current_org_id = '...'
-    // For now, we filter by orgId in queries explicitly
-  }
-  
+  // Neon HTTP does not keep a stable per-request Postgres session for SET LOCAL.
+  // API routes enforce tenant isolation with explicit org_id filters.
   return db;
 }
 

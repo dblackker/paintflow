@@ -1,13 +1,22 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { orgSettings, serviceAreas, teamMembers, orgBranding } from '@paintflow/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
 const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 settings.use('*', authMiddleware);
+
+const teamMemberSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email().optional(),
+  role: z.string().min(1),
+  hourlyRate: z.coerce.number().min(0).default(0),
+  burdenRate: z.coerce.number().min(0).max(100).default(30),
+});
 
 // GET /v1/settings/org
 settings.get('/org', async (c) => {
@@ -76,7 +85,9 @@ settings.get('/team', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  const members = await db.select().from(teamMembers).where(eq(teamMembers.orgId, orgId));
+  const members = await db.select().from(teamMembers).where(
+    and(eq(teamMembers.orgId, orgId), eq(teamMembers.isActive, true))
+  );
   
   return c.json({ data: members });
 });
@@ -85,11 +96,36 @@ settings.get('/team', async (c) => {
 settings.post('/team', async (c) => {
   const orgId = c.get('orgId');
   const body = await c.req.json();
+  const parsed = teamMemberSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
   const db = createDb(c.env.DATABASE_URL);
   
-  const [member] = await db.insert(teamMembers).values({ orgId, ...body }).returning();
+  const [member] = await db.insert(teamMembers).values({
+    orgId,
+    name: parsed.data.name,
+    email: parsed.data.email,
+    role: parsed.data.role,
+    hourlyRate: parsed.data.hourlyRate.toString(),
+    burdenRate: parsed.data.burdenRate.toString(),
+  }).returning();
   
   return c.json({ data: member }, 201);
+});
+
+// DELETE /v1/settings/team/:id
+settings.delete('/team/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  await db.update(teamMembers)
+    .set({ isActive: false })
+    .where(and(eq(teamMembers.id, id), eq(teamMembers.orgId, orgId)));
+
+  return c.json({ success: true });
 });
 
 export default settings;

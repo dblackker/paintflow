@@ -33,8 +33,16 @@ import rolesRoutes from './routes/roles';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const defaultOrigins = ['http://localhost:4321', 'https://app.paintflow.app', 'https://paintflow.app'];
+
 app.use('*', cors({
-  origin: ['http://localhost:4321', 'https://app.paintflow.app', 'https://paintflow.app'],
+  origin: (origin, c) => {
+    const configuredOrigins = c.env.CORS_ORIGINS
+      ? c.env.CORS_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
+      : defaultOrigins;
+
+    return configuredOrigins.includes(origin) ? origin : null;
+  },
   credentials: true,
 }));
 

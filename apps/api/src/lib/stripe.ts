@@ -38,7 +38,8 @@ export async function createCheckoutSession(env: any, params: {
 export async function verifyWebhookSignature(
   payload: string,
   signature: string,
-  secret: string
+  secret: string,
+  toleranceSeconds = 300
 ): Promise<boolean> {
   // Stripe webhook signature verification
   // Format: t=timestamp,v1=signature
@@ -47,6 +48,12 @@ export async function verifyWebhookSignature(
   const sig = parts.find(p => p.startsWith('v1='))?.split('=')[1];
   
   if (!timestamp || !sig) return false;
+
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isFinite(timestampSeconds)) return false;
+
+  const ageSeconds = Math.abs(Date.now() / 1000 - timestampSeconds);
+  if (ageSeconds > toleranceSeconds) return false;
   
   const signedPayload = `${timestamp}.${payload}`;
   
@@ -70,5 +77,22 @@ export async function verifyWebhookSignature(
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
   
-  return expectedSig === sig;
+  return timingSafeEqual(expectedSig, sig);
+}
+
+export function timingSafeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const left = encoder.encode(a);
+  const right = encoder.encode(b);
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  let diff = 0;
+  for (let i = 0; i < left.length; i++) {
+    diff |= left[i] ^ right[i];
+  }
+
+  return diff === 0;
 }
