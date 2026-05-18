@@ -1,7 +1,7 @@
 {
   "name": "PaintFlow",
   "short_name": "PaintFlow",
-  "description": "Painting contractor CRM and estimating",
+  "description": "CRM for painting contractors",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",

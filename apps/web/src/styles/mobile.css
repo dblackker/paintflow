@@ -1,0 +1,78 @@
+/* Mobile touch targets - minimum 44px */
+.btn,
+button,
+a.btn,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Responsive tables */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -1rem;
+  padding: 0 1rem;
+}
+
+/* Mobile cards instead of tables */
+@media (max-width: 768px) {
+  .table-mobile-cards thead {
+    display: none;
+  }
+  
+  .table-mobile-cards tr {
+    display: block;
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+  }
+  
+  .table-mobile-cards td {
+    display: block;
+    border: none;
+    padding: 0.25rem 0;
+  }
+  
+  .table-mobile-cards td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    display: block;
+    font-size: 0.75rem;
+    color: #6b7280;
+  }
+}
+
+/* Bottom nav spacing */
+.has-bottom-nav {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
+/* Loading skeletons */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Touch feedback */
+.touch-feedback:active {
+  transform: scale(0.98);
+  opacity: 0.8;
+}
+
+/* Prevent zoom on input focus */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Safe area insets */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
