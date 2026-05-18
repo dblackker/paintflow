@@ -33,31 +33,21 @@ import Layout from '../../components/Layout.astro';
             </select>
           </div>
           <input type="text" name="subject" placeholder="Subject (email only)" class="w-full px-3 py-2 border rounded">
-          <textarea name="body" rows="6" placeholder="Message body. Use customer_name, estimate_total..." required class="w-full px-3 py-2 border rounded font-mono text-sm"></textarea>
-          <div class="flex items-center gap-4">
-            <label class="flex items-center gap-2">
-              <input type="checkbox" name="enabled" checked>
-              <span class="text-sm">Enabled</span>
-            </label>
-            <input type="number" name="delayDays" placeholder="Delay days" value="0" class="px-3 py-2 border rounded w-32">
+          <input type="text" name="subject" placeholder="Subject (email only)" class="w-full px-3 py-2 border rounded">
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-sm text-gray-600">Insert variable:</span>
+              <button type="button" onclick="insertVar('customer_name')" class="px-2 py-1 text-xs border rounded hover:bg-gray-50">{customer_name}</button>
+              <button type="button" onclick="insertVar('estimate_total')" class="px-2 py-1 text-xs border rounded hover:bg-gray-50">{estimate_total}</button>
+              <button type="button" onclick="insertVar('company_name')" class="px-2 py-1 text-xs border rounded hover:bg-gray-50">{company_name}</button>
+              <button type="button" onclick="insertVar('job_address')" class="px-2 py-1 text-xs border rounded hover:bg-gray-50">{job_address}</button>
+            </div>
+            <textarea name="body" id="template-body" rows="6" placeholder="Message body..." required class="w-full px-3 py-2 border rounded font-mono text-sm"></textarea>
+            <div class="mt-2 p-3 bg-gray-50 rounded text-sm">
+              <p class="text-gray-600 mb-1">Preview:</p>
+              <p id="preview" class="font-mono text-xs text-gray-700"></p>
+            </div>
           </div>
-          <div class="flex gap-3">
-            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
-            <button type="button" onclick="document.getElementById('new-modal').classList.add('hidden')" class="px-4 py-2 border rounded">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </main>
-
-  <script>
-    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
-    
-    async function loadTemplates() {
-      try {
-        const res = await fetch(`${API_URL}/v1/templates`, { credentials: 'include' });
-        const { data } = await res.json();
-        const container = document.getElementById('templates-list');
         
         if (data.length === 0) {
           container.innerHTML = '<p class="text-gray-500">No templates yet</p>';
@@ -102,3 +92,31 @@ import Layout from '../../components/Layout.astro';
     loadTemplates();
   </script>
 </Layout>
+
+    // Variable insertion
+    window.insertVar = (varName) => {
+      const textarea = document.getElementById('template-body');
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const before = text.substring(0, start);
+      const after = text.substring(end);
+      textarea.value = before + `{${varName}}` + after;
+      textarea.focus();
+      textarea.setSelectionRange(start + varName.length + 2, start + varName.length + 2);
+      updatePreview();
+    };
+
+    // Live preview
+    function updatePreview() {
+      const body = document.getElementById('template-body')?.value || '';
+      const preview = body
+        .replace(/\{customer_name\}/g, 'John Smith')
+        .replace(/\{estimate_total\}/g, '$5,200')
+        .replace(/\{company_name\}/g, 'Black Line Painting')
+        .replace(/\{job_address\}/g, '123 Main St');
+      document.getElementById('preview').textContent = preview;
+    }
+
+    document.getElementById('template-body')?.addEventListener('input', updatePreview);
+    updatePreview();
