@@ -1,0 +1,169 @@
+---
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Tracking - PaintFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16 items-center">
+        <h1 class="text-xl font-semibold">Time Tracking</h1>
+        <button id="add-time" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">+ Log Time</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="bg-white rounded-lg shadow-sm border p-4 mb-6 flex gap-4 items-center">
+      <button id="prev-week" class="px-3 py-1 border rounded">←</button>
+      <span id="week-range" class="flex-1 text-center font-medium"></span>
+      <button id="next-week" class="px-3 py-1 border rounded">→</button>
+    </div>
+
+    <div id="timesheet" class="bg-white rounded-lg shadow-sm border divide-y"></div>
+  </main>
+
+  <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-md w-full p-6">
+      <h2 class="text-lg font-semibold mb-4">Log Time</h2>
+      <form id="time-form" class="space-y-4">
+        <select name="teamMemberId" id="member-select" class="w-full px-3 py-2 border rounded-lg" required>
+          <option value="">Select crew member...</option>
+        </select>
+        <select name="jobId" id="job-select" class="w-full px-3 py-2 border rounded-lg" required>
+          <option value="">Select job...</option>
+        </select>
+        <input type="date" name="date" class="w-full px-3 py-2 border rounded-lg" required>
+        <input type="number" name="hours" step="0.25" placeholder="Hours (e.g. 8)" class="w-full px-3 py-2 border rounded-lg" required>
+        <input type="text" name="description" placeholder="What did you work on?" class="w-full px-3 py-2 border rounded-lg">
+        <div class="flex gap-3">
+          <button type="button" onclick="closeModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
+          <button type="submit" class="flex-1 py-2 bg-blue-600 text-white rounded-lg">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    let currentWeekStart = getWeekStart(new Date());
+
+    function getWeekStart(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(d.setDate(diff));
+    }
+
+    function formatDate(date) {
+      return date.toISOString().split('T')[0];
+    }
+
+    async function loadData() {
+      const [members, jobs, time] = await Promise.all([
+        fetch(`${API_URL}/v1/team/members`, { credentials: 'include' }).then(r => r.json()),
+        fetch(`${API_URL}/v1/jobs`, { credentials: 'include' }).then(r => r.json()),
+        fetch(`${API_URL}/v1/team/time`, { credentials: 'include' }).then(r => r.json()),
+      ]);
+
+      const memberSelect = document.getElementById('member-select');
+      memberSelect.innerHTML = '<option value="">Select crew member...</option>' + 
+        members.data.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+      const jobSelect = document.getElementById('job-select');
+      jobSelect.innerHTML = '<option value="">Select job...</option>' + 
+        jobs.data.map(j => `<option value="${j.id}">${j.title}</option>`).join('');
+
+      renderTimesheet(time.data);
+      document.querySelector('input[name="date"]').value = formatDate(new Date());
+    }
+
+    function renderTimesheet(entries) {
+      const weekEnd = new Date(currentWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      
+      document.getElementById('week-range').textContent = 
+        `${currentWeekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`;
+
+      const weekEntries = entries.filter(e => {
+        const date = new Date(e.date);
+        return date >= currentWeekStart && date <= weekEnd;
+      });
+
+      if (!weekEntries.length) {
+        document.getElementById('timesheet').innerHTML = 
+          '<div class="p-8 text-center text-gray-500">No time entries this week</div>';
+        return;
+      }
+
+      const grouped = {};
+      weekEntries.forEach(e => {
+        const key = e.jobId + '|' + e.teamMemberId;
+        if (!grouped[key]) grouped[key] = { entries: [], total: 0 };
+        grouped[key].entries.push(e);
+        grouped[key].total += parseFloat(e.hours);
+      });
+
+      document.getElementById('timesheet').innerHTML = Object.values(grouped).map(g => {
+        const first = g.entries[0];
+        return `
+          <div class="p-4">
+            <div class="flex justify-between">
+              <div>
+                <p class="font-medium">${first.description || 'Labor'}</p>
+                <p class="text-sm text-gray-600">${g.entries.length} entries</p>
+              </div>
+              <div class="text-right">
+                <p class="font-semibold">${g.total.toFixed(2)} hrs</p>
+                <p class="text-sm text-gray-600">$${(g.total * parseFloat(first.hourlyRate)).toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('add-time').addEventListener('click', () => {
+      document.getElementById('modal').classList.remove('hidden');
+    });
+
+    window.closeModal = () => document.getElementById('modal').classList.add('hidden');
+
+    document.getElementById('time-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = Object.fromEntries(form);
+      data.hours = parseFloat(data.hours);
+      data.date = new Date(data.date).toISOString();
+
+      await fetch(`${API_URL}/v1/team/time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+
+      closeModal();
+      loadData();
+    });
+
+    document.getElementById('prev-week').addEventListener('click', () => {
+      currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+      loadData();
+    });
+
+    document.getElementById('next-week').addEventListener('click', () => {
+      currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+      loadData();
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
