@@ -77,11 +77,13 @@
               progress.className = 'bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6';
               progress.innerHTML = `
                 <div class="flex items-start gap-3">
-                  <span class="text-2xl">⚠️</span>
                   <div class="flex-1">
                     <p class="font-medium text-yellow-900">Complete your setup</p>
-                    <p class="text-sm text-yellow-800 mt-1">Finish configuring PaintFlow</p>
-                    <a href="/onboarding" class="inline-block mt-2 text-sm font-medium text-yellow-900 hover:underline">Continue setup →</a>
+                    <p class="text-sm text-yellow-800 mt-1">Finish configuring PaintFlow so estimates, deposits, and job costing work from day one.</p>
+                    <div class="flex flex-wrap gap-3 mt-3">
+                      <a href="/onboarding" class="inline-block text-sm font-medium text-yellow-900 hover:underline">Continue setup</a>
+                      <a href="/billing" class="inline-block text-sm font-medium text-yellow-900 hover:underline">Compare plans</a>
+                    </div>
                   </div>
                 </div>
               `;

@@ -106,7 +106,7 @@ import Base from '../layouts/Base.astro';
         const form = document.getElementById(formId);
         Array.from(form.elements).forEach(el => {
           if (el.name && data[el.name] !== undefined) {
-            el.value = data[el.name];
+            el.value = el.name === 'salesTaxRate' ? (Number(data[el.name]) * 100).toString() : data[el.name];
           }
         });
       });
@@ -114,7 +114,7 @@ import Base from '../layouts/Base.astro';
       // Check connectors
       const calRes = await fetch(`${API_URL}/v1/calendar/status`, { credentials: 'include' });
       const { connected } = await calRes.json();
-      document.getElementById('calendar-status').textContent = connected ? '✓ Connected' : 'Not connected';
+      document.getElementById('calendar-status').textContent = connected ? 'Connected' : 'Not connected';
       document.getElementById('stripe-status').textContent = 'Configure in Stripe dashboard';
       document.getElementById('qb-status').textContent = 'Check QuickBooks settings';
     }

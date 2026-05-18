@@ -163,12 +163,12 @@ auth.get('/verify', async (c) => {
     const welcomePayload = {
       personalizations: [{ to: [{ email }] }],
       from: { email: 'welcome@paintflow.app', name: 'PaintFlow' },
-      subject: 'Welcome to PaintFlow! 🎨',
+      subject: 'Welcome to PaintFlow',
       content: [{
         type: 'text/html',
         value: `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
 <h1>Welcome to PaintFlow!</h1>
-<p>You're all set. <a href="${c.env.PUBLIC_URL}/onboarding">Start onboarding →</a></p>
+<p>You're all set. <a href="${c.env.PUBLIC_URL}/onboarding">Start onboarding</a></p>
 </body></html>`
       }]
     };

@@ -1,0 +1,90 @@
+---
+const plan = Astro.url.searchParams.get('plan') || 'pro';
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Start Free Trial - PaintFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-gray-50">
+    <main class="max-w-5xl mx-auto px-4 py-10 grid lg:grid-cols-[1fr_420px] gap-8 items-start">
+      <section class="pt-6">
+        <a href="/" class="text-sm text-gray-600 hover:text-gray-900">PaintFlow</a>
+        <h1 class="text-4xl font-bold tracking-tight text-gray-950 mt-8">Set up your painting CRM in minutes</h1>
+        <p class="text-lg text-gray-700 mt-4 max-w-2xl">Start with company defaults, service areas, deposit settings, and the tools your team needs to move from lead to estimate to job costing.</p>
+        <div class="grid sm:grid-cols-3 gap-3 mt-8">
+          <div class="bg-white border rounded-lg p-4">
+            <p class="font-semibold">Leads</p>
+            <p class="text-sm text-gray-600 mt-1">Capture and follow up</p>
+          </div>
+          <div class="bg-white border rounded-lg p-4">
+            <p class="font-semibold">Estimates</p>
+            <p class="text-sm text-gray-600 mt-1">Good/Better/Best packages</p>
+          </div>
+          <div class="bg-white border rounded-lg p-4">
+            <p class="font-semibold">Jobs</p>
+            <p class="text-sm text-gray-600 mt-1">Schedule and cost work</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-white border rounded-lg shadow-sm p-6">
+        <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">14-day trial</p>
+        <h2 class="text-2xl font-bold mt-2">Create your workspace</h2>
+        <p class="text-sm text-gray-600 mt-2">No password. We will send a secure sign-in link.</p>
+        <form id="signup-form" class="space-y-4 mt-6">
+          <input type="hidden" name="plan" value={plan} />
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Work email</label>
+            <input id="email" name="email" type="email" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="owner@example.com" />
+          </div>
+          <button id="submit" type="submit" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Send magic link</button>
+        </form>
+        <div id="message" class="hidden mt-4 rounded-lg border p-3 text-sm"></div>
+        <p class="text-xs text-gray-500 mt-5">Selected plan: <span class="font-medium">{plan}</span>. You can change plans from Billing after setup.</p>
+      </section>
+    </main>
+
+    <script>
+      const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+      const form = document.getElementById('signup-form');
+      const message = document.getElementById('message');
+      const submit = document.getElementById('submit');
+
+      function showMessage(text, type = 'success') {
+        message.textContent = text;
+        message.className = `mt-4 rounded-lg border p-3 text-sm ${type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`;
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        submit.disabled = true;
+        submit.textContent = 'Sending...';
+
+        try {
+          const formData = new FormData(form);
+          const res = await fetch(`${API_URL}/v1/auth/magic-link`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: formData.get('email'),
+              plan: formData.get('plan'),
+            }),
+          });
+          const payload = await res.json();
+          if (!res.ok) throw new Error(payload.error || 'Failed to send magic link');
+          showMessage('Check your email for the sign-in link. It expires in 15 minutes.');
+        } catch (err) {
+          showMessage(err.message || 'Failed to start trial', 'error');
+        } finally {
+          submit.disabled = false;
+          submit.textContent = 'Send magic link';
+        }
+      });
+    </script>
+  </body>
+</html>
