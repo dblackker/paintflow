@@ -376,3 +376,19 @@ export const auditLogs = pgTable('audit_logs', {
   userAgent: text('user_agent'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const estimateTemplates = pgTable('estimate_templates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  category: varchar('category', { length: 100 }), // 'room', 'full_estimate', 'package'
+  isShared: boolean('is_shared').notNull().default(false), // shared with team
+  isSmart: boolean('is_smart').notNull().default(false), // auto-updates rates
+  rooms: jsonb('rooms').notNull(), // [{name, roomType, items: [...]}]
+  packages: jsonb('packages'), // for full estimate templates
+  usageCount: integer('usage_count').notNull().default(0),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
