@@ -10,3 +10,4 @@ dist
 *.log
 .wrangler
 .corepack
+.neon_local/

@@ -1,0 +1,62 @@
+services:
+  db:
+    image: neondatabase/neon_local:latest
+    ports:
+      - "5432:5432"
+    environment:
+      NEON_API_KEY: ${NEON_API_KEY}
+      NEON_PROJECT_ID: ${NEON_PROJECT_ID}
+      PARENT_BRANCH_ID: ${PARENT_BRANCH_ID:-}
+      BRANCH_ID: ${BRANCH_ID:-}
+      DELETE_BRANCH: ${DELETE_BRANCH:-false}
+    volumes:
+      - ./.neon_local:/tmp/.neon_local
+      - ./.git/HEAD:/tmp/.git/HEAD:ro
+
+  migrate:
+    image: node:20-alpine
+    working_dir: /workspace
+    depends_on:
+      - db
+    volumes:
+      - .:/workspace
+    environment:
+      DATABASE_URL: postgres://neon:npg@db:5432/neondb?sslmode=require
+    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @paintflow/db db:migrate"
+
+  api:
+    image: node:20-alpine
+    working_dir: /workspace
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8787:8787"
+    volumes:
+      - .:/workspace
+    environment:
+      DATABASE_URL: postgres://neon:npg@db:5432/neondb?sslmode=require
+      APP_URL: http://127.0.0.1:8787
+      PUBLIC_URL: http://127.0.0.1:4321
+      CORS_ORIGINS: http://localhost:4321,http://127.0.0.1:4321
+      ENVIRONMENT: development
+      CRON_SECRET: dev-cron-secret
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_replace_me}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_replace_me}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @paintflow/api dev -- --ip 0.0.0.0 --port 8787"
+
+  web:
+    image: node:20-alpine
+    working_dir: /workspace
+    depends_on:
+      - api
+    ports:
+      - "4321:4321"
+    volumes:
+      - .:/workspace
+    environment:
+      PUBLIC_API_URL: http://127.0.0.1:8787
+    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @paintflow/web dev -- --host 0.0.0.0 --port 4321"
