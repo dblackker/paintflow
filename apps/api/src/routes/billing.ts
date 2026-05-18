@@ -3,16 +3,13 @@ import { createDb } from '@paintflow/db';
 import { estimates, leads, quickbooksConnections } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
-import { authMiddleware } from '../middleware/tenant';
 import { createCheckoutSession, verifyWebhookSignature } from '../lib/stripe';
 import { createQBInvoice, createQBPayment } from '../lib/quickbooks';
+import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-billing.use('/checkout', authMiddleware);
-
 billing.post('/checkout', async (c) => {
-  const orgId = c.get('orgId');
   const { estimateId, packageName } = await c.req.json();
   
   const db = createDb(c.env.DATABASE_URL);
@@ -21,7 +18,7 @@ billing.post('/checkout', async (c) => {
     where: eq(estimates.id, estimateId),
   });
   
-  if (!estimate || estimate.orgId !== orgId) {
+  if (!estimate) {
     return c.json({ error: 'Estimate not found' }, 404);
   }
   
@@ -32,11 +29,16 @@ billing.post('/checkout', async (c) => {
   }
   
   try {
+    const packageTotal = Number(pkg.total);
+    if (!Number.isFinite(packageTotal) || packageTotal <= 0) {
+      return c.json({ error: 'Invalid package total' }, 400);
+    }
+
     const session = await createCheckoutSession(c.env, {
-      amount: Math.round(pkg.total * 0.5 * 100) / 100,
+      amount: Math.round(packageTotal * 0.5 * 100) / 100,
       successUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}/success`,
       cancelUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}`,
-      metadata: { estimateId, orgId, packageName },
+      metadata: { estimateId, orgId: estimate.orgId, packageName },
     });
     
     return c.json({ 
@@ -77,6 +79,7 @@ billing.post('/webhook', async (c) => {
       const metadata = event.data?.object?.metadata;
       const estimateId = metadata?.estimateId;
       const orgId = metadata?.orgId;
+      const packageName = metadata?.packageName;
       const amountTotal = (event.data?.object?.amount_total ?? 0) / 100;
       if (!estimateId || !orgId || amountTotal <= 0) {
         return c.json({ error: 'Missing checkout metadata' }, 400);
@@ -91,12 +94,14 @@ billing.post('/webhook', async (c) => {
         return c.json({ error: 'Estimate metadata mismatch' }, 400);
       }
       
-      // Mark estimate as accepted
-      await db.update(estimates)
+      const [acceptedEstimate] = await db.update(estimates)
         .set({ status: 'accepted' })
-        .where(eq(estimates.id, estimateId));
+        .where(eq(estimates.id, estimateId))
+        .returning();
+
+      const job = await createJobFromAcceptedEstimate(db, acceptedEstimate, { packageName });
       
-      console.log(`Estimate ${estimateId} marked as accepted`);
+      console.log(`Estimate ${estimateId} marked as accepted and job ${job.id} is ready`);
       
       // Auto-sync to QuickBooks if connected
       const qbConnection = await db.query.quickbooksConnections.findFirst({

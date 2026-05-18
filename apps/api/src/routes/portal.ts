@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
 import { estimates, jobs, leads, portalTokens } from '@paintflow/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
+import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
 
 const portalApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -25,8 +26,10 @@ portalApp.get('/:token', async (c) => {
   const estimate = await db.query.estimates.findFirst({
     where: and(
       eq(estimates.leadId, portalToken.leadId),
+      eq(estimates.orgId, portalToken.orgId),
       eq(estimates.status, 'sent')
     ),
+    orderBy: [desc(estimates.createdAt)],
   });
   
   const job = await db.query.jobs.findFirst({
@@ -55,16 +58,26 @@ portalApp.post('/:token/approve', async (c) => {
   }
   
   const estimate = await db.query.estimates.findFirst({
-    where: and(eq(estimates.leadId, portalToken.leadId), eq(estimates.orgId, portalToken.orgId)),
+    where: and(
+      eq(estimates.leadId, portalToken.leadId),
+      eq(estimates.orgId, portalToken.orgId),
+      eq(estimates.status, 'sent')
+    ),
+    orderBy: [desc(estimates.createdAt)],
   });
   
+  let jobId: string | undefined;
   if (estimate) {
-    await db.update(estimates)
+    const [acceptedEstimate] = await db.update(estimates)
       .set({ status: 'accepted', signedAt: new Date() })
-      .where(eq(estimates.id, estimate.id));
+      .where(eq(estimates.id, estimate.id))
+      .returning();
+
+    const job = await createJobFromAcceptedEstimate(db, acceptedEstimate);
+    jobId = job.id;
   }
   
-  return c.json({ success: true });
+  return c.json({ success: true, jobId });
 });
 
 portalApp.post('/:token/pay', async (c) => {

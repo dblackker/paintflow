@@ -268,11 +268,15 @@
         const signatureData = canvas.toDataURL();
         
         try {
-          await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
+          const signRes = await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, signatureData, packageName: selectedPackage }),
           });
+
+          if (!signRes.ok) {
+            throw new Error('Failed to sign estimate');
+          }
           
           const res = await fetch(`${API_URL}/v1/payments/checkout`, {
             method: 'POST',
@@ -281,6 +285,10 @@
           });
           
           const { checkoutUrl } = await res.json();
+          if (!res.ok || !checkoutUrl) {
+            throw new Error('Failed to create payment checkout');
+          }
+
           window.location.href = checkoutUrl;
         } catch (err) {
           alert('Failed to process signature');

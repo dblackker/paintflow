@@ -2,10 +2,11 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, estimateEmailTemplate } from '../lib/email';
+import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -13,6 +14,19 @@ const signSchema = z.object({
   name: z.string().min(1).max(255),
   signatureData: z.string().min(1).max(100000),
   packageName: z.string().optional(),
+});
+
+const estimatePackageSchema = z.object({
+  name: z.string().min(1).max(100),
+  subtotal: z.coerce.number().nonnegative().optional(),
+  discount: z.coerce.number().nonnegative().optional(),
+  total: z.coerce.number().positive(),
+  lineItems: z.array(z.unknown()).optional(),
+});
+
+const createEstimateSchema = z.object({
+  leadId: z.string().uuid(),
+  packages: z.array(estimatePackageSchema).min(1).max(5),
 });
 
 estimatesApp.get('/:id/public', async (c) => {
@@ -79,8 +93,15 @@ estimatesApp.post('/:id/sign', async (c) => {
   if (!estimate) {
     return c.json({ error: 'Not found' }, 404);
   }
+
+  const job = await createJobFromAcceptedEstimate(db, estimate, {
+    packageName,
+    signedBy: name,
+    ipAddress: ip,
+    userAgent,
+  });
   
-  return c.json({ data: { id: estimate.id, status: 'accepted' } });
+  return c.json({ data: { id: estimate.id, status: 'accepted', jobId: job.id } });
 });
 
 estimatesApp.use('*', authMiddleware);
@@ -99,6 +120,50 @@ estimatesApp.get('/', async (c) => {
   });
   
   return c.json({ data });
+});
+
+estimatesApp.post('/', async (c) => {
+  const orgId = c.get('orgId');
+  const body = await c.req.json();
+  const parsed = createEstimateSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid input', details: parsed.error.errors }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, parsed.data.leadId), eq(leads.orgId, orgId)),
+  });
+
+  if (!lead) {
+    return c.json({ error: 'Lead not found' }, 404);
+  }
+
+  const recommendedPackage = parsed.data.packages.find((pkg) => /better|recommended/i.test(pkg.name))
+    ?? parsed.data.packages[0];
+
+  const [estimate] = await db.insert(estimates)
+    .values({
+      orgId,
+      leadId: lead.id,
+      packages: parsed.data.packages,
+      total: Number(recommendedPackage.total).toFixed(2),
+      status: 'sent',
+      sentAt: new Date(),
+    })
+    .returning();
+
+  await db.update(leads)
+    .set({ status: 'estimate_sent', updatedAt: new Date() })
+    .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
+
+  return c.json({
+    data: {
+      ...estimate,
+      recommendedTotal: estimateContractValue(estimate),
+    },
+  }, 201);
 });
 
 estimatesApp.post('/:id/portal-link', async (c) => {
