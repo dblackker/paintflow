@@ -456,6 +456,7 @@ export const teamMembers = pgTable('team_members', {
   name: varchar('name', { length: 255 }).notNull(),
   role: varchar('role', { length: 100 }).notNull(), // 'painter', 'foreman', 'helper'
   hourlyRate: decimal('hourly_rate', { precision: 10, scale: 2 }).notNull(),
+  burdenRate: decimal('burden_rate', { precision: 5, scale: 2 }).notNull().default('30'), // percent
   isActive: boolean('is_active').default(true),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

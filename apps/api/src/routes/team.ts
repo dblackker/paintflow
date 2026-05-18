@@ -25,6 +25,7 @@ const createMemberSchema = z.object({
   name: z.string().min(1),
   role: z.string().min(1),
   hourlyRate: z.number().positive(),
+  burdenRate: z.number().min(0).max(100).default(30),
 });
 
 teamApp.post('/members', async (c) => {
@@ -35,8 +36,10 @@ teamApp.post('/members', async (c) => {
   
   const [member] = await db.insert(teamMembers).values({
     orgId,
-    ...data,
+    name: data.name,
+    role: data.role,
     hourlyRate: data.hourlyRate.toString(),
+    burdenRate: data.burdenRate.toString(),
   }).returning();
   
   return c.json({ data: member }, 201);
@@ -63,12 +66,14 @@ teamApp.post('/time', async (c) => {
   if (!member) return c.json({ error: 'Team member not found' }, 404);
   
   const hourlyRate = parseFloat(member.hourlyRate);
-  const totalCost = data.hours * hourlyRate;
+  const burdenRate = parseFloat(member.burdenRate || '30');
+  const burdenedRate = hourlyRate * (1 + burdenRate / 100);
+  const totalCost = data.hours * burdenedRate;
   
   const [entry] = await db.insert(timeEntries).values({
     orgId,
     ...data,
-    hourlyRate: hourlyRate.toString(),
+    hourlyRate: burdenedRate.toString(),
     totalCost: totalCost.toString(),
     date: new Date(data.date),
   }).returning();
@@ -80,7 +85,7 @@ teamApp.post('/time', async (c) => {
     category: 'labor',
     description: `${member.name} - ${data.description || 'Labor'}`,
     quantity: data.hours.toString(),
-    unitCost: hourlyRate.toString(),
+    unitCost: burdenedRate.toString(),
     totalCost: totalCost.toString(),
   });
   
