@@ -1,48 +1,38 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Materials - PaintFlow</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <h1 class="text-xl font-semibold">Materials</h1>
-        <button id="add-material" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">+ Add Material</button>
-      </div>
+<Base title="Materials - PaintFlow">
+  <section class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="flex justify-between h-16 items-center">
+      <h1 class="text-xl font-semibold">Materials</h1>
+      <button id="add-material" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">+ Add Material</button>
     </div>
-  </nav>
 
-  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div class="bg-white rounded-lg shadow-sm border divide-y" id="materials-list">
       <div class="p-4 text-center text-gray-500">Loading...</div>
     </div>
-  </main>
+  </section>
 
   <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-lg max-w-md w-full p-6">
       <h2 class="text-lg font-semibold mb-4">Add Material</h2>
       <form id="material-form" class="space-y-4">
-        <input name="name" placeholder="Material name" class="w-full px-3 py-2 border rounded-lg" required>
+        <input name="name" placeholder="Material name" class="w-full px-3 py-2 border rounded-lg" required />
         <select name="category" class="w-full px-3 py-2 border rounded-lg" required>
           <option value="">Category</option>
           <option value="paint">Paint</option>
           <option value="primer">Primer</option>
           <option value="supplies">Supplies</option>
         </select>
+        <input name="unit" placeholder="Unit" value="gallon" class="w-full px-3 py-2 border rounded-lg" required />
         <div class="grid grid-cols-2 gap-3">
-          <input name="costPerUnit" type="number" step="0.01" placeholder="Cost" class="px-3 py-2 border rounded-lg" required>
-          <input name="markupPercent" type="number" step="0.1" placeholder="Markup %" value="30" class="px-3 py-2 border rounded-lg">
+          <input name="costPerUnit" type="number" step="0.01" placeholder="Cost" class="px-3 py-2 border rounded-lg" required />
+          <input name="markupPercent" type="number" step="0.1" placeholder="Markup %" value="30" class="px-3 py-2 border rounded-lg" />
         </div>
-        <input name="coverageSqFt" type="number" placeholder="Coverage sq ft (optional)" class="w-full px-3 py-2 border rounded-lg">
+        <input name="coverageSqFt" type="number" placeholder="Coverage sq ft (optional)" class="w-full px-3 py-2 border rounded-lg" />
         <div class="flex gap-3">
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
+          <button type="button" id="cancel-material" class="flex-1 py-2 border rounded-lg">Cancel</button>
           <button type="submit" class="flex-1 py-2 bg-blue-600 text-white rounded-lg">Save</button>
         </div>
       </form>
@@ -51,67 +41,67 @@
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const modal = document.getElementById('modal');
+
+    function closeModal() {
+      modal?.classList.add('hidden');
+    }
 
     async function loadMaterials() {
       const res = await fetch(`${API_URL}/v1/materials`, { credentials: 'include' });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
       const { data } = await res.json();
-      renderMaterials(data);
+      renderMaterials(data || []);
     }
 
     function renderMaterials(materials) {
       const list = document.getElementById('materials-list');
-      list.innerHTML = materials.map(m => {
-        const price = (parseFloat(m.costPerUnit) * (1 + parseFloat(m.markupPercent) / 100)).toFixed(2);
-        return `
-          <div class="p-4 flex justify-between items-center">
-            <div>
-              <p class="font-medium">${m.name}</p>
-              <p class="text-sm text-gray-600">${m.brand || ''} • ${m.category}</p>
-            </div>
-    function renderMaterials(materials) {
-      const list = document.getElementById('materials-list');
-      list.innerHTML = materials.map(m => {
-        const price = (parseFloat(m.costPerUnit) * (1 + parseFloat(m.markupPercent) / 100)).toFixed(2);
-        return `
-          <div class="p-4 flex justify-between items-center hover:bg-gray-50" data-id="${m.id}">
-            <div class="flex-1">
-              <p class="font-medium">${m.name}</p>
-              <p class="text-sm text-gray-600">${m.brand || ''} • ${m.category}</p>
-            </div>
-            <div class="flex items-center gap-4">
-              <div class="text-right">
-                <p class="font-semibold">$${price}/${m.unit}</p>
-                <p class="text-xs text-gray-500">Cost: $<span class="cost-value" data-field="costPerUnit">${m.costPerUnit}</span> • <span class="markup-value">${m.markupPercent}</span>% markup</p>
+      list.innerHTML = materials.length
+        ? materials.map((m) => {
+            const price = (parseFloat(m.costPerUnit) * (1 + parseFloat(m.markupPercent) / 100)).toFixed(2);
+            return `
+              <div class="p-4 flex justify-between items-center hover:bg-gray-50">
+                <div>
+                  <p class="font-medium">${m.name}</p>
+                  <p class="text-sm text-gray-600">${m.brand || ''} ${m.category}</p>
+                </div>
+                <div class="text-right">
+                  <p class="font-semibold">$${price}/${m.unit}</p>
+                  <p class="text-xs text-gray-500">Cost: $${m.costPerUnit}</p>
+                </div>
               </div>
-              <button onclick="quickEdit('${m.id}')" class="text-sm text-blue-600 hover:text-blue-700">Edit</button>
-            </div>
-          </div>
-        `;
-      }).join('');
+            `;
+          }).join('')
+        : '<div class="p-4 text-center text-gray-500">No materials yet</div>';
     }
 
-    async function quickEdit(id) {
-      const cost = prompt('New cost per unit:');
-      if (!cost) return;
-      const markup = prompt('Markup %:', '30');
-      await fetch(`${API_URL}/v1/materials/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ costPerUnit: parseFloat(cost), markupPercent: parseFloat(markup) }),
-      });
-      loadMaterials();
-    }
+    document.getElementById('add-material')?.addEventListener('click', () => {
+      modal?.classList.remove('hidden');
+    });
+
+    document.getElementById('cancel-material')?.addEventListener('click', closeModal);
+
+    document.getElementById('material-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const payload = Object.fromEntries(form);
+      payload.costPerUnit = parseFloat(payload.costPerUnit);
+      payload.markupPercent = parseFloat(payload.markupPercent || '30');
+      if (payload.coverageSqFt) payload.coverageSqFt = parseFloat(payload.coverageSqFt);
+
+      await fetch(`${API_URL}/v1/materials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(Object.fromEntries(form)),
+        body: JSON.stringify(payload),
       });
       closeModal();
       loadMaterials();
     });
 
-    loadMaterials();
+    loadMaterials().catch(console.error);
   </script>
-</body>
-</html>
+</Base>

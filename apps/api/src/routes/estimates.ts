@@ -1,12 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { estimates, leads, orgBranding, jobs, portalTokens, customers } from '@paintflow/db/schema';
+import { estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, estimateEmailTemplate } from '../lib/email';
-import { randomBytes } from 'crypto';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -115,19 +114,21 @@ estimatesApp.post('/:id/portal-link', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
   
-  const customer = await db.query.customers.findFirst({
-    where: eq(customers.id, estimate.customerId),
+  const lead = await db.query.leads.findFirst({
+    where: eq(leads.id, estimate.leadId),
   });
   
-  if (!customer) {
-    return c.json({ error: 'Customer not found' }, 404);
+  if (!lead || lead.orgId !== orgId) {
+    return c.json({ error: 'Lead not found' }, 404);
   }
   
-  const token = randomBytes(32).toString('hex');
+  const tokenBytes = new Uint8Array(32);
+  crypto.getRandomValues(tokenBytes);
+  const token = Array.from(tokenBytes, b => b.toString(16).padStart(2, '0')).join('');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   
   await db.insert(portalTokens).values({
-    customerId: customer.id,
+    leadId: lead.id,
     orgId,
     token,
     expiresAt,

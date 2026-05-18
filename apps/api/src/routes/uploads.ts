@@ -57,8 +57,6 @@ uploads.get('/:key', async (c) => {
   return c.json({ url: `https://cdn.paintflow.app/${key}` });
 });
 
-export default uploads;
-
 // POST /v1/uploads/photo
 uploads.post('/photo', async (c) => {
   const orgId = c.get('orgId');

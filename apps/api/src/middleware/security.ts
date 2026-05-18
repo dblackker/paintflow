@@ -31,7 +31,7 @@ export const corsHeaders = async (c: Context, next: Next) => {
   }
   
   if (c.req.method === 'OPTIONS') {
-    return c.text('', 204);
+    return new Response(null, { status: 204 });
   }
   
   await next();

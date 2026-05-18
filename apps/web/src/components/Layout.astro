@@ -1,0 +1,9 @@
+---
+import Base from '../layouts/Base.astro';
+
+const { title = 'PaintFlow' } = Astro.props;
+---
+
+<Base title={title}>
+  <slot />
+</Base>

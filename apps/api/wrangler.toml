@@ -3,22 +3,36 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 [vars]
-APP_URL = "https://paintflow.app"
+APP_URL = "https://app.paintflow.app"
+PUBLIC_URL = "https://app.paintflow.app"
+ENVIRONMENT = "development"
 
 [[kv_namespaces]]
 binding = "KV"
 id = "your_kv_namespace_id"
 preview_id = "your_preview_kv_namespace_id"
 
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "paintflow-uploads"
+preview_bucket_name = "paintflow-uploads-preview"
+
 [triggers]
 crons = ["0 9 * * *"]
 
 [env.production]
-vars = { APP_URL = "https://paintflow.app" }
+vars = { APP_URL = "https://api.paintflow.app", PUBLIC_URL = "https://app.paintflow.app", ENVIRONMENT = "production" }
+routes = [
+  { pattern = "api.paintflow.app/*", zone_name = "paintflow.app" }
+]
 
-[env.production.kv_namespaces]
+[[env.production.kv_namespaces]]
 binding = "KV"
 id = "prod_kv_namespace_id"
 
+[[env.production.r2_buckets]]
+binding = "R2"
+bucket_name = "paintflow-uploads"
+
 [env.staging]
-vars = { APP_URL = "https://staging.paintflow.app" }
+vars = { APP_URL = "https://api-staging.paintflow.app", PUBLIC_URL = "https://staging.paintflow.app", ENVIRONMENT = "staging" }

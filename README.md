@@ -178,7 +178,8 @@ This enables magic link emails via MailChannels (free).
 ### Stripe Webhooks
 
 Configure in Stripe Dashboard:
-- Endpoint: `https://app.paintflow.app/v1/billing/webhook`
+- SaaS billing endpoint: `https://api.paintflow.app/v1/billing/webhook`
+- Estimate payment endpoint: `https://api.paintflow.app/v1/payments/webhook`
 - Events: `checkout.session.completed`, `customer.subscription.updated`, `invoice.payment_failed`
 
 ## Architectural Decisions

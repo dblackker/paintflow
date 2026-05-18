@@ -8,7 +8,9 @@
 - [ ] Set Cloudflare environment variables:
   ```
   DATABASE_URL=postgresql://...
-  APP_URL=https://app.paintflow.app
+  APP_URL=https://api.paintflow.app
+  PUBLIC_URL=https://app.paintflow.app
+  PUBLIC_API_URL=https://api.paintflow.app
   ENVIRONMENT=production
   STRIPE_SECRET_KEY=sk_live_...
   STRIPE_WEBHOOK_SECRET=whsec_...
@@ -34,13 +36,13 @@
   - Pro: $149/month
   - Enterprise: $399/month
 - [ ] Configure webhook endpoint:
-  - URL: `https://app.paintflow.app/api/webhooks/stripe`
+  - URL: `https://api.paintflow.app/v1/billing/webhook`
   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 - [ ] Copy webhook secret to env
 
 ### 4. QuickBooks (Optional for launch)
 - [ ] Register app at developer.intuit.com
-- [ ] Set redirect URI: `https://app.paintflow.app/v1/quickbooks/callback`
+- [ ] Set redirect URI: `https://api.paintflow.app/v1/quickbooks/callback`
 - [ ] Get production Client ID/Secret
 - [ ] Add to env vars
 

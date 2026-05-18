@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
-import type { Env } from './types';
+import { getCookie } from 'hono/cookie';
+import type { Env, Variables } from './types';
 
 export interface Session {
   userId: string;
@@ -55,8 +56,44 @@ export async function deleteSession(env: Env, token: string): Promise<void> {
   await env.KV.delete(`session:${token}`);
 }
 
-export async function requireAuth(c: Context<{ Bindings: Env }>) {
-  const token = c.req.cookie('session');
+export async function createOAuthState(
+  env: Env,
+  provider: string,
+  orgId: string,
+  userId?: string
+): Promise<string> {
+  const token = crypto.randomUUID();
+  await env.KV.put(
+    `oauth:${provider}:${token}`,
+    JSON.stringify({ orgId, userId, createdAt: Date.now() }),
+    { expirationTtl: 10 * 60 }
+  );
+  return token;
+}
+
+export async function consumeOAuthState(
+  env: Env,
+  provider: string,
+  token?: string | null
+): Promise<{ orgId: string; userId?: string } | null> {
+  if (!token) return null;
+
+  const key = `oauth:${provider}:${token}`;
+  const data = await env.KV.get(key);
+  if (!data) return null;
+
+  await env.KV.delete(key);
+
+  const state = JSON.parse(data) as { orgId?: string; userId?: string; createdAt?: number };
+  if (!state.orgId || !state.createdAt || Date.now() - state.createdAt > 10 * 60 * 1000) {
+    return null;
+  }
+
+  return { orgId: state.orgId, userId: state.userId };
+}
+
+export async function requireAuth(c: Context<{ Bindings: Env; Variables: Variables }>) {
+  const token = getCookie(c, 'session');
   
   if (!token) {
     return c.json({ error: 'Unauthorized', code: 'NO_SESSION' }, 401);

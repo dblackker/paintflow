@@ -1,8 +1,10 @@
 import { defineConfig } from 'astro/config';
+import cloudflare from '@astrojs/cloudflare';
 
 export default defineConfig({
-  output: 'static',
-  site: 'https://paintflow.app',
+  output: 'server',
+  adapter: cloudflare(),
+  site: 'https://app.paintflow.app',
   build: {
     inlineStylesheets: 'auto',
   },

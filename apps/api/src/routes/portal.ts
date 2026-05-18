@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { customers, estimates, jobs, portalTokens } from '@paintflow/db/schema';
+import { estimates, jobs, leads, portalTokens } from '@paintflow/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 
@@ -12,29 +12,30 @@ portalApp.get('/:token', async (c) => {
   
   const portalToken = await db.query.portalTokens.findFirst({
     where: eq(portalTokens.token, token),
-    with: {
-      customer: true,
-    },
   });
   
   if (!portalToken || new Date() > portalToken.expiresAt) {
     return c.json({ error: 'Invalid or expired token' }, 404);
   }
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, portalToken.leadId), eq(leads.orgId, portalToken.orgId)),
+  });
   
   const estimate = await db.query.estimates.findFirst({
     where: and(
-      eq(estimates.customerId, portalToken.customerId),
+      eq(estimates.leadId, portalToken.leadId),
       eq(estimates.status, 'sent')
     ),
   });
   
   const job = await db.query.jobs.findFirst({
-    where: eq(jobs.customerId, portalToken.customerId),
+    where: and(eq(jobs.leadId, portalToken.leadId), eq(jobs.orgId, portalToken.orgId)),
   });
   
   return c.json({ 
     data: {
-      customer: portalToken.customer,
+      customer: lead,
       estimate,
       job,
     }
@@ -49,22 +50,22 @@ portalApp.post('/:token/approve', async (c) => {
     where: eq(portalTokens.token, token),
   });
   
-  if (!portalToken) return c.json({ error: 'Invalid token' }, 404);
+  if (!portalToken || new Date() > portalToken.expiresAt) {
+    return c.json({ error: 'Invalid token' }, 404);
+  }
   
   const estimate = await db.query.estimates.findFirst({
-    where: eq(estimates.customerId, portalToken.customerId),
+    where: and(eq(estimates.leadId, portalToken.leadId), eq(estimates.orgId, portalToken.orgId)),
   });
   
   if (estimate) {
     await db.update(estimates)
-      .set({ status: 'approved', signedAt: new Date(), signedBy: portalToken.customerId })
+      .set({ status: 'accepted', signedAt: new Date() })
       .where(eq(estimates.id, estimate.id));
   }
   
   return c.json({ success: true });
 });
-
-export default portalApp;
 
 portalApp.post('/:token/pay', async (c) => {
   const token = c.req.param('token');
@@ -74,7 +75,6 @@ portalApp.post('/:token/pay', async (c) => {
   
   const portalToken = await db.query.portalTokens.findFirst({
     where: eq(portalTokens.token, token),
-    with: { customer: true },
   });
   
   if (!portalToken || new Date() > portalToken.expiresAt) {
@@ -90,10 +90,13 @@ portalApp.post('/:token/pay', async (c) => {
     amount: Math.round(amount * 100),
     currency: 'usd',
     metadata: {
-      customerId: portalToken.customerId,
+      leadId: portalToken.leadId,
+      orgId: portalToken.orgId,
       portalToken: token,
     },
   });
   
   return c.json({ data: { clientSecret: paymentIntent.client_secret } });
 });
+
+export default portalApp;

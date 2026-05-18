@@ -210,10 +210,6 @@ import Base from '../../layouts/Base.astro';
         window.showToast('Failed to send request', 'error');
       }
     };
-    
-    loadJobs();
-  </script>
-</Base>
 
     window.uploadPhoto = async (jobId) => {
       const fileInput = document.getElementById(`photo-file-${jobId}`);
@@ -264,7 +260,6 @@ import Base from '../../layouts/Base.astro';
       }
     }
 
-    // Change orders
     async function loadChangeOrders(jobId) {
       try {
         const res = await fetch(`${API_URL}/v1/change-orders?jobId=${jobId}`, { credentials: 'include' });
@@ -312,3 +307,7 @@ import Base from '../../layouts/Base.astro';
       });
       loadChangeOrders(jobId);
     };
+    
+    loadJobs();
+  </script>
+</Base>

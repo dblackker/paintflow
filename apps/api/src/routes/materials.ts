@@ -24,13 +24,6 @@ const materialSchema = z.object({
 import { flattenCatalog } from '../lib/materials-catalog';
 
 const DEFAULT_MATERIALS = flattenCatalog().slice(0, 20);
-  { name: 'Sherwin Williams SuperPaint', category: 'paint', brand: 'Sherwin Williams', unit: 'gallon', costPerUnit: 65, markupPercent: 30, coverageSqFt: 350 },
-  { name: 'Benjamin Moore Regal Select', category: 'paint', brand: 'Benjamin Moore', unit: 'gallon', costPerUnit: 70, markupPercent: 30, coverageSqFt: 400 },
-  { name: 'Kilz 2 Primer', category: 'primer', brand: 'Kilz', unit: 'gallon', costPerUnit: 25, markupPercent: 30, coverageSqFt: 300 },
-  { name: 'Painter\'s Tape', category: 'supplies', brand: '3M', unit: 'roll', costPerUnit: 8, markupPercent: 50 },
-  { name: 'Drop Cloths', category: 'supplies', unit: 'each', costPerUnit: 15, markupPercent: 50 },
-  { name: 'Roller Covers', category: 'supplies', unit: 'each', costPerUnit: 5, markupPercent: 50 },
-];
 
 materialsApp.get('/', async (c) => {
   const orgId = c.get('orgId');

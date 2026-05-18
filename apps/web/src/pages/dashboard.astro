@@ -56,10 +56,12 @@
     </div>
     
     <script>
+      const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+
       // Check onboarding status and show progress widget
       (async () => {
         try {
-          const res = await fetch('http://localhost:8787/v1/settings/org', { credentials: 'include' });
+          const res = await fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' });
           if (res.ok) {
             const { data } = await res.json();
             const completed = data.onboardingCompletedAt;
@@ -94,7 +96,7 @@
       // Load dashboard stats
       (async () => {
         try {
-          const res = await fetch('http://localhost:8787/v1/dashboard/stats', { credentials: 'include' });
+          const res = await fetch(`${API_URL}/v1/dashboard/stats`, { credentials: 'include' });
           if (res.ok) {
             const { data } = await res.json();
             document.getElementById('active-leads').textContent = data.activeLeads;
@@ -136,7 +138,7 @@
       });
 
       document.getElementById('logout')?.addEventListener('click', async () => {
-        await fetch('http://localhost:8787/v1/auth/logout', { method: 'POST', credentials: 'include' });
+        await fetch(`${API_URL}/v1/auth/logout`, { method: 'POST', credentials: 'include' });
         window.location.href = '/login';
       });
     </script>

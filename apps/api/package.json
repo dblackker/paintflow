@@ -1,1 +1,21 @@
-{"name":"@paintflow/api","private":true,"scripts":{"build":"tsc","dev":"wrangler dev"},"type":"module","version":"0.1.0"}
+{
+  "name": "@paintflow/api",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit --noCheck",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "@paintflow/core": "workspace:*",
+    "@paintflow/db": "workspace:*",
+    "drizzle-orm": "^0.31.2",
+    "hono": "^4.4.6",
+    "stripe": "^15.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.2"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

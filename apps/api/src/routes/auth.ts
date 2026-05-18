@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { createSession } from '../auth';
 import type { Env } from '../types';
 import { createDb } from '@paintflow/db';
@@ -31,11 +32,6 @@ const magicLinkEmail = (magicLink: string) => ({
 
 // POST /v1/auth/magic-link
 auth.post('/magic-link', async (c) => {
-  const { email } = await c.req.json();
-  
-  if (!email || typeof email !== 'string') {
-    return c.json({ error: 'Email required' }, 400);
-  }
   const { email } = await c.req.json();
   
   if (!email || typeof email !== 'string') {
@@ -169,7 +165,7 @@ auth.get('/verify', async (c) => {
 
 // POST /v1/auth/logout
 auth.post('/logout', async (c) => {
-  const token = c.req.cookie('session');
+  const token = getCookie(c, 'session');
   
   if (token) {
     await c.env.KV.delete(`session:${token}`);

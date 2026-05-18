@@ -4,6 +4,7 @@ import { quickbooksConnections, leads, estimates, orgSettings } from '@paintflow
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { createOAuthState, consumeOAuthState } from '../auth';
 import { getCompanyInfo, createQBCustomer, createQBInvoice, getTaxCodes, getItems } from '../lib/quickbooks';
 
 const qb = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -19,7 +20,8 @@ qb.use('/settings', authMiddleware);
 // GET /v1/quickbooks/connect
 qb.get('/connect', async (c) => {
   const orgId = c.get('orgId');
-  const state = btoa(JSON.stringify({ orgId, ts: Date.now() }));
+  const userId = c.get('userId');
+  const state = await createOAuthState(c.env, 'quickbooks', orgId, userId);
   
   const authUrl = new URL('https://appcenter.intuit.com/connect/oauth2');
   authUrl.searchParams.set('client_id', c.env.QB_CLIENT_ID);
@@ -37,8 +39,13 @@ qb.get('/callback', async (c) => {
   const state = c.req.query('state');
   const realmId = c.req.query('realmId');
   
-  if (!code || !realmId) {
-    return c.json({ error: 'Missing code or realmId' }, 400);
+  if (!code || !realmId || !state) {
+    return c.json({ error: 'Missing code, realmId, or state' }, 400);
+  }
+
+  const stateData = await consumeOAuthState(c.env, 'quickbooks', state);
+  if (!stateData) {
+    return c.json({ error: 'Invalid or expired state' }, 400);
   }
   
   try {
@@ -65,7 +72,6 @@ qb.get('/callback', async (c) => {
     const tokens = await tokenResponse.json();
     const companyInfo = await getCompanyInfo(c.env, tokens.access_token, realmId);
     const companyName = companyInfo.CompanyInfo?.CompanyName || 'QuickBooks Company';
-    const stateData = JSON.parse(atob(state!));
     const orgId = stateData.orgId;
     
     const db = createDb(c.env.DATABASE_URL);
@@ -236,14 +242,22 @@ qb.post('/sync/invoice/:estimateId', async (c) => {
 qb.post('/disconnect', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
-  
+  await db.delete(quickbooksConnections)
+    .where(eq(quickbooksConnections.orgId, orgId));
+
+  return c.json({ success: true });
+});
 
 // POST /v1/quickbooks/webhook
 qb.post('/webhook', async (c) => {
   const signature = c.req.header('intuit-signature');
   const body = await c.req.text();
   
-  if (c.env.QB_WEBHOOK_VERIFIER_TOKEN && signature) {
+  if (c.env.QB_WEBHOOK_VERIFIER_TOKEN) {
+    if (!signature) {
+      return c.json({ error: 'Missing signature' }, 401);
+    }
+
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       'raw',

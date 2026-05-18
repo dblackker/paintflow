@@ -1,1 +1,16 @@
-{"name":"@paintflow/web","private":true,"scripts":{"build":"astro build","dev":"astro dev","preview":"astro preview"},"type":"module","version":"0.1.0"}
+{
+  "name": "@paintflow/web",
+  "private": true,
+  "scripts": {
+    "build": "astro build",
+    "dev": "astro dev",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^10.4.1",
+    "astro": "^4.10.2",
+    "stripe": "^15.12.0"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

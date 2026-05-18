@@ -54,7 +54,8 @@
         button.textContent = 'Sending...';
         
         try {
-          const res = await fetch('http://localhost:8787/v1/auth/magic-link', {
+          const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+          const res = await fetch(`${API_URL}/v1/auth/magic-link`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),
@@ -72,7 +73,7 @@
             // Dev mode: show token
             if (data.devToken) {
               const devLink = document.createElement('a');
-              devLink.href = `http://localhost:8787/v1/auth/verify?token=${data.devToken}`;
+              devLink.href = `${API_URL}/v1/auth/verify?token=${data.devToken}`;
               devLink.textContent = 'Dev: Click to verify';
               devLink.className = 'block mt-2 text-sm underline';
               message.appendChild(devLink);

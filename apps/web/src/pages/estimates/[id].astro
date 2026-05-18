@@ -280,7 +280,7 @@ export async function getStaticPaths() {
             body: JSON.stringify({ name, signatureData, packageName: selectedPackage }),
           });
           
-          const res = await fetch(`${API_URL}/v1/billing/checkout`, {
+          const res = await fetch(`${API_URL}/v1/payments/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ estimateId, packageName: selectedPackage }),

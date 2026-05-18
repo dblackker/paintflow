@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { securityHeaders } from './middleware/security';
 import { tenantMiddleware } from './middleware/tenant';
 import { processDrips } from './cron/drips';
+import type { Env, Variables } from './types';
 import authRoutes from './routes/auth';
 import leadsRoutes from './routes/leads';
 import estimatesRoutes from './routes/estimates';
@@ -29,10 +30,10 @@ import reportsRoutes from './routes/reports';
 import payrollRoutes from './routes/payroll';
 import rolesRoutes from './routes/roles';
 
-const app = new Hono();
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use('*', cors({
-  origin: ['http://localhost:4321', 'https://paintflow.app'],
+  origin: ['http://localhost:4321', 'https://app.paintflow.app', 'https://paintflow.app'],
   credentials: true,
 }));
 
@@ -41,7 +42,6 @@ app.use('*', tenantMiddleware);
 
 app.route('/v1/auth', authRoutes);
 app.route('/v1/sms', smsRoutes);
-app.route('/v1/billing/webhook', billingRoutes);
 app.route('/v1/portal', portalRoutes);
 
 app.get('/health', (c) => {
@@ -55,7 +55,7 @@ app.get('/health', (c) => {
 
 app.route('/v1/leads', leadsRoutes);
 app.route('/v1/estimates', estimatesRoutes);
-app.route('/v1/billing', billingRoutes);
+app.route('/v1/payments', billingRoutes);
 app.route('/v1/jobs', jobsRoutes);
 app.route('/v1/pdf', pdfRoutes);
 app.route('/v1/calendar', calendarRoutes);
@@ -81,7 +81,7 @@ app.get('/api/cron/drips', async (c) => {
   if (!authHeader || authHeader !== `Bearer ${c.env.CRON_SECRET}`) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
-  const result = await processDrips(c.env.DATABASE_URL, c);
+  const result = await processDrips(c.env);
   return c.json(result);
 });
 

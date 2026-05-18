@@ -4,6 +4,7 @@ import { jobs, googleCalendarConnections } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { createOAuthState, consumeOAuthState } from '../auth';
 
 const calendar = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -12,7 +13,8 @@ calendar.use('*', authMiddleware);
 // GET /v1/calendar/connect
 calendar.get('/connect', async (c) => {
   const orgId = c.get('orgId');
-  const state = btoa(JSON.stringify({ orgId, ts: Date.now() }));
+  const userId = c.get('userId');
+  const state = await createOAuthState(c.env, 'google-calendar', orgId, userId);
   
   const params = new URLSearchParams({
     client_id: c.env.GOOGLE_CLIENT_ID,
@@ -32,8 +34,13 @@ calendar.get('/callback', async (c) => {
   const code = c.req.query('code');
   const state = c.req.query('state');
   
-  if (!code) {
-    return c.json({ error: 'Missing code' }, 400);
+  if (!code || !state) {
+    return c.json({ error: 'Missing code or state' }, 400);
+  }
+
+  const stateData = await consumeOAuthState(c.env, 'google-calendar', state);
+  if (!stateData) {
+    return c.json({ error: 'Invalid or expired state' }, 400);
   }
   
   try {
@@ -49,9 +56,8 @@ calendar.get('/callback', async (c) => {
       }),
     });
     
-    const tokens = await tokenRes.json();
-    const stateData = JSON.parse(atob(state!));
     const orgId = stateData.orgId;
+    const tokens = await tokenRes.json();
     
     const db = createDb(c.env.DATABASE_URL);
     await db.insert(googleCalendarConnections)

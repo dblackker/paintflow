@@ -1,1 +1,9 @@
-{"name":"@paintflow/core","private":true,"type":"module","version":"0.1.0"}
+{
+  "name": "@paintflow/core",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

@@ -1,1 +1,23 @@
-{"name":"@paintflow/db","private":true,"scripts":{"db:generate":"drizzle-kit generate","db:migrate":"drizzle-kit migrate","db:studio":"drizzle-kit studio"},"type":"module","version":"0.1.0"}
+{
+  "name": "@paintflow/db",
+  "private": true,
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.9.4",
+    "drizzle-orm": "^0.31.2"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.22.7"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./client": "./src/client.ts"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

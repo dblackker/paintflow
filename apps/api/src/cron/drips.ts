@@ -35,6 +35,8 @@ export async function processDrips(env: any) {
       }
     }
   }
+
+  return { processed: sentEstimates.length };
 }
 
 async function sendDripMessage(env: any, estimate: any, day: number) {

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, decimal, jsonb, pgEnum, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, decimal, jsonb, pgEnum, boolean, integer } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['owner', 'member']);
 export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'estimate_sent', 'won', 'lost']);
@@ -73,19 +73,6 @@ export const jobs = pgTable('jobs', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-export const timeEntries = pgTable('time_entries', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  orgId: uuid('org_id').references(() => organizations.id).notNull(),
-  jobId: uuid('job_id').references(() => jobs.id).notNull(),
-  userId: uuid('user_id').references(() => users.id).notNull(),
-  hours: decimal('hours', { precision: 5, scale: 2 }).notNull(),
-  rate: decimal('rate', { precision: 10, scale: 2 }).notNull(),
-  cost: decimal('cost', { precision: 10, scale: 2 }).notNull(),
-  description: text('description'),
-  date: timestamp('date').notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
 export const expenses = pgTable('expenses', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
@@ -120,17 +107,6 @@ export const quickbooksConnections = pgTable('quickbooks_connections', {
   tokenExpiresAt: timestamp('token_expires_at').notNull(),
   companyName: varchar('company_name', { length: 255 }),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
-
-export const productionRates = pgTable('production_rates', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  orgId: uuid('org_id').references(() => organizations.id).notNull(),
-  task: varchar('task', { length: 255 }).notNull(),
-  unit: varchar('unit', { length: 50 }).notNull(),
-  hoursPerUnit: decimal('hours_per_unit', { precision: 10, scale: 3 }).notNull(),
-  category: varchar('category', { length: 100 }),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
@@ -465,7 +441,7 @@ export const timeEntries = pgTable('time_entries', {
 
 export const portalTokens = pgTable('portal_tokens', {
   id: uuid('id').defaultRandom().primaryKey(),
-  customerId: uuid('customer_id').references(() => customers.id).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id).notNull(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
   token: varchar('token', { length: 255 }).notNull().unique(),
   expiresAt: timestamp('expires_at').notNull(),

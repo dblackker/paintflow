@@ -1,10 +1,11 @@
 import type { Context, Next } from 'hono';
-import type { Env } from '../types';
+import { getCookie } from 'hono/cookie';
+import type { Env, Variables } from '../types';
 import { getSession } from '../auth';
 
 // Middleware to set org_id for RLS and tenant isolation
-export async function tenantMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
-  const token = c.req.cookie('session');
+export async function tenantMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
+  const token = getCookie(c, 'session');
   
   if (token) {
     const session = await getSession(c.env, token);
@@ -17,8 +18,8 @@ export async function tenantMiddleware(c: Context<{ Bindings: Env }>, next: Next
     }
   }
   
-  // For unauthenticated requests, use header override for testing
-  if (!c.get('orgId')) {
+  // Local/test helper only. Production must derive tenant context from a session or a public token.
+  if (!c.get('orgId') && c.env.ENVIRONMENT !== 'production') {
     const orgId = c.req.header('x-org-id');
     if (orgId) {
       c.set('orgId', orgId);
@@ -29,8 +30,8 @@ export async function tenantMiddleware(c: Context<{ Bindings: Env }>, next: Next
 }
 
 // Middleware to require authentication
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
-  const token = c.req.cookie('session');
+export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
+  const token = getCookie(c, 'session');
   
   if (!token) {
     return c.json({ error: 'Unauthorized', code: 'NO_SESSION' }, 401);

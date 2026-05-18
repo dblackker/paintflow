@@ -80,6 +80,8 @@ wrangler pages deploy dist --project-name=paintflow
 Set in Cloudflare dashboard or wrangler.toml:
 
 - `APP_URL` - Your app URL
+- `PUBLIC_URL` - Public web app URL
+- `PUBLIC_API_URL` - Public API URL used by the web app
 - `DATABASE_URL` - Neon connection string
 - `KV` - KV namespace binding
 - `TWILIO_*` - Twilio credentials
