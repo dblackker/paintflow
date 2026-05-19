@@ -1000,6 +1000,11 @@ import Base from '../../layouts/Base.astro';
       document.querySelectorAll('#rooms-container > div').forEach((room) => {
         room.querySelector('[data-area-type]').value = estimateAreaType();
         room.querySelector('[data-area-label]').textContent = estimateAreaLabel();
+        const nameInput = room.querySelector('[data-room-name]');
+        const currentName = nameInput.value.trim();
+        if (['', 'Interior', 'Exterior', 'Cabinets', 'Custom area'].includes(currentName)) {
+          nameInput.value = estimateDefaultAreaName();
+        }
       });
       syncScopeBuilderVisibility();
     }
@@ -1016,6 +1021,16 @@ import Base from '../../layouts/Base.astro';
         cabinet: 'Specialty scope',
         custom: 'Custom scope',
       })[type] || 'Scope';
+    }
+
+    function estimateDefaultAreaName() {
+      const type = document.getElementById('estimate-type')?.value || 'interior';
+      return ({
+        interior: 'Interior',
+        exterior: 'Exterior',
+        cabinet: 'Cabinets',
+        custom: 'Custom area',
+      })[type] || 'Area';
     }
 
     function syncAreaType(room) {
