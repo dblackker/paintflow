@@ -475,10 +475,18 @@ import Base from '../../layouts/Base.astro';
               <span class="text-xs text-blue-900">Corners</span>
               <input data-exterior="corners" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="4" class="mt-1 w-full px-2 py-2 border rounded">
             </label>
-            <label>
-              <span class="text-xs text-blue-900">Roofline factor</span>
-              <input data-exterior="rooflineFactor" type="number" min="0" step="0.05" inputmode="decimal" autocomplete="off" value="1" class="mt-1 w-full px-2 py-2 border rounded">
-            </label>
+            <div class="relative">
+              <div class="flex items-center justify-between gap-2">
+                <label for="${roomId}-roofline-factor" class="text-xs text-blue-900">Roofline factor</label>
+                <button type="button" class="roofline-info inline-flex h-6 w-6 items-center justify-center rounded-full border border-blue-300 bg-white text-xs font-semibold text-blue-700" aria-label="Explain roofline factor" aria-expanded="false">?</button>
+              </div>
+              <input id="${roomId}-roofline-factor" data-exterior="rooflineFactor" type="number" min="0" step="0.05" inputmode="decimal" autocomplete="off" value="1" class="mt-1 w-full px-2 py-2 border rounded">
+              <div class="hidden absolute right-0 z-20 mt-2 w-72 rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-roofline-info role="dialog" aria-label="Roofline factor explanation">
+                <p class="font-semibold text-gray-900">What this does</p>
+                <p class="mt-1">Roofline factor multiplies the house perimeter for soffit and fascia estimates when the roof edge is longer than the footprint.</p>
+                <p class="mt-2">Use 1.00 for a simple box. Use 1.10-1.20 for gables, dormers, returns, or bump-outs. Use 1.25+ for complex rooflines, then override the line if you have exact measurements.</p>
+              </div>
+            </div>
           </div>
           <p class="mt-2 text-xs text-blue-900">Use field assumptions for exterior trim, fascia, soffit, and siding when exact ladder measurements are impractical. Any line can still be overridden.</p>
         </div>
@@ -849,6 +857,17 @@ import Base from '../../layouts/Base.astro';
       });
     });
     document.getElementById('rooms-container').addEventListener('click', (event) => {
+      if (event.target.classList.contains('roofline-info')) {
+        const button = event.target;
+        const panel = button.closest('.relative').querySelector('[data-roofline-info]');
+        const willOpen = panel.classList.contains('hidden');
+        document.querySelectorAll('[data-roofline-info]').forEach(info => info.classList.add('hidden'));
+        document.querySelectorAll('.roofline-info').forEach(infoButton => infoButton.setAttribute('aria-expanded', 'false'));
+        panel.classList.toggle('hidden', !willOpen);
+        button.setAttribute('aria-expanded', String(willOpen));
+        event.stopPropagation();
+        return;
+      }
       if (event.target.classList.contains('remove-room')) event.target.closest('#rooms-container > div').remove();
       if (event.target.classList.contains('add-surface')) addSurface(event.target.closest('#rooms-container > div').id);
       if (event.target.classList.contains('remove-surface')) event.target.closest('[data-items] > div').remove();
@@ -868,6 +887,11 @@ import Base from '../../layouts/Base.astro';
         syncAreaType(copied);
       }
       calculateTotal();
+    });
+    document.addEventListener('click', (event) => {
+      if (event.target.closest('[data-roofline-info]')) return;
+      document.querySelectorAll('[data-roofline-info]').forEach(info => info.classList.add('hidden'));
+      document.querySelectorAll('.roofline-info').forEach(button => button.setAttribute('aria-expanded', 'false'));
     });
     document.getElementById('line-items-container').addEventListener('click', (event) => {
       if (event.target.classList.contains('remove-line-item')) {
