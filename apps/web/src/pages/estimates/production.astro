@@ -616,6 +616,7 @@ import Base from '../../layouts/Base.astro';
       div.className = 'border rounded-lg p-3 bg-gray-50';
       div.dataset.surfaceItem = 'true';
       if (item.group) div.dataset.group = item.group;
+      if (item.surfaceName) div.dataset.surfaceName = item.surfaceName;
       const rateId = findRateForTemplateItem(item);
       const selectedRate = rates.find(rate => rate.id === rateId);
       const prepLevel = item.prepLevel || 'standard';
@@ -638,7 +639,8 @@ import Base from '../../layouts/Base.astro';
             <option value="heavy" ${prepLevel === 'heavy' ? 'selected' : ''}>Heavy prep</option>
           </select>
         </div>
-        <input type="text" autocomplete="off" placeholder="Line label, e.g. Bedroom 1 walls" value="${escapeHtml(item.label || '')}" class="mb-2 w-full px-2 py-2 border rounded text-sm" data-field="label">
+        <input type="hidden" value="${escapeHtml(item.label || '')}" data-field="label">
+        <div class="${item.group ? 'mb-2 text-sm font-medium text-gray-700' : 'hidden'}" data-surface-title>${escapeHtml(item.surfaceName || item.label || '')}</div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-1">
           <label class="block" data-measure="width">
             <span class="text-xs text-gray-600" data-label="width">Width</span>
@@ -727,9 +729,28 @@ import Base from '../../layouts/Base.astro';
       if (existing) return;
       const header = document.createElement('div');
       header.dataset.surfaceGroup = groupName;
-      header.className = 'mt-4 mb-2 flex items-center gap-2 text-sm font-semibold text-gray-800';
-      header.innerHTML = `<span>${escapeHtml(groupName)}</span><span class="h-px flex-1 bg-gray-200"></span>`;
+      header.className = 'mt-4 mb-2 flex items-center gap-2';
+      header.innerHTML = `
+        <input value="${escapeHtml(groupName)}" autocomplete="off" class="min-w-0 max-w-52 border-0 border-b border-transparent bg-transparent px-0 py-1 text-sm font-semibold text-gray-800 focus:border-blue-500 focus:outline-none" data-group-name>
+        <span class="h-px flex-1 bg-gray-200"></span>
+      `;
       container.appendChild(header);
+    }
+
+    function groupDisplayName(surface) {
+      if (!surface.dataset.group) return '';
+      const header = Array.from(surface.closest('[data-items]').querySelectorAll('[data-surface-group]'))
+        .find(group => group.dataset.surfaceGroup === surface.dataset.group);
+      return header?.querySelector('[data-group-name]')?.value.trim() || surface.dataset.group;
+    }
+
+    function surfaceDisplayName(surface, rate) {
+      if (!surface.dataset.group) {
+        return surface.querySelector('[data-field="label"]').value.trim() || rate.description || `${rate.category} ${rate.surfaceType}`;
+      }
+      const groupName = groupDisplayName(surface);
+      const surfaceName = surface.dataset.surfaceName || surface.querySelector('[data-field="label"]').value.trim();
+      return `${groupName} ${surfaceName}`.trim();
     }
 
     function generateInteriorScope(room) {
@@ -776,24 +797,26 @@ import Base from '../../layouts/Base.astro';
         ensureSurfaceGroup(room.querySelector('[data-items]'), roomItem.label);
         const quantities = interiorQuantitiesForRoom(roomItem, assumptions);
         [
-          { kind: 'walls', label: `${roomItem.label} walls`, quantity: quantities.walls },
-          { kind: 'ceilings', label: `${roomItem.label} ceiling`, quantity: quantities.ceilings },
-          { kind: 'trim', label: `${roomItem.label} trim`, quantity: quantities.trim },
-          { kind: 'doors', label: `${roomItem.label} doors`, quantity: quantities.doors },
+          { kind: 'walls', surfaceName: 'walls', quantity: quantities.walls },
+          { kind: 'ceilings', surfaceName: 'ceiling', quantity: quantities.ceilings },
+          { kind: 'trim', surfaceName: 'trim', quantity: quantities.trim },
+          { kind: 'doors', surfaceName: 'doors', quantity: quantities.doors },
         ].filter(item => item.quantity > 0).forEach((item) => {
-          if (existingLabels.has(item.label.toLowerCase())) return;
+          const label = `${roomItem.label} ${item.surfaceName}`;
+          if (existingLabels.has(label.toLowerCase())) return;
           const rate = rateByKind[item.kind];
           addSurface(room.id, {
             productionRateId: rate.id,
-            label: item.label,
+            label,
             group: roomItem.label,
+            surfaceName: item.surfaceName,
             prepLevel: 'standard',
             quantity: Number(item.quantity.toFixed(1)),
             coats: rate.coats || 2,
             customerVisible: true,
           });
-          existingLabels.add(item.label.toLowerCase());
-          added.push(item.label);
+          existingLabels.add(label.toLowerCase());
+          added.push(label);
         });
       });
 
@@ -1073,6 +1096,7 @@ import Base from '../../layouts/Base.astro';
         productionRateId: surface.querySelector('[data-field="rateId"]').value,
         label: surface.querySelector('[data-field="label"]').value,
         group: surface.dataset.group || '',
+        surfaceName: surface.dataset.surfaceName || '',
         applicationMethod: surface.querySelector('[data-field="applicationMethod"]').value,
         prepLevel: surface.querySelector('[data-field="prepLevel"]').value,
         width: surface.querySelector('[data-field="width"]').value,
@@ -1180,13 +1204,13 @@ import Base from '../../layouts/Base.astro';
           const fallbackMaterialUnit = Number(rate.hourlyRate || settings.defaultLaborRate || 65) * 0.12;
           const itemMaterials = productCost ? productCost.price : quantity * fallbackMaterialUnit * (1 + materialMarkup);
           const itemTotal = itemLabor + itemMaterials;
-          const lineLabel = surface.querySelector('[data-field="label"]').value.trim();
+          const lineLabel = surfaceDisplayName(surface, rate);
 
           hours += itemHours;
           labor += itemLabor;
           materials += itemMaterials;
           items.push({
-            desc: `${roomName}: ${lineLabel || rate.description || `${rate.category} ${rate.surfaceType}`}`,
+            desc: `${roomName}: ${lineLabel}`,
             qty: 1,
             rate: Number(itemTotal.toFixed(2)),
             category: rate.unit,
