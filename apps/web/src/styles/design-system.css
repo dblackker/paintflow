@@ -301,6 +301,26 @@ button[class*="bg-blue"][class*="text-white"]:active {
   width: 2.25rem;
 }
 
+.btn-compact {
+  align-items: center;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border-strong);
+  border-radius: 0.45rem;
+  color: var(--pf-text);
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 1.9rem;
+  padding: 0.35rem 0.55rem;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.btn-compact:hover {
+  background: var(--pf-surface-tint);
+  border-color: var(--pf-primary);
+}
+
 .input {
   border: 1px solid var(--pf-border-strong);
   border-radius: 0.55rem;
