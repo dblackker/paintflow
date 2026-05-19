@@ -2,14 +2,17 @@
 import Base from '../../layouts/Base.astro';
 ---
 
-<Base title="New Estimate">
+<Base title="Quick Estimate">
   <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
-        <h2 class="text-2xl font-bold text-gray-900">Create Estimate</h2>
-        <p class="text-sm text-gray-600 mt-1">Build Good, Better, and Best options from one set of painting line items.</p>
+        <h2 class="text-2xl font-bold text-gray-900">Quick Estimate</h2>
+        <p class="text-sm text-gray-600 mt-1">Build fast Good, Better, and Best options from one set of painting line items.</p>
       </div>
-      <a href="/estimates" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Back to estimates</a>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <a href="/estimates/production" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Use production estimator</a>
+        <a href="/estimates" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Back to estimates</a>
+      </div>
     </div>
 
     <form id="estimate-form" class="grid lg:grid-cols-[1fr_340px] gap-5">

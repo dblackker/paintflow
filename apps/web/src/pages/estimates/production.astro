@@ -1,24 +1,20 @@
 ---
+import Base from '../../layouts/Base.astro';
 ---
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Production Rate Estimate - PaintFlow</title>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <h1 class="text-xl font-semibold">Production Estimate</h1>
-        <a href="/estimates" class="text-sm text-gray-600">Estimates</a>
+<Base title="Production Estimate">
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">Production Estimate</h2>
+        <p class="text-sm text-gray-600 mt-1">Build pricing from measured surfaces, prep level, production rates, labor, and materials.</p>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <a href="/templates" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Templates</a>
+        <a href="/estimates/new" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Quick estimate</a>
       </div>
     </div>
-  </nav>
 
-  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div id="setup-error" class="hidden bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-5">
       <p class="font-medium">Estimator setup could not load</p>
       <p class="text-sm mt-1" id="setup-error-message"></p>
@@ -70,7 +66,6 @@
       </aside>
     </div>
   </main>
-  <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
@@ -85,18 +80,6 @@
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-
-    function showToast(message, type = 'success') {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      toast.className = `px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
-      toast.textContent = message;
-      container.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
     }
 
     async function apiJson(url, options = {}) {
@@ -137,7 +120,13 @@
       document.getElementById('lead-select').innerHTML =
         '<option value="">Select customer...</option>' +
         leadsRes.data.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)}</option>`).join('');
-      addRoom('Interior');
+      const templateRooms = consumeTemplateRooms();
+      if (templateRooms.length) {
+        templateRooms.forEach(room => addRoom(room.name || 'Template room', room.items || []));
+        window.showToast('Template loaded into the production estimator.');
+      } else {
+        addRoom('Interior');
+      }
       calculateTotal();
     }
 
@@ -145,7 +134,20 @@
       return rates.map(rate => `<option value="${rate.id}">${escapeHtml(rate.description || `${rate.category} ${rate.surfaceType}`)} (${rate.ratePerHour} ${rate.unit}/hr)</option>`).join('');
     }
 
-    function addRoom(name = '') {
+    function consumeTemplateRooms() {
+      const raw = sessionStorage.getItem('templateRooms');
+      if (!raw) return [];
+      sessionStorage.removeItem('templateRooms');
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        window.showToast('Template data could not be loaded', 'error');
+        return [];
+      }
+    }
+
+    function addRoom(name = '', templateItems = []) {
       roomCounter++;
       const roomId = `room-${roomCounter}`;
       const div = document.createElement('div');
@@ -160,13 +162,40 @@
         <button type="button" class="add-surface mt-3 text-sm text-blue-600">Add surface</button>
       `;
       document.getElementById('rooms-container').appendChild(div);
-      addSurface(roomId);
+      if (templateItems.length) {
+        templateItems.forEach(item => addSurface(roomId, item));
+      } else {
+        addSurface(roomId);
+      }
     }
 
-    function addSurface(roomId) {
+    function findRateForTemplateItem(item = {}) {
+      if (item.productionRateId && rates.some(rate => rate.id === item.productionRateId)) return item.productionRateId;
+      const category = String(item.category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const singularCategory = category.endsWith('s') ? category.slice(0, -1) : category;
+      const match = rates.find(rate => {
+        const rateCategory = String(rate.category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const singularRateCategory = rateCategory.endsWith('s') ? rateCategory.slice(0, -1) : rateCategory;
+        const rateSurface = String(rate.surfaceType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rateDescription = String(rate.description || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return rateCategory === category ||
+          rateCategory === singularCategory ||
+          singularRateCategory === category ||
+          singularRateCategory === singularCategory ||
+          rateSurface === category ||
+          rateDescription.includes(category) ||
+          rateDescription.includes(singularCategory);
+      });
+      return match?.id || '';
+    }
+
+    function addSurface(roomId, item = {}) {
       const container = document.querySelector(`#${roomId} [data-items]`);
       const div = document.createElement('div');
       div.className = 'border rounded-lg p-3 bg-gray-50';
+      const rateId = findRateForTemplateItem(item);
+      const prepLevel = item.prepLevel || 'standard';
+      const quantity = item.quantity || '';
       div.innerHTML = `
         <div class="grid sm:grid-cols-2 gap-2 mb-2">
           <select class="px-2 py-2 border rounded text-sm" data-field="rateId">
@@ -174,16 +203,16 @@
             ${rateOptions()}
           </select>
           <select class="px-2 py-2 border rounded text-sm" data-field="prepLevel">
-            <option value="none">No prep</option>
-            <option value="light">Light prep</option>
-            <option value="standard" selected>Standard prep</option>
-            <option value="heavy">Heavy prep</option>
+            <option value="none" ${prepLevel === 'none' ? 'selected' : ''}>No prep</option>
+            <option value="light" ${prepLevel === 'light' ? 'selected' : ''}>Light prep</option>
+            <option value="standard" ${prepLevel === 'standard' ? 'selected' : ''}>Standard prep</option>
+            <option value="heavy" ${prepLevel === 'heavy' ? 'selected' : ''}>Heavy prep</option>
           </select>
         </div>
         <div class="grid grid-cols-3 gap-2 mb-2">
           <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Width" class="px-2 py-2 border rounded text-sm" data-field="width">
           <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Height" class="px-2 py-2 border rounded text-sm" data-field="height">
-          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Qty" class="px-2 py-2 border rounded text-sm" data-field="quantity">
+          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Qty" value="${escapeHtml(quantity)}" class="px-2 py-2 border rounded text-sm" data-field="quantity">
         </div>
         <div class="flex justify-between items-center text-sm">
           <span class="text-gray-600" data-line-total>$0.00</span>
@@ -191,6 +220,7 @@
         </div>
       `;
       container.appendChild(div);
+      div.querySelector('[data-field="rateId"]').value = rateId;
     }
 
     function collectItems(multiplier = 1) {
@@ -289,11 +319,11 @@
       const leadId = document.getElementById('lead-select').value;
       const packages = buildPackages();
       if (!leadId) {
-        showToast('Select a customer first', 'error');
+        window.showToast('Select a customer first', 'error');
         return;
       }
       if (packages.length === 0) {
-        showToast('Add at least one measured surface', 'error');
+        window.showToast('Add at least one measured surface', 'error');
         return;
       }
 
@@ -307,10 +337,10 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, packages }),
         });
-        showToast('Estimate created. Opening it now.');
+        window.showToast('Estimate created. Opening it now.');
         window.location.href = `/estimates/${data.id}`;
       } catch (err) {
-        showToast(err.message || 'Failed to create estimate', 'error');
+        window.showToast(err.message || 'Failed to create estimate', 'error');
         status.textContent = err.message || 'Failed to create estimate';
         button.disabled = false;
         button.textContent = 'Create Estimate';
@@ -322,5 +352,4 @@
       showSetupError(err.message || 'Failed to load estimator setup');
     });
   </script>
-</body>
-</html>
+</Base>

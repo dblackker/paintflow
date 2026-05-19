@@ -9,8 +9,29 @@ import Base from '../../layouts/Base.astro';
         <h2 class="text-2xl font-bold text-gray-900">Estimates</h2>
         <p class="text-sm text-gray-600 mt-1">Track sent, accepted, and declined painting proposals.</p>
       </div>
-      <a href="/estimates/new" class="w-full sm:w-auto text-center bg-blue-600 text-white px-4 py-3 sm:py-2 rounded-lg hover:bg-blue-700 font-medium">New Estimate</a>
+      <a href="/estimates/new" class="w-full sm:w-auto text-center bg-blue-600 text-white px-4 py-3 sm:py-2 rounded-lg hover:bg-blue-700 font-medium">Start estimate</a>
     </div>
+
+    <section class="grid md:grid-cols-2 gap-3 mb-4">
+      <a href="/estimates/new" class="block bg-white border rounded-lg shadow-sm p-4 hover:border-blue-300 hover:shadow-md">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="font-semibold text-gray-950">Quick estimate</h3>
+            <p class="text-sm text-gray-600 mt-1">Best for common residential work where the owner wants fast Good, Better, Best pricing.</p>
+          </div>
+          <span class="shrink-0 rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-xs font-medium">Default</span>
+        </div>
+      </a>
+      <a href="/estimates/production" class="block bg-white border rounded-lg shadow-sm p-4 hover:border-blue-300 hover:shadow-md">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="font-semibold text-gray-950">Production estimate</h3>
+            <p class="text-sm text-gray-600 mt-1">Use measured surfaces, prep levels, production rates, labor, materials, and templates.</p>
+          </div>
+          <span class="shrink-0 rounded-full bg-gray-100 text-gray-700 px-3 py-1 text-xs font-medium">Advanced</span>
+        </div>
+      </a>
+    </section>
 
     <section class="bg-white border rounded-lg shadow-sm p-3 sm:p-4 mb-4">
       <div class="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
