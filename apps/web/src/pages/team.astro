@@ -3,28 +3,13 @@ import Base from '../layouts/Base.astro';
 ---
 
 <Base title="Team">
-  <div class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/team" class="text-blue-600 font-medium">Team</a>
-            </nav>
-          </div>
-        </div>
-      </div>
-    </nav>
-
-    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex justify-between items-center mb-6">
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h2 class="text-2xl font-bold">Team Members</h2>
           <p class="text-gray-600">Manage roles and permissions</p>
         </div>
-        <button id="add-member-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Add Member</button>
+        <button id="add-member-btn" class="w-full sm:w-auto px-4 py-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Add Member</button>
       </div>
 
       <div id="members-list" class="space-y-3">
@@ -51,8 +36,7 @@ import Base from '../layouts/Base.astro';
           </form>
         </div>
       </div>
-    </main>
-  </div>
+  </main>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
