@@ -149,7 +149,7 @@
 
       function renderProposal(packages) {
         const pkg = packages.find(item => item.name === 'proposal') || packages.find(item => /better|recommended/i.test(item.name)) || packages[0];
-        const items = packageItems(pkg || {});
+        const items = packageItems(pkg || {}).filter(item => item.customerVisible !== false);
         if (!pkg || items.length === 0) {
           showError();
           return;
@@ -177,6 +177,7 @@
             <aside class="rounded-lg border p-5 bg-gray-50 self-start">
               <p class="text-sm text-gray-600">Total proposal</p>
               <p class="text-4xl font-bold mt-2" style="color: ${primaryColor}">${money(pkg.total)}</p>
+              ${pkg.discount ? `<p class="text-sm text-gray-600 mt-2">Includes ${money(pkg.discount)} discount.</p>` : ''}
               ${pkg.tax ? `<p class="text-sm text-gray-600 mt-2">Includes ${money(pkg.tax)} estimated tax.</p>` : ''}
               <p class="text-sm text-gray-600 mt-4">This price includes labor, selected paint products, prep, and listed materials for the scope shown.</p>
             </aside>

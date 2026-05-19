@@ -22,6 +22,23 @@ const estimateLineItemSchema = z.object({
   rate: z.coerce.number().nonnegative(),
   category: z.string().trim().max(80).optional(),
   notes: z.string().trim().max(500).optional(),
+  kind: z.enum(['surface', 'line_item']).optional(),
+  customerVisible: z.boolean().optional(),
+  dimensions: z.object({
+    width: z.coerce.number().nonnegative().optional(),
+    height: z.coerce.number().nonnegative().optional(),
+    quantity: z.coerce.number().nonnegative().optional(),
+    unit: z.string().trim().max(20).optional(),
+  }).optional(),
+  labor: z.object({
+    hours: z.coerce.number().nonnegative().optional(),
+    rate: z.coerce.number().nonnegative().optional(),
+    cost: z.coerce.number().nonnegative().optional(),
+    coats: z.coerce.number().int().positive().optional(),
+    prepLevel: z.string().trim().max(50).optional(),
+    prepAdjustmentHours: z.coerce.number().optional(),
+    paintAdjustmentHours: z.coerce.number().optional(),
+  }).optional(),
   material: z.object({
     id: z.string().uuid().optional(),
     name: z.string().trim().max(255).optional(),

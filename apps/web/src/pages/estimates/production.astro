@@ -37,6 +37,17 @@ import Base from '../../layouts/Base.astro';
         <button id="add-room" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600">
           Add Room or Area
         </button>
+
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h2 class="font-semibold text-gray-900">Add-ons & Adjustments</h2>
+              <p class="text-sm text-gray-600">Add trip charges, prep allowances, repairs, discounts, or other estimate-specific line items.</p>
+            </div>
+            <button id="add-line-item" type="button" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Add Line</button>
+          </div>
+          <div id="line-items-container" class="space-y-3"></div>
+        </div>
       </section>
 
       <aside class="space-y-4 lg:sticky lg:top-20 self-start">
@@ -46,6 +57,11 @@ import Base from '../../layouts/Base.astro';
             <div class="flex justify-between"><span class="text-gray-600">Labor hours</span><span id="total-hours" class="font-medium">0.0</span></div>
             <div class="flex justify-between"><span class="text-gray-600">Labor</span><span id="labor-total" class="font-medium">$0.00</span></div>
             <div class="flex justify-between"><span class="text-gray-600">Materials</span><span id="materials-total" class="font-medium">$0.00</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Adjustments</span><span id="adjustments-total" class="font-medium">$0.00</span></div>
+            <label class="flex items-center justify-between gap-3 border-t pt-2">
+              <span class="text-gray-600">Discount</span>
+              <input id="discount" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="0" class="w-28 px-2 py-1 border rounded text-right">
+            </label>
             <div class="flex justify-between"><span class="text-gray-600">Tax</span><span id="tax-total" class="font-medium">$0.00</span></div>
             <div class="flex justify-between border-t pt-2 text-base"><span class="font-semibold">Proposal total</span><span id="total-cost" class="font-bold text-blue-600">$0.00</span></div>
           </div>
@@ -141,7 +157,14 @@ import Base from '../../layouts/Base.astro';
     }
 
     function rateOptions() {
-      return rates.map(rate => `<option value="${rate.id}">${escapeHtml(rate.description || `${rate.category} ${rate.surfaceType}`)} (${rate.ratePerHour} ${rate.unit}/hr)</option>`).join('');
+      const categories = [...new Set(rates.map(rate => rate.category || 'Other'))];
+      return categories.map(category => {
+        const options = rates
+          .filter(rate => (rate.category || 'Other') === category)
+          .map(rate => `<option value="${rate.id}">${escapeHtml(rate.description || `${rate.category} ${rate.surfaceType}`)} (${rate.ratePerHour} ${rate.unit}/hr)</option>`)
+          .join('');
+        return `<optgroup label="${escapeHtml(category)}">${options}</optgroup>`;
+      }).join('');
     }
 
     function renderMaterialSelectors() {
@@ -194,6 +217,7 @@ import Base from '../../layouts/Base.astro';
       div.innerHTML = `
         <div class="flex gap-3 items-center mb-3">
           <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
+          <button type="button" class="copy-room text-sm text-blue-600">Copy</button>
           <button type="button" class="remove-room text-sm text-red-600">Remove</button>
         </div>
         <div class="space-y-3" data-items></div>
@@ -234,6 +258,7 @@ import Base from '../../layouts/Base.astro';
       const rateId = findRateForTemplateItem(item);
       const prepLevel = item.prepLevel || 'standard';
       const quantity = item.quantity || '';
+      const coats = item.coats || 2;
       div.innerHTML = `
         <div class="grid sm:grid-cols-2 gap-2 mb-2">
           <select class="px-2 py-2 border rounded text-sm" data-field="rateId">
@@ -247,18 +272,78 @@ import Base from '../../layouts/Base.astro';
             <option value="heavy" ${prepLevel === 'heavy' ? 'selected' : ''}>Heavy prep</option>
           </select>
         </div>
-        <div class="grid grid-cols-3 gap-2 mb-2">
-          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Width" class="px-2 py-2 border rounded text-sm" data-field="width">
-          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Height" class="px-2 py-2 border rounded text-sm" data-field="height">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Width" value="${escapeHtml(item.width || '')}" class="px-2 py-2 border rounded text-sm" data-field="width">
+          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Height" value="${escapeHtml(item.height || '')}" class="px-2 py-2 border rounded text-sm" data-field="height">
           <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Qty" value="${escapeHtml(quantity)}" class="px-2 py-2 border rounded text-sm" data-field="quantity">
+          <input type="number" min="1" step="1" inputmode="numeric" autocomplete="off" placeholder="Coats" value="${escapeHtml(coats)}" class="px-2 py-2 border rounded text-sm" data-field="coats">
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Prep hrs +/-" value="${escapeHtml(item.prepAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="prepAdjustmentHours">
+          <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Paint hrs +/-" value="${escapeHtml(item.paintAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="paintAdjustmentHours">
         </div>
         <div class="flex justify-between items-center text-sm">
-          <span class="text-gray-600" data-line-total>$0.00</span>
-          <button type="button" class="remove-surface text-red-600">Remove</button>
+          <label class="inline-flex items-center gap-2 text-gray-600">
+            <input type="checkbox" class="rounded border-gray-300" data-field="customerVisible" ${item.customerVisible === false ? '' : 'checked'}>
+            Show on proposal
+          </label>
+          <div class="flex items-center gap-3">
+            <span class="text-gray-600" data-line-total>$0.00</span>
+            <button type="button" class="copy-surface text-blue-600">Copy</button>
+            <button type="button" class="remove-surface text-red-600">Remove</button>
+          </div>
         </div>
       `;
       container.appendChild(div);
       div.querySelector('[data-field="rateId"]').value = rateId;
+    }
+
+    function collectSurfaceData(surface) {
+      return {
+        productionRateId: surface.querySelector('[data-field="rateId"]').value,
+        prepLevel: surface.querySelector('[data-field="prepLevel"]').value,
+        width: surface.querySelector('[data-field="width"]').value,
+        height: surface.querySelector('[data-field="height"]').value,
+        quantity: surface.querySelector('[data-field="quantity"]').value,
+        coats: surface.querySelector('[data-field="coats"]').value,
+        prepAdjustmentHours: surface.querySelector('[data-field="prepAdjustmentHours"]').value,
+        paintAdjustmentHours: surface.querySelector('[data-field="paintAdjustmentHours"]').value,
+        customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
+      };
+    }
+
+    function addLineItem(item = {}) {
+      const div = document.createElement('div');
+      div.className = 'grid gap-2 sm:grid-cols-[1fr_90px_110px_120px_auto] items-end border rounded-lg p-3 bg-gray-50';
+      div.innerHTML = `
+        <label class="block">
+          <span class="text-xs text-gray-600">Description</span>
+          <input data-field="desc" autocomplete="off" value="${escapeHtml(item.desc || '')}" placeholder="Add-on or adjustment" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Qty</span>
+          <input data-field="qty" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${escapeHtml(item.qty || 1)}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Price</span>
+          <input data-field="rate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${escapeHtml(item.rate || 0)}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Category</span>
+          <select data-field="category" class="mt-1 w-full px-3 py-2 border rounded-lg">
+            ${['add-on', 'prep', 'repair', 'discount', 'other'].map(category => `<option value="${category}" ${item.category === category ? 'selected' : ''}>${category}</option>`).join('')}
+          </select>
+        </label>
+        <div class="flex items-center justify-between gap-3">
+          <label class="inline-flex items-center gap-2 text-xs text-gray-600">
+            <input type="checkbox" class="rounded border-gray-300" data-field="customerVisible" ${item.customerVisible === false ? '' : 'checked'}>
+            Show
+          </label>
+          <button type="button" class="remove-line-item text-sm text-red-600">Remove</button>
+        </div>
+      `;
+      document.getElementById('line-items-container').appendChild(div);
+      calculateTotal();
     }
 
     function collectItems() {
@@ -269,6 +354,7 @@ import Base from '../../layouts/Base.astro';
       const items = [];
       let labor = 0;
       let materials = 0;
+      let adjustments = 0;
       let hours = 0;
 
       document.querySelectorAll('#rooms-container > div').forEach(room => {
@@ -284,7 +370,11 @@ import Base from '../../layouts/Base.astro';
           if (!manualQty && width && height) surface.querySelector('[data-field="quantity"]').value = quantity.toFixed(1);
 
           const prep = surface.querySelector('[data-field="prepLevel"]').value;
-          const itemHours = (quantity / Number(rate.ratePerHour || 1)) * Number(rate.coats || 2) * (prepMultipliers[prep] || 1.2);
+          const coats = Math.max(1, Number(surface.querySelector('[data-field="coats"]').value || rate.coats || 2));
+          const prepAdjustmentHours = Number(surface.querySelector('[data-field="prepAdjustmentHours"]').value || 0);
+          const paintAdjustmentHours = Number(surface.querySelector('[data-field="paintAdjustmentHours"]').value || 0);
+          const baseHours = (quantity / Number(rate.ratePerHour || 1)) * coats * (prepMultipliers[prep] || 1.2);
+          const itemHours = Math.max(0, baseHours + prepAdjustmentHours + paintAdjustmentHours);
           const itemLabor = itemHours * Number(rate.hourlyRate || settings.defaultLaborRate || 65);
           const isPrimerHeavy = prep === 'heavy' || /primer|prep|cabinet/i.test(`${rate.category} ${rate.description}`);
           const material = isPrimerHeavy && primer ? primer : paint;
@@ -301,7 +391,19 @@ import Base from '../../layouts/Base.astro';
             qty: 1,
             rate: Number(itemTotal.toFixed(2)),
             category: rate.unit,
-            notes: `${quantity.toFixed(1)} ${rate.unit}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}`,
+            kind: 'surface',
+            customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
+            dimensions: { width, height, quantity, unit: rate.unit },
+            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}`,
+            labor: {
+              hours: Number(itemHours.toFixed(2)),
+              rate: Number(rate.hourlyRate || settings.defaultLaborRate || 65),
+              cost: Number(itemLabor.toFixed(2)),
+              coats,
+              prepLevel: prep,
+              prepAdjustmentHours,
+              paintAdjustmentHours,
+            },
             material: material ? {
               id: material.id,
               name: material.name,
@@ -318,9 +420,29 @@ import Base from '../../layouts/Base.astro';
         });
       });
 
-      const subtotal = labor + materials;
-      const tax = subtotal * taxRate;
-      return { items, hours, labor, materials, tax, total: subtotal + tax };
+      document.querySelectorAll('#line-items-container > div').forEach(row => {
+        const desc = row.querySelector('[data-field="desc"]').value.trim();
+        const qty = Number(row.querySelector('[data-field="qty"]').value || 0);
+        const rate = Number(row.querySelector('[data-field="rate"]').value || 0);
+        if (!desc || qty <= 0 || rate <= 0) return;
+        const total = qty * rate;
+        adjustments += total;
+        items.push({
+          desc,
+          qty,
+          rate,
+          category: row.querySelector('[data-field="category"]').value,
+          kind: 'line_item',
+          customerVisible: row.querySelector('[data-field="customerVisible"]').checked,
+          notes: 'Estimate-specific line item',
+        });
+      });
+
+      const discount = Number(document.getElementById('discount').value || 0);
+      const subtotal = labor + materials + adjustments;
+      const taxableSubtotal = Math.max(subtotal - discount, 0);
+      const tax = taxableSubtotal * taxRate;
+      return { items, hours, labor, materials, adjustments, discount, tax, subtotal, total: taxableSubtotal + tax };
     }
 
     function buildPackages() {
@@ -328,7 +450,8 @@ import Base from '../../layouts/Base.astro';
       if (result.items.length === 0) return [];
       return [{
         name: 'proposal',
-        subtotal: Number((result.labor + result.materials).toFixed(2)),
+        subtotal: Number(result.subtotal.toFixed(2)),
+        discount: Number(result.discount.toFixed(2)),
         tax: Number(result.tax.toFixed(2)),
         total: Number(result.total.toFixed(2)),
         items: result.items,
@@ -341,11 +464,13 @@ import Base from '../../layouts/Base.astro';
       document.getElementById('total-hours').textContent = result.hours.toFixed(1);
       document.getElementById('labor-total').textContent = money(result.labor);
       document.getElementById('materials-total').textContent = money(result.materials);
+      document.getElementById('adjustments-total').textContent = money(result.adjustments);
       document.getElementById('tax-total').textContent = money(result.tax);
       document.getElementById('total-cost').textContent = money(result.total);
     }
 
     document.getElementById('add-room').addEventListener('click', () => addRoom());
+    document.getElementById('add-line-item').addEventListener('click', () => addLineItem());
     document.getElementById('retry-setup').addEventListener('click', () => {
       loadSetup().catch((err) => {
         console.error('Failed to load production estimator', err);
@@ -356,7 +481,23 @@ import Base from '../../layouts/Base.astro';
       if (event.target.classList.contains('remove-room')) event.target.closest('#rooms-container > div').remove();
       if (event.target.classList.contains('add-surface')) addSurface(event.target.closest('#rooms-container > div').id);
       if (event.target.classList.contains('remove-surface')) event.target.closest('[data-items] > div').remove();
+      if (event.target.classList.contains('copy-surface')) {
+        const room = event.target.closest('#rooms-container > div');
+        addSurface(room.id, collectSurfaceData(event.target.closest('[data-items] > div')));
+      }
+      if (event.target.classList.contains('copy-room')) {
+        const source = event.target.closest('#rooms-container > div');
+        const roomName = source.querySelector('[data-room-name]').value.trim() || 'Area';
+        const items = Array.from(source.querySelectorAll('[data-items] > div')).map(collectSurfaceData);
+        addRoom(`${roomName} copy`, items);
+      }
       calculateTotal();
+    });
+    document.getElementById('line-items-container').addEventListener('click', (event) => {
+      if (event.target.classList.contains('remove-line-item')) {
+        event.target.closest('#line-items-container > div').remove();
+        calculateTotal();
+      }
     });
     document.addEventListener('input', (event) => {
       if (event.target.closest('main')) calculateTotal();
