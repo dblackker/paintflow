@@ -181,8 +181,20 @@ import Base from '../../layouts/Base.astro';
         throw new Error('Unauthorized');
       }
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      if (!res.ok) throw new Error(apiErrorMessage(payload));
       return payload;
+    }
+
+    function apiErrorMessage(payload) {
+      const issues = payload?.issues || payload?.details?.formErrors || [];
+      const fieldErrors = payload?.details?.fieldErrors || {};
+      const issueMessage = Array.isArray(issues) && issues.length
+        ? issues.map(issue => `${Array.isArray(issue.path) ? issue.path.join('.') : ''} ${issue.message || issue}`.trim()).join('; ')
+        : '';
+      const fieldMessage = Object.entries(fieldErrors)
+        .flatMap(([field, messages]) => (messages || []).map(message => `${field}: ${message}`))
+        .join('; ');
+      return fieldMessage || issueMessage || payload?.error || 'Request failed';
     }
 
     function showSetupError(message) {

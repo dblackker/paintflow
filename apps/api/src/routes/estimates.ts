@@ -17,11 +17,11 @@ const signSchema = z.object({
 });
 
 const estimateLineItemSchema = z.object({
-  desc: z.string().trim().min(1).max(255),
+  desc: z.string().trim().min(1).max(500),
   qty: z.coerce.number().positive(),
   rate: z.coerce.number().nonnegative(),
-  category: z.string().trim().max(80).optional(),
-  notes: z.string().trim().max(500).optional(),
+  category: z.string().trim().max(120).optional(),
+  notes: z.string().trim().max(2000).optional(),
   kind: z.enum(['surface', 'line_item']).optional(),
   customerVisible: z.boolean().optional(),
   dimensions: z.object({
@@ -36,6 +36,8 @@ const estimateLineItemSchema = z.object({
     cost: z.coerce.number().nonnegative().optional(),
     coats: z.coerce.number().int().positive().optional(),
     prepLevel: z.string().trim().max(50).optional(),
+    applicationMethod: z.string().trim().max(50).optional(),
+    productionRatePerHour: z.coerce.number().nonnegative().optional(),
     prepAdjustmentHours: z.coerce.number().optional(),
     paintAdjustmentHours: z.coerce.number().optional(),
   }).optional(),
@@ -49,6 +51,10 @@ const estimateLineItemSchema = z.object({
     costPerUnit: z.coerce.number().nonnegative().optional(),
     markupPercent: z.coerce.number().nonnegative().optional(),
     price: z.coerce.number().nonnegative().optional(),
+    colorName: z.string().trim().max(120).optional(),
+    colorCode: z.string().trim().max(80).optional(),
+    status: z.string().trim().max(50).optional(),
+    crewNote: z.string().trim().max(500).optional(),
   }).optional(),
 });
 
@@ -56,6 +62,7 @@ const estimatePackageSchema = z.object({
   name: z.string().min(1).max(100),
   subtotal: z.coerce.number().nonnegative().optional(),
   discount: z.coerce.number().nonnegative().optional(),
+  tax: z.coerce.number().nonnegative().optional(),
   total: z.coerce.number().positive().optional(),
   items: z.array(estimateLineItemSchema).min(1).optional(),
   lineItems: z.array(estimateLineItemSchema).min(1).optional(),
@@ -69,6 +76,7 @@ const estimatePackageSchema = z.object({
     name: pkg.name,
     subtotal: Number(pkg.subtotal ?? subtotal),
     discount,
+    tax: Number(pkg.tax ?? 0),
     total: Number(pkg.total ?? computedTotal),
     items,
     lineItems: items,
@@ -194,7 +202,7 @@ estimatesApp.post('/', async (c) => {
   const parsed = createEstimateSchema.safeParse(body);
 
   if (!parsed.success) {
-    return c.json({ error: 'Invalid input', details: parsed.error.errors }, 400);
+    return c.json({ error: 'Invalid input', details: parsed.error.flatten(), issues: parsed.error.issues }, 400);
   }
 
   const db = createDb(c.env.DATABASE_URL);
