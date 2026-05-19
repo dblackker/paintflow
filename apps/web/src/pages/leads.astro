@@ -252,5 +252,9 @@ import Base from '../layouts/Base.astro';
     });
 
     loadSources().then(loadLeads);
+
+    if (new URLSearchParams(window.location.search).get('new') === '1') {
+      modal?.classList.remove('hidden');
+    }
   </script>
 </Base>

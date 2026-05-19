@@ -1,149 +1,195 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Dashboard - PaintFlow</title>
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#2563eb" />
-  </head>
-  <body class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <h1 class="text-xl font-semibold">PaintFlow</h1>
-          <button id="logout" class="text-sm text-gray-600 hover:text-gray-900">Sign out</button>
-        </div>
+<Base title="Dashboard - PaintFlow">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
+      <div>
+        <h2 class="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h2>
+        <p class="text-sm sm:text-base text-gray-600 mt-1">Run today’s lead, estimate, and job workflow from one place.</p>
       </div>
-    </nav>
-
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="mb-8">
-        <h2 class="text-2xl font-bold text-gray-900">Welcome back!</h2>
-        <p class="text-gray-600">Here's what's happening with your painting business</p>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <p class="text-sm text-gray-600">Active Leads</p>
-          <p class="text-3xl font-bold mt-2" id="active-leads">-</p>
-        </div>
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <p class="text-sm text-gray-600">Estimates Sent</p>
-          <p class="text-3xl font-bold mt-2" id="estimates-sent">-</p>
-        </div>
-        <div class="bg-white p-6 rounded-lg shadow-sm border">
-          <p class="text-sm text-gray-600">Jobs This Month</p>
-          <p class="text-3xl font-bold mt-2" id="jobs-month">-</p>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-lg shadow-sm border p-6">
-        <h3 class="text-lg font-semibold mb-4">Recent Activity</h3>
-        <div id="recent-activity" class="text-gray-600">Loading...</div>
-      </div>
-    </main>
-
-    <div id="install-prompt" class="hidden fixed bottom-4 right-4 bg-white p-4 rounded-lg shadow-lg border max-w-sm">
-      <p class="font-medium mb-2">Install PaintFlow</p>
-      <p class="text-sm text-gray-600 mb-3">Add to home screen for quick access</p>
-      <div class="flex gap-2">
-        <button id="install-btn" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded text-sm">Install</button>
-        <button id="dismiss-install" class="px-3 py-2 border rounded text-sm">Later</button>
+      <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <a href="/leads?new=1" class="text-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700">Add lead</a>
+        <a href="/estimates/new" class="text-center rounded-lg border bg-white px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50">New estimate</a>
+        <a href="/jobs" class="text-center rounded-lg border bg-white px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50">Jobs</a>
+        <a href="/payments/stripe" class="text-center rounded-lg border bg-white px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50">Payments</a>
       </div>
     </div>
-    
-    <script>
-      const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
 
-      // Check onboarding status and show progress widget
-      (async () => {
-        try {
-          const res = await fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' });
-          if (res.ok) {
-            const { data } = await res.json();
-            const completed = data.onboardingCompletedAt;
-            const hasCompany = !!data.companyName;
-            
-            if (!hasCompany && !completed) {
-              window.location.href = '/onboarding';
-              return;
-            }
-            
-            if (!completed) {
-              const progress = document.createElement('div');
-              progress.className = 'bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6';
-              progress.innerHTML = `
-                <div class="flex items-start gap-3">
-                  <div class="flex-1">
+    <section id="setup-slot"></section>
+
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
+      <a href="/leads" class="bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:border-blue-200 hover:shadow-md">
+        <p class="text-sm text-gray-600">Active Leads</p>
+        <p class="text-3xl font-bold mt-2" id="active-leads">-</p>
+        <p class="mt-3 text-sm font-medium text-blue-700">Open leads</p>
+      </a>
+      <a href="/estimates" class="bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:border-blue-200 hover:shadow-md">
+        <p class="text-sm text-gray-600">Estimates Sent</p>
+        <p class="text-3xl font-bold mt-2" id="estimates-sent">-</p>
+        <p class="mt-3 text-sm font-medium text-blue-700">Review estimates</p>
+      </a>
+      <a href="/jobs" class="bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:border-blue-200 hover:shadow-md">
+        <p class="text-sm text-gray-600">Jobs This Month</p>
+        <p class="text-3xl font-bold mt-2" id="jobs-month">-</p>
+        <p class="mt-3 text-sm font-medium text-blue-700">Open schedule</p>
+      </a>
+    </section>
+
+    <section id="empty-start" class="hidden mb-6 rounded-lg border border-blue-200 bg-blue-50 p-5 sm:p-6">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p class="font-semibold text-blue-950">Start with your first lead</p>
+          <p class="mt-1 text-sm text-blue-900">Capture the customer, then build an estimate from production rates when you are ready.</p>
+        </div>
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <a href="/leads?new=1" class="rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-medium text-white hover:bg-blue-700">Add first lead</a>
+          <a href="/production-rates" class="rounded-lg border border-blue-200 bg-white px-4 py-3 text-center text-sm font-medium text-blue-800 hover:bg-blue-50">Tune rates</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid gap-6 lg:grid-cols-[1fr_340px]">
+      <div class="bg-white rounded-lg shadow-sm border p-5 sm:p-6">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <h3 class="text-lg font-semibold">Recent Activity</h3>
+          <a href="/leads" class="text-sm font-medium text-blue-700 hover:underline">View pipeline</a>
+        </div>
+        <div id="recent-activity" class="text-gray-600">Loading...</div>
+      </div>
+
+      <aside class="space-y-4">
+        <div class="bg-white rounded-lg shadow-sm border p-5">
+          <p class="font-semibold text-gray-900">Quick entry</p>
+          <div class="mt-4 grid gap-2">
+            <a href="/leads?new=1" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Add a lead</a>
+            <a href="/estimates/new" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Create an estimate</a>
+            <a href="/templates" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Use an estimate template</a>
+            <a href="/settings" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Business settings</a>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm border p-5">
+          <p class="font-semibold text-gray-900">Owner tools</p>
+          <div class="mt-4 grid gap-2 text-sm">
+            <a href="/production-rates" class="text-blue-700 hover:underline">Production rates</a>
+            <a href="/reporting/lead-sources" class="text-blue-700 hover:underline">Lead source reporting</a>
+            <a href="/team" class="text-blue-700 hover:underline">Team and roles</a>
+            <a href="/payments/stripe" class="text-blue-700 hover:underline">Stripe payment setup</a>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <div id="install-prompt" class="hidden fixed bottom-4 right-4 bg-white p-4 rounded-lg shadow-lg border max-w-sm">
+    <p class="font-medium mb-2">Install PaintFlow</p>
+    <p class="text-sm text-gray-600 mb-3">Add to home screen for quick access</p>
+    <div class="flex gap-2">
+      <button id="install-btn" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded text-sm">Install</button>
+      <button id="dismiss-install" class="px-3 py-2 border rounded text-sm">Later</button>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' });
+        if (res.ok) {
+          const { data } = await res.json();
+          const completed = data.onboardingCompletedAt;
+          const hasCompany = !!data.companyName;
+
+          if (!hasCompany && !completed) {
+            window.location.href = '/onboarding';
+            return;
+          }
+
+          if (!completed) {
+            document.getElementById('setup-slot').innerHTML = `
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
                     <p class="font-medium text-yellow-900">Complete your setup</p>
-                    <p class="text-sm text-yellow-800 mt-1">Finish configuring PaintFlow so estimates, deposits, and job costing work from day one.</p>
-                    <div class="flex flex-wrap gap-3 mt-3">
-                      <a href="/onboarding" class="inline-block text-sm font-medium text-yellow-900 hover:underline">Continue setup</a>
-                      <a href="/billing" class="inline-block text-sm font-medium text-yellow-900 hover:underline">Compare plans</a>
-                    </div>
+                    <p class="text-sm text-yellow-800 mt-1">Finish settings, service areas, and payments before your first live estimate.</p>
+                  </div>
+                  <div class="flex flex-wrap gap-3">
+                    <a href="/onboarding" class="text-sm font-medium text-yellow-900 hover:underline">Continue setup</a>
+                    <a href="/payments/stripe" class="text-sm font-medium text-yellow-900 hover:underline">Set up payments</a>
                   </div>
                 </div>
-              `;
-              document.querySelector('main').prepend(progress);
-            }
+              </div>
+            `;
           }
-        } catch (err) {
-          console.error('Failed to check onboarding status', err);
+        } else if (res.status === 401) {
+          window.location.href = '/login';
         }
-      })();
+      } catch (err) {
+        console.error('Failed to check onboarding status', err);
+      }
+    })();
 
-      // Load dashboard stats
-      (async () => {
-        try {
-          const res = await fetch(`${API_URL}/v1/dashboard/stats`, { credentials: 'include' });
-          if (res.ok) {
-            const { data } = await res.json();
-            document.getElementById('active-leads').textContent = data.activeLeads;
-            document.getElementById('estimates-sent').textContent = data.estimatesSent;
-            document.getElementById('jobs-month').textContent = data.jobsThisMonth;
-            
-            const activity = document.getElementById('recent-activity');
-            if (data.recentActivity.length === 0) {
-              activity.textContent = 'No recent activity. Start by adding your first lead!';
-            } else {
-              activity.innerHTML = data.recentActivity.map(e => `<div class="py-2 border-b last:border-0"><p class="font-medium">${e.clientName || 'Estimate'}</p><p class="text-sm text-gray-600">Status: ${e.status}</p></div>`).join('');
-            }
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/v1/dashboard/stats`, { credentials: 'include' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (res.ok) {
+          const { data } = await res.json();
+          document.getElementById('active-leads').textContent = data.activeLeads;
+          document.getElementById('estimates-sent').textContent = data.estimatesSent;
+          document.getElementById('jobs-month').textContent = data.jobsThisMonth;
+
+          if (!data.activeLeads && !data.estimatesSent && !data.jobsThisMonth) {
+            document.getElementById('empty-start').classList.remove('hidden');
           }
-        } catch (err) {
-          console.error('Failed to load stats', err);
+
+          const activity = document.getElementById('recent-activity');
+          if (data.recentActivity.length === 0) {
+            activity.innerHTML = `
+              <div class="rounded-lg border border-dashed p-6 text-center">
+                <p class="font-medium text-gray-900">No activity yet</p>
+                <p class="mt-1 text-sm text-gray-600">Add a lead to start tracking calls, estimates, and jobs.</p>
+                <a href="/leads?new=1" class="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Add lead</a>
+              </div>
+            `;
+          } else {
+            activity.innerHTML = data.recentActivity.map(e => `
+              <div class="py-3 border-b last:border-0">
+                <p class="font-medium text-gray-950">${e.clientName || 'Estimate'}</p>
+                <p class="text-sm text-gray-600">Status: ${e.status}</p>
+              </div>
+            `).join('');
+          }
         }
-      })();
+      } catch (err) {
+        console.error('Failed to load stats', err);
+      }
+    })();
 
-      let deferredPrompt;
-      const prompt = document.getElementById('install-prompt');
-      
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        prompt.classList.remove('hidden');
-      });
-      
-      document.getElementById('install-btn')?.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log('Install outcome:', outcome);
-        deferredPrompt = null;
-        prompt.classList.add('hidden');
-      });
-      
-      document.getElementById('dismiss-install')?.addEventListener('click', () => {
-        prompt.classList.add('hidden');
-      });
+    let deferredPrompt;
+    const prompt = document.getElementById('install-prompt');
 
-      document.getElementById('logout')?.addEventListener('click', async () => {
-        await fetch(`${API_URL}/v1/auth/logout`, { method: 'POST', credentials: 'include' });
-        window.location.href = '/login';
-      });
-    </script>
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      prompt.classList.remove('hidden');
+    });
 
-  </body>
-</html>
+    document.getElementById('install-btn')?.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      prompt.classList.add('hidden');
+    });
+
+    document.getElementById('dismiss-install')?.addEventListener('click', () => {
+      prompt.classList.add('hidden');
+    });
+  </script>
+</Base>
