@@ -614,6 +614,8 @@ import Base from '../../layouts/Base.astro';
       const container = document.querySelector(`#${roomId} [data-items]`);
       const div = document.createElement('div');
       div.className = 'border rounded-lg p-3 bg-gray-50';
+      div.dataset.surfaceItem = 'true';
+      if (item.group) div.dataset.group = item.group;
       const rateId = findRateForTemplateItem(item);
       const selectedRate = rates.find(rate => rate.id === rateId);
       const prepLevel = item.prepLevel || 'standard';
@@ -718,6 +720,18 @@ import Base from '../../layouts/Base.astro';
       return !hasMeasurements && (!rate || !isExteriorRate(rate));
     }
 
+    function ensureSurfaceGroup(container, groupName) {
+      if (!groupName) return;
+      const existing = Array.from(container.querySelectorAll('[data-surface-group]'))
+        .find(group => group.dataset.surfaceGroup === groupName);
+      if (existing) return;
+      const header = document.createElement('div');
+      header.dataset.surfaceGroup = groupName;
+      header.className = 'mt-4 mb-2 flex items-center gap-2 text-sm font-semibold text-gray-800';
+      header.innerHTML = `<span>${escapeHtml(groupName)}</span><span class="h-px flex-1 bg-gray-200"></span>`;
+      container.appendChild(header);
+    }
+
     function generateInteriorScope(room) {
       room.querySelector('[data-area-type]').value = 'interior';
       syncAreaType(room);
@@ -749,16 +763,17 @@ import Base from '../../layouts/Base.astro';
         return;
       }
 
-      Array.from(room.querySelectorAll('[data-items] > div'))
+      Array.from(room.querySelectorAll('[data-surface-item]'))
         .filter(isEmptyGeneratedPlaceholder)
         .forEach(surface => surface.remove());
 
-      const existingLabels = new Set(Array.from(room.querySelectorAll('[data-field="label"]'))
+      const existingLabels = new Set(Array.from(room.querySelectorAll('[data-surface-item] [data-field="label"]'))
         .map(input => input.value.trim().toLowerCase())
         .filter(Boolean));
       const added = [];
 
       roomItems.forEach((roomItem) => {
+        ensureSurfaceGroup(room.querySelector('[data-items]'), roomItem.label);
         const quantities = interiorQuantitiesForRoom(roomItem, assumptions);
         [
           { kind: 'walls', label: `${roomItem.label} walls`, quantity: quantities.walls },
@@ -771,6 +786,7 @@ import Base from '../../layouts/Base.astro';
           addSurface(room.id, {
             productionRateId: rate.id,
             label: item.label,
+            group: roomItem.label,
             prepLevel: 'standard',
             quantity: Number(item.quantity.toFixed(1)),
             coats: rate.coats || 2,
@@ -805,11 +821,11 @@ import Base from '../../layouts/Base.astro';
       const added = [];
       const missingRates = [];
 
-      Array.from(room.querySelectorAll('[data-items] > div'))
+      Array.from(room.querySelectorAll('[data-surface-item]'))
         .filter(isEmptyGeneratedPlaceholder)
         .forEach(surface => surface.remove());
 
-      const existingKinds = new Set(Array.from(room.querySelectorAll('[data-items] > div')).map(surfaceRateKind).filter(Boolean));
+      const existingKinds = new Set(Array.from(room.querySelectorAll('[data-surface-item]')).map(surfaceRateKind).filter(Boolean));
 
       items.forEach((item) => {
         if (existingKinds.has(item.kind)) return;
@@ -953,7 +969,7 @@ import Base from '../../layouts/Base.astro';
       const preview = room?.querySelector('[data-interior-preview]');
       if (!preview) return;
       const quantities = interiorAssumptionQuantities(room);
-      const hasInteriorSurface = Array.from(room.querySelectorAll('[data-items] > div')).some((surface) => interiorSurfaceKind(surface));
+      const hasInteriorSurface = Array.from(room.querySelectorAll('[data-surface-item]')).some((surface) => interiorSurfaceKind(surface));
 
       if (!quantities.roomCount) {
         preview.innerHTML = '<p class="font-medium">Add room counts to preview assumed interior quantities.</p>';
@@ -1005,7 +1021,7 @@ import Base from '../../layouts/Base.astro';
 
       const assumptions = exteriorAssumptions(room);
       const quantities = exteriorAssumptionQuantities(room);
-      const hasExteriorSurface = Array.from(room.querySelectorAll('[data-items] > div')).some((surface) => {
+      const hasExteriorSurface = Array.from(room.querySelectorAll('[data-surface-item]')).some((surface) => {
         const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
         return rate && isExteriorRate(rate);
       });
@@ -1056,6 +1072,7 @@ import Base from '../../layouts/Base.astro';
       return {
         productionRateId: surface.querySelector('[data-field="rateId"]').value,
         label: surface.querySelector('[data-field="label"]').value,
+        group: surface.dataset.group || '',
         applicationMethod: surface.querySelector('[data-field="applicationMethod"]').value,
         prepLevel: surface.querySelector('[data-field="prepLevel"]').value,
         width: surface.querySelector('[data-field="width"]').value,
@@ -1138,7 +1155,7 @@ import Base from '../../layouts/Base.astro';
 
       document.querySelectorAll('#rooms-container > div').forEach(room => {
         const roomName = room.querySelector('[data-room-name]').value.trim() || 'Area';
-        room.querySelectorAll('[data-items] > div').forEach(surface => {
+        room.querySelectorAll('[data-surface-item]').forEach(surface => {
           const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
           if (!rate) return;
           const { width, height, quantity } = measuredQuantity(surface, rate);
@@ -1283,15 +1300,15 @@ import Base from '../../layouts/Base.astro';
       }
       if (event.target.classList.contains('remove-room')) event.target.closest('#rooms-container > div').remove();
       if (event.target.classList.contains('add-surface')) addSurface(event.target.closest('#rooms-container > div').id);
-      if (event.target.classList.contains('remove-surface')) event.target.closest('[data-items] > div').remove();
+      if (event.target.classList.contains('remove-surface')) event.target.closest('[data-surface-item]').remove();
       if (event.target.classList.contains('copy-surface')) {
         const room = event.target.closest('#rooms-container > div');
-        addSurface(room.id, collectSurfaceData(event.target.closest('[data-items] > div')));
+        addSurface(room.id, collectSurfaceData(event.target.closest('[data-surface-item]')));
       }
       if (event.target.classList.contains('copy-room')) {
         const source = event.target.closest('#rooms-container > div');
         const roomName = source.querySelector('[data-room-name]').value.trim() || 'Area';
-        const items = Array.from(source.querySelectorAll('[data-items] > div')).map(collectSurfaceData);
+        const items = Array.from(source.querySelectorAll('[data-surface-item]')).map(collectSurfaceData);
         const copied = addRoom(`${roomName} copy`, items);
         copied.querySelector('[data-area-type]').value = source.querySelector('[data-area-type]').value;
         source.querySelectorAll('[data-exterior]').forEach((input) => {
@@ -1325,13 +1342,13 @@ import Base from '../../layouts/Base.astro';
       if (event.target.matches('[data-area-type]')) {
         const room = event.target.closest('#rooms-container > div');
         syncAreaType(room);
-        room.querySelectorAll('[data-items] > div').forEach(syncSurfaceMeasurement);
+        room.querySelectorAll('[data-surface-item]').forEach(syncSurfaceMeasurement);
       }
       if (event.target.matches('[data-interior]')) {
         updateInteriorPreview(event.target.closest('#rooms-container > div'));
       }
       if (event.target.matches('[data-field="rateId"]')) {
-        const surface = event.target.closest('[data-items] > div');
+        const surface = event.target.closest('[data-surface-item]');
         syncSurfaceMeasurement(surface);
         const rate = rates.find(item => item.id === event.target.value);
         surface.querySelector('[data-field="applicationMethod"]').value = defaultApplicationMethod(rate);
