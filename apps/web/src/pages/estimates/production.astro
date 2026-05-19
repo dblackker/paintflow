@@ -219,16 +219,16 @@ import Base from '../../layouts/Base.astro';
 
       if (kind === 'fascia') {
         return {
-          widthLabel: 'Fascia run',
+          widthLabel: 'Linear feet',
           widthPlaceholder: 'Linear ft',
           heightLabel: '',
           heightPlaceholder: '',
-          qtyLabel: 'Lin ft override',
-          qtyPlaceholder: 'Optional',
+          qtyLabel: '',
+          qtyPlaceholder: '',
           showWidth: true,
           showHeight: false,
-          showQty: true,
-          helper: 'Fascia is normally estimated from roofline or house perimeter, then overridden if measured.',
+          showQty: false,
+          helper: 'Fascia uses this measured linear footage, or exterior assumptions when blank.',
         };
       }
 
@@ -264,16 +264,16 @@ import Base from '../../layouts/Base.astro';
 
       if (kind === 'exterior_trim') {
         return {
-          widthLabel: '',
-          widthPlaceholder: '',
+          widthLabel: 'Linear feet',
+          widthPlaceholder: 'Linear ft',
           heightLabel: '',
           heightPlaceholder: '',
-          qtyLabel: 'Lin ft override',
-          qtyPlaceholder: 'Optional',
-          showWidth: false,
+          qtyLabel: '',
+          qtyPlaceholder: '',
+          showWidth: true,
           showHeight: false,
-          showQty: true,
-          helper: 'Exterior trim uses window and door counts from the area assumptions, with a linear-foot override when measured.',
+          showQty: false,
+          helper: 'Exterior trim uses this measured linear footage, or window and door assumptions when blank.',
         };
       }
 
@@ -294,16 +294,16 @@ import Base from '../../layouts/Base.astro';
 
       if (kind === 'corner_boards') {
         return {
-          widthLabel: '',
-          widthPlaceholder: '',
+          widthLabel: 'Linear feet',
+          widthPlaceholder: 'Linear ft',
           heightLabel: '',
           heightPlaceholder: '',
-          qtyLabel: 'Lin ft override',
-          qtyPlaceholder: 'Optional',
-          showWidth: false,
+          qtyLabel: '',
+          qtyPlaceholder: '',
+          showWidth: true,
           showHeight: false,
-          showQty: true,
-          helper: 'Corner board footage is estimated from corner count times wall height and stories.',
+          showQty: false,
+          helper: 'Corner boards use this measured linear footage, or corner count assumptions when blank.',
         };
       }
 
@@ -313,12 +313,12 @@ import Base from '../../layouts/Base.astro';
           widthPlaceholder: 'Length',
           heightLabel: '',
           heightPlaceholder: '',
-          qtyLabel: 'Lin ft override',
-          qtyPlaceholder: 'Optional',
+          qtyLabel: '',
+          qtyPlaceholder: '',
           showWidth: true,
           showHeight: false,
-          showQty: true,
-          helper: 'Linear items use measured length, or a direct override.',
+          showQty: false,
+          helper: 'Linear items use this measured length.',
         };
       }
 
@@ -1094,7 +1094,7 @@ import Base from '../../layouts/Base.astro';
 
       if (String(rate?.unit || '').toLowerCase() === 'linear_ft') {
         const quantity = manualQty || width || assumptionQty;
-        return { width, height: 0, quantity };
+        return { width: quantity, height: 0, quantity };
       }
 
       if (String(rate?.unit || '').toLowerCase() === 'each') {
