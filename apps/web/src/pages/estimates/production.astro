@@ -161,10 +161,96 @@ import Base from '../../layouts/Base.astro';
       return categories.map(category => {
         const options = rates
           .filter(rate => (rate.category || 'Other') === category)
-          .map(rate => `<option value="${rate.id}">${escapeHtml(rate.description || `${rate.category} ${rate.surfaceType}`)} (${rate.ratePerHour} ${rate.unit}/hr)</option>`)
+          .map(rate => `<option value="${rate.id}">${escapeHtml(cleanRateLabel(rate))} (${rate.ratePerHour} ${rate.unit}/hr)</option>`)
           .join('');
         return `<optgroup label="${escapeHtml(category)}">${options}</optgroup>`;
       }).join('');
+    }
+
+    function cleanRateLabel(rate) {
+      return String(rate.description || `${rate.category} ${rate.surfaceType}`)
+        .replace(/\s*[,\-–—]?\s*(no|light|standard|heavy)\s+prep\b/ig, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    }
+
+    function measurementConfig(rate) {
+      const category = String(rate?.category || '').toLowerCase();
+      const description = String(rate?.description || '').toLowerCase();
+      const unit = String(rate?.unit || 'sqft').toLowerCase();
+
+      if (unit === 'linear_ft') {
+        return {
+          widthLabel: 'Linear feet',
+          widthPlaceholder: 'Length',
+          heightLabel: '',
+          heightPlaceholder: '',
+          qtyLabel: 'Qty',
+          qtyPlaceholder: 'Optional',
+          showWidth: true,
+          showHeight: false,
+          showQty: true,
+          helper: 'Trim is measured in linear feet.',
+        };
+      }
+
+      if (unit === 'each') {
+        return {
+          widthLabel: '',
+          widthPlaceholder: '',
+          heightLabel: '',
+          heightPlaceholder: '',
+          qtyLabel: 'Count',
+          qtyPlaceholder: 'Count',
+          showWidth: false,
+          showHeight: false,
+          showQty: true,
+          helper: 'Doors, cabinet fronts, and similar items are measured by count.',
+        };
+      }
+
+      if (category.includes('wall') || description.includes('wall')) {
+        return {
+          widthLabel: 'Perimeter',
+          widthPlaceholder: 'Linear ft',
+          heightLabel: 'Wall height',
+          heightPlaceholder: 'Feet',
+          qtyLabel: 'Sq ft override',
+          qtyPlaceholder: 'Optional',
+          showWidth: true,
+          showHeight: true,
+          showQty: true,
+          helper: 'Wall area uses room perimeter times wall height, with optional direct square-foot override.',
+        };
+      }
+
+      if (category.includes('ceiling') || description.includes('ceiling')) {
+        return {
+          widthLabel: 'Length',
+          widthPlaceholder: 'Feet',
+          heightLabel: 'Width',
+          heightPlaceholder: 'Feet',
+          qtyLabel: 'Sq ft override',
+          qtyPlaceholder: 'Optional',
+          showWidth: true,
+          showHeight: true,
+          showQty: true,
+          helper: 'Ceilings use length times width, with optional direct square-foot override.',
+        };
+      }
+
+      return {
+        widthLabel: 'Width',
+        widthPlaceholder: 'Feet',
+        heightLabel: 'Height',
+        heightPlaceholder: 'Feet',
+        qtyLabel: 'Sq ft override',
+        qtyPlaceholder: 'Optional',
+        showWidth: true,
+        showHeight: true,
+        showQty: true,
+        helper: 'Area surfaces use width times height, with optional direct square-foot override.',
+      };
     }
 
     function renderMaterialSelectors() {
@@ -272,12 +358,29 @@ import Base from '../../layouts/Base.astro';
             <option value="heavy" ${prepLevel === 'heavy' ? 'selected' : ''}>Heavy prep</option>
           </select>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Width" value="${escapeHtml(item.width || '')}" class="px-2 py-2 border rounded text-sm" data-field="width">
-          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Height" value="${escapeHtml(item.height || '')}" class="px-2 py-2 border rounded text-sm" data-field="height">
-          <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Qty" value="${escapeHtml(quantity)}" class="px-2 py-2 border rounded text-sm" data-field="quantity">
-          <input type="number" min="1" step="1" inputmode="numeric" autocomplete="off" placeholder="Coats" value="${escapeHtml(coats)}" class="px-2 py-2 border rounded text-sm" data-field="coats">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-1">
+          <label class="block" data-measure="width">
+            <span class="text-xs text-gray-600" data-label="width">Width</span>
+            <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Feet" value="${escapeHtml(item.width || '')}" class="mt-1 w-full px-2 py-2 border rounded text-sm" data-field="width">
+          </label>
+          <label class="block" data-measure="height">
+            <span class="text-xs text-gray-600" data-label="height">Height</span>
+            <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Feet" value="${escapeHtml(item.height || '')}" class="mt-1 w-full px-2 py-2 border rounded text-sm" data-field="height">
+          </label>
+          <label class="block" data-measure="quantity">
+            <span class="text-xs text-gray-600" data-label="quantity">Qty</span>
+            <input type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" placeholder="Optional" value="${escapeHtml(quantity)}" class="mt-1 w-full px-2 py-2 border rounded text-sm" data-field="quantity">
+          </label>
+          <label class="block">
+            <span class="text-xs text-gray-600">Coats</span>
+            <select class="mt-1 w-full px-2 py-2 border rounded text-sm" data-field="coats">
+              <option value="1" ${Number(coats) === 1 ? 'selected' : ''}>1 coat</option>
+              <option value="2" ${Number(coats) === 2 ? 'selected' : ''}>2 coats</option>
+              <option value="3" ${Number(coats) === 3 ? 'selected' : ''}>3 coats</option>
+            </select>
+          </label>
         </div>
+        <p class="mb-2 text-xs text-gray-500" data-measure-helper></p>
         <div class="grid grid-cols-2 gap-2 mb-2">
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Prep hrs +/-" value="${escapeHtml(item.prepAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="prepAdjustmentHours">
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Paint hrs +/-" value="${escapeHtml(item.paintAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="paintAdjustmentHours">
@@ -296,6 +399,26 @@ import Base from '../../layouts/Base.astro';
       `;
       container.appendChild(div);
       div.querySelector('[data-field="rateId"]').value = rateId;
+      syncSurfaceMeasurement(div);
+    }
+
+    function syncSurfaceMeasurement(surface) {
+      const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
+      const config = measurementConfig(rate);
+      const widthWrap = surface.querySelector('[data-measure="width"]');
+      const heightWrap = surface.querySelector('[data-measure="height"]');
+      const qtyWrap = surface.querySelector('[data-measure="quantity"]');
+
+      widthWrap.classList.toggle('hidden', !config.showWidth);
+      heightWrap.classList.toggle('hidden', !config.showHeight);
+      qtyWrap.classList.toggle('hidden', !config.showQty);
+      surface.querySelector('[data-label="width"]').textContent = config.widthLabel;
+      surface.querySelector('[data-label="height"]').textContent = config.heightLabel;
+      surface.querySelector('[data-label="quantity"]').textContent = config.qtyLabel;
+      surface.querySelector('[data-field="width"]').placeholder = config.widthPlaceholder;
+      surface.querySelector('[data-field="height"]').placeholder = config.heightPlaceholder;
+      surface.querySelector('[data-field="quantity"]').placeholder = config.qtyPlaceholder;
+      surface.querySelector('[data-measure-helper]').textContent = config.helper;
     }
 
     function collectSurfaceData(surface) {
@@ -346,6 +469,26 @@ import Base from '../../layouts/Base.astro';
       calculateTotal();
     }
 
+    function measuredQuantity(surface, rate) {
+      const config = measurementConfig(rate);
+      const width = Number(surface.querySelector('[data-field="width"]').value || 0);
+      const height = Number(surface.querySelector('[data-field="height"]').value || 0);
+      const manualQty = Number(surface.querySelector('[data-field="quantity"]').value || 0);
+
+      if (String(rate?.unit || '').toLowerCase() === 'linear_ft') {
+        const quantity = width || manualQty;
+        return { width, height: 0, quantity };
+      }
+
+      if (String(rate?.unit || '').toLowerCase() === 'each') {
+        return { width: 0, height: 0, quantity: manualQty };
+      }
+
+      const quantity = manualQty || (width && height ? width * height : 0);
+      if (!manualQty && width && height) surface.querySelector('[data-field="quantity"]').value = quantity.toFixed(1);
+      return { width: config.showWidth ? width : 0, height: config.showHeight ? height : 0, quantity };
+    }
+
     function collectItems() {
       const taxRate = Number(settings.salesTaxRate || 0);
       const materialMarkup = Number(settings.materialMarkupPercent || 0) / 100;
@@ -362,12 +505,8 @@ import Base from '../../layouts/Base.astro';
         room.querySelectorAll('[data-items] > div').forEach(surface => {
           const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
           if (!rate) return;
-          const width = Number(surface.querySelector('[data-field="width"]').value || 0);
-          const height = Number(surface.querySelector('[data-field="height"]').value || 0);
-          const manualQty = Number(surface.querySelector('[data-field="quantity"]').value || 0);
-          const quantity = manualQty || (width && height ? width * height : 0);
+          const { width, height, quantity } = measuredQuantity(surface, rate);
           if (quantity <= 0) return;
-          if (!manualQty && width && height) surface.querySelector('[data-field="quantity"]').value = quantity.toFixed(1);
 
           const prep = surface.querySelector('[data-field="prepLevel"]').value;
           const coats = Math.max(1, Number(surface.querySelector('[data-field="coats"]').value || rate.coats || 2));
@@ -503,6 +642,9 @@ import Base from '../../layouts/Base.astro';
       if (event.target.closest('main')) calculateTotal();
     });
     document.addEventListener('change', (event) => {
+      if (event.target.matches('[data-field="rateId"]')) {
+        syncSurfaceMeasurement(event.target.closest('[data-items] > div'));
+      }
       if (event.target.closest('main')) calculateTotal();
     });
 
