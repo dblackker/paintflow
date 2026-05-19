@@ -305,14 +305,14 @@ button[class*="bg-blue"][class*="text-white"]:active {
   align-items: center;
   background: var(--pf-surface);
   border: 1px solid var(--pf-border-strong);
-  border-radius: 0.45rem;
+  border-radius: 0.4rem;
   color: var(--pf-text);
   display: inline-flex;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
   justify-content: center;
-  min-height: 1.9rem;
-  padding: 0.35rem 0.55rem;
+  min-height: 1.65rem;
+  padding: 0.25rem 0.45rem;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
