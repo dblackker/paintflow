@@ -85,6 +85,11 @@ import Base from '../../layouts/Base.astro';
           </button>
           <p id="save-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
         </div>
+
+        <div class="bg-white rounded-lg shadow-sm border p-4">
+          <h2 class="font-semibold text-gray-900 mb-3">Production Readiness</h2>
+          <div id="production-readiness" class="space-y-2 text-sm text-gray-700"></div>
+        </div>
       </aside>
     </div>
   </main>
@@ -396,7 +401,7 @@ import Base from '../../layouts/Base.astro';
     function renderMaterialSelectors() {
       const paintOptions = materialsCatalog
         .filter(material => ['paint', 'primer'].includes(String(material.category || '').toLowerCase()))
-        .map(material => `<option value="${material.id}">${escapeHtml([material.brand, material.name].filter(Boolean).join(' - '))} (${money(material.costPerUnit)}/${escapeHtml(material.unit)})</option>`)
+        .map(material => materialOption(material))
         .join('');
       const noMaterial = '<option value="">Use pricing default</option>';
       document.getElementById('paint-material').innerHTML = noMaterial + paintOptions;
@@ -408,6 +413,19 @@ import Base from '../../layouts/Base.astro';
 
     function selectedMaterial(id) {
       return materialsCatalog.find(material => material.id === id);
+    }
+
+    function materialOption(material, selectedId = '') {
+      const selected = material.id === selectedId ? 'selected' : '';
+      return `<option value="${material.id}" ${selected}>${escapeHtml([material.brand, material.name].filter(Boolean).join(' - '))} (${money(material.costPerUnit)}/${escapeHtml(material.unit)})</option>`;
+    }
+
+    function surfaceMaterialOptions(selectedId = '') {
+      const options = materialsCatalog
+        .filter(material => ['paint', 'primer'].includes(String(material.category || '').toLowerCase()))
+        .map(material => materialOption(material, selectedId))
+        .join('');
+      return '<option value="">Use estimate paint product</option>' + options;
     }
 
     function materialCostForQuantity(quantity, material) {
@@ -624,6 +642,8 @@ import Base from '../../layouts/Base.astro';
       const quantity = item.quantity || '';
       const coats = item.coats || 2;
       div.innerHTML = `
+        <input type="hidden" value="${escapeHtml(item.label || '')}" data-field="label">
+        <div class="${item.group ? 'mb-2 text-sm font-medium text-gray-700' : 'hidden'}" data-surface-title>${escapeHtml(item.surfaceName || item.label || '')}</div>
         <div class="grid sm:grid-cols-3 gap-2 mb-2">
           <select class="px-2 py-2 border rounded text-sm" data-field="rateId">
             <option value="">Select surface...</option>
@@ -639,8 +659,6 @@ import Base from '../../layouts/Base.astro';
             <option value="heavy" ${prepLevel === 'heavy' ? 'selected' : ''}>Heavy prep</option>
           </select>
         </div>
-        <input type="hidden" value="${escapeHtml(item.label || '')}" data-field="label">
-        <div class="${item.group ? 'mb-2 text-sm font-medium text-gray-700' : 'hidden'}" data-surface-title>${escapeHtml(item.surfaceName || item.label || '')}</div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-1">
           <label class="block" data-measure="width">
             <span class="text-xs text-gray-600" data-label="width">Width</span>
@@ -667,6 +685,16 @@ import Base from '../../layouts/Base.astro';
         <div class="grid grid-cols-2 gap-2 mb-2">
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Prep hrs +/-" value="${escapeHtml(item.prepAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="prepAdjustmentHours">
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Paint hrs +/-" value="${escapeHtml(item.paintAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="paintAdjustmentHours">
+        </div>
+        <div class="grid gap-2 mb-2 sm:grid-cols-[1.2fr_0.8fr_1fr_0.8fr]">
+          <select class="px-2 py-2 border rounded text-sm" data-field="materialId">
+            ${surfaceMaterialOptions(item.materialId || '')}
+          </select>
+          <select class="px-2 py-2 border rounded text-sm" data-field="sheen">
+            ${['', 'Flat', 'Matte', 'Eggshell', 'Satin', 'Semi-gloss', 'Gloss'].map(sheen => `<option value="${sheen}" ${item.sheen === sheen ? 'selected' : ''}>${sheen || 'Sheen TBD'}</option>`).join('')}
+          </select>
+          <input type="text" autocomplete="off" placeholder="Color name" value="${escapeHtml(item.colorName || '')}" class="px-2 py-2 border rounded text-sm" data-field="colorName">
+          <input type="text" autocomplete="off" placeholder="Color code" value="${escapeHtml(item.colorCode || '')}" class="px-2 py-2 border rounded text-sm" data-field="colorCode">
         </div>
         <div class="flex justify-between items-center text-sm">
           <label class="inline-flex items-center gap-2 text-gray-600">
@@ -1105,6 +1133,10 @@ import Base from '../../layouts/Base.astro';
         coats: surface.querySelector('[data-field="coats"]').value,
         prepAdjustmentHours: surface.querySelector('[data-field="prepAdjustmentHours"]').value,
         paintAdjustmentHours: surface.querySelector('[data-field="paintAdjustmentHours"]').value,
+        materialId: surface.querySelector('[data-field="materialId"]').value,
+        sheen: surface.querySelector('[data-field="sheen"]').value,
+        colorName: surface.querySelector('[data-field="colorName"]').value,
+        colorCode: surface.querySelector('[data-field="colorCode"]').value,
         customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
       };
     }
@@ -1194,12 +1226,16 @@ import Base from '../../layouts/Base.astro';
           const coats = Math.max(1, Number(surface.querySelector('[data-field="coats"]').value || rate.coats || 2));
           const prepAdjustmentHours = Number(surface.querySelector('[data-field="prepAdjustmentHours"]').value || 0);
           const paintAdjustmentHours = Number(surface.querySelector('[data-field="paintAdjustmentHours"]').value || 0);
+          const surfaceMaterial = selectedMaterial(surface.querySelector('[data-field="materialId"]').value);
+          const sheen = surface.querySelector('[data-field="sheen"]').value;
+          const colorName = surface.querySelector('[data-field="colorName"]').value.trim();
+          const colorCode = surface.querySelector('[data-field="colorCode"]').value.trim();
           const adjustedRatePerHour = Number(rate.ratePerHour || 1) * Number(application.productivity || 1);
           const baseHours = (quantity / adjustedRatePerHour) * coats * (prepMultipliers[prep] || 1.2);
           const itemHours = Math.max(0, baseHours + prepAdjustmentHours + paintAdjustmentHours);
           const itemLabor = itemHours * Number(rate.hourlyRate || settings.defaultLaborRate || 65);
           const isPrimerHeavy = prep === 'heavy' || /primer|prep|cabinet/i.test(`${rate.category} ${rate.description}`);
-          const material = isPrimerHeavy && primer ? primer : paint;
+          const material = surfaceMaterial || (isPrimerHeavy && primer ? primer : paint);
           const productCost = materialCostForQuantity(quantity, material);
           const fallbackMaterialUnit = Number(rate.hourlyRate || settings.defaultLaborRate || 65) * 0.12;
           const itemMaterials = productCost ? productCost.price : quantity * fallbackMaterialUnit * (1 + materialMarkup);
@@ -1217,7 +1253,7 @@ import Base from '../../layouts/Base.astro';
             kind: 'surface',
             customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
             dimensions: { width, height, quantity, unit: rate.unit },
-            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}`,
+            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}${sheen ? `, ${sheen}` : ''}${colorName ? `, ${colorName}` : ''}${colorCode ? ` (${colorCode})` : ''}`,
             labor: {
               hours: Number(itemHours.toFixed(2)),
               rate: Number(rate.hourlyRate || settings.defaultLaborRate || 65),
@@ -1239,6 +1275,10 @@ import Base from '../../layouts/Base.astro';
               costPerUnit: Number(material.costPerUnit || 0),
               markupPercent: Number(material.markupPercent ?? settings.materialMarkupPercent ?? 0),
               price: productCost ? Number(productCost.price.toFixed(2)) : Number(itemMaterials.toFixed(2)),
+              sheen,
+              colorName,
+              colorCode,
+              status: colorName && colorCode ? 'selected' : 'needs_selection',
             } : undefined,
           });
           surface.querySelector('[data-line-total]').textContent = money(itemTotal);
@@ -1292,6 +1332,24 @@ import Base from '../../layouts/Base.astro';
       document.getElementById('adjustments-total').textContent = money(result.adjustments);
       document.getElementById('tax-total').textContent = money(result.tax);
       document.getElementById('total-cost').textContent = money(result.total);
+      updateProductionReadiness(result.items);
+    }
+
+    function updateProductionReadiness(items) {
+      const panel = document.getElementById('production-readiness');
+      const surfaceItems = items.filter(item => item.kind === 'surface' && item.customerVisible !== false);
+      const materialItems = surfaceItems.filter(item => item.material);
+      const missingProduct = surfaceItems.length - materialItems.length;
+      const missingColor = materialItems.filter(item => !item.material.colorName || !item.material.colorCode).length;
+      const gallons = materialItems.reduce((sum, item) => sum + Number(item.material.quantity || 0), 0);
+      const statusClass = (count) => count ? 'text-amber-700' : 'text-green-700';
+
+      panel.innerHTML = `
+        <div class="flex justify-between"><span>Paint order units</span><span class="font-medium">${gallons.toFixed(0)}</span></div>
+        <div class="flex justify-between ${statusClass(missingProduct)}"><span>Missing products</span><span class="font-medium">${missingProduct}</span></div>
+        <div class="flex justify-between ${statusClass(missingColor)}"><span>Color selections needed</span><span class="font-medium">${missingColor}</span></div>
+        <p class="text-xs text-gray-500">Use per-surface product, sheen, and color fields to prepare ordering and job handoff.</p>
+      `;
     }
 
     document.getElementById('add-room').addEventListener('click', () => addRoom());
