@@ -58,7 +58,7 @@ Primer,SW-456,2,25.00,50.00</pre>
   </div>
 
   <script>
-    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
 
     async function loadPurchases() {
       const res = await fetch(`${API_URL}/v1/invoices/purchases`, { credentials: 'include' });

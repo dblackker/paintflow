@@ -1,9 +1,18 @@
 ---
 import Base from '../layouts/Base.astro';
+
+const isWelcome = Astro.url.searchParams.get('welcome') === '1';
 ---
 
 <Base title="Onboarding">
   <div class="min-h-screen bg-gray-50 p-4 sm:p-6">
+    {isWelcome && (
+      <div class="max-w-5xl mx-auto mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+        <p class="font-semibold">Workspace created</p>
+        <p class="mt-1">We loaded starter settings for lead intake, estimating, job costing, roles, and follow-up. Review the defaults here before your first estimate.</p>
+      </div>
+    )}
+
     <div class="max-w-5xl mx-auto grid lg:grid-cols-[1fr_320px] gap-6">
       <section class="bg-white rounded-lg shadow-sm border p-6 sm:p-8">
         <div class="mb-8">
@@ -46,7 +55,7 @@ import Base from '../layouts/Base.astro';
   </div>
 
   <script>
-    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let currentStep = 1;
     const totalSteps = 5;
     let formData = {};
@@ -107,7 +116,7 @@ import Base from '../layouts/Base.astro';
       const steps = progress?.steps || [];
       checklist.innerHTML = steps.map(step => `
         <div class="flex items-center gap-2">
-          <span class="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${step.complete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${step.complete ? 'Y' : ''}</span>
+          <span class="inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${step.complete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${step.complete ? '&#10003;' : ''}</span>
           <span>${step.label}</span>
         </div>
       `).join('');

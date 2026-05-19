@@ -84,7 +84,7 @@ import Base from '../../layouts/Base.astro';
   </main>
 
   <script>
-    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const packageLabels = { good: 'Good', better: 'Better', best: 'Best' };
     const defaultItems = [
       { desc: 'Prep, patching, masking, and setup', qty: 1, unit: 'job', laborHours: 4, materialCost: 75 },

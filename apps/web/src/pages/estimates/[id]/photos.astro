@@ -31,7 +31,7 @@ import PhotoAnnotator from '../../../components/PhotoAnnotator.astro';
   </main>
   <PhotoAnnotator />
   <script>
-    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+      const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const estimateId = window.location.pathname.split('/')[2];
     let photos = [];
     async function loadPhotos() {

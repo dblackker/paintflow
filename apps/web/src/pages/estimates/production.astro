@@ -71,7 +71,7 @@
   </main>
 
   <script>
-    const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const prepMultipliers = { none: 0.8, light: 1, standard: 1.2, heavy: 1.5 };
     let rates = [];
     let settings = {};

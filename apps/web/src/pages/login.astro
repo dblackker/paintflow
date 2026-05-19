@@ -54,7 +54,7 @@
         button.textContent = 'Sending...';
         
         try {
-          const API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+          const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
           const res = await fetch(`${API_URL}/v1/auth/magic-link`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
