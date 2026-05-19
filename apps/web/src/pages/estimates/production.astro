@@ -24,8 +24,8 @@ import Base from '../../layouts/Base.astro';
       </div>
     </div>
 
-    <div class="mb-5 overflow-x-auto rounded-lg border bg-white p-2 shadow-sm">
-      <nav class="grid min-w-[640px] grid-cols-4 gap-2 text-sm" aria-label="Estimator workflow">
+    <div class="mb-5 rounded-lg border bg-white p-2 shadow-sm">
+      <nav class="grid grid-cols-2 gap-2 text-sm md:grid-cols-4" aria-label="Estimator workflow">
         <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-blue-700 bg-blue-50" data-jump-stage="setup">
           <span class="block text-xs text-blue-500">1. Setup</span>
           Customer & estimate type
@@ -46,18 +46,18 @@ import Base from '../../layouts/Base.astro';
     </div>
 
     <div class="grid lg:grid-cols-[1fr_340px] gap-5">
-      <section class="space-y-4">
+      <section class="min-w-0 space-y-4">
         <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="setup">
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="block">
               <span class="block text-sm font-medium text-gray-700 mb-2">Customer</span>
-              <select id="lead-select" class="w-full px-3 py-3 border rounded-lg text-base">
+              <select id="lead-select" class="min-w-0 w-full px-3 py-3 border rounded-lg text-base">
                 <option>Loading...</option>
               </select>
             </label>
             <label class="block">
               <span class="block text-sm font-medium text-gray-700 mb-2">Estimate type</span>
-              <select id="estimate-type" class="w-full px-3 py-3 border rounded-lg text-base">
+              <select id="estimate-type" class="min-w-0 w-full px-3 py-3 border rounded-lg text-base">
                 <option value="interior">Interior repaint</option>
                 <option value="exterior">Exterior repaint</option>
                 <option value="cabinet">Cabinets / specialty</option>
@@ -104,7 +104,7 @@ import Base from '../../layouts/Base.astro';
         </div>
       </section>
 
-      <aside class="space-y-4 lg:sticky lg:top-20 self-start">
+      <aside class="min-w-0 space-y-4 lg:sticky lg:top-20 self-start">
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <h2 class="font-semibold text-gray-900 mb-3">Estimate Summary</h2>
           <div class="space-y-2 text-sm">
@@ -525,37 +525,37 @@ import Base from '../../layouts/Base.astro';
         </div>
         <div class="mb-4 rounded-lg border bg-emerald-50 p-3" data-interior-assumptions>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Bedrooms</span>
-              <input data-interior="bedrooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="bedrooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Bathrooms</span>
-              <input data-interior="bathrooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="bathrooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Living rooms</span>
-              <input data-interior="livingRooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="livingRooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Dining rooms</span>
-              <input data-interior="diningRooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="diningRooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Kitchens</span>
-              <input data-interior="kitchens" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="kitchens" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Hallways</span>
-              <input data-interior="hallways" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="hallways" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Closets</span>
-              <input data-interior="closets" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="closets" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
-            <label>
+            <label class="min-w-0">
               <span class="text-xs text-emerald-900">Ceiling height</span>
-              <input data-interior="ceilingHeight" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="9" class="mt-1 w-full px-2 py-2 border rounded">
+              <input data-interior="ceilingHeight" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="9" class="mt-1 min-w-0 w-full px-2 py-2 border rounded">
             </label>
             <label class="col-span-2 sm:col-span-2">
               <span class="text-xs text-emerald-900">Trim scope</span>
@@ -565,7 +565,7 @@ import Base from '../../layouts/Base.astro';
                 <option value="base-crown-casing">Baseboards + crown + casing</option>
               </select>
             </label>
-            <div class="col-span-2 sm:col-span-2 grid grid-cols-2 gap-2">
+            <div class="col-span-2 sm:col-span-2 grid gap-2 min-[420px]:grid-cols-2">
               <label class="inline-flex items-center gap-2 rounded border bg-white px-2 py-2 text-xs text-emerald-900">
                 <input data-interior="includeCeilings" type="checkbox" class="rounded border-gray-300" checked>
                 Ceilings
@@ -579,7 +579,7 @@ import Base from '../../layouts/Base.astro';
           <div class="relative mt-3 inline-flex items-center gap-1.5">
             <button type="button" class="generate-interior-scope inline-flex justify-center rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800">Add interior scope from room counts</button>
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 bg-white/80 text-[11px] font-medium leading-none text-emerald-700 hover:bg-white" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
-            <div class="hidden absolute left-0 top-10 z-20 w-80 rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
+            <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
               <p class="font-semibold text-gray-900">Interior assumptions</p>
               <p class="mt-1">Creates itemized editable lines for each generated room, such as Bedroom 1 walls, Bedroom 1 ceiling, Bedroom 1 trim, and Bedroom 1 doors.</p>
               <p class="mt-2">Room allowances estimate perimeter, ceiling area, opening deductions, baseboards, casing, crown, and doors. Override any generated line as measurements improve.</p>
@@ -628,7 +628,7 @@ import Base from '../../layouts/Base.astro';
                 <button type="button" class="assumption-info inline-flex h-6 w-6 items-center justify-center rounded-full border border-blue-300 bg-white text-xs font-semibold text-blue-700" aria-label="Explain roofline factor" aria-expanded="false">?</button>
               </div>
               <input id="${roomId}-roofline-factor" data-exterior="rooflineFactor" type="number" min="0" step="0.05" inputmode="decimal" autocomplete="off" value="1" class="mt-1 w-full px-2 py-2 border rounded">
-              <div class="hidden absolute right-0 z-20 mt-2 w-72 rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Roofline factor explanation">
+              <div class="hidden absolute right-0 z-20 mt-2 w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Roofline factor explanation">
                 <p class="font-semibold text-gray-900">What this does</p>
                 <p class="mt-1">Roofline factor multiplies the house perimeter for soffit and fascia estimates when the roof edge is longer than the footprint.</p>
                 <p class="mt-2">Use 1.00 for a simple box. Use 1.10-1.20 for gables, dormers, returns, or bump-outs. Use 1.25+ for complex rooflines, then override the line if you have exact measurements.</p>
@@ -638,7 +638,7 @@ import Base from '../../layouts/Base.astro';
           <div class="relative mt-3 inline-flex items-center gap-1.5">
             <button type="button" class="generate-exterior-scope inline-flex justify-center rounded-md bg-blue-700 px-3 py-2 text-sm font-medium text-white hover:bg-blue-800">Add exterior scope from assumptions</button>
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-blue-300 bg-white/80 text-[11px] font-medium leading-none text-blue-700 hover:bg-white" aria-label="Explain exterior assumptions" aria-expanded="false">?</button>
-            <div class="hidden absolute left-0 top-10 z-20 w-80 rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Exterior assumptions explanation">
+            <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Exterior assumptions explanation">
               <p class="font-semibold text-gray-900">Exterior assumptions</p>
               <p class="mt-1">These fields do not add price by themselves. Generate exterior scope, then each line prices from the assumptions while its measurement override is blank.</p>
               <p class="mt-2">The generator adds missing siding, soffit, fascia, trim, and corner-board lines. Existing exterior lines are kept, and every generated line can be overridden.</p>
@@ -698,15 +698,15 @@ import Base from '../../layouts/Base.astro';
       div.innerHTML = `
         <input type="hidden" value="${escapeHtml(item.label || '')}" data-field="label">
         <div class="${item.group ? 'mb-2 text-sm font-medium text-gray-700' : 'hidden'}" data-surface-title>${escapeHtml(item.surfaceName || item.label || '')}</div>
-        <div class="grid sm:grid-cols-3 gap-2 mb-2">
-          <select class="px-2 py-2 border rounded text-sm" data-field="rateId">
+        <div class="grid gap-2 mb-2 sm:grid-cols-3">
+          <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="rateId">
             <option value="">Select surface...</option>
             ${rateOptions()}
           </select>
-          <select class="px-2 py-2 border rounded text-sm" data-field="applicationMethod">
+          <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="applicationMethod">
             ${Object.entries(applicationMethods).map(([value, method]) => `<option value="${value}" ${applicationMethod === value ? 'selected' : ''}>${method.label}</option>`).join('')}
           </select>
-          <select class="px-2 py-2 border rounded text-sm" data-field="prepLevel">
+          <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="prepLevel">
             <option value="none" ${prepLevel === 'none' ? 'selected' : ''}>No prep</option>
             <option value="light" ${prepLevel === 'light' ? 'selected' : ''}>Light prep</option>
             <option value="standard" ${prepLevel === 'standard' ? 'selected' : ''}>Standard prep</option>
@@ -741,17 +741,17 @@ import Base from '../../layouts/Base.astro';
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Paint hrs +/-" value="${escapeHtml(item.paintAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="paintAdjustmentHours">
         </div>
         <div class="grid gap-2 mb-2 sm:grid-cols-[1.2fr_1fr_0.8fr]">
-          <select class="px-2 py-2 border rounded text-sm" data-field="materialId">
+          <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="materialId">
             ${surfaceMaterialOptions(item.materialId || '')}
           </select>
-          <input type="text" autocomplete="off" placeholder="Color name" value="${escapeHtml(item.colorName || '')}" class="px-2 py-2 border rounded text-sm" data-field="colorName">
-          <input type="text" autocomplete="off" placeholder="Color code" value="${escapeHtml(item.colorCode || '')}" class="px-2 py-2 border rounded text-sm" data-field="colorCode">
+          <input type="text" autocomplete="off" placeholder="Color name" value="${escapeHtml(item.colorName || '')}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="colorName">
+          <input type="text" autocomplete="off" placeholder="Color code" value="${escapeHtml(item.colorCode || '')}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="colorCode">
         </div>
         <div class="grid gap-2 mb-2 sm:grid-cols-[0.8fr_1fr]">
-          <select class="px-2 py-2 border rounded text-sm" data-field="colorStatus">
+          <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="colorStatus">
             ${['TBD', 'Selected', 'Approved', 'Ordered', 'Delivered', 'Changed'].map(status => `<option value="${status}" ${(item.colorStatus || 'TBD') === status ? 'selected' : ''}>${status}</option>`).join('')}
           </select>
-          <input type="text" autocomplete="off" placeholder="Crew note / production handoff" value="${escapeHtml(item.crewNote || '')}" class="px-2 py-2 border rounded text-sm" data-field="crewNote">
+          <input type="text" autocomplete="off" placeholder="Crew note / production handoff" value="${escapeHtml(item.crewNote || '')}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="crewNote">
         </div>
         <div class="flex justify-between items-center text-sm">
           <label class="inline-flex items-center gap-2 text-gray-600">
@@ -816,7 +816,7 @@ import Base from '../../layouts/Base.astro';
       header.dataset.surfaceGroup = groupName;
       header.className = 'mt-4 mb-2 flex items-center gap-2';
       header.innerHTML = `
-        <input value="${escapeHtml(groupName)}" autocomplete="off" class="min-w-0 max-w-52 border-0 border-b border-transparent bg-transparent px-0 py-1 text-sm font-semibold text-gray-800 focus:border-blue-500 focus:outline-none" data-group-name>
+        <input value="${escapeHtml(groupName)}" autocomplete="off" class="min-w-0 max-w-full border-0 border-b border-transparent bg-transparent px-0 py-1 text-sm font-semibold text-gray-800 focus:border-blue-500 focus:outline-none sm:max-w-52" data-group-name>
         <span class="h-px flex-1 bg-gray-200"></span>
       `;
       container.appendChild(header);
@@ -1120,7 +1120,7 @@ import Base from '../../layouts/Base.astro';
 
       preview.innerHTML = `
         <div class="font-medium">${hasInteriorSurface ? 'Assumed quantities feeding selected interior lines' : 'Assumed quantities ready for interior lines'}</div>
-        <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div class="mt-2 grid gap-2 min-[420px]:grid-cols-2 sm:grid-cols-4">
           <span>Walls: ${quantities.walls.toFixed(0)} sqft</span>
           <span>Ceilings: ${quantities.ceilings.toFixed(0)} sqft</span>
           <span>Trim: ${quantities.trim.toFixed(0)} lin ft</span>
@@ -1175,7 +1175,7 @@ import Base from '../../layouts/Base.astro';
 
       preview.innerHTML = `
         <div class="font-medium">${hasExteriorSurface ? 'Assumed quantities feeding selected exterior lines' : 'Assumed quantities ready for exterior lines'}</div>
-        <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div class="mt-2 grid gap-2 min-[420px]:grid-cols-2 sm:grid-cols-5">
           <span>Siding: ${quantities.siding.toFixed(0)} sqft</span>
           <span>Soffit: ${quantities.soffit.toFixed(0)} sqft</span>
           <span>Fascia: ${quantities.fascia.toFixed(0)} lin ft</span>
@@ -1235,7 +1235,7 @@ import Base from '../../layouts/Base.astro';
 
     function addLineItem(item = {}) {
       const div = document.createElement('div');
-      div.className = 'grid gap-2 sm:grid-cols-[1fr_90px_110px_120px_auto] items-end border rounded-lg p-3 bg-gray-50';
+      div.className = 'grid gap-2 sm:grid-cols-[minmax(0,1fr)_90px_110px_120px_auto] items-end border rounded-lg p-3 bg-gray-50';
       div.innerHTML = `
         <label class="block">
           <span class="text-xs text-gray-600">Description</span>
