@@ -92,6 +92,11 @@ import Base from '../../layouts/Base.astro';
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const prepMultipliers = { none: 0.8, light: 1, standard: 1.2, heavy: 1.5 };
+    const applicationMethods = {
+      brush_roll: { label: 'Brush & roll', productivity: 1 },
+      spray_backroll: { label: 'Spray & back-roll', productivity: 1.35 },
+      spray_only: { label: 'Spray only', productivity: 1.6 },
+    };
     let rates = [];
     let materialsCatalog = [];
     let settings = {};
@@ -172,6 +177,13 @@ import Base from '../../layouts/Base.astro';
         .replace(/\s*[,\-–—]?\s*(no|light|standard|heavy)\s+prep\b/ig, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
+    }
+
+    function defaultApplicationMethod(rate) {
+      const text = `${rate?.category || ''} ${rate?.surfaceType || ''} ${rate?.description || ''}`.toLowerCase();
+      if (/spray/.test(text) && /back.?roll/.test(text)) return 'spray_backroll';
+      if (/spray/.test(text)) return 'spray_only';
+      return 'brush_roll';
     }
 
     function isExteriorRate(rate) {
@@ -603,14 +615,19 @@ import Base from '../../layouts/Base.astro';
       const div = document.createElement('div');
       div.className = 'border rounded-lg p-3 bg-gray-50';
       const rateId = findRateForTemplateItem(item);
+      const selectedRate = rates.find(rate => rate.id === rateId);
       const prepLevel = item.prepLevel || 'standard';
+      const applicationMethod = item.applicationMethod || defaultApplicationMethod(selectedRate);
       const quantity = item.quantity || '';
       const coats = item.coats || 2;
       div.innerHTML = `
-        <div class="grid sm:grid-cols-2 gap-2 mb-2">
+        <div class="grid sm:grid-cols-3 gap-2 mb-2">
           <select class="px-2 py-2 border rounded text-sm" data-field="rateId">
             <option value="">Select surface...</option>
             ${rateOptions()}
+          </select>
+          <select class="px-2 py-2 border rounded text-sm" data-field="applicationMethod">
+            ${Object.entries(applicationMethods).map(([value, method]) => `<option value="${value}" ${applicationMethod === value ? 'selected' : ''}>${method.label}</option>`).join('')}
           </select>
           <select class="px-2 py-2 border rounded text-sm" data-field="prepLevel">
             <option value="none" ${prepLevel === 'none' ? 'selected' : ''}>No prep</option>
@@ -1039,6 +1056,7 @@ import Base from '../../layouts/Base.astro';
       return {
         productionRateId: surface.querySelector('[data-field="rateId"]').value,
         label: surface.querySelector('[data-field="label"]').value,
+        applicationMethod: surface.querySelector('[data-field="applicationMethod"]').value,
         prepLevel: surface.querySelector('[data-field="prepLevel"]').value,
         width: surface.querySelector('[data-field="width"]').value,
         height: surface.querySelector('[data-field="height"]').value,
@@ -1130,10 +1148,13 @@ import Base from '../../layouts/Base.astro';
           }
 
           const prep = surface.querySelector('[data-field="prepLevel"]').value;
+          const applicationMethod = surface.querySelector('[data-field="applicationMethod"]').value;
+          const application = applicationMethods[applicationMethod] || applicationMethods.brush_roll;
           const coats = Math.max(1, Number(surface.querySelector('[data-field="coats"]').value || rate.coats || 2));
           const prepAdjustmentHours = Number(surface.querySelector('[data-field="prepAdjustmentHours"]').value || 0);
           const paintAdjustmentHours = Number(surface.querySelector('[data-field="paintAdjustmentHours"]').value || 0);
-          const baseHours = (quantity / Number(rate.ratePerHour || 1)) * coats * (prepMultipliers[prep] || 1.2);
+          const adjustedRatePerHour = Number(rate.ratePerHour || 1) * Number(application.productivity || 1);
+          const baseHours = (quantity / adjustedRatePerHour) * coats * (prepMultipliers[prep] || 1.2);
           const itemHours = Math.max(0, baseHours + prepAdjustmentHours + paintAdjustmentHours);
           const itemLabor = itemHours * Number(rate.hourlyRate || settings.defaultLaborRate || 65);
           const isPrimerHeavy = prep === 'heavy' || /primer|prep|cabinet/i.test(`${rate.category} ${rate.description}`);
@@ -1155,13 +1176,15 @@ import Base from '../../layouts/Base.astro';
             kind: 'surface',
             customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
             dimensions: { width, height, quantity, unit: rate.unit },
-            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}`,
+            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}`,
             labor: {
               hours: Number(itemHours.toFixed(2)),
               rate: Number(rate.hourlyRate || settings.defaultLaborRate || 65),
               cost: Number(itemLabor.toFixed(2)),
               coats,
               prepLevel: prep,
+              applicationMethod,
+              productionRatePerHour: Number(adjustedRatePerHour.toFixed(2)),
               prepAdjustmentHours,
               paintAdjustmentHours,
             },
@@ -1310,6 +1333,8 @@ import Base from '../../layouts/Base.astro';
       if (event.target.matches('[data-field="rateId"]')) {
         const surface = event.target.closest('[data-items] > div');
         syncSurfaceMeasurement(surface);
+        const rate = rates.find(item => item.id === event.target.value);
+        surface.querySelector('[data-field="applicationMethod"]').value = defaultApplicationMethod(rate);
         updateInteriorPreview(surface.closest('#rooms-container > div'));
         updateExteriorPreview(surface.closest('#rooms-container > div'));
       }
