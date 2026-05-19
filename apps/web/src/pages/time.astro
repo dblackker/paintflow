@@ -14,10 +14,16 @@ import Base from '../layouts/Base.astro';
     </div>
 
     <section class="surface-panel p-4 mb-6">
-      <div class="grid grid-cols-[auto_1fr_auto] gap-3 items-center">
+      <div class="grid grid-cols-1 lg:grid-cols-[auto_1fr_auto_auto] gap-3 items-center">
         <button id="prev-week" class="btn-secondary px-3">Previous</button>
         <span id="week-range" class="text-center font-semibold text-sm sm:text-base"></span>
         <button id="next-week" class="btn-secondary px-3">Next</button>
+        <div class="flex flex-wrap justify-center lg:justify-end gap-1.5" aria-label="Time grouping">
+          <button type="button" class="btn-compact" data-view-mode="day">Day</button>
+          <button type="button" class="btn-compact" data-view-mode="job">Job</button>
+          <button type="button" class="btn-compact" data-view-mode="employee">Employee</button>
+          <button type="button" class="btn-compact" data-view-mode="flat">Flat</button>
+        </div>
       </div>
     </section>
 
@@ -88,7 +94,8 @@ import Base from '../layouts/Base.astro';
     let members = [];
     let jobs = [];
     let isSavingTime = false;
-    const collapsedDays = new Set();
+    let viewMode = localStorage.getItem('paintflow.time.viewMode') || 'day';
+    const collapsedGroups = new Set();
 
     const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 
@@ -175,6 +182,7 @@ import Base from '../layouts/Base.astro';
 
       const weekEntries = getWeekEntries();
       renderSummary(weekEntries);
+      renderViewModeControls();
 
       if (!weekEntries.length) {
         document.getElementById('empty').classList.remove('hidden');
@@ -182,18 +190,16 @@ import Base from '../layouts/Base.astro';
         return;
       }
 
-      const groupedByDate = weekEntries.reduce((groups, entry) => {
-        const key = dateKey(entry.date);
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(entry);
-        return groups;
-      }, {});
-
       document.getElementById('timesheet').classList.remove('hidden');
-      document.getElementById('timesheet').innerHTML = Object.entries(groupedByDate)
-        .sort(([a], [b]) => b.localeCompare(a))
-        .map(([day, entries]) => renderDay(day, entries))
-        .join('');
+      document.getElementById('timesheet').innerHTML = renderGroupedTimesheet(weekEntries);
+    }
+
+    function renderViewModeControls() {
+      document.querySelectorAll('[data-view-mode]').forEach((button) => {
+        const active = button.dataset.viewMode === viewMode;
+        button.classList.toggle('view-mode-active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
     }
 
     function renderSummary(entries) {
@@ -213,24 +219,67 @@ import Base from '../layouts/Base.astro';
       `).join('');
     }
 
-    function renderDay(day, entries) {
+    function renderGroupedTimesheet(entries) {
+      if (viewMode === 'flat') {
+        const sorted = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
+        return renderGroup('flat', 'All entries', entryCountLabel(sorted.length), sorted, 'flat');
+      }
+
+      const grouping = {
+        day: {
+          key: (entry) => dateKey(entry.date),
+          title: (key) => new Date(`${key}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
+          subtitle: (groupEntries) => entryCountLabel(groupEntries.length),
+          sort: ([a], [b]) => b.localeCompare(a),
+        },
+        job: {
+          key: (entry) => entry.jobId || 'unassigned-job',
+          title: (_key, groupEntries) => groupEntries[0]?.jobName || 'Job',
+          subtitle: (groupEntries) => `${new Set(groupEntries.map((entry) => entry.teamMemberId)).size} crew - ${entryCountLabel(groupEntries.length)}`,
+          sort: ([, a], [, b]) => (b.reduce((sum, entry) => sum + Number(entry.hours || 0), 0)) - (a.reduce((sum, entry) => sum + Number(entry.hours || 0), 0)),
+        },
+        employee: {
+          key: (entry) => entry.teamMemberId || 'unassigned-employee',
+          title: (_key, groupEntries) => groupEntries[0]?.teamMemberName || 'Crew member',
+          subtitle: (groupEntries) => `${new Set(groupEntries.map((entry) => entry.jobId)).size} jobs - ${entryCountLabel(groupEntries.length)}`,
+          sort: ([, a], [, b]) => (b.reduce((sum, entry) => sum + Number(entry.hours || 0), 0)) - (a.reduce((sum, entry) => sum + Number(entry.hours || 0), 0)),
+        },
+      }[viewMode];
+
+      const grouped = entries.reduce((groups, entry) => {
+        const key = grouping.key(entry);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(entry);
+        return groups;
+      }, {});
+
+      return Object.entries(grouped)
+        .sort(grouping.sort)
+        .map(([key, groupEntries]) => renderGroup(`${viewMode}:${key}`, grouping.title(key, groupEntries), grouping.subtitle(groupEntries), groupEntries, viewMode))
+        .join('');
+    }
+
+    function entryCountLabel(count) {
+      return `${count} ${count === 1 ? 'entry' : 'entries'}`;
+    }
+
+    function renderGroup(groupKey, title, subtitle, entries, mode) {
       const totalHours = entries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
       const totalCost = entries.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
-      const collapsed = collapsedDays.has(day);
-      const label = new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-      });
+      const collapsed = collapsedGroups.has(groupKey);
+      const columns = getColumns(mode);
+      const gridClass = mode === 'flat'
+        ? 'lg:grid-cols-[minmax(8rem,0.7fr)_minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]'
+        : 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]';
 
       return `
         <section class="surface-panel overflow-hidden">
-          <button type="button" onclick="toggleDay('${day}')" class="w-full px-3 py-2.5 bg-gray-50 border-b flex items-center justify-between gap-3 text-left hover:bg-gray-100">
+          <button type="button" onclick="toggleGroup('${groupKey}')" class="w-full px-3 py-2.5 bg-gray-50 border-b flex items-center justify-between gap-3 text-left hover:bg-gray-100">
             <div class="flex items-center gap-3">
               <span class="btn-compact w-7 h-7 p-0" aria-hidden="true">${collapsed ? '+' : '-'}</span>
               <div>
-                <h2 class="font-semibold text-sm sm:text-base">${label}</h2>
-                <p class="text-xs text-gray-600">${entries.length} entries</p>
+                <h2 class="font-semibold text-sm sm:text-base">${escapeHtml(title)}</h2>
+                <p class="text-xs text-gray-600">${escapeHtml(subtitle)}</p>
               </div>
             </div>
             <div class="text-right shrink-0">
@@ -239,37 +288,67 @@ import Base from '../layouts/Base.astro';
             </div>
           </button>
           ${collapsed ? '' : `
-            <div class="hidden lg:grid grid-cols-[minmax(12rem,1.35fr)_minmax(9rem,0.85fr)_5rem_7rem_auto] gap-3 px-3 py-1.5 bg-white text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500 border-b border-[var(--pf-border)]">
-              <span>Job</span>
-              <span>Employee</span>
-              <span class="text-right">Hours</span>
-              <span class="text-right">Cost</span>
-              <span class="text-right">Actions</span>
+            <div class="hidden lg:grid ${gridClass} gap-3 px-3 py-1.5 bg-white text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500 border-b border-[var(--pf-border)]">
+              ${columns.map((column) => `<span class="${column.align === 'right' ? 'text-right' : ''}">${column.label}</span>`).join('')}
             </div>
             <div class="divide-y divide-[var(--pf-border)]">
-              ${entries.map((entry) => renderEntry(entry)).join('')}
+              ${entries.map((entry) => renderEntry(entry, mode)).join('')}
             </div>
           `}
         </section>
       `;
     }
 
-    function renderEntry(entry) {
+    function getColumns(mode) {
+      const base = {
+        date: { key: 'date', label: 'Date' },
+        job: { key: 'job', label: 'Job' },
+        employee: { key: 'employee', label: 'Employee' },
+        hours: { key: 'hours', label: 'Hours', align: 'right' },
+        cost: { key: 'cost', label: 'Cost', align: 'right' },
+        actions: { key: 'actions', label: 'Actions', align: 'right' },
+      };
+      if (mode === 'day') return [base.job, base.employee, base.hours, base.cost, base.actions];
+      if (mode === 'job') return [base.date, base.employee, base.hours, base.cost, base.actions];
+      if (mode === 'employee') return [base.date, base.job, base.hours, base.cost, base.actions];
+      return [base.date, base.job, base.employee, base.hours, base.cost, base.actions];
+    }
+
+    function renderEntry(entry, mode) {
       const hasDescription = Boolean(entry.description);
-      return `
-        <article class="px-3 py-2 grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(12rem,1.35fr)_minmax(9rem,0.85fr)_5rem_7rem_auto] gap-2 lg:gap-3 lg:items-center text-sm hover:bg-gray-50">
-          <div class="min-w-0">
-            <p class="font-medium truncate">${escapeHtml(entry.jobName || 'Job')}</p>
-            <p class="lg:hidden text-xs text-gray-500 truncate">${escapeHtml(entry.teamMemberName || 'Crew member')} - ${Number(entry.hours).toFixed(2)} hrs - ${currency(entry.totalCost)}${hasDescription ? ` - ${escapeHtml(entry.description)}` : ''}</p>
-            ${hasDescription ? `<p class="hidden lg:block text-xs text-gray-500 truncate mt-0.5">${escapeHtml(entry.description)}</p>` : ''}
-          </div>
-          <p class="hidden lg:block text-gray-700 truncate">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>
-          <p class="hidden lg:block text-right font-medium">${Number(entry.hours).toFixed(2)}</p>
-          <p class="hidden lg:block text-right font-medium">${currency(entry.totalCost)}</p>
+      const date = new Date(entry.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const gridClass = mode === 'flat'
+        ? 'lg:grid-cols-[minmax(8rem,0.7fr)_minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]'
+        : 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]';
+      const desktopCells = {
+        date: `<p class="hidden lg:block text-gray-700 truncate">${date}</p>`,
+        job: `<div class="hidden lg:block min-w-0"><p class="text-gray-700 truncate">${escapeHtml(entry.jobName || 'Job')}</p>${hasDescription ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(entry.description)}</p>` : ''}</div>`,
+        employee: `<p class="hidden lg:block text-gray-700 truncate">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>`,
+        hours: `<p class="hidden lg:block text-right font-medium">${Number(entry.hours).toFixed(2)}</p>`,
+        cost: `<p class="hidden lg:block text-right font-medium">${currency(entry.totalCost)}</p>`,
+        actions: `
           <div class="flex justify-end gap-1.5">
             <button onclick="editEntry('${entry.id}')" class="btn-compact">Edit</button>
             <button onclick="removeEntry('${entry.id}')" class="btn-compact text-red-700">Remove</button>
           </div>
+        `,
+      };
+      const mobileTitle = mode === 'job' ? entry.teamMemberName || 'Crew member' : entry.jobName || 'Job';
+      const mobileParts = {
+        day: [entry.teamMemberName, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
+        job: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
+        employee: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
+        flat: [date, entry.teamMemberName, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
+      }[mode];
+      const mobileContext = mobileParts.filter(Boolean).join(' - ');
+
+      return `
+        <article class="px-3 py-2 grid grid-cols-[minmax(0,1fr)_auto] ${gridClass} gap-2 lg:gap-3 lg:items-center text-sm hover:bg-gray-50">
+          <div class="min-w-0 lg:hidden">
+            <p class="font-medium truncate">${escapeHtml(mobileTitle)}</p>
+            <p class="lg:hidden text-xs text-gray-500 truncate">${escapeHtml(mobileContext)}</p>
+          </div>
+          ${getColumns(mode).map((column) => desktopCells[column.key]).join('')}
         </article>
       `;
     }
@@ -297,11 +376,11 @@ import Base from '../layouts/Base.astro';
       if (entry) openModal(entry);
     };
 
-    window.toggleDay = (day) => {
-      if (collapsedDays.has(day)) {
-        collapsedDays.delete(day);
+    window.toggleGroup = (key) => {
+      if (collapsedGroups.has(key)) {
+        collapsedGroups.delete(key);
       } else {
-        collapsedDays.add(day);
+        collapsedGroups.add(key);
       }
       renderTimesheet();
     };
@@ -358,6 +437,14 @@ import Base from '../layouts/Base.astro';
     document.getElementById('next-week').addEventListener('click', () => {
       currentWeekStart.setDate(currentWeekStart.getDate() + 7);
       renderTimesheet();
+    });
+
+    document.querySelectorAll('[data-view-mode]').forEach((button) => {
+      button.addEventListener('click', () => {
+        viewMode = button.dataset.viewMode;
+        localStorage.setItem('paintflow.time.viewMode', viewMode);
+        renderTimesheet();
+      });
     });
 
     loadData();

@@ -329,6 +329,17 @@ button[class*="bg-blue"][class*="text-white"]:active {
   border-color: var(--pf-primary);
 }
 
+.view-mode-active {
+  background: var(--pf-primary);
+  border-color: var(--pf-primary);
+  color: white;
+}
+
+.view-mode-active:hover {
+  background: var(--pf-primary-hover);
+  border-color: var(--pf-primary-hover);
+}
+
 .input {
   border: 1px solid var(--pf-border-strong);
   border-radius: 0.55rem;
