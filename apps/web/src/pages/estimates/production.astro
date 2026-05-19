@@ -24,21 +24,75 @@ import Base from '../../layouts/Base.astro';
       </div>
     </div>
 
+    <div class="mb-5 overflow-x-auto rounded-lg border bg-white p-2 shadow-sm">
+      <nav class="grid min-w-[640px] grid-cols-4 gap-2 text-sm" aria-label="Estimator workflow">
+        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-blue-700 bg-blue-50" data-jump-stage="setup">
+          <span class="block text-xs text-blue-500">1. Setup</span>
+          Customer & estimate type
+        </button>
+        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-50" data-jump-stage="scope">
+          <span class="block text-xs text-gray-500">2. Scope</span>
+          Rooms, surfaces, rates
+        </button>
+        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-50" data-jump-stage="paint">
+          <span class="block text-xs text-gray-500">3. Paint Schedule</span>
+          Product, color, ordering
+        </button>
+        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-50" data-jump-stage="review">
+          <span class="block text-xs text-gray-500">4. Review</span>
+          Readiness & proposal
+        </button>
+      </nav>
+    </div>
+
     <div class="grid lg:grid-cols-[1fr_340px] gap-5">
       <section class="space-y-4">
-        <div class="bg-white rounded-lg shadow-sm border p-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-          <select id="lead-select" class="w-full px-3 py-3 border rounded-lg text-base">
-            <option>Loading...</option>
-          </select>
+        <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="setup">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="block">
+              <span class="block text-sm font-medium text-gray-700 mb-2">Customer</span>
+              <select id="lead-select" class="w-full px-3 py-3 border rounded-lg text-base">
+                <option>Loading...</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="block text-sm font-medium text-gray-700 mb-2">Estimate type</span>
+              <select id="estimate-type" class="w-full px-3 py-3 border rounded-lg text-base">
+                <option value="interior">Interior repaint</option>
+                <option value="exterior">Exterior repaint</option>
+                <option value="cabinet">Cabinets / specialty</option>
+                <option value="custom">Custom / commercial</option>
+              </select>
+            </label>
+          </div>
+          <p class="mt-3 text-sm text-gray-600">Choose the estimate type first. The quick-scope builder appears once, then surfaces become editable production lines.</p>
         </div>
 
-        <div id="rooms-container" class="space-y-4"></div>
-        <button id="add-room" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600">
-          Add Room or Area
-        </button>
+        <div class="scroll-mt-24 space-y-4" data-stage="scope">
+          <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">Scope Builder</h2>
+              <p class="text-sm text-gray-600">Generate a starter scope, then adjust rooms, surfaces, prep, methods, and measurements.</p>
+            </div>
+            <button id="add-room" class="w-full sm:w-auto px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600">
+              Add Room or Area
+            </button>
+          </div>
+          <div id="rooms-container" class="space-y-4"></div>
+        </div>
 
-        <div class="bg-white rounded-lg shadow-sm border p-4">
+        <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="paint">
+          <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 class="font-semibold text-gray-900">Paint Schedule</h2>
+              <p class="text-sm text-gray-600">Production handoff by surface: product, color, status, and order units.</p>
+            </div>
+            <span id="paint-schedule-count" class="text-sm font-medium text-gray-700">0 surfaces</span>
+          </div>
+          <div id="paint-schedule" class="mt-3 space-y-2 text-sm text-gray-700"></div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="review">
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
               <h2 class="font-semibold text-gray-900">Add-ons & Adjustments</h2>
@@ -163,6 +217,7 @@ import Base from '../../layouts/Base.astro';
       } else {
         addRoom('Interior');
       }
+      applyEstimateType();
       calculateTotal();
     }
 
@@ -694,6 +749,12 @@ import Base from '../../layouts/Base.astro';
           <input type="text" autocomplete="off" placeholder="Color name" value="${escapeHtml(item.colorName || '')}" class="px-2 py-2 border rounded text-sm" data-field="colorName">
           <input type="text" autocomplete="off" placeholder="Color code" value="${escapeHtml(item.colorCode || '')}" class="px-2 py-2 border rounded text-sm" data-field="colorCode">
         </div>
+        <div class="grid gap-2 mb-2 sm:grid-cols-[0.8fr_1fr]">
+          <select class="px-2 py-2 border rounded text-sm" data-field="colorStatus">
+            ${['TBD', 'Selected', 'Approved', 'Ordered', 'Delivered', 'Changed'].map(status => `<option value="${status}" ${(item.colorStatus || 'TBD') === status ? 'selected' : ''}>${status}</option>`).join('')}
+          </select>
+          <input type="text" autocomplete="off" placeholder="Crew note / production handoff" value="${escapeHtml(item.crewNote || '')}" class="px-2 py-2 border rounded text-sm" data-field="crewNote">
+        </div>
         <div class="flex justify-between items-center text-sm">
           <label class="inline-flex items-center gap-2 text-gray-600">
             <input type="checkbox" class="rounded border-gray-300" data-field="customerVisible" ${item.customerVisible === false ? '' : 'checked'}>
@@ -937,11 +998,24 @@ import Base from '../../layouts/Base.astro';
       });
     }
 
+    function applyEstimateType() {
+      const type = document.getElementById('estimate-type').value;
+      const firstRoom = document.querySelector('#rooms-container > div');
+      if (!firstRoom) return;
+      if (type === 'exterior') {
+        firstRoom.querySelector('[data-area-type]').value = 'exterior';
+      } else if (type === 'interior') {
+        firstRoom.querySelector('[data-area-type]').value = 'interior';
+      }
+      syncScopeBuilderVisibility();
+    }
+
     function syncAreaType(room) {
       const ownsScopeBuilder = room.dataset.scopeOwner === 'true';
+      const estimateType = document.getElementById('estimate-type')?.value || 'interior';
       const isExterior = room.querySelector('[data-area-type]').value === 'exterior';
-      room.querySelector('[data-interior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || isExterior);
-      room.querySelector('[data-exterior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || !isExterior);
+      room.querySelector('[data-interior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'interior' || isExterior);
+      room.querySelector('[data-exterior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'exterior' || !isExterior);
       updateInteriorPreview(room);
       updateExteriorPreview(room);
     }
@@ -1143,6 +1217,8 @@ import Base from '../../layouts/Base.astro';
         materialId: surface.querySelector('[data-field="materialId"]').value,
         colorName: surface.querySelector('[data-field="colorName"]').value,
         colorCode: surface.querySelector('[data-field="colorCode"]').value,
+        colorStatus: surface.querySelector('[data-field="colorStatus"]').value,
+        crewNote: surface.querySelector('[data-field="crewNote"]').value,
         customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
       };
     }
@@ -1235,6 +1311,8 @@ import Base from '../../layouts/Base.astro';
           const surfaceMaterial = selectedMaterial(surface.querySelector('[data-field="materialId"]').value);
           const colorName = surface.querySelector('[data-field="colorName"]').value.trim();
           const colorCode = surface.querySelector('[data-field="colorCode"]').value.trim();
+          const colorStatus = surface.querySelector('[data-field="colorStatus"]').value;
+          const crewNote = surface.querySelector('[data-field="crewNote"]').value.trim();
           const adjustedRatePerHour = Number(rate.ratePerHour || 1) * Number(application.productivity || 1);
           const baseHours = (quantity / adjustedRatePerHour) * coats * (prepMultipliers[prep] || 1.2);
           const itemHours = Math.max(0, baseHours + prepAdjustmentHours + paintAdjustmentHours);
@@ -1258,7 +1336,7 @@ import Base from '../../layouts/Base.astro';
             kind: 'surface',
             customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
             dimensions: { width, height, quantity, unit: rate.unit },
-            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}${colorName ? `, ${colorName}` : ''}${colorCode ? ` (${colorCode})` : ''}`,
+            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}${colorName ? `, ${colorName}` : ''}${colorCode ? ` (${colorCode})` : ''}${crewNote ? `, crew: ${crewNote}` : ''}`,
             labor: {
               hours: Number(itemHours.toFixed(2)),
               rate: Number(rate.hourlyRate || settings.defaultLaborRate || 65),
@@ -1282,7 +1360,8 @@ import Base from '../../layouts/Base.astro';
               price: productCost ? Number(productCost.price.toFixed(2)) : Number(itemMaterials.toFixed(2)),
               colorName,
               colorCode,
-              status: colorName && colorCode ? 'selected' : 'needs_selection',
+              status: colorStatus,
+              crewNote,
             } : undefined,
           });
           surface.querySelector('[data-line-total]').textContent = money(itemTotal);
@@ -1336,7 +1415,43 @@ import Base from '../../layouts/Base.astro';
       document.getElementById('adjustments-total').textContent = money(result.adjustments);
       document.getElementById('tax-total').textContent = money(result.tax);
       document.getElementById('total-cost').textContent = money(result.total);
+      updatePaintSchedule(result.items);
       updateProductionReadiness(result.items);
+      updateWorkflowState(result);
+    }
+
+    function updatePaintSchedule(items) {
+      const panel = document.getElementById('paint-schedule');
+      const count = document.getElementById('paint-schedule-count');
+      const surfaceItems = items.filter(item => item.kind === 'surface' && item.customerVisible !== false);
+      count.textContent = `${surfaceItems.length} surface${surfaceItems.length === 1 ? '' : 's'}`;
+      if (!surfaceItems.length) {
+        panel.innerHTML = '<p class="rounded-md border border-dashed border-gray-300 p-3 text-gray-500">Add scope lines to build the paint schedule.</p>';
+        return;
+      }
+
+      panel.innerHTML = surfaceItems.map(item => {
+        const material = item.material;
+        const status = material?.status || 'TBD';
+        const statusClass = ['Approved', 'Ordered', 'Delivered'].includes(status) ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-800 border-amber-200';
+        const color = [material?.colorName, material?.colorCode].filter(Boolean).join(' ');
+        return `
+          <div class="rounded-lg border p-3">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div class="font-medium text-gray-900">${escapeHtml(item.desc)}</div>
+                <div class="mt-1 text-xs text-gray-500">${escapeHtml(item.dimensions.quantity.toFixed(1))} ${escapeHtml(item.dimensions.unit)} · ${material?.quantity || 0} ${escapeHtml(material?.unit || 'units')}</div>
+              </div>
+              <span class="inline-flex w-fit rounded-full border px-2 py-1 text-xs font-medium ${statusClass}">${escapeHtml(status)}</span>
+            </div>
+            <div class="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+              <div><span class="text-gray-500">Product</span><div class="font-medium text-gray-800">${material ? escapeHtml([material.brand, material.name].filter(Boolean).join(' - ')) : 'Missing product'}</div></div>
+              <div><span class="text-gray-500">Color</span><div class="font-medium text-gray-800">${color ? escapeHtml(color) : 'TBD'}</div></div>
+              <div><span class="text-gray-500">Crew note</span><div class="font-medium text-gray-800">${escapeHtml(material?.crewNote || 'None')}</div></div>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     function updateProductionReadiness(items) {
@@ -1344,20 +1459,54 @@ import Base from '../../layouts/Base.astro';
       const surfaceItems = items.filter(item => item.kind === 'surface' && item.customerVisible !== false);
       const materialItems = surfaceItems.filter(item => item.material);
       const missingProduct = surfaceItems.length - materialItems.length;
-      const missingColor = materialItems.filter(item => !item.material.colorName || !item.material.colorCode).length;
+      const missingColor = materialItems.filter(item => !item.material.colorName || !item.material.colorCode || item.material.status === 'TBD').length;
+      const unapprovedColor = materialItems.filter(item => ['Selected', 'Changed'].includes(item.material.status)).length;
+      const zeroQuantitySurfaces = Array.from(document.querySelectorAll('[data-surface-item]')).filter(surface => {
+        const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
+        return rate && measuredQuantity(surface, rate).quantity <= 0;
+      }).length;
+      const missingCustomer = document.getElementById('lead-select').value ? 0 : 1;
       const orderUnits = materialItems.reduce((sum, item) => sum + Number(item.material.quantity || 0), 0);
       const statusClass = (count) => count ? 'text-amber-700' : 'text-green-700';
 
       panel.innerHTML = `
         <div class="flex justify-between"><span>Paint order units</span><span class="font-medium">${orderUnits.toFixed(0)}</span></div>
+        <div class="flex justify-between ${statusClass(missingCustomer)}"><span>Missing customer</span><span class="font-medium">${missingCustomer}</span></div>
+        <div class="flex justify-between ${statusClass(zeroQuantitySurfaces)}"><span>Zero-quantity surfaces</span><span class="font-medium">${zeroQuantitySurfaces}</span></div>
         <div class="flex justify-between ${statusClass(missingProduct)}"><span>Missing products</span><span class="font-medium">${missingProduct}</span></div>
         <div class="flex justify-between ${statusClass(missingColor)}"><span>Color selections needed</span><span class="font-medium">${missingColor}</span></div>
+        <div class="flex justify-between ${statusClass(unapprovedColor)}"><span>Colors awaiting approval</span><span class="font-medium">${unapprovedColor}</span></div>
         <p class="text-xs text-gray-500">Use per-surface product and color fields to prepare ordering and job handoff. Sheen should live in the selected paint product because it changes cost and coverage.</p>
       `;
     }
 
+    function updateWorkflowState(result) {
+      const checks = {
+        setup: Boolean(document.getElementById('lead-select').value),
+        scope: result.items.some(item => item.kind === 'surface'),
+        paint: result.items.some(item => item.material?.colorName && item.material?.colorCode && item.material?.status !== 'TBD'),
+        review: result.total > 0,
+      };
+      document.querySelectorAll('.workflow-step').forEach((button) => {
+        const stage = button.dataset.jumpStage;
+        const isReady = checks[stage];
+        button.classList.toggle('bg-blue-50', stage === 'setup' && !isReady);
+        button.classList.toggle('bg-green-50', isReady);
+        button.classList.toggle('text-green-700', isReady);
+      });
+    }
+
     document.getElementById('add-room').addEventListener('click', () => addRoom());
     document.getElementById('add-line-item').addEventListener('click', () => addLineItem());
+    document.getElementById('estimate-type').addEventListener('change', () => {
+      applyEstimateType();
+      calculateTotal();
+    });
+    document.querySelectorAll('[data-jump-stage]').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelector(`[data-stage="${button.dataset.jumpStage}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
     document.getElementById('retry-setup').addEventListener('click', () => {
       loadSetup().catch((err) => {
         console.error('Failed to load production estimator', err);
