@@ -152,6 +152,45 @@
         `;
       }
 
+      function scopeParts(item) {
+        const [area = 'Project', rawLabel = item.desc || 'Scope item'] = String(item.desc || '').split(/:\s(.+)/);
+        const label = rawLabel || area;
+        const surfaceMatch = label.match(/^(.*)\s+(walls?|ceilings?|trim|doors?|cabinets?|siding|soffits?|fascia|corner boards?)$/i);
+        return {
+          area: area.trim() || 'Project',
+          space: surfaceMatch ? surfaceMatch[1].trim() : area.trim() || 'Project',
+          surface: surfaceMatch ? surfaceMatch[2].trim() : label.trim(),
+          label: label.trim(),
+        };
+      }
+
+      function groupScopeBySpace(items) {
+        const groups = new Map();
+        items.forEach((item) => {
+          const parts = scopeParts(item);
+          const key = parts.space || parts.area;
+          if (!groups.has(key)) groups.set(key, { name: key, area: parts.area, items: [] });
+          groups.get(key).items.push({ item, parts });
+        });
+        return Array.from(groups.values());
+      }
+
+      function productSummary(items) {
+        const products = new Map();
+        items.forEach((item) => {
+          if (!item.material?.name) return;
+          const product = [item.material.brand, item.material.name].filter(Boolean).join(' ');
+          const color = [item.material.colorName, item.material.colorCode].filter(Boolean).join(' ') || 'Color TBD';
+          const key = `${product}|${color}`;
+          if (!products.has(key)) products.set(key, { product, color, spaces: new Set() });
+          products.get(key).spaces.add(scopeParts(item).space);
+        });
+        return Array.from(products.values()).map(product => ({
+          ...product,
+          spaces: Array.from(product.spaces).filter(Boolean),
+        }));
+      }
+
       function customerScopeDetail(item) {
         if (item.kind === 'line_item') return escapeHtml(item.notes || 'Additional project item');
         const labor = item.labor || {};
@@ -163,6 +202,24 @@
         return escapeHtml(parts.join(' · ') || 'Included in project scope');
       }
 
+      function priceSummary(pkg) {
+        const total = Number(pkg.total ?? 0);
+        const discount = Number(pkg.discount ?? 0);
+        const tax = Number(pkg.tax ?? 0);
+        const rawSubtotal = Number(pkg.subtotal ?? 0);
+        const subtotal = rawSubtotal > 0 && Math.abs((rawSubtotal - discount + tax) - total) < 0.02
+          ? rawSubtotal
+          : Math.max(total - tax + discount, 0);
+        return `
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between gap-4"><span class="text-gray-600">Subtotal</span><span class="font-medium">${money(subtotal)}</span></div>
+            ${discount ? `<div class="flex justify-between gap-4 text-green-700"><span>Discount</span><span class="font-medium">-${money(discount)}</span></div>` : ''}
+            <div class="flex justify-between gap-4"><span class="text-gray-600">Estimated tax</span><span class="font-medium">${money(tax)}</span></div>
+            <div class="flex justify-between gap-4 border-t pt-3 text-lg"><span class="font-semibold text-gray-900">Total</span><span class="font-bold" style="color: ${primaryColor}">${money(total)}</span></div>
+          </div>
+        `;
+      }
+
       function renderProposal(packages) {
         const pkg = packages.find(item => item.name === 'proposal') || packages.find(item => /better|recommended/i.test(item.name)) || packages[0];
         const items = packageItems(pkg || {}).filter(item => item.customerVisible !== false);
@@ -170,29 +227,49 @@
           showError();
           return;
         }
+        const scopeGroups = groupScopeBySpace(items);
+        const products = productSummary(items);
 
         document.getElementById('proposal-container').innerHTML = `
           <div class="grid lg:grid-cols-[1fr_280px] gap-6">
-            <section>
+            <section class="space-y-5">
               <h2 class="text-lg font-semibold text-gray-900 mb-3">Project Scope</h2>
               <p class="mb-3 text-sm text-gray-600">The scope below is included in one total proposal price. Individual task pricing is intentionally not itemized.</p>
-              <div class="divide-y rounded-lg border">
-                ${items.map(item => `
-                  <div class="p-4">
-                    <div>
-                      <p class="font-medium text-gray-950">${escapeHtml(item.desc)}</p>
-                      <p class="text-sm text-gray-600 mt-1">${customerScopeDetail(item)}</p>
-                      ${itemMaterial(item)}
+              <div class="space-y-3">
+                ${scopeGroups.map(group => `
+                  <div class="rounded-lg border bg-white">
+                    <div class="border-b bg-gray-50 px-4 py-3">
+                      <h3 class="font-semibold text-gray-950">${escapeHtml(group.name)}</h3>
+                      ${group.area && group.area !== group.name ? `<p class="text-xs text-gray-500">${escapeHtml(group.area)}</p>` : ''}
+                    </div>
+                    <div class="divide-y">
+                      ${group.items.map(({ item, parts }) => `
+                        <div class="p-4">
+                          <p class="font-medium text-gray-900">${escapeHtml(parts.surface)}</p>
+                          <p class="text-sm text-gray-600 mt-1">${customerScopeDetail(item)}</p>
+                          ${itemMaterial(item)}
+                        </div>
+                      `).join('')}
                     </div>
                   </div>
                 `).join('')}
               </div>
+              <section class="rounded-lg border bg-white p-4">
+                <h2 class="text-lg font-semibold text-gray-900">Paint Products & Colors</h2>
+                <div class="mt-3 space-y-3">
+                  ${products.length ? products.map(product => `
+                    <div class="rounded-md bg-gray-50 p-3">
+                      <p class="font-medium text-gray-900">${escapeHtml(product.product)}</p>
+                      <p class="text-sm text-gray-600">${escapeHtml(product.color)}</p>
+                      ${product.spaces.length ? `<p class="mt-1 text-xs text-gray-500">Used in: ${escapeHtml(product.spaces.join(', '))}</p>` : ''}
+                    </div>
+                  `).join('') : '<p class="rounded-md bg-gray-50 p-3 text-sm text-gray-600">Paint product and color selections will be confirmed before ordering and production.</p>'}
+                </div>
+              </section>
             </section>
             <aside class="rounded-lg border p-5 bg-gray-50 self-start">
-              <p class="text-sm text-gray-600">Total proposal</p>
-              <p class="text-4xl font-bold mt-2" style="color: ${primaryColor}">${money(pkg.total)}</p>
-              ${pkg.discount ? `<p class="text-sm text-gray-600 mt-2">Includes ${money(pkg.discount)} discount.</p>` : ''}
-              ${pkg.tax ? `<p class="text-sm text-gray-600 mt-2">Includes ${money(pkg.tax)} estimated tax.</p>` : ''}
+              <p class="text-sm text-gray-600">Project investment</p>
+              <div class="mt-4">${priceSummary(pkg)}</div>
               <p class="text-sm text-gray-600 mt-4">This price includes labor, selected paint products, prep, and listed materials for the scope shown.</p>
             </aside>
           </div>
