@@ -281,6 +281,14 @@ button[class*="bg-blue"][class*="text-white"]:active {
   border-color: var(--pf-primary-hover);
 }
 
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-compact:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
 .btn-secondary {
   background: var(--pf-surface-muted);
   border: 1px solid var(--pf-border-strong);

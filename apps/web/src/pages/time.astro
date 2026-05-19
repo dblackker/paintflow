@@ -75,7 +75,7 @@ import Base from '../layouts/Base.astro';
         </label>
         <div class="flex flex-col sm:flex-row gap-3 pt-2">
           <button type="button" id="cancel-btn" class="btn-secondary flex-1">Cancel</button>
-          <button type="submit" class="btn-primary flex-1">Save time</button>
+          <button type="submit" id="save-time-btn" class="btn-primary flex-1">Save time</button>
         </div>
       </form>
     </div>
@@ -87,6 +87,7 @@ import Base from '../layouts/Base.astro';
     let allEntries = [];
     let members = [];
     let jobs = [];
+    let isSavingTime = false;
     const collapsedDays = new Set();
 
     const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
@@ -320,7 +321,9 @@ import Base from '../layouts/Base.astro';
 
     document.getElementById('time-form').addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (isSavingTime) return;
       const form = event.currentTarget;
+      const saveButton = document.getElementById('save-time-btn');
       const data = Object.fromEntries(new FormData(form));
       const id = data.id;
       delete data.id;
@@ -328,6 +331,9 @@ import Base from '../layouts/Base.astro';
       data.date = new Date(`${data.date}T12:00:00`).toISOString();
 
       try {
+        isSavingTime = true;
+        saveButton.disabled = true;
+        saveButton.textContent = id ? 'Updating...' : 'Saving...';
         await api(id ? `/v1/team/time/${id}` : '/v1/team/time', {
           method: id ? 'PATCH' : 'POST',
           body: JSON.stringify(data),
@@ -337,6 +343,10 @@ import Base from '../layouts/Base.astro';
         await loadData();
       } catch (e) {
         alert(e.message || 'Failed to save time entry');
+      } finally {
+        isSavingTime = false;
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save time';
       }
     });
 
