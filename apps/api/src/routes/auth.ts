@@ -34,6 +34,10 @@ const DEFAULT_PRODUCTION_RATES = [
   { category: 'doors', surfaceType: 'interior wood', unit: 'each', ratePerHour: '4.00', hourlyRate: '65.00', prepMultiplier: '1.15', coats: 2, description: 'Interior slab door, both sides' },
   { category: 'cabinets', surfaceType: 'wood cabinet fronts', unit: 'each', ratePerHour: '0.50', hourlyRate: '75.00', prepMultiplier: '1.60', coats: 2, description: 'Cabinet door or drawer front with heavy prep' },
   { category: 'exterior_siding', surfaceType: 'exterior siding', unit: 'sqft', ratePerHour: '200.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior siding, spray and back-roll where needed' },
+  { category: 'exterior_soffit', surfaceType: 'wood or aluminum', unit: 'sqft', ratePerHour: '125.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior soffits' },
+  { category: 'exterior_fascia', surfaceType: 'wood or composite', unit: 'linear_ft', ratePerHour: '55.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior fascia boards' },
+  { category: 'exterior_trim', surfaceType: 'window and door trim', unit: 'linear_ft', ratePerHour: '50.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior window and door trim' },
+  { category: 'exterior_corner_boards', surfaceType: 'wood or composite', unit: 'linear_ft', ratePerHour: '50.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior corner boards' },
 ];
 
 const DEFAULT_ESTIMATE_TEMPLATES = [

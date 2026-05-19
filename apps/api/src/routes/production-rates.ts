@@ -28,6 +28,10 @@ const DEFAULT_RATES = [
   { category: 'doors', surfaceType: 'wood', unit: 'each', ratePerHour: 4, hourlyRate: 50, description: 'Interior door (both sides)' },
   { category: 'cabinets', surfaceType: 'wood', unit: 'each', ratePerHour: 0.5, hourlyRate: 50, description: 'Cabinet door/drawer front' },
   { category: 'exterior_siding', surfaceType: 'wood', unit: 'sqft', ratePerHour: 200, hourlyRate: 50, description: 'Exterior siding - spray' },
+  { category: 'exterior_soffit', surfaceType: 'wood or aluminum', unit: 'sqft', ratePerHour: 125, hourlyRate: 65, description: 'Exterior soffits' },
+  { category: 'exterior_fascia', surfaceType: 'wood or composite', unit: 'linear_ft', ratePerHour: 55, hourlyRate: 65, description: 'Exterior fascia boards' },
+  { category: 'exterior_trim', surfaceType: 'window and door trim', unit: 'linear_ft', ratePerHour: 50, hourlyRate: 65, description: 'Exterior window and door trim' },
+  { category: 'exterior_corner_boards', surfaceType: 'wood or composite', unit: 'linear_ft', ratePerHour: 50, hourlyRate: 65, description: 'Exterior corner boards' },
 ];
 
 ratesApp.get('/', async (c) => {
@@ -52,6 +56,26 @@ ratesApp.get('/', async (c) => {
       }))
     ).returning();
     rates = seeded;
+  } else {
+    const missingExteriorDefaults = DEFAULT_RATES.filter((defaultRate) =>
+      defaultRate.category.startsWith('exterior_') &&
+      !rates.some((rate) => rate.category === defaultRate.category)
+    );
+
+    if (missingExteriorDefaults.length) {
+      const seeded = await db.insert(productionRates).values(
+        missingExteriorDefaults.map(r => ({
+          orgId,
+          category: r.category,
+          surfaceType: r.surfaceType,
+          unit: r.unit,
+          ratePerHour: r.ratePerHour.toString(),
+          hourlyRate: r.hourlyRate.toString(),
+          description: r.description,
+        }))
+      ).returning();
+      rates = [...rates, ...seeded];
+    }
   }
   
   return c.json({ data: rates });

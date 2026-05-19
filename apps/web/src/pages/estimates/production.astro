@@ -174,27 +174,155 @@ import Base from '../../layouts/Base.astro';
         .trim();
     }
 
-    function measurementConfig(rate) {
+    function isExteriorRate(rate) {
+      const text = `${rate?.category || ''} ${rate?.surfaceType || ''} ${rate?.description || ''}`.toLowerCase();
+      return /exterior|siding|soffit|fascia|eave|shutter|corner board|cornerboard/.test(text);
+    }
+
+    function rateKind(rate) {
       const category = String(rate?.category || '').toLowerCase();
       const description = String(rate?.description || '').toLowerCase();
       const unit = String(rate?.unit || 'sqft').toLowerCase();
+      const text = `${category} ${description}`;
 
-      if (unit === 'linear_ft') {
+      if (/soffit|eave/.test(text)) return 'soffit';
+      if (/fascia/.test(text)) return 'fascia';
+      if (/corner board|cornerboard|corner/.test(text)) return 'corner_boards';
+      if (/exterior_trim|window.*door.*trim|door.*window.*trim/.test(text)) return 'exterior_trim';
+      if (/window.*trim|trim.*window|shutter/.test(text)) return 'window_trim';
+      if (/door.*trim|trim.*door/.test(text)) return 'door_trim';
+      if (/exterior|siding/.test(text) && unit === 'sqft') return 'exterior_body';
+      if (unit === 'linear_ft') return 'linear';
+      if (unit === 'each') return 'count';
+      if (category.includes('wall') || description.includes('wall')) return 'wall_area';
+      if (category.includes('ceiling') || description.includes('ceiling')) return 'ceiling_area';
+      return 'area';
+    }
+
+    function measurementConfig(rate) {
+      const kind = rateKind(rate);
+
+      if (kind === 'soffit') {
+        return {
+          widthLabel: 'Eave run',
+          widthPlaceholder: 'Linear ft',
+          heightLabel: 'Soffit depth',
+          heightPlaceholder: 'Feet',
+          qtyLabel: 'Sq ft override',
+          qtyPlaceholder: 'Optional',
+          showWidth: true,
+          showHeight: true,
+          showQty: true,
+          helper: 'Soffit area uses eave linear feet times soffit depth. If blank, exterior assumptions are used.',
+        };
+      }
+
+      if (kind === 'fascia') {
+        return {
+          widthLabel: 'Fascia run',
+          widthPlaceholder: 'Linear ft',
+          heightLabel: '',
+          heightPlaceholder: '',
+          qtyLabel: 'Lin ft override',
+          qtyPlaceholder: 'Optional',
+          showWidth: true,
+          showHeight: false,
+          showQty: true,
+          helper: 'Fascia is normally estimated from roofline or house perimeter, then overridden if measured.',
+        };
+      }
+
+      if (kind === 'exterior_body') {
+        return {
+          widthLabel: 'Wall run',
+          widthPlaceholder: 'Linear ft',
+          heightLabel: 'Avg height',
+          heightPlaceholder: 'Feet',
+          qtyLabel: 'Sq ft override',
+          qtyPlaceholder: 'Optional',
+          showWidth: true,
+          showHeight: true,
+          showQty: true,
+          helper: 'Exterior body uses perimeter times wall height and stories, less estimated openings when assumptions are filled.',
+        };
+      }
+
+      if (kind === 'window_trim') {
+        return {
+          widthLabel: '',
+          widthPlaceholder: '',
+          heightLabel: '',
+          heightPlaceholder: '',
+          qtyLabel: 'Window count',
+          qtyPlaceholder: 'Count',
+          showWidth: false,
+          showHeight: false,
+          showQty: true,
+          helper: 'Window trim can use the exterior window count with a default trim allowance per window.',
+        };
+      }
+
+      if (kind === 'exterior_trim') {
+        return {
+          widthLabel: '',
+          widthPlaceholder: '',
+          heightLabel: '',
+          heightPlaceholder: '',
+          qtyLabel: 'Lin ft override',
+          qtyPlaceholder: 'Optional',
+          showWidth: false,
+          showHeight: false,
+          showQty: true,
+          helper: 'Exterior trim uses window and door counts from the area assumptions, with a linear-foot override when measured.',
+        };
+      }
+
+      if (kind === 'door_trim') {
+        return {
+          widthLabel: '',
+          widthPlaceholder: '',
+          heightLabel: '',
+          heightPlaceholder: '',
+          qtyLabel: 'Door count',
+          qtyPlaceholder: 'Count',
+          showWidth: false,
+          showHeight: false,
+          showQty: true,
+          helper: 'Door trim can use the exterior door count with a default trim allowance per door.',
+        };
+      }
+
+      if (kind === 'corner_boards') {
+        return {
+          widthLabel: '',
+          widthPlaceholder: '',
+          heightLabel: '',
+          heightPlaceholder: '',
+          qtyLabel: 'Lin ft override',
+          qtyPlaceholder: 'Optional',
+          showWidth: false,
+          showHeight: false,
+          showQty: true,
+          helper: 'Corner board footage is estimated from corner count times wall height and stories.',
+        };
+      }
+
+      if (kind === 'linear') {
         return {
           widthLabel: 'Linear feet',
           widthPlaceholder: 'Length',
           heightLabel: '',
           heightPlaceholder: '',
-          qtyLabel: 'Qty',
+          qtyLabel: 'Lin ft override',
           qtyPlaceholder: 'Optional',
           showWidth: true,
           showHeight: false,
           showQty: true,
-          helper: 'Trim is measured in linear feet.',
+          helper: 'Linear items use measured length, or a direct override.',
         };
       }
 
-      if (unit === 'each') {
+      if (kind === 'count') {
         return {
           widthLabel: '',
           widthPlaceholder: '',
@@ -205,11 +333,11 @@ import Base from '../../layouts/Base.astro';
           showWidth: false,
           showHeight: false,
           showQty: true,
-          helper: 'Doors, cabinet fronts, and similar items are measured by count.',
+          helper: 'Doors, cabinet fronts, shutters, and similar items are measured by count.',
         };
       }
 
-      if (category.includes('wall') || description.includes('wall')) {
+      if (kind === 'wall_area') {
         return {
           widthLabel: 'Perimeter',
           widthPlaceholder: 'Linear ft',
@@ -224,7 +352,7 @@ import Base from '../../layouts/Base.astro';
         };
       }
 
-      if (category.includes('ceiling') || description.includes('ceiling')) {
+      if (kind === 'ceiling_area') {
         return {
           widthLabel: 'Length',
           widthPlaceholder: 'Feet',
@@ -301,20 +429,70 @@ import Base from '../../layouts/Base.astro';
       div.className = 'bg-white rounded-lg shadow-sm border p-4';
       div.id = roomId;
       div.innerHTML = `
-        <div class="flex gap-3 items-center mb-3">
-          <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
-          <button type="button" class="copy-room text-sm text-blue-600">Copy</button>
-          <button type="button" class="remove-room text-sm text-red-600">Remove</button>
+        <div class="flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
+          <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room, side, or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
+          <select class="px-2 py-2 border rounded text-sm" data-area-type>
+            <option value="interior">Interior</option>
+            <option value="exterior">Exterior</option>
+          </select>
+          <div class="flex gap-3">
+            <button type="button" class="copy-room text-sm text-blue-600">Copy</button>
+            <button type="button" class="remove-room text-sm text-red-600">Remove</button>
+          </div>
+        </div>
+        <div class="hidden mb-4 rounded-lg border bg-blue-50 p-3" data-exterior-assumptions>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <label>
+              <span class="text-xs text-blue-900">House perimeter</span>
+              <input data-exterior="perimeter" type="number" min="0" step="1" inputmode="decimal" autocomplete="off" placeholder="Linear ft" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-blue-900">Stories</span>
+              <select data-exterior="stories" class="mt-1 w-full px-2 py-2 border rounded">
+                <option value="1">1</option>
+                <option value="1.5">1.5</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </label>
+            <label>
+              <span class="text-xs text-blue-900">Wall height</span>
+              <input data-exterior="wallHeight" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="10" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-blue-900">Soffit depth</span>
+              <input data-exterior="soffitDepth" type="number" min="0" step="0.25" inputmode="decimal" autocomplete="off" value="2" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-blue-900">Windows</span>
+              <input data-exterior="windows" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-blue-900">Doors</span>
+              <input data-exterior="doors" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-blue-900">Corners</span>
+              <input data-exterior="corners" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="4" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-blue-900">Roofline factor</span>
+              <input data-exterior="rooflineFactor" type="number" min="0" step="0.05" inputmode="decimal" autocomplete="off" value="1" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+          </div>
+          <p class="mt-2 text-xs text-blue-900">Use field assumptions for exterior trim, fascia, soffit, and siding when exact ladder measurements are impractical. Any line can still be overridden.</p>
         </div>
         <div class="space-y-3" data-items></div>
         <button type="button" class="add-surface mt-3 text-sm text-blue-600">Add surface</button>
       `;
       document.getElementById('rooms-container').appendChild(div);
+      syncAreaType(div);
       if (templateItems.length) {
         templateItems.forEach(item => addSurface(roomId, item));
       } else {
         addSurface(roomId);
       }
+      return div;
     }
 
     function findRateForTemplateItem(item = {}) {
@@ -405,9 +583,15 @@ import Base from '../../layouts/Base.astro';
     function syncSurfaceMeasurement(surface) {
       const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
       const config = measurementConfig(rate);
+      const room = surface.closest('#rooms-container > div');
       const widthWrap = surface.querySelector('[data-measure="width"]');
       const heightWrap = surface.querySelector('[data-measure="height"]');
       const qtyWrap = surface.querySelector('[data-measure="quantity"]');
+
+      if (rate && isExteriorRate(rate) && room) {
+        room.querySelector('[data-area-type]').value = 'exterior';
+        syncAreaType(room);
+      }
 
       widthWrap.classList.toggle('hidden', !config.showWidth);
       heightWrap.classList.toggle('hidden', !config.showHeight);
@@ -419,6 +603,51 @@ import Base from '../../layouts/Base.astro';
       surface.querySelector('[data-field="height"]').placeholder = config.heightPlaceholder;
       surface.querySelector('[data-field="quantity"]').placeholder = config.qtyPlaceholder;
       surface.querySelector('[data-measure-helper]').textContent = config.helper;
+    }
+
+    function syncAreaType(room) {
+      const isExterior = room.querySelector('[data-area-type]').value === 'exterior';
+      room.querySelector('[data-exterior-assumptions]').classList.toggle('hidden', !isExterior);
+    }
+
+    function exteriorAssumptions(room) {
+      const read = (key, fallback = 0) => Number(room?.querySelector(`[data-exterior="${key}"]`)?.value || fallback);
+      return {
+        perimeter: read('perimeter'),
+        stories: read('stories', 1),
+        wallHeight: read('wallHeight', 10),
+        soffitDepth: read('soffitDepth', 2),
+        windows: read('windows'),
+        doors: read('doors'),
+        corners: read('corners', 4),
+        rooflineFactor: read('rooflineFactor', 1),
+      };
+    }
+
+    function exteriorQuantityFromAssumptions(room, rate) {
+      if (!room || room.querySelector('[data-area-type]')?.value !== 'exterior') return 0;
+      const assumptions = exteriorAssumptions(room);
+      const roofline = assumptions.perimeter * Math.max(assumptions.rooflineFactor || 1, 0);
+      const openingAllowance = (assumptions.windows * 15) + (assumptions.doors * 21);
+
+      switch (rateKind(rate)) {
+        case 'exterior_body':
+          return Math.max(0, (assumptions.perimeter * assumptions.wallHeight * assumptions.stories) - openingAllowance);
+        case 'soffit':
+          return Math.max(0, roofline * assumptions.soffitDepth);
+        case 'fascia':
+          return Math.max(0, roofline);
+        case 'corner_boards':
+          return Math.max(0, assumptions.corners * assumptions.wallHeight * assumptions.stories);
+        case 'exterior_trim':
+          return Math.max(0, (assumptions.windows * 18) + (assumptions.doors * 20));
+        case 'window_trim':
+          return Math.max(0, assumptions.windows * 18);
+        case 'door_trim':
+          return Math.max(0, assumptions.doors * 20);
+        default:
+          return 0;
+      }
     }
 
     function collectSurfaceData(surface) {
@@ -471,21 +700,24 @@ import Base from '../../layouts/Base.astro';
 
     function measuredQuantity(surface, rate) {
       const config = measurementConfig(rate);
+      const room = surface.closest('#rooms-container > div');
       const width = Number(surface.querySelector('[data-field="width"]').value || 0);
       const height = Number(surface.querySelector('[data-field="height"]').value || 0);
       const manualQty = Number(surface.querySelector('[data-field="quantity"]').value || 0);
+      const assumptionQty = exteriorQuantityFromAssumptions(room, rate);
 
       if (String(rate?.unit || '').toLowerCase() === 'linear_ft') {
-        const quantity = width || manualQty;
+        const quantity = manualQty || width || assumptionQty;
         return { width, height: 0, quantity };
       }
 
       if (String(rate?.unit || '').toLowerCase() === 'each') {
-        return { width: 0, height: 0, quantity: manualQty };
+        return { width: 0, height: 0, quantity: manualQty || assumptionQty };
       }
 
-      const quantity = manualQty || (width && height ? width * height : 0);
-      if (!manualQty && width && height) surface.querySelector('[data-field="quantity"]').value = quantity.toFixed(1);
+      const measuredArea = width && height ? width * height : 0;
+      const quantity = manualQty || measuredArea || assumptionQty;
+      if (!manualQty && measuredArea) surface.querySelector('[data-field="quantity"]').value = measuredArea.toFixed(1);
       return { width: config.showWidth ? width : 0, height: config.showHeight ? height : 0, quantity };
     }
 
@@ -628,7 +860,12 @@ import Base from '../../layouts/Base.astro';
         const source = event.target.closest('#rooms-container > div');
         const roomName = source.querySelector('[data-room-name]').value.trim() || 'Area';
         const items = Array.from(source.querySelectorAll('[data-items] > div')).map(collectSurfaceData);
-        addRoom(`${roomName} copy`, items);
+        const copied = addRoom(`${roomName} copy`, items);
+        copied.querySelector('[data-area-type]').value = source.querySelector('[data-area-type]').value;
+        source.querySelectorAll('[data-exterior]').forEach((input) => {
+          copied.querySelector(`[data-exterior="${input.dataset.exterior}"]`).value = input.value;
+        });
+        syncAreaType(copied);
       }
       calculateTotal();
     });
@@ -642,6 +879,11 @@ import Base from '../../layouts/Base.astro';
       if (event.target.closest('main')) calculateTotal();
     });
     document.addEventListener('change', (event) => {
+      if (event.target.matches('[data-area-type]')) {
+        const room = event.target.closest('#rooms-container > div');
+        syncAreaType(room);
+        room.querySelectorAll('[data-items] > div').forEach(syncSurfaceMeasurement);
+      }
       if (event.target.matches('[data-field="rateId"]')) {
         syncSurfaceMeasurement(event.target.closest('[data-items] > div'));
       }
