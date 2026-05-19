@@ -3,47 +3,79 @@ import Base from '../layouts/Base.astro';
 ---
 
 <Base title="Time Tracking - PaintFlow">
-  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-    <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-bold">Time Tracking</h2>
-      <button id="add-time" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">+ Log Time</button>
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+      <div>
+        <p class="text-sm font-semibold text-brand-700">Field Operations</p>
+        <h1 class="text-2xl sm:text-3xl font-bold">Time Tracking</h1>
+        <p class="text-gray-600 max-w-2xl">Review daily timecards, drill into individual entries, and correct job hours without touching pay rates.</p>
+      </div>
+      <button id="add-time" class="btn-primary w-full sm:w-auto">Log time</button>
     </div>
 
-    <div class="bg-white rounded-lg shadow-sm border p-4 mb-6 flex gap-4 items-center">
-      <button id="prev-week" class="px-3 py-1 border rounded hover:bg-gray-50">Previous</button>
-      <span id="week-range" class="flex-1 text-center font-medium"></span>
-      <button id="next-week" class="px-3 py-1 border rounded hover:bg-gray-50">Next</button>
-    </div>
+    <section class="surface-panel p-4 mb-6">
+      <div class="grid grid-cols-[auto_1fr_auto] gap-3 items-center">
+        <button id="prev-week" class="btn-secondary px-3">Previous</button>
+        <span id="week-range" class="text-center font-semibold text-sm sm:text-base"></span>
+        <button id="next-week" class="btn-secondary px-3">Next</button>
+      </div>
+    </section>
+
+    <div id="week-summary" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6"></div>
 
     <div id="loading" class="text-center py-12">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
       <p class="mt-4 text-gray-600">Loading timesheet...</p>
     </div>
 
-    <div id="timesheet" class="bg-white rounded-lg shadow-sm border divide-y hidden"></div>
+    <div id="timesheet" class="space-y-4 hidden"></div>
 
-    <div id="empty" class="hidden bg-white rounded-lg shadow-sm border p-12 text-center">
+    <div id="empty" class="hidden surface-panel p-12 text-center">
       <p class="text-gray-500">No time entries this week</p>
-      <button onclick="document.getElementById('add-time').click()" class="mt-4 text-blue-600 text-sm">Log your first entry</button>
+      <button onclick="document.getElementById('add-time').click()" class="mt-4 text-blue-600 text-sm font-semibold">Log your first entry</button>
     </div>
-  </div>
+  </main>
 
-  <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-lg max-w-md w-full p-6">
-      <h2 class="text-lg font-semibold mb-4">Log Time</h2>
+  <div id="modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-lg w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 id="modal-title" class="text-lg font-semibold">Log Time</h2>
+          <p class="text-sm text-gray-600">Labor cost is calculated from the team member's burdened rate.</p>
+        </div>
+        <button type="button" id="close-modal-btn" class="btn-icon" aria-label="Close">x</button>
+      </div>
       <form id="time-form" class="space-y-4">
-        <select name="teamMemberId" id="member-select" class="w-full px-3 py-2 border rounded-lg" required>
-          <option value="">Select crew member...</option>
-        </select>
-        <select name="jobId" id="job-select" class="w-full px-3 py-2 border rounded-lg" required>
-          <option value="">Select job...</option>
-        </select>
-        <input type="date" name="date" autocomplete="off" class="w-full px-3 py-2 border rounded-lg" required>
-        <input type="number" name="hours" min="0" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Hours (e.g. 8)" class="w-full px-3 py-2 border rounded-lg" required>
-        <input type="text" name="description" autocomplete="off" enterkeyhint="done" placeholder="What did you work on?" class="w-full px-3 py-2 border rounded-lg">
-        <div class="flex gap-3">
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
-          <button type="submit" class="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+        <input type="hidden" name="id">
+        <label class="block">
+          <span class="form-label">Crew member</span>
+          <select name="teamMemberId" id="member-select" class="input" required>
+            <option value="">Select crew member...</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="form-label">Job</span>
+          <select name="jobId" id="job-select" class="input" required>
+            <option value="">Select job...</option>
+          </select>
+        </label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="block">
+            <span class="form-label">Work date</span>
+            <input type="date" name="date" autocomplete="off" class="input" required>
+          </label>
+          <label class="block">
+            <span class="form-label">Hours</span>
+            <input type="number" name="hours" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" placeholder="8" class="input" required>
+          </label>
+        </div>
+        <label class="block">
+          <span class="form-label">Work performed</span>
+          <input type="text" name="description" autocomplete="off" enterkeyhint="done" placeholder="Prep, spray, trim, punch list" class="input">
+        </label>
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          <button type="button" id="cancel-btn" class="btn-secondary flex-1">Cancel</button>
+          <button type="submit" class="btn-primary flex-1">Save time</button>
         </div>
       </form>
     </div>
@@ -52,11 +84,21 @@ import Base from '../layouts/Base.astro';
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let currentWeekStart = getWeekStart(new Date());
+    let allEntries = [];
+    let members = [];
+    let jobs = [];
+
+    const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+
+    function escapeHtml(value = '') {
+      return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
 
     function getWeekStart(date) {
       const d = new Date(date);
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      d.setHours(0, 0, 0, 0);
       return new Date(d.setDate(diff));
     }
 
@@ -64,14 +106,23 @@ import Base from '../layouts/Base.astro';
       return date.toISOString().split('T')[0];
     }
 
-    async function apiJson(url) {
-      const res = await fetch(url, { credentials: 'include' });
+    function dateKey(value) {
+      return formatDate(new Date(value));
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
       if (res.status === 401) {
         window.location.href = '/login';
         throw new Error('Unauthorized');
       }
-      if (!res.ok) throw new Error('Request failed');
-      return res.json();
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
     }
 
     async function loadData() {
@@ -80,113 +131,202 @@ import Base from '../layouts/Base.astro';
       document.getElementById('empty').classList.add('hidden');
 
       try {
-        const [members, jobs, time] = await Promise.all([
-          apiJson(`${API_URL}/v1/team/members`),
-          apiJson(`${API_URL}/v1/jobs`),
-          apiJson(`${API_URL}/v1/team/time`),
+        const [membersPayload, jobsPayload, timePayload] = await Promise.all([
+          api('/v1/team/members'),
+          api('/v1/jobs'),
+          api('/v1/team/time'),
         ]);
 
-        const memberSelect = document.getElementById('member-select');
-        memberSelect.innerHTML = '<option value="">Select crew member...</option>' + 
-          members.data.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
-
-        const jobSelect = document.getElementById('job-select');
-        jobSelect.innerHTML = '<option value="">Select job...</option>' + 
-          jobs.data.map(j => `<option value="${j.id}">${j.name}</option>`).join('');
-
-        renderTimesheet(time.data);
-        document.querySelector('input[name="date"]').value = formatDate(new Date());
+        members = membersPayload.data || [];
+        jobs = jobsPayload.data || [];
+        allEntries = timePayload.data || [];
+        populateSelects();
+        renderTimesheet();
       } catch (e) {
-        document.getElementById('loading').innerHTML = '<p class="text-red-600">Failed to load</p>';
+        document.getElementById('loading').innerHTML = `<p class="text-red-600">${escapeHtml(e.message || 'Failed to load')}</p>`;
       }
     }
 
-    function renderTimesheet(entries) {
+    function populateSelects() {
+      document.getElementById('member-select').innerHTML = '<option value="">Select crew member...</option>' +
+        members.map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
+      document.getElementById('job-select').innerHTML = '<option value="">Select job...</option>' +
+        jobs.map((job) => `<option value="${job.id}">${escapeHtml(job.name)}</option>`).join('');
+    }
+
+    function getWeekEntries() {
+      const weekEnd = new Date(currentWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      return allEntries.filter((entry) => {
+        const entryDate = new Date(entry.date);
+        return entryDate >= currentWeekStart && entryDate < weekEnd;
+      });
+    }
+
+    function renderTimesheet() {
       document.getElementById('loading').classList.add('hidden');
-      
+
       const weekEnd = new Date(currentWeekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
-      
-      document.getElementById('week-range').textContent = 
+      document.getElementById('week-range').textContent =
         `${currentWeekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`;
 
-      const weekEntries = entries.filter(e => {
-        const date = new Date(e.date);
-        return date >= currentWeekStart && date <= weekEnd;
-      });
+      const weekEntries = getWeekEntries();
+      renderSummary(weekEntries);
 
       if (!weekEntries.length) {
         document.getElementById('empty').classList.remove('hidden');
+        document.getElementById('timesheet').classList.add('hidden');
         return;
       }
 
+      const groupedByDate = weekEntries.reduce((groups, entry) => {
+        const key = dateKey(entry.date);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(entry);
+        return groups;
+      }, {});
+
       document.getElementById('timesheet').classList.remove('hidden');
-
-      const grouped = {};
-      weekEntries.forEach(e => {
-        const key = e.jobId + '|' + e.teamMemberId;
-        if (!grouped[key]) grouped[key] = { entries: [], total: 0 };
-        grouped[key].entries.push(e);
-        grouped[key].total += parseFloat(e.hours);
-      });
-
-      document.getElementById('timesheet').innerHTML = Object.values(grouped).map(g => {
-        const first = g.entries[0];
-        return `
-          <div class="p-4 hover:bg-gray-50">
-            <div class="flex justify-between">
-              <div class="min-w-0 flex-1">
-                <p class="font-medium text-sm truncate">${first.jobName}</p>
-                <p class="text-xs text-gray-600">${first.teamMemberName} - ${g.entries.length} entries - ${new Date(first.date).toLocaleDateString()}</p>
-                ${first.description ? `<p class="text-xs text-gray-500 mt-1 truncate">${first.description}</p>` : ''}
-              </div>
-              <div class="text-right ml-4">
-                <p class="font-semibold text-sm">${g.total.toFixed(2)} hrs</p>
-                <p class="text-xs text-gray-600">$${(g.total * parseFloat(first.hourlyRate)).toFixed(2)}</p>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
+      document.getElementById('timesheet').innerHTML = Object.entries(groupedByDate)
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([day, entries]) => renderDay(day, entries))
+        .join('');
     }
 
-    document.getElementById('add-time').addEventListener('click', () => {
+    function renderSummary(entries) {
+      const totalHours = entries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+      const totalCost = entries.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
+      const crewCount = new Set(entries.map((entry) => entry.teamMemberId)).size;
+      document.getElementById('week-summary').innerHTML = [
+        ['Hours', totalHours.toFixed(2), 'Logged this week'],
+        ['Labor cost', currency(totalCost), 'Burdened job cost'],
+        ['Crew', crewCount, 'People with entries'],
+      ].map(([label, value, help]) => `
+        <div class="surface-panel p-4">
+          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">${label}</p>
+          <p class="text-2xl font-bold mt-1">${value}</p>
+          <p class="text-xs text-gray-500 mt-1">${help}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderDay(day, entries) {
+      const totalHours = entries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+      const totalCost = entries.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
+      const label = new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      });
+
+      return `
+        <section class="surface-panel overflow-hidden">
+          <div class="p-4 bg-gray-50 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 class="font-semibold">${label}</h2>
+              <p class="text-sm text-gray-600">${entries.length} entries</p>
+            </div>
+            <div class="sm:text-right">
+              <p class="font-semibold">${totalHours.toFixed(2)} hrs</p>
+              <p class="text-sm text-gray-600">${currency(totalCost)}</p>
+            </div>
+          </div>
+          <div class="divide-y divide-[var(--pf-border)]">
+            ${entries.map((entry) => renderEntry(entry)).join('')}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderEntry(entry) {
+      return `
+        <article class="p-4 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="font-semibold truncate">${escapeHtml(entry.jobName || 'Job')}</p>
+              <span class="chip">${escapeHtml(entry.teamMemberName || 'Crew member')}</span>
+            </div>
+            <p class="text-sm text-gray-600 mt-1">${Number(entry.hours).toFixed(2)} hrs at ${currency(entry.hourlyRate)}/hr burdened</p>
+            ${entry.description ? `<p class="text-sm text-gray-500 mt-1">${escapeHtml(entry.description)}</p>` : ''}
+          </div>
+          <div class="flex flex-col sm:flex-row lg:flex-col sm:items-center lg:items-end gap-2">
+            <p class="font-semibold">${currency(entry.totalCost)}</p>
+            <div class="flex gap-2 w-full sm:w-auto">
+              <button onclick="editEntry('${entry.id}')" class="btn-secondary flex-1 sm:flex-none">Edit</button>
+              <button onclick="removeEntry('${entry.id}')" class="btn-secondary flex-1 sm:flex-none text-red-700">Remove</button>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function openModal(entry = null) {
+      const form = document.getElementById('time-form');
+      const fields = form.elements;
+      form.reset();
+      document.getElementById('modal-title').textContent = entry ? 'Edit Time Entry' : 'Log Time';
+      fields.id.value = entry?.id || '';
+      fields.teamMemberId.value = entry?.teamMemberId || '';
+      fields.jobId.value = entry?.jobId || '';
+      fields.date.value = entry ? dateKey(entry.date) : formatDate(new Date());
+      fields.hours.value = entry?.hours || '';
+      fields.description.value = entry?.description || '';
       document.getElementById('modal').classList.remove('hidden');
-    });
+    }
 
-    window.closeModal = () => document.getElementById('modal').classList.add('hidden');
+    function closeModal() {
+      document.getElementById('modal').classList.add('hidden');
+    }
 
-    document.getElementById('time-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = new FormData(e.target);
-      const data = Object.fromEntries(form);
-      data.hours = parseFloat(data.hours);
-      data.date = new Date(data.date).toISOString();
+    window.editEntry = (id) => {
+      const entry = allEntries.find((item) => item.id === id);
+      if (entry) openModal(entry);
+    };
+
+    window.removeEntry = async (id) => {
+      const entry = allEntries.find((item) => item.id === id);
+      const label = entry ? `${entry.teamMemberName} on ${new Date(entry.date).toLocaleDateString()}` : 'this time entry';
+      if (!confirm(`Remove ${label}? This will reverse its labor cost from the job.`)) return;
+      await api(`/v1/team/time/${id}`, { method: 'DELETE' });
+      window.showToast('Time entry removed', 'success');
+      await loadData();
+    };
+
+    document.getElementById('add-time').addEventListener('click', () => openModal());
+    document.getElementById('cancel-btn').addEventListener('click', closeModal);
+    document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+
+    document.getElementById('time-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      const id = data.id;
+      delete data.id;
+      data.hours = Number(data.hours);
+      data.date = new Date(`${data.date}T12:00:00`).toISOString();
 
       try {
-        const res = await fetch(`${API_URL}/v1/team/time`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
+        await api(id ? `/v1/team/time/${id}` : '/v1/team/time', {
+          method: id ? 'PATCH' : 'POST',
           body: JSON.stringify(data),
         });
-        if (!res.ok) throw new Error('Failed to save time entry');
         closeModal();
-        e.target.reset();
-        loadData();
+        window.showToast(id ? 'Time entry updated' : 'Time entry logged', 'success');
+        await loadData();
       } catch (e) {
-        alert('Failed to save time entry');
+        alert(e.message || 'Failed to save time entry');
       }
     });
 
     document.getElementById('prev-week').addEventListener('click', () => {
       currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-      loadData();
+      renderTimesheet();
     });
 
     document.getElementById('next-week').addEventListener('click', () => {
       currentWeekStart.setDate(currentWeekStart.getDate() + 7);
-      loadData();
+      renderTimesheet();
     });
 
     loadData();

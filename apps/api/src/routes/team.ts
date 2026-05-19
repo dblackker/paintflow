@@ -80,6 +80,14 @@ const createTimeEntrySchema = z.object({
   description: z.string().optional(),
 });
 
+const updateTimeEntrySchema = z.object({
+  jobId: z.string().uuid().optional(),
+  teamMemberId: z.string().uuid().optional(),
+  hours: z.coerce.number().positive().max(24).optional(),
+  date: z.string().datetime().optional(),
+  description: z.string().optional(),
+});
+
 const createTimecardSchema = z.object({
   jobId: z.string().uuid(),
   date: z.string().min(1),
@@ -93,6 +101,41 @@ const createTimecardSchema = z.object({
 
 function parseTimecardDate(value: string) {
   return new Date(value.includes('T') ? value : `${value}T12:00:00`);
+}
+
+async function assertCanModifyTimeEntry(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  entry: typeof timeEntries.$inferSelect,
+) {
+  const userId = c.get('userId');
+  const canLogForOthers = await hasPermission(c, 'log_time_for_others');
+  if (canLogForOthers) return true;
+
+  const db = createDb(c.env.DATABASE_URL);
+  const member = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.id, entry.teamMemberId), eq(teamMembers.orgId, entry.orgId)),
+  });
+
+  return member?.userId === userId;
+}
+
+function laborCostAdjustmentRow(
+  orgId: string,
+  jobId: string,
+  description: string,
+  hours: number,
+  hourlyRate: number,
+  totalCost: number,
+) {
+  return {
+    orgId,
+    jobId,
+    category: 'labor',
+    description,
+    quantity: hours.toFixed(2),
+    unitCost: hourlyRate.toFixed(2),
+    totalCost: totalCost.toFixed(2),
+  };
 }
 
 teamApp.post('/time', async (c) => {
@@ -270,6 +313,109 @@ teamApp.get('/time', async (c) => {
       jobName: jobsById.get(entry.jobId)?.name ?? 'Job',
     })),
   });
+});
+
+teamApp.patch('/time/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const parsed = updateTimeEntrySchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.timeEntries.findFirst({
+    where: and(eq(timeEntries.id, id), eq(timeEntries.orgId, orgId)),
+  });
+  if (!existing) {
+    return c.json({ error: 'Time entry not found' }, 404);
+  }
+  if (!await assertCanModifyTimeEntry(c, existing)) {
+    return c.json({ error: 'Cannot edit this time entry' }, 403);
+  }
+
+  const data = parsed.data;
+  const jobId = data.jobId || existing.jobId;
+  const teamMemberId = data.teamMemberId || existing.teamMemberId;
+  const hours = data.hours ?? Number(existing.hours);
+
+  const [job, member] = await Promise.all([
+    db.query.jobs.findFirst({ where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)) }),
+    db.query.teamMembers.findFirst({ where: and(eq(teamMembers.id, teamMemberId), eq(teamMembers.orgId, orgId)) }),
+  ]);
+  if (!job) return c.json({ error: 'Job not found' }, 404);
+  if (!member) return c.json({ error: 'Team member not found' }, 404);
+
+  const baseRate = parseFloat(member.hourlyRate);
+  const burdenRate = parseFloat(member.burdenRate || '30');
+  const burdenedRate = baseRate * (1 + burdenRate / 100);
+  const totalCost = hours * burdenedRate;
+  const oldTotalCost = Number(existing.totalCost);
+  const oldHourlyRate = Number(existing.hourlyRate);
+  const oldHours = Number(existing.hours);
+
+  const [entry] = await db.update(timeEntries)
+    .set({
+      jobId,
+      teamMemberId,
+      hours: hours.toFixed(2),
+      description: data.description ?? existing.description,
+      hourlyRate: burdenedRate.toFixed(2),
+      totalCost: totalCost.toFixed(2),
+      date: data.date ? new Date(data.date) : existing.date,
+    })
+    .where(and(eq(timeEntries.id, id), eq(timeEntries.orgId, orgId)))
+    .returning();
+
+  if (existing.jobId !== jobId) {
+    await db.insert(jobCosts).values([
+      laborCostAdjustmentRow(orgId, existing.jobId, 'Time entry moved out', -oldHours, oldHourlyRate, -oldTotalCost),
+      laborCostAdjustmentRow(orgId, jobId, `Time entry moved in - ${member.name}`, hours, burdenedRate, totalCost),
+    ]);
+  } else {
+    const delta = totalCost - oldTotalCost;
+    if (Math.abs(delta) >= 0.01) {
+      const deltaHours = burdenedRate ? delta / burdenedRate : 0;
+      await db.insert(jobCosts).values(
+        laborCostAdjustmentRow(orgId, jobId, `Time entry adjusted - ${member.name}`, deltaHours, burdenedRate, delta),
+      );
+    }
+  }
+
+  return c.json({ data: entry });
+});
+
+teamApp.delete('/time/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.timeEntries.findFirst({
+    where: and(eq(timeEntries.id, id), eq(timeEntries.orgId, orgId)),
+  });
+  if (!existing) {
+    return c.json({ error: 'Time entry not found' }, 404);
+  }
+  if (!await assertCanModifyTimeEntry(c, existing)) {
+    return c.json({ error: 'Cannot remove this time entry' }, 403);
+  }
+
+  const member = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.id, existing.teamMemberId), eq(teamMembers.orgId, orgId)),
+  });
+
+  await db.delete(timeEntries).where(and(eq(timeEntries.id, id), eq(timeEntries.orgId, orgId)));
+  await db.insert(jobCosts).values(
+    laborCostAdjustmentRow(
+      orgId,
+      existing.jobId,
+      `Time entry removed - ${member?.name || 'Crew member'}`,
+      -Number(existing.hours),
+      Number(existing.hourlyRate),
+      -Number(existing.totalCost),
+    ),
+  );
+
+  return c.json({ success: true });
 });
 
 export default teamApp;
