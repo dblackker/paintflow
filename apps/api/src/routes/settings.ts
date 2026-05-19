@@ -10,14 +10,6 @@ const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 settings.use('*', authMiddleware);
 
-const teamMemberSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().optional(),
-  role: z.string().min(1),
-  hourlyRate: z.coerce.number().min(0).default(0),
-  burdenRate: z.coerce.number().min(0).max(100).default(30),
-});
-
 const optionalText = (max: number) => z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
   z.string().trim().max(max).optional()
@@ -26,6 +18,14 @@ const optionalEmail = z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
   z.string().trim().email().max(255).optional()
 );
+
+const teamMemberSchema = z.object({
+  name: z.string().trim().min(1),
+  email: optionalEmail,
+  role: z.string().trim().min(1),
+  hourlyRate: z.coerce.number().min(0).default(0),
+  burdenRate: z.coerce.number().min(0).max(100).default(30),
+});
 
 const orgSettingsPatchSchema = z.object({
   companyName: z.string().trim().min(1).max(255).optional(),
@@ -290,6 +290,39 @@ settings.post('/team', async (c) => {
   }).returning();
   
   return c.json({ data: member }, 201);
+});
+
+// PATCH /v1/settings/team/:id
+settings.patch('/team/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const parsed = teamMemberSchema.partial().safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const updates: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed.data)) {
+    if (value === undefined) continue;
+    updates[key] = key === 'hourlyRate' || key === 'burdenRate' ? Number(value).toFixed(2) : value;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return c.json({ error: 'No supported team member fields provided' }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const [member] = await db.update(teamMembers)
+    .set(updates)
+    .where(and(eq(teamMembers.id, id), eq(teamMembers.orgId, orgId)))
+    .returning();
+
+  if (!member) {
+    return c.json({ error: 'Team member not found' }, 404);
+  }
+
+  return c.json({ data: member });
 });
 
 // DELETE /v1/settings/team/:id

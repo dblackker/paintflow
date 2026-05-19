@@ -1,4 +1,5 @@
 ---
+import '../../styles/design-system.css';
 ---
 
 <!DOCTYPE html>
@@ -40,19 +41,34 @@
         </section>
 
         <section class="bg-white rounded-lg shadow-sm border">
-          <div class="p-4 border-b flex justify-between items-center">
+          <div class="p-4 border-b flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
-              <h2 class="font-semibold">Labor Entry</h2>
-              <p class="text-xs text-gray-500">Quick add actual crew hours when a full timecard workflow is not needed</p>
+              <h2 class="font-semibold">Crew Timecard</h2>
+              <p class="text-xs text-gray-500">Log daily crew hours for this job. Pay and burdened rates are managed in Team.</p>
             </div>
           </div>
-          <form id="labor-form" class="p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input name="hours" type="number" min="0" step="0.25" inputmode="decimal" autocomplete="off" required placeholder="Hours" class="px-3 py-2 border rounded">
-            <input name="rate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" required placeholder="Burdened rate" class="px-3 py-2 border rounded">
-            <input name="date" type="date" autocomplete="off" class="px-3 py-2 border rounded">
-            <input name="description" type="text" autocomplete="off" placeholder="Description" class="px-3 py-2 border rounded md:col-span-1">
-            <button class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Log Labor</button>
+          <form id="timecard-form" class="p-4 space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-3">
+              <label>
+                <span class="form-label">Work date</span>
+                <input name="date" type="date" autocomplete="off" class="input" required>
+              </label>
+              <label>
+                <span class="form-label">Crew note</span>
+                <input name="notes" type="text" autocomplete="off" class="input" placeholder="Prep, spray, trim, punch list">
+              </label>
+              <button class="btn-primary md:self-end">Submit timecard</button>
+            </div>
+            <div id="crew-timecard-rows" class="divide-y border rounded-lg overflow-hidden"></div>
           </form>
+        </section>
+
+        <section class="bg-white rounded-lg shadow-sm border">
+          <div class="p-4 border-b">
+            <h2 class="font-semibold">Labor Timecards</h2>
+            <p class="text-xs text-gray-500">Crew hours tied to this job and rolled into actual labor costs.</p>
+          </div>
+          <div id="time-entry-list" class="divide-y"></div>
         </section>
 
         <section class="bg-white rounded-lg shadow-sm border">
@@ -115,6 +131,8 @@
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const jobId = window.location.pathname.split('/').pop();
     let costing = null;
+    let teamMembers = [];
+    let timeEntries = [];
 
     const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
@@ -137,9 +155,15 @@
     }
 
     async function loadCosting() {
-      const payload = await api(`/v1/jobs/${jobId}/costing`);
-      if (!payload) return;
-      costing = payload.data;
+      const [costingPayload, membersPayload, timePayload] = await Promise.all([
+        api(`/v1/jobs/${jobId}/costing`),
+        api('/v1/team/members'),
+        api(`/v1/team/time?jobId=${jobId}`),
+      ]);
+      if (!costingPayload) return;
+      costing = costingPayload.data;
+      teamMembers = membersPayload?.data || [];
+      timeEntries = timePayload?.data || [];
       render();
     }
 
@@ -147,6 +171,8 @@
       renderHeader();
       renderKpis();
       renderCosts();
+      renderTimecardRows();
+      renderTimeEntries();
       renderChangeOrders();
       renderPurchases();
       renderBreakdown();
@@ -208,6 +234,67 @@
           <p class="font-semibold">${currency(cost.totalCost)}</p>
         </div>
       `).join('');
+    }
+
+    function renderTimecardRows() {
+      const container = document.getElementById('crew-timecard-rows');
+      if (!teamMembers.length) {
+        container.innerHTML = `
+          <div class="p-5 text-sm text-gray-600">
+            Add active crew members on the <a href="/team" class="text-blue-700 font-medium">Team page</a> before logging job timecards.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = teamMembers.map((member) => `
+        <div class="p-3 sm:p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] gap-3 items-center bg-white">
+          <label class="flex items-center gap-3 min-w-0">
+            <input type="checkbox" data-member-enabled="${member.id}" class="h-5 w-5 rounded">
+            <span class="min-w-0">
+              <span class="block font-medium truncate">${escapeHtml(member.name || 'Crew member')}</span>
+              <span class="block text-xs text-gray-500">${escapeHtml(member.role || 'crew')}</span>
+            </span>
+          </label>
+          <label>
+            <span class="form-label">Hours</span>
+            <input data-member-hours="${member.id}" type="number" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" class="input" placeholder="0.00">
+          </label>
+          <label>
+            <span class="form-label">Work performed</span>
+            <input data-member-note="${member.id}" type="text" autocomplete="off" class="input" placeholder="Cut, roll, prep">
+          </label>
+        </div>
+      `).join('');
+    }
+
+    function renderTimeEntries() {
+      const container = document.getElementById('time-entry-list');
+      if (!timeEntries.length) {
+        container.innerHTML = '<div class="p-6 text-sm text-gray-500">No crew timecards have been submitted for this job.</div>';
+        return;
+      }
+
+      const totalHours = timeEntries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+      const totalCost = timeEntries.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
+      container.innerHTML = `
+        <div class="p-4 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p class="text-sm text-gray-600">${Number(totalHours).toFixed(2)} logged hours</p>
+          <p class="font-semibold">${currency(totalCost)} labor cost</p>
+        </div>
+        ${timeEntries.map((entry) => `
+          <div class="p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+            <div>
+              <p class="font-medium">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>
+              <p class="text-sm text-gray-600">${Number(entry.hours).toFixed(2)} hrs on ${dateLabel(entry.date)}${entry.description ? ` &middot; ${escapeHtml(entry.description)}` : ''}</p>
+            </div>
+            <div class="sm:text-right">
+              <p class="font-semibold">${currency(entry.totalCost)}</p>
+              <p class="text-xs text-gray-500">${currency(entry.hourlyRate)}/hr burdened</p>
+            </div>
+          </div>
+        `).join('')}
+      `;
     }
 
     function renderChangeOrders() {
@@ -310,13 +397,25 @@
       await loadCosting();
     });
 
-    document.getElementById('labor-form').addEventListener('submit', async (event) => {
+    document.getElementById('timecard-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       const data = Object.fromEntries(new FormData(form));
-      await api(`/v1/jobs/${jobId}/time-entries`, {
+      const entries = teamMembers.map((member) => {
+        const enabled = document.querySelector(`[data-member-enabled="${member.id}"]`)?.checked;
+        const hours = Number(document.querySelector(`[data-member-hours="${member.id}"]`)?.value || 0);
+        const description = document.querySelector(`[data-member-note="${member.id}"]`)?.value || data.notes || '';
+        return enabled && hours > 0 ? { teamMemberId: member.id, hours, description } : null;
+      }).filter(Boolean);
+
+      if (!entries.length) {
+        alert('Select at least one crew member and enter hours.');
+        return;
+      }
+
+      await api('/v1/team/timecards', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: JSON.stringify({ jobId, date: data.date, notes: data.notes, entries }),
       });
       form.reset();
       form.querySelector('input[name="date"]').valueAsDate = new Date();
@@ -349,7 +448,7 @@
       await loadCosting();
     });
 
-    document.querySelector('#labor-form input[name="date"]').valueAsDate = new Date();
+    document.querySelector('#timecard-form input[name="date"]').valueAsDate = new Date();
     loadCosting().catch((err) => {
       document.getElementById('job-header').innerHTML = `<div class="p-6 text-red-600">${escapeHtml(err.message)}</div>`;
     });

@@ -80,6 +80,21 @@ const createTimeEntrySchema = z.object({
   description: z.string().optional(),
 });
 
+const createTimecardSchema = z.object({
+  jobId: z.string().uuid(),
+  date: z.string().min(1),
+  notes: z.string().trim().max(500).optional(),
+  entries: z.array(z.object({
+    teamMemberId: z.string().uuid(),
+    hours: z.coerce.number().positive().max(24),
+    description: z.string().trim().max(255).optional(),
+  })).min(1).max(50),
+});
+
+function parseTimecardDate(value: string) {
+  return new Date(value.includes('T') ? value : `${value}T12:00:00`);
+}
+
 teamApp.post('/time', async (c) => {
   const orgId = c.get('orgId');
   const userId = c.get('userId');
@@ -136,6 +151,78 @@ teamApp.post('/time', async (c) => {
   });
   
   return c.json({ data: entry }, 201);
+});
+
+teamApp.post('/timecards', async (c) => {
+  if (!await hasPermission(c, 'log_time_for_others')) {
+    return c.json({ error: 'Cannot create crew timecards' }, 403);
+  }
+
+  const orgId = c.get('orgId');
+  const parsed = createTimecardSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const data = parsed.data;
+  const db = createDb(c.env.DATABASE_URL);
+  const job = await db.query.jobs.findFirst({
+    where: and(eq(jobs.id, data.jobId), eq(jobs.orgId, orgId)),
+  });
+
+  if (!job) {
+    return c.json({ error: 'Job not found' }, 404);
+  }
+
+  const members = await db.query.teamMembers.findMany({
+    where: and(eq(teamMembers.orgId, orgId), eq(teamMembers.isActive, true)),
+  });
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const missingMember = data.entries.find((entry) => !membersById.has(entry.teamMemberId));
+  if (missingMember) {
+    return c.json({ error: 'One or more team members were not found' }, 404);
+  }
+
+  const date = parseTimecardDate(data.date);
+  const timeRows = data.entries.map((entry) => {
+    const member = membersById.get(entry.teamMemberId)!;
+    const baseRate = parseFloat(member.hourlyRate);
+    const burdenRate = parseFloat(member.burdenRate || '30');
+    const burdenedRate = baseRate * (1 + burdenRate / 100);
+    const totalCost = entry.hours * burdenedRate;
+    return {
+      orgId,
+      jobId: data.jobId,
+      teamMemberId: entry.teamMemberId,
+      hours: entry.hours.toFixed(2),
+      description: entry.description || data.notes || 'Crew labor',
+      hourlyRate: burdenedRate.toFixed(2),
+      totalCost: totalCost.toFixed(2),
+      date,
+    };
+  });
+
+  const inserted = await db.insert(timeEntries).values(timeRows).returning();
+  await db.insert(jobCosts).values(timeRows.map((row) => {
+    const member = membersById.get(row.teamMemberId)!;
+    return {
+      jobId: data.jobId,
+      orgId,
+      category: 'labor',
+      description: `${member.name} - ${row.description}`,
+      quantity: row.hours,
+      unitCost: row.hourlyRate,
+      totalCost: row.totalCost,
+    };
+  }));
+
+  return c.json({
+    data: {
+      entries: inserted,
+      totalHours: data.entries.reduce((sum, entry) => sum + entry.hours, 0),
+      totalCost: timeRows.reduce((sum, row) => sum + Number(row.totalCost), 0),
+    },
+  }, 201);
 });
 
 teamApp.get('/time', async (c) => {

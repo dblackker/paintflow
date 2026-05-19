@@ -248,3 +248,81 @@ button[class*="bg-blue"][class*="text-white"]:active {
   background: var(--pf-surface-tint);
   color: var(--pf-text);
 }
+
+.surface-panel {
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  box-shadow: var(--pf-shadow);
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-icon {
+  align-items: center;
+  border-radius: 0.55rem;
+  display: inline-flex;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 2.5rem;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+}
+
+.btn-primary {
+  background: var(--pf-primary);
+  border: 1px solid var(--pf-primary);
+  box-shadow: 0 1px 2px rgb(23 32 27 / 0.1), 0 8px 18px rgb(23 107 91 / 0.18);
+  color: white;
+  padding: 0.65rem 1rem;
+}
+
+.btn-primary:hover {
+  background: var(--pf-primary-hover);
+  border-color: var(--pf-primary-hover);
+}
+
+.btn-secondary {
+  background: var(--pf-surface-muted);
+  border: 1px solid var(--pf-border-strong);
+  color: var(--pf-text);
+  padding: 0.65rem 1rem;
+}
+
+.btn-secondary:hover {
+  background: var(--pf-surface-tint);
+  border-color: var(--pf-primary);
+}
+
+.btn-icon {
+  background: var(--pf-surface-muted);
+  border: 1px solid var(--pf-border);
+  color: var(--pf-text);
+  height: 2.25rem;
+  width: 2.25rem;
+}
+
+.input {
+  border: 1px solid var(--pf-border-strong);
+  border-radius: 0.55rem;
+  min-height: 2.6rem;
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+}
+
+.form-label {
+  color: var(--pf-text-muted);
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.chip {
+  background: var(--pf-primary-soft);
+  border-radius: 999px;
+  color: var(--pf-primary);
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+}

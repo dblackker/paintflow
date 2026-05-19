@@ -2,109 +2,270 @@
 import Base from '../layouts/Base.astro';
 ---
 
-<Base title="Team">
-  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h2 class="text-2xl font-bold">Team Members</h2>
-          <p class="text-gray-600">Manage roles and permissions</p>
-        </div>
-        <button id="add-member-btn" class="w-full sm:w-auto px-4 py-3 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ Add Member</button>
+<Base title="Team - PaintFlow">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+      <div>
+        <p class="text-sm font-semibold text-brand-700">Operations</p>
+        <h1 class="text-2xl sm:text-3xl font-bold">Team Management</h1>
+        <p class="text-gray-600 max-w-2xl">Manage crew roles, pay rates, and labor burden once. Job timecards use these rates automatically for accurate job costing.</p>
       </div>
+      <button id="add-member-btn" class="btn-primary w-full sm:w-auto">Add crew member</button>
+    </div>
 
-      <div id="members-list" class="space-y-3">
+    <div id="team-summary" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6"></div>
+
+    <section class="surface-panel p-4 sm:p-5 mb-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h2 class="font-semibold">Labor Rate Policy</h2>
+          <p class="text-sm text-gray-600">Base pay is the payroll rate. Labor burden covers payroll tax, workers comp, benefits, drive time, and overhead allocation.</p>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] px-3 py-2">
+            <p class="text-xs text-gray-500">Typical burden</p>
+            <p class="font-semibold">25-45%</p>
+          </div>
+          <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] px-3 py-2">
+            <p class="text-xs text-gray-500">Crew lead access</p>
+            <p class="font-semibold">Hours only</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="surface-panel overflow-hidden">
+      <div class="p-4 sm:p-5 border-b border-[var(--pf-border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 class="font-semibold">Active Crew</h2>
+          <p class="text-sm text-gray-600">Use clear roles so leads can create crew timecards without managing payroll settings.</p>
+        </div>
+        <a href="/time" class="btn-secondary w-full sm:w-auto text-center">Review timesheets</a>
+      </div>
+      <div id="members-list" class="divide-y divide-[var(--pf-border)]">
         <div class="p-8 text-center text-gray-500">Loading...</div>
       </div>
+    </section>
 
-      <!-- Add Member Modal -->
-      <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg p-6 w-full max-w-md">
-          <h3 class="text-lg font-semibold mb-4">Add Team Member</h3>
-          <form id="add-member-form" class="space-y-4">
-            <input name="name" autocomplete="name" enterkeyhint="next" placeholder="Full Name" required class="w-full px-3 py-2 border rounded-lg">
-            <input name="email" type="email" autocomplete="email" inputmode="email" enterkeyhint="next" placeholder="Email" required class="w-full px-3 py-2 border rounded-lg">
-            <select name="role" class="w-full px-3 py-2 border rounded-lg">
-              <option value="crew">Crew Member</option>
+    <div id="modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-30">
+      <div class="bg-white rounded-xl p-5 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h3 id="modal-title" class="text-lg font-semibold">Add Crew Member</h3>
+            <p class="text-sm text-gray-600">Rates are visible to office users and applied automatically to labor costs.</p>
+          </div>
+          <button type="button" id="close-modal-btn" class="btn-icon" aria-label="Close">×</button>
+        </div>
+        <form id="member-form" class="space-y-4">
+          <input name="id" type="hidden">
+          <label class="block">
+            <span class="form-label">Full name</span>
+            <input name="name" autocomplete="name" enterkeyhint="next" required class="input" placeholder="Maria Sanchez">
+          </label>
+          <label class="block">
+            <span class="form-label">Email</span>
+            <input name="email" type="email" autocomplete="email" inputmode="email" enterkeyhint="next" class="input" placeholder="maria@example.com">
+          </label>
+          <label class="block">
+            <span class="form-label">Role</span>
+            <select name="role" class="input">
+              <option value="crew_lead">Crew lead</option>
+              <option value="painter">Painter</option>
+              <option value="prep">Prep crew</option>
               <option value="estimator">Estimator</option>
               <option value="admin">Admin</option>
             </select>
-            <input name="hourlyRate" type="number" step="0.01" min="0" inputmode="decimal" autocomplete="off" placeholder="Hourly Rate" class="w-full px-3 py-2 border rounded-lg">
-            <div class="flex gap-3 pt-4">
-              <button type="button" id="cancel-btn" class="flex-1 px-4 py-2 border rounded-lg">Cancel</button>
-              <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg">Add Member</button>
-            </div>
-          </form>
-        </div>
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="block">
+              <span class="form-label">Base pay rate</span>
+              <input name="hourlyRate" type="number" step="0.01" min="0" inputmode="decimal" autocomplete="off" class="input" placeholder="28.00">
+            </label>
+            <label class="block">
+              <span class="form-label">Labor burden %</span>
+              <input name="burdenRate" type="number" step="0.01" min="0" max="100" inputmode="decimal" autocomplete="off" class="input" placeholder="35">
+            </label>
+          </div>
+          <div id="rate-preview" class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3 text-sm text-gray-700"></div>
+          <div class="flex flex-col sm:flex-row gap-3 pt-2">
+            <button type="button" id="cancel-btn" class="btn-secondary flex-1">Cancel</button>
+            <button type="submit" class="btn-primary flex-1">Save member</button>
+          </div>
+        </form>
       </div>
+    </div>
   </main>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const roleLabels = {
+      admin: 'Admin',
+      crew: 'Crew member',
+      crew_lead: 'Crew lead',
+      estimator: 'Estimator',
+      painter: 'Painter',
+      prep: 'Prep crew',
+    };
+    let members = [];
+
+    function escapeHtml(value = '') {
+      return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    function burdenedRate(member) {
+      const base = Number(member.hourlyRate || 0);
+      const burden = Number(member.burdenRate || 0);
+      return base * (1 + burden / 100);
+    }
+
+    async function request(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
 
     async function loadMembers() {
-      const res = await fetch(`${API_URL}/v1/settings/team`, { credentials: 'include' });
-      const { data } = await res.json();
-      const container = document.getElementById('members-list');
-      
-      if (data.length === 0) {
-        container.innerHTML = '<div class="bg-white rounded-lg border p-8 text-center text-gray-500">No team members yet. Add your first crew member!</div>';
-        return;
-      }
+      const payload = await request('/v1/settings/team');
+      if (!payload) return;
+      members = payload.data || [];
+      renderSummary();
+      renderMembers();
+    }
 
-      const roleColors = {
-        owner: 'bg-purple-100 text-purple-800',
-        admin: 'bg-blue-100 text-blue-800',
-        estimator: 'bg-green-100 text-green-800',
-        crew: 'bg-gray-100 text-gray-800',
-      };
-
-      container.innerHTML = data.map(member => `
-        <div class="bg-white rounded-lg border p-4 flex justify-between items-center">
-          <div>
-            <p class="font-medium">${member.name || 'Unnamed'}</p>
-            <p class="text-sm text-gray-600">${member.email}</p>
-          </div>
-          <div class="flex items-center gap-3">
-            ${member.hourlyRate ? `<span class="text-sm text-gray-600">$${member.hourlyRate}/hr</span>` : ''}
-            <span class="px-2 py-1 text-xs rounded ${roleColors[member.role] || 'bg-gray-100'}">${member.role}</span>
-            <button onclick="removeMember('${member.id}')" class="text-red-600 hover:text-red-700 text-sm">Remove</button>
-          </div>
+    function renderSummary() {
+      const activeCount = members.length;
+      const leadCount = members.filter((member) => member.role === 'crew_lead').length;
+      const avgBurdened = members.length
+        ? members.reduce((sum, member) => sum + burdenedRate(member), 0) / members.length
+        : 0;
+      document.getElementById('team-summary').innerHTML = [
+        ['Active crew', activeCount, 'People available for scheduling and timecards'],
+        ['Crew leads', leadCount, 'Can log daily crew time'],
+        ['Avg burdened rate', currency(avgBurdened), 'Used for job labor costing'],
+      ].map(([label, value, help]) => `
+        <div class="surface-panel p-4">
+          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">${label}</p>
+          <p class="text-2xl font-bold mt-1">${value}</p>
+          <p class="text-xs text-gray-500 mt-1">${help}</p>
         </div>
       `).join('');
     }
 
-    document.getElementById('add-member-btn').addEventListener('click', () => {
+    function renderMembers() {
+      const container = document.getElementById('members-list');
+      if (!members.length) {
+        container.innerHTML = '<div class="p-8 text-center text-gray-500">No active team members yet. Add crew members before logging job timecards.</div>';
+        return;
+      }
+
+      container.innerHTML = members.map((member) => `
+        <article class="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="font-semibold truncate">${escapeHtml(member.name || 'Unnamed')}</h3>
+              <span class="chip">${roleLabels[member.role] || escapeHtml(member.role)}</span>
+            </div>
+            <p class="text-sm text-gray-600 mt-1">${escapeHtml(member.email || 'No email on file')}</p>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-[120px_120px_140px_auto] gap-3 items-center">
+            <div>
+              <p class="text-xs text-gray-500">Base pay</p>
+              <p class="font-semibold">${currency(member.hourlyRate)}/hr</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500">Burden</p>
+              <p class="font-semibold">${Number(member.burdenRate || 0).toFixed(1)}%</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500">Job cost rate</p>
+              <p class="font-semibold">${currency(burdenedRate(member))}/hr</p>
+            </div>
+            <div class="flex gap-2 col-span-2 sm:col-span-1">
+              <button onclick="editMember('${member.id}')" class="btn-secondary flex-1 sm:flex-none">Edit</button>
+              <button onclick="removeMember('${member.id}')" class="btn-secondary flex-1 sm:flex-none text-red-700">Remove</button>
+            </div>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    function openModal(member = null) {
+      const form = document.getElementById('member-form');
+      const fields = form.elements;
+      form.reset();
+      document.getElementById('modal-title').textContent = member ? 'Edit Crew Member' : 'Add Crew Member';
+      if (member) {
+        fields.id.value = member.id;
+        fields.name.value = member.name || '';
+        fields.email.value = member.email || '';
+        fields.role.value = member.role || 'painter';
+        fields.hourlyRate.value = member.hourlyRate || '';
+        fields.burdenRate.value = member.burdenRate || 30;
+      } else {
+        fields.role.value = 'painter';
+        fields.burdenRate.value = 30;
+      }
+      updateRatePreview();
       document.getElementById('modal').classList.remove('hidden');
-    });
+    }
 
-    document.getElementById('cancel-btn').addEventListener('click', () => {
+    function closeModal() {
       document.getElementById('modal').classList.add('hidden');
-    });
+    }
 
-    document.getElementById('add-member-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = Object.fromEntries(new FormData(e.target));
-      
-      await fetch(`${API_URL}/v1/settings/team`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData),
-      });
-      
-      document.getElementById('modal').classList.add('hidden');
-      e.target.reset();
-      window.showToast('Team member added', 'success');
-      loadMembers();
-    });
+    function updateRatePreview() {
+      const form = document.getElementById('member-form');
+      const fields = form.elements;
+      const base = Number(fields.hourlyRate.value || 0);
+      const burden = Number(fields.burdenRate.value || 0);
+      document.getElementById('rate-preview').textContent = `Job cost rate: ${currency(base * (1 + burden / 100))}/hr. Crew leads log hours; owners manage this rate.`;
+    }
+
+    window.editMember = (id) => {
+      const member = members.find((item) => item.id === id);
+      if (member) openModal(member);
+    };
 
     window.removeMember = async (id) => {
-      if (!confirm('Remove this team member?')) return;
-      await fetch(`${API_URL}/v1/settings/team/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (!confirm('Remove this team member from active crew? Historical time entries stay on jobs.')) return;
+      await request(`/v1/settings/team/${id}`, { method: 'DELETE' });
       window.showToast('Team member removed', 'success');
       loadMembers();
     };
 
-    loadMembers();
+    document.getElementById('add-member-btn').addEventListener('click', () => openModal());
+    document.getElementById('cancel-btn').addEventListener('click', closeModal);
+    document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+    document.getElementById('member-form').addEventListener('input', updateRatePreview);
+    document.getElementById('member-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      const id = data.id;
+      delete data.id;
+
+      await request(id ? `/v1/settings/team/${id}` : '/v1/settings/team', {
+        method: id ? 'PATCH' : 'POST',
+        body: JSON.stringify(data),
+      });
+
+      closeModal();
+      window.showToast(id ? 'Team member updated' : 'Team member added', 'success');
+      loadMembers();
+    });
+
+    loadMembers().catch((err) => {
+      document.getElementById('members-list').innerHTML = `<div class="p-8 text-center text-red-600">${escapeHtml(err.message)}</div>`;
+    });
   </script>
 </Base>
