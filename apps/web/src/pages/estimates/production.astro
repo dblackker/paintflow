@@ -498,7 +498,7 @@ import Base from '../../layouts/Base.astro';
             <button type="button" class="assumption-info inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-300 bg-white text-xs font-semibold text-emerald-700" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
             <div class="hidden absolute right-0 top-10 z-20 w-80 rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
               <p class="font-semibold text-gray-900">Interior assumptions</p>
-              <p class="mt-1">Creates editable aggregate lines for walls, ceilings, trim, and doors from room counts. It is meant for early whole-home pricing before detailed measurements are complete.</p>
+              <p class="mt-1">Creates itemized editable lines for each generated room, such as Bedroom 1 walls, Bedroom 1 ceiling, Bedroom 1 trim, and Bedroom 1 doors.</p>
               <p class="mt-2">Room allowances estimate perimeter, ceiling area, opening deductions, baseboards, casing, crown, and doors. Override any generated line as measurements improve.</p>
             </div>
           </div>
@@ -619,6 +619,7 @@ import Base from '../../layouts/Base.astro';
             <option value="heavy" ${prepLevel === 'heavy' ? 'selected' : ''}>Heavy prep</option>
           </select>
         </div>
+        <input type="text" autocomplete="off" placeholder="Line label, e.g. Bedroom 1 walls" value="${escapeHtml(item.label || '')}" class="mb-2 w-full px-2 py-2 border rounded text-sm" data-field="label">
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-1">
           <label class="block" data-measure="width">
             <span class="text-xs text-gray-600" data-label="width">Width</span>
@@ -704,53 +705,72 @@ import Base from '../../layouts/Base.astro';
       room.querySelector('[data-area-type]').value = 'interior';
       syncAreaType(room);
 
-      const quantities = interiorAssumptionQuantities(room);
-      if (!quantities.roomCount) {
+      const roomItems = interiorRoomItems(room);
+      if (!roomItems.length) {
         window.showToast?.('Add at least one room count before generating interior scope', 'error');
         return;
       }
 
-      const items = [
-        { kind: 'walls', label: 'Interior walls', quantity: quantities.walls },
-        { kind: 'ceilings', label: 'Interior ceilings', quantity: quantities.ceilings },
-        { kind: 'trim', label: 'Interior trim', quantity: quantities.trim },
-        { kind: 'doors', label: 'Interior doors', quantity: quantities.doors },
-      ].filter(item => item.quantity > 0);
-      const added = [];
-      const missingRates = [];
+      const rateByKind = {
+        walls: findInteriorRate('walls'),
+        ceilings: findInteriorRate('ceilings'),
+        trim: findInteriorRate('trim'),
+        doors: findInteriorRate('doors'),
+      };
+      const neededKinds = new Set();
+      const assumptions = interiorAssumptions(room);
+      roomItems.forEach((roomItem) => {
+        const quantities = interiorQuantitiesForRoom(roomItem, assumptions);
+        if (quantities.walls > 0) neededKinds.add('walls');
+        if (quantities.ceilings > 0) neededKinds.add('ceilings');
+        if (quantities.trim > 0) neededKinds.add('trim');
+        if (quantities.doors > 0) neededKinds.add('doors');
+      });
+      const missingRates = Array.from(neededKinds).filter(kind => !rateByKind[kind]);
+      if (missingRates.length) {
+        window.showToast?.(`Add production rates for: ${missingRates.join(', ')}`, 'error');
+        return;
+      }
 
       Array.from(room.querySelectorAll('[data-items] > div'))
         .filter(isEmptyGeneratedPlaceholder)
         .forEach(surface => surface.remove());
 
-      const existingKinds = new Set(Array.from(room.querySelectorAll('[data-items] > div')).map(interiorSurfaceKind).filter(Boolean));
+      const existingLabels = new Set(Array.from(room.querySelectorAll('[data-field="label"]'))
+        .map(input => input.value.trim().toLowerCase())
+        .filter(Boolean));
+      const added = [];
 
-      items.forEach((item) => {
-        if (existingKinds.has(item.kind)) return;
-        const rate = findInteriorRate(item.kind);
-        if (!rate) {
-          missingRates.push(item.label);
-          return;
-        }
-        addSurface(room.id, {
-          productionRateId: rate.id,
-          prepLevel: 'standard',
-          quantity: Number(item.quantity.toFixed(1)),
-          coats: rate.coats || 2,
-          customerVisible: true,
+      roomItems.forEach((roomItem) => {
+        const quantities = interiorQuantitiesForRoom(roomItem, assumptions);
+        [
+          { kind: 'walls', label: `${roomItem.label} walls`, quantity: quantities.walls },
+          { kind: 'ceilings', label: `${roomItem.label} ceiling`, quantity: quantities.ceilings },
+          { kind: 'trim', label: `${roomItem.label} trim`, quantity: quantities.trim },
+          { kind: 'doors', label: `${roomItem.label} doors`, quantity: quantities.doors },
+        ].filter(item => item.quantity > 0).forEach((item) => {
+          if (existingLabels.has(item.label.toLowerCase())) return;
+          const rate = rateByKind[item.kind];
+          addSurface(room.id, {
+            productionRateId: rate.id,
+            label: item.label,
+            prepLevel: 'standard',
+            quantity: Number(item.quantity.toFixed(1)),
+            coats: rate.coats || 2,
+            customerVisible: true,
+          });
+          existingLabels.add(item.label.toLowerCase());
+          added.push(item.label);
         });
-        added.push(item.label);
       });
 
       updateInteriorPreview(room);
       calculateTotal();
 
       if (added.length) {
-        window.showToast?.(`Added ${added.length} interior scope line${added.length === 1 ? '' : 's'} from room counts`, 'success');
-      } else if (missingRates.length) {
-        window.showToast?.(`Add production rates for: ${missingRates.join(', ')}`, 'error');
+        window.showToast?.(`Added ${added.length} itemized interior scope line${added.length === 1 ? '' : 's'}`, 'success');
       } else {
-        window.showToast?.('Interior scope already includes the standard room-count lines', 'success');
+        window.showToast?.('Interior room-count scope is already itemized', 'success');
       }
     }
 
@@ -856,43 +876,59 @@ import Base from '../../layouts/Base.astro';
     function interiorRoomTypes(room) {
       const assumptions = interiorAssumptions(room);
       return [
-        { count: assumptions.bedrooms, length: 12, width: 12, windows: 1, doors: 1 },
-        { count: assumptions.bathrooms, length: 8, width: 8, windows: 0.5, doors: 1 },
-        { count: assumptions.livingRooms, length: 18, width: 16, windows: 3, doors: 1 },
-        { count: assumptions.diningRooms, length: 14, width: 12, windows: 2, doors: 1 },
-        { count: assumptions.kitchens, length: 14, width: 12, windows: 1, doors: 1 },
-        { count: assumptions.hallways, length: 14, width: 4, windows: 0, doors: 0 },
-        { count: assumptions.closets, length: 6, width: 4, windows: 0, doors: 1 },
+        { name: 'Bedroom', count: assumptions.bedrooms, length: 12, width: 12, windows: 1, doors: 1 },
+        { name: 'Bathroom', count: assumptions.bathrooms, length: 8, width: 8, windows: 0.5, doors: 1 },
+        { name: 'Living room', count: assumptions.livingRooms, length: 18, width: 16, windows: 3, doors: 1 },
+        { name: 'Dining room', count: assumptions.diningRooms, length: 14, width: 12, windows: 2, doors: 1 },
+        { name: 'Kitchen', count: assumptions.kitchens, length: 14, width: 12, windows: 1, doors: 1 },
+        { name: 'Hallway', count: assumptions.hallways, length: 14, width: 4, windows: 0, doors: 0 },
+        { name: 'Closet', count: assumptions.closets, length: 6, width: 4, windows: 0, doors: 1 },
       ].filter(type => type.count > 0);
+    }
+
+    function interiorRoomItems(room) {
+      return interiorRoomTypes(room).flatMap(type => {
+        const count = Math.max(0, Math.floor(type.count));
+        return Array.from({ length: count }, (_, index) => ({
+          ...type,
+          label: `${type.name} ${index + 1}`,
+          count: 1,
+        }));
+      });
+    }
+
+    function interiorQuantitiesForRoom(roomItem, assumptions) {
+      const perimeter = (roomItem.length + roomItem.width) * 2;
+      const walls = Math.max(0, (perimeter * assumptions.ceilingHeight) - (roomItem.windows * 15) - (roomItem.doors * 21));
+      const ceilings = assumptions.includeCeilings ? roomItem.length * roomItem.width : 0;
+      const casing = assumptions.trimScope.includes('casing') ? (roomItem.doors * 14) + (roomItem.windows * 16) : 0;
+      const crown = assumptions.trimScope.includes('crown') ? perimeter : 0;
+      const trim = perimeter + casing + crown;
+      const doors = assumptions.includeDoors ? Math.round(roomItem.doors) : 0;
+      return { walls, ceilings, trim, doors };
     }
 
     function interiorAssumptionQuantities(room) {
       const assumptions = interiorAssumptions(room);
-      const openingAllowancePerWindow = 15;
-      const openingAllowancePerDoor = 21;
       let walls = 0;
       let ceilings = 0;
-      let baseboard = 0;
+      let trim = 0;
       let doors = 0;
-      let windows = 0;
 
-      interiorRoomTypes(room).forEach((type) => {
-        const perimeter = (type.length + type.width) * 2;
-        walls += Math.max(0, ((perimeter * assumptions.ceilingHeight) - (type.windows * openingAllowancePerWindow) - (type.doors * openingAllowancePerDoor)) * type.count);
-        ceilings += (type.length * type.width) * type.count;
-        baseboard += perimeter * type.count;
-        doors += type.doors * type.count;
-        windows += type.windows * type.count;
+      interiorRoomItems(room).forEach((roomItem) => {
+        const quantities = interiorQuantitiesForRoom(roomItem, assumptions);
+        walls += quantities.walls;
+        ceilings += quantities.ceilings;
+        trim += quantities.trim;
+        doors += quantities.doors;
       });
 
-      const casing = assumptions.trimScope.includes('casing') ? (doors * 14) + (windows * 16) : 0;
-      const crown = assumptions.trimScope.includes('crown') ? baseboard : 0;
       return {
         walls,
-        ceilings: assumptions.includeCeilings ? ceilings : 0,
-        trim: baseboard + casing + crown,
-        doors: assumptions.includeDoors ? Math.round(doors) : 0,
-        roomCount: interiorRoomTypes(room).reduce((sum, type) => sum + type.count, 0),
+        ceilings,
+        trim,
+        doors,
+        roomCount: interiorRoomItems(room).length,
       };
     }
 
@@ -1002,6 +1038,7 @@ import Base from '../../layouts/Base.astro';
     function collectSurfaceData(surface) {
       return {
         productionRateId: surface.querySelector('[data-field="rateId"]').value,
+        label: surface.querySelector('[data-field="label"]').value,
         prepLevel: surface.querySelector('[data-field="prepLevel"]').value,
         width: surface.querySelector('[data-field="width"]').value,
         height: surface.querySelector('[data-field="height"]').value,
@@ -1105,12 +1142,13 @@ import Base from '../../layouts/Base.astro';
           const fallbackMaterialUnit = Number(rate.hourlyRate || settings.defaultLaborRate || 65) * 0.12;
           const itemMaterials = productCost ? productCost.price : quantity * fallbackMaterialUnit * (1 + materialMarkup);
           const itemTotal = itemLabor + itemMaterials;
+          const lineLabel = surface.querySelector('[data-field="label"]').value.trim();
 
           hours += itemHours;
           labor += itemLabor;
           materials += itemMaterials;
           items.push({
-            desc: `${roomName}: ${rate.description || `${rate.category} ${rate.surfaceType}`}`,
+            desc: `${roomName}: ${lineLabel || rate.description || `${rate.category} ${rate.surfaceType}`}`,
             qty: 1,
             rate: Number(itemTotal.toFixed(2)),
             category: rate.unit,
