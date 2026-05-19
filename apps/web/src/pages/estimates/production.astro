@@ -440,6 +440,66 @@ import Base from '../../layouts/Base.astro';
             <button type="button" class="remove-room text-sm text-red-600">Remove</button>
           </div>
         </div>
+        <div class="mb-4 rounded-lg border bg-emerald-50 p-3" data-interior-assumptions>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+            <label>
+              <span class="text-xs text-emerald-900">Bedrooms</span>
+              <input data-interior="bedrooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-emerald-900">Bathrooms</span>
+              <input data-interior="bathrooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-emerald-900">Living rooms</span>
+              <input data-interior="livingRooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-emerald-900">Dining rooms</span>
+              <input data-interior="diningRooms" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-emerald-900">Kitchens</span>
+              <input data-interior="kitchens" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-emerald-900">Hallways</span>
+              <input data-interior="hallways" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-emerald-900">Closets</span>
+              <input data-interior="closets" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" value="0" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label>
+              <span class="text-xs text-emerald-900">Ceiling height</span>
+              <input data-interior="ceilingHeight" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="9" class="mt-1 w-full px-2 py-2 border rounded">
+            </label>
+            <label class="col-span-2 sm:col-span-2">
+              <span class="text-xs text-emerald-900">Trim scope</span>
+              <select data-interior="trimScope" class="mt-1 w-full px-2 py-2 border rounded">
+                <option value="base">Baseboards</option>
+                <option value="base-casing" selected>Baseboards + casing</option>
+                <option value="base-crown-casing">Baseboards + crown + casing</option>
+              </select>
+            </label>
+            <div class="col-span-2 sm:col-span-2 grid grid-cols-2 gap-2">
+              <label class="inline-flex items-center gap-2 rounded border bg-white px-2 py-2 text-xs text-emerald-900">
+                <input data-interior="includeCeilings" type="checkbox" class="rounded border-gray-300" checked>
+                Ceilings
+              </label>
+              <label class="inline-flex items-center gap-2 rounded border bg-white px-2 py-2 text-xs text-emerald-900">
+                <input data-interior="includeDoors" type="checkbox" class="rounded border-gray-300" checked>
+                Doors
+              </label>
+            </div>
+          </div>
+          <p class="mt-2 text-xs text-emerald-900">Interior assumptions create editable aggregate lines for walls, ceilings, trim, and doors. Use them for early whole-home pricing, then override quantities as measurements improve.</p>
+          <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <button type="button" class="generate-interior-scope inline-flex justify-center rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800">Add interior scope from room counts</button>
+            <span class="text-xs text-emerald-900">Uses standard room allowances for perimeter, ceiling area, openings, baseboards, casing, and doors.</span>
+          </div>
+          <div class="mt-3 rounded-md border border-emerald-200 bg-white p-3 text-xs text-emerald-950" data-interior-preview></div>
+        </div>
         <div class="hidden mb-4 rounded-lg border bg-blue-50 p-3" data-exterior-assumptions>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
             <label>
@@ -500,6 +560,7 @@ import Base from '../../layouts/Base.astro';
       `;
       document.getElementById('rooms-container').appendChild(div);
       syncAreaType(div);
+      updateInteriorPreview(div);
       updateExteriorPreview(div);
       if (templateItems.length) {
         templateItems.forEach(item => addSurface(roomId, item));
@@ -604,11 +665,85 @@ import Base from '../../layouts/Base.astro';
       return rate ? rateKind(rate) : '';
     }
 
+    function interiorRateKind(rate) {
+      const category = String(rate?.category || '').toLowerCase();
+      const description = String(rate?.description || '').toLowerCase();
+      const text = `${category} ${description}`;
+      if (/ceiling/.test(text)) return 'ceilings';
+      if (/wall/.test(text)) return 'walls';
+      if (/trim|baseboard|casing|crown/.test(text)) return 'trim';
+      if (/door/.test(text)) return 'doors';
+      return '';
+    }
+
+    function interiorSurfaceKind(surface) {
+      const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
+      return interiorRateKind(rate);
+    }
+
+    function findInteriorRate(kind) {
+      return rates.find(rate => interiorRateKind(rate) === kind) || null;
+    }
+
     function isEmptyGeneratedPlaceholder(surface) {
       const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
       const hasMeasurements = ['width', 'height', 'quantity', 'prepAdjustmentHours', 'paintAdjustmentHours']
         .some(field => Number(surface.querySelector(`[data-field="${field}"]`)?.value || 0) > 0);
       return !hasMeasurements && (!rate || !isExteriorRate(rate));
+    }
+
+    function generateInteriorScope(room) {
+      room.querySelector('[data-area-type]').value = 'interior';
+      syncAreaType(room);
+
+      const quantities = interiorAssumptionQuantities(room);
+      if (!quantities.roomCount) {
+        window.showToast?.('Add at least one room count before generating interior scope', 'error');
+        return;
+      }
+
+      const items = [
+        { kind: 'walls', label: 'Interior walls', quantity: quantities.walls },
+        { kind: 'ceilings', label: 'Interior ceilings', quantity: quantities.ceilings },
+        { kind: 'trim', label: 'Interior trim', quantity: quantities.trim },
+        { kind: 'doors', label: 'Interior doors', quantity: quantities.doors },
+      ].filter(item => item.quantity > 0);
+      const added = [];
+      const missingRates = [];
+
+      Array.from(room.querySelectorAll('[data-items] > div'))
+        .filter(isEmptyGeneratedPlaceholder)
+        .forEach(surface => surface.remove());
+
+      const existingKinds = new Set(Array.from(room.querySelectorAll('[data-items] > div')).map(interiorSurfaceKind).filter(Boolean));
+
+      items.forEach((item) => {
+        if (existingKinds.has(item.kind)) return;
+        const rate = findInteriorRate(item.kind);
+        if (!rate) {
+          missingRates.push(item.label);
+          return;
+        }
+        addSurface(room.id, {
+          productionRateId: rate.id,
+          prepLevel: 'standard',
+          quantity: Number(item.quantity.toFixed(1)),
+          coats: rate.coats || 2,
+          customerVisible: true,
+        });
+        added.push(item.label);
+      });
+
+      updateInteriorPreview(room);
+      calculateTotal();
+
+      if (added.length) {
+        window.showToast?.(`Added ${added.length} interior scope line${added.length === 1 ? '' : 's'} from room counts`, 'success');
+      } else if (missingRates.length) {
+        window.showToast?.(`Add production rates for: ${missingRates.join(', ')}`, 'error');
+      } else {
+        window.showToast?.('Interior scope already includes the standard room-count lines', 'success');
+      }
     }
 
     function generateExteriorScope(room) {
@@ -622,13 +757,14 @@ import Base from '../../layouts/Base.astro';
         { kind: 'exterior_trim', label: 'Exterior trim' },
         { kind: 'corner_boards', label: 'Exterior corner boards' },
       ];
-      const existingKinds = new Set(Array.from(room.querySelectorAll('[data-items] > div')).map(surfaceRateKind).filter(Boolean));
       const added = [];
       const missingRates = [];
 
       Array.from(room.querySelectorAll('[data-items] > div'))
         .filter(isEmptyGeneratedPlaceholder)
         .forEach(surface => surface.remove());
+
+      const existingKinds = new Set(Array.from(room.querySelectorAll('[data-items] > div')).map(surfaceRateKind).filter(Boolean));
 
       items.forEach((item) => {
         if (existingKinds.has(item.kind)) return;
@@ -685,8 +821,94 @@ import Base from '../../layouts/Base.astro';
 
     function syncAreaType(room) {
       const isExterior = room.querySelector('[data-area-type]').value === 'exterior';
+      room.querySelector('[data-interior-assumptions]').classList.toggle('hidden', isExterior);
       room.querySelector('[data-exterior-assumptions]').classList.toggle('hidden', !isExterior);
+      updateInteriorPreview(room);
       updateExteriorPreview(room);
+    }
+
+    function interiorAssumptions(room) {
+      const numberValue = (key, fallback = 0) => Number(room?.querySelector(`[data-interior="${key}"]`)?.value || fallback);
+      const checked = (key) => Boolean(room?.querySelector(`[data-interior="${key}"]`)?.checked);
+      return {
+        bedrooms: numberValue('bedrooms'),
+        bathrooms: numberValue('bathrooms'),
+        livingRooms: numberValue('livingRooms'),
+        diningRooms: numberValue('diningRooms'),
+        kitchens: numberValue('kitchens'),
+        hallways: numberValue('hallways'),
+        closets: numberValue('closets'),
+        ceilingHeight: numberValue('ceilingHeight', 9),
+        trimScope: room?.querySelector('[data-interior="trimScope"]')?.value || 'base-casing',
+        includeCeilings: checked('includeCeilings'),
+        includeDoors: checked('includeDoors'),
+      };
+    }
+
+    function interiorRoomTypes(room) {
+      const assumptions = interiorAssumptions(room);
+      return [
+        { count: assumptions.bedrooms, length: 12, width: 12, windows: 1, doors: 1 },
+        { count: assumptions.bathrooms, length: 8, width: 8, windows: 0.5, doors: 1 },
+        { count: assumptions.livingRooms, length: 18, width: 16, windows: 3, doors: 1 },
+        { count: assumptions.diningRooms, length: 14, width: 12, windows: 2, doors: 1 },
+        { count: assumptions.kitchens, length: 14, width: 12, windows: 1, doors: 1 },
+        { count: assumptions.hallways, length: 14, width: 4, windows: 0, doors: 0 },
+        { count: assumptions.closets, length: 6, width: 4, windows: 0, doors: 1 },
+      ].filter(type => type.count > 0);
+    }
+
+    function interiorAssumptionQuantities(room) {
+      const assumptions = interiorAssumptions(room);
+      const openingAllowancePerWindow = 15;
+      const openingAllowancePerDoor = 21;
+      let walls = 0;
+      let ceilings = 0;
+      let baseboard = 0;
+      let doors = 0;
+      let windows = 0;
+
+      interiorRoomTypes(room).forEach((type) => {
+        const perimeter = (type.length + type.width) * 2;
+        walls += Math.max(0, ((perimeter * assumptions.ceilingHeight) - (type.windows * openingAllowancePerWindow) - (type.doors * openingAllowancePerDoor)) * type.count);
+        ceilings += (type.length * type.width) * type.count;
+        baseboard += perimeter * type.count;
+        doors += type.doors * type.count;
+        windows += type.windows * type.count;
+      });
+
+      const casing = assumptions.trimScope.includes('casing') ? (doors * 14) + (windows * 16) : 0;
+      const crown = assumptions.trimScope.includes('crown') ? baseboard : 0;
+      return {
+        walls,
+        ceilings: assumptions.includeCeilings ? ceilings : 0,
+        trim: baseboard + casing + crown,
+        doors: assumptions.includeDoors ? Math.round(doors) : 0,
+        roomCount: interiorRoomTypes(room).reduce((sum, type) => sum + type.count, 0),
+      };
+    }
+
+    function updateInteriorPreview(room) {
+      const preview = room?.querySelector('[data-interior-preview]');
+      if (!preview) return;
+      const quantities = interiorAssumptionQuantities(room);
+      const hasInteriorSurface = Array.from(room.querySelectorAll('[data-items] > div')).some((surface) => interiorSurfaceKind(surface));
+
+      if (!quantities.roomCount) {
+        preview.innerHTML = '<p class="font-medium">Add room counts to preview assumed interior quantities.</p>';
+        return;
+      }
+
+      preview.innerHTML = `
+        <div class="font-medium">${hasInteriorSurface ? 'Assumed quantities feeding selected interior lines' : 'Assumed quantities ready for interior lines'}</div>
+        <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <span>Walls: ${quantities.walls.toFixed(0)} sqft</span>
+          <span>Ceilings: ${quantities.ceilings.toFixed(0)} sqft</span>
+          <span>Trim: ${quantities.trim.toFixed(0)} lin ft</span>
+          <span>Doors: ${quantities.doors} each</span>
+        </div>
+        ${hasInteriorSurface ? '' : '<p class="mt-2 text-emerald-800">Generate interior scope to turn these assumptions into price.</p>'}
+      `;
     }
 
     function exteriorAssumptions(room) {
@@ -986,6 +1208,10 @@ import Base from '../../layouts/Base.astro';
         generateExteriorScope(event.target.closest('#rooms-container > div'));
         return;
       }
+      if (event.target.classList.contains('generate-interior-scope')) {
+        generateInteriorScope(event.target.closest('#rooms-container > div'));
+        return;
+      }
       if (event.target.classList.contains('remove-room')) event.target.closest('#rooms-container > div').remove();
       if (event.target.classList.contains('add-surface')) addSurface(event.target.closest('#rooms-container > div').id);
       if (event.target.classList.contains('remove-surface')) event.target.closest('[data-items] > div').remove();
@@ -1018,6 +1244,9 @@ import Base from '../../layouts/Base.astro';
       }
     });
     document.addEventListener('input', (event) => {
+      if (event.target.matches('[data-interior]')) {
+        updateInteriorPreview(event.target.closest('#rooms-container > div'));
+      }
       if (event.target.matches('[data-exterior]')) {
         updateExteriorPreview(event.target.closest('#rooms-container > div'));
       }
@@ -1029,9 +1258,13 @@ import Base from '../../layouts/Base.astro';
         syncAreaType(room);
         room.querySelectorAll('[data-items] > div').forEach(syncSurfaceMeasurement);
       }
+      if (event.target.matches('[data-interior]')) {
+        updateInteriorPreview(event.target.closest('#rooms-container > div'));
+      }
       if (event.target.matches('[data-field="rateId"]')) {
         const surface = event.target.closest('[data-items] > div');
         syncSurfaceMeasurement(surface);
+        updateInteriorPreview(surface.closest('#rooms-container > div'));
         updateExteriorPreview(surface.closest('#rooms-container > div'));
       }
       if (event.target.closest('main')) calculateTotal();
