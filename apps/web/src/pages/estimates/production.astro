@@ -489,6 +489,10 @@ import Base from '../../layouts/Base.astro';
             </div>
           </div>
           <p class="mt-2 text-xs text-blue-900">These assumptions do not add price by themselves. Add exterior scope below, then leave that line's measurements blank to use these assumptions. Any line can still be overridden.</p>
+          <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <button type="button" class="generate-exterior-scope inline-flex justify-center rounded-md bg-blue-700 px-3 py-2 text-sm font-medium text-white hover:bg-blue-800">Add exterior scope from assumptions</button>
+            <span class="text-xs text-blue-900">Adds missing siding, soffit, fascia, trim, and corner-board lines. Existing exterior lines are kept.</span>
+          </div>
           <div class="mt-3 rounded-md border border-blue-200 bg-white p-3 text-xs text-blue-950" data-assumption-preview></div>
         </div>
         <div class="space-y-3" data-items></div>
@@ -588,6 +592,70 @@ import Base from '../../layouts/Base.astro';
       container.appendChild(div);
       div.querySelector('[data-field="rateId"]').value = rateId;
       syncSurfaceMeasurement(div);
+      return div;
+    }
+
+    function findExteriorRate(kind) {
+      return rates.find(rate => rateKind(rate) === kind) || null;
+    }
+
+    function surfaceRateKind(surface) {
+      const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
+      return rate ? rateKind(rate) : '';
+    }
+
+    function isEmptyGeneratedPlaceholder(surface) {
+      const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
+      const hasMeasurements = ['width', 'height', 'quantity', 'prepAdjustmentHours', 'paintAdjustmentHours']
+        .some(field => Number(surface.querySelector(`[data-field="${field}"]`)?.value || 0) > 0);
+      return !hasMeasurements && (!rate || !isExteriorRate(rate));
+    }
+
+    function generateExteriorScope(room) {
+      room.querySelector('[data-area-type]').value = 'exterior';
+      syncAreaType(room);
+
+      const items = [
+        { kind: 'exterior_body', label: 'Exterior siding' },
+        { kind: 'soffit', label: 'Exterior soffits' },
+        { kind: 'fascia', label: 'Exterior fascia' },
+        { kind: 'exterior_trim', label: 'Exterior trim' },
+        { kind: 'corner_boards', label: 'Exterior corner boards' },
+      ];
+      const existingKinds = new Set(Array.from(room.querySelectorAll('[data-items] > div')).map(surfaceRateKind).filter(Boolean));
+      const added = [];
+      const missingRates = [];
+
+      Array.from(room.querySelectorAll('[data-items] > div'))
+        .filter(isEmptyGeneratedPlaceholder)
+        .forEach(surface => surface.remove());
+
+      items.forEach((item) => {
+        if (existingKinds.has(item.kind)) return;
+        const rate = findExteriorRate(item.kind);
+        if (!rate) {
+          missingRates.push(item.label);
+          return;
+        }
+        addSurface(room.id, {
+          productionRateId: rate.id,
+          prepLevel: 'standard',
+          coats: rate.coats || 2,
+          customerVisible: true,
+        });
+        added.push(item.label);
+      });
+
+      updateExteriorPreview(room);
+      calculateTotal();
+
+      if (added.length) {
+        window.showToast?.(`Added ${added.length} exterior scope line${added.length === 1 ? '' : 's'} from assumptions`, 'success');
+      } else if (missingRates.length) {
+        window.showToast?.(`Add production rates for: ${missingRates.join(', ')}`, 'error');
+      } else {
+        window.showToast?.('Exterior scope already includes the standard assumption-based lines', 'success');
+      }
     }
 
     function syncSurfaceMeasurement(surface) {
@@ -912,6 +980,10 @@ import Base from '../../layouts/Base.astro';
         panel.classList.toggle('hidden', !willOpen);
         button.setAttribute('aria-expanded', String(willOpen));
         event.stopPropagation();
+        return;
+      }
+      if (event.target.classList.contains('generate-exterior-scope')) {
+        generateExteriorScope(event.target.closest('#rooms-container > div'));
         return;
       }
       if (event.target.classList.contains('remove-room')) event.target.closest('#rooms-container > div').remove();
