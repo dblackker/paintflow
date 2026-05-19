@@ -14,15 +14,16 @@ import Base from '../layouts/Base.astro';
     </div>
 
     <section class="surface-panel p-4 mb-6">
-      <div class="grid grid-cols-1 lg:grid-cols-[auto_1fr_auto_auto] gap-3 items-center">
-        <button id="prev-week" class="btn-secondary px-3">Previous</button>
-        <span id="week-range" class="text-center font-semibold text-sm sm:text-base"></span>
-        <button id="next-week" class="btn-secondary px-3">Next</button>
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full lg:w-auto lg:min-w-[22rem]">
+          <button id="prev-week" class="btn-secondary px-3" aria-label="Previous week">‹</button>
+          <span id="week-range" class="text-center font-semibold text-sm sm:text-base"></span>
+          <button id="next-week" class="btn-secondary px-3" aria-label="Next week">›</button>
+        </div>
         <div class="flex flex-wrap justify-center lg:justify-end gap-1.5" aria-label="Time grouping">
           <button type="button" class="btn-compact" data-view-mode="day">Day</button>
           <button type="button" class="btn-compact" data-view-mode="job">Job</button>
           <button type="button" class="btn-compact" data-view-mode="employee">Employee</button>
-          <button type="button" class="btn-compact" data-view-mode="flat">Flat</button>
         </div>
       </div>
     </section>
@@ -94,7 +95,10 @@ import Base from '../layouts/Base.astro';
     let members = [];
     let jobs = [];
     let isSavingTime = false;
-    let viewMode = localStorage.getItem('paintflow.time.viewMode') || 'day';
+    const supportedViewModes = new Set(['day', 'job', 'employee']);
+    let viewMode = supportedViewModes.has(localStorage.getItem('paintflow.time.viewMode'))
+      ? localStorage.getItem('paintflow.time.viewMode')
+      : 'day';
     const collapsedGroups = new Set();
 
     const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
@@ -220,11 +224,6 @@ import Base from '../layouts/Base.astro';
     }
 
     function renderGroupedTimesheet(entries) {
-      if (viewMode === 'flat') {
-        const sorted = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
-        return renderGroup('flat', 'All entries', entryCountLabel(sorted.length), sorted, 'flat');
-      }
-
       const grouping = {
         day: {
           key: (entry) => dateKey(entry.date),
@@ -310,16 +309,13 @@ import Base from '../layouts/Base.astro';
       };
       if (mode === 'day') return [base.job, base.employee, base.hours, base.cost, base.actions];
       if (mode === 'job') return [base.date, base.employee, base.hours, base.cost, base.actions];
-      if (mode === 'employee') return [base.date, base.job, base.hours, base.cost, base.actions];
-      return [base.date, base.job, base.employee, base.hours, base.cost, base.actions];
+      return [base.date, base.job, base.hours, base.cost, base.actions];
     }
 
     function renderEntry(entry, mode) {
       const hasDescription = Boolean(entry.description);
       const date = new Date(entry.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      const gridClass = mode === 'flat'
-        ? 'lg:grid-cols-[minmax(8rem,0.7fr)_minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]'
-        : 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]';
+      const gridClass = 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]';
       const desktopCells = {
         date: `<p class="hidden lg:block text-gray-700 truncate">${date}</p>`,
         job: `<div class="hidden lg:block min-w-0"><p class="text-gray-700 truncate">${escapeHtml(entry.jobName || 'Job')}</p>${hasDescription ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(entry.description)}</p>` : ''}</div>`,
@@ -338,7 +334,6 @@ import Base from '../layouts/Base.astro';
         day: [entry.teamMemberName, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
         job: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
         employee: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
-        flat: [date, entry.teamMemberName, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
       }[mode];
       const mobileContext = mobileParts.filter(Boolean).join(' - ');
 
