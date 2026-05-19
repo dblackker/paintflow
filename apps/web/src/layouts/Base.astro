@@ -1,5 +1,6 @@
 ---
 import Toast from '../components/Toast.astro';
+import '../styles/design-system.css';
 
 interface Props {
   title?: string;
@@ -16,28 +17,31 @@ const { title = 'PaintFlow' } = Astro.props;
   <title>{title}</title>
 </head>
 <body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
+  <nav class="pf-app-nav shadow-sm border-b sticky top-0 z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16 items-center">
         <div class="flex items-center space-x-8">
-          <h1 class="text-xl font-semibold">PaintFlow</h1>
+          <a href="/dashboard" class="flex items-center gap-3">
+            <span class="pf-brand-mark">P</span>
+            <span class="text-xl font-semibold text-gray-950">PaintFlow</span>
+          </a>
           <div class="hidden md:flex space-x-4">
-            <a href="/dashboard" class="text-sm text-gray-600 hover:text-gray-900">Dashboard</a>
-            <a href="/leads" class="text-sm text-gray-600 hover:text-gray-900">Leads</a>
-            <a href="/estimates" class="text-sm text-gray-600 hover:text-gray-900">Estimates</a>
-            <a href="/jobs" class="text-sm text-gray-600 hover:text-gray-900">Jobs</a>
-            <a href="/reports" class="text-sm text-gray-600 hover:text-gray-900">Reports</a>
-            <a href="/team" class="text-sm text-gray-600 hover:text-gray-900">Team</a>
+            <a href="/dashboard" class="pf-nav-link text-sm">Dashboard</a>
+            <a href="/leads" class="pf-nav-link text-sm">Leads</a>
+            <a href="/estimates" class="pf-nav-link text-sm">Estimates</a>
+            <a href="/jobs" class="pf-nav-link text-sm">Jobs</a>
+            <a href="/reports" class="pf-nav-link text-sm">Reports</a>
+            <a href="/team" class="pf-nav-link text-sm">Team</a>
           </div>
         </div>
-        <button id="mobile-menu" class="md:hidden">
+        <button id="mobile-menu" class="pf-mobile-menu-button md:hidden" aria-label="Open navigation" aria-expanded="false">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
           </svg>
         </button>
       </div>
     </div>
-    <div id="mobile-nav" class="hidden md:hidden border-t">
+    <div id="mobile-nav" class="pf-mobile-nav hidden md:hidden border-t">
       <div class="px-4 py-2 space-y-1">
         <a href="/dashboard" class="block py-2 text-sm">Dashboard</a>
         <a href="/leads" class="block py-2 text-sm">Leads</a>
@@ -55,6 +59,8 @@ const { title = 'PaintFlow' } = Astro.props;
   <script>
     document.getElementById('mobile-menu')?.addEventListener('click', () => {
       document.getElementById('mobile-nav')?.classList.toggle('hidden');
+      const button = document.getElementById('mobile-menu');
+      button?.setAttribute('aria-expanded', String(document.getElementById('mobile-nav') && !document.getElementById('mobile-nav')?.classList.contains('hidden')));
     });
   </script>
 </body>
