@@ -65,7 +65,7 @@ const isWelcome = Astro.url.searchParams.get('welcome') === '1';
     const steps = [
       { title: 'Business Basics', fields: [
         { name: 'companyName', label: 'Company Name', type: 'text', required: true, autocomplete: 'organization', placeholder: 'Acme Painting Co.' },
-        { name: 'phone', label: 'Phone Number', type: 'tel', required: true, autocomplete: 'tel', inputmode: 'numeric', placeholder: '(555) 123-4567', maxlength: '14', pattern: '\\([0-9]{3}\\) [0-9]{3}-[0-9]{4}', format: 'phone' },
+        { name: 'phone', label: 'Phone Number', type: 'tel', required: true, autocomplete: 'tel', inputmode: 'numeric', placeholder: '(555) 123-4567', maxlength: '14', pattern: '[0-9() -]{10,14}', format: 'phone' },
         { name: 'email', label: 'Email', type: 'email', required: true, autocomplete: 'email', inputmode: 'email', placeholder: 'owner@example.com' },
         { name: 'address', label: 'Business Address', type: 'text', required: true, autocomplete: 'street-address', placeholder: '123 Main St, Tacoma, WA 98402' },
       ]},

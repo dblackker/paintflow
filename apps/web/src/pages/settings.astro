@@ -26,12 +26,12 @@ import Base from '../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-4">Business Information</h3>
           <form id="business-form" class="space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-              <input name="companyName" placeholder="Company Name" class="px-3 py-2 border rounded-lg">
-              <input name="phone" placeholder="Phone" class="px-3 py-2 border rounded-lg">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <input name="companyName" autocomplete="organization" placeholder="Company Name" class="px-3 py-2 border rounded-lg">
+              <input name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="14" pattern="[0-9() -]{10,14}" placeholder="(555) 123-4567" class="px-3 py-2 border rounded-lg">
             </div>
-            <input name="email" placeholder="Email" type="email" class="w-full px-3 py-2 border rounded-lg">
-            <input name="address" placeholder="Address" class="w-full px-3 py-2 border rounded-lg">
+            <input name="email" placeholder="Email" type="email" autocomplete="email" inputmode="email" class="w-full px-3 py-2 border rounded-lg">
+            <input name="address" placeholder="Address" autocomplete="street-address" class="w-full px-3 py-2 border rounded-lg">
             <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
           </form>
         </div>
@@ -43,19 +43,19 @@ import Base from '../layouts/Base.astro';
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="text-sm text-gray-600">Labor Rate ($/hr)</label>
-                <input name="defaultLaborRate" type="number" step="0.01" class="w-full px-3 py-2 border rounded-lg">
+                <input name="defaultLaborRate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
               <div>
                 <label class="text-sm text-gray-600">Material Markup (%)</label>
-                <input name="materialMarkupPercent" type="number" step="0.1" class="w-full px-3 py-2 border rounded-lg">
+                <input name="materialMarkupPercent" type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
               <div>
                 <label class="text-sm text-gray-600">Sales Tax (%)</label>
-                <input name="salesTaxRate" type="number" step="0.01" class="w-full px-3 py-2 border rounded-lg">
+                <input name="salesTaxRate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
               <div>
                 <label class="text-sm text-gray-600">Deposit (%)</label>
-                <input name="depositPercent" type="number" step="0.1" class="w-full px-3 py-2 border rounded-lg">
+                <input name="depositPercent" type="number" min="0" max="100" step="0.1" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
             </div>
             <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
@@ -85,8 +85,8 @@ import Base from '../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-4">Review Links</h3>
           <form id="reviews-form" class="space-y-4">
-            <input name="googleReviewUrl" placeholder="Google Business Review URL" class="w-full px-3 py-2 border rounded-lg">
-            <input name="yelpReviewUrl" placeholder="Yelp Review URL (optional)" class="w-full px-3 py-2 border rounded-lg">
+            <input name="googleReviewUrl" type="url" inputmode="url" autocomplete="url" placeholder="Google Business Review URL" class="w-full px-3 py-2 border rounded-lg">
+            <input name="yelpReviewUrl" type="url" inputmode="url" autocomplete="url" placeholder="Yelp Review URL (optional)" class="w-full px-3 py-2 border rounded-lg">
             <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>
           </form>
         </div>
@@ -96,6 +96,21 @@ import Base from '../layouts/Base.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+
+    function phoneDigits(value) {
+      return String(value || '').replace(/\D/g, '').slice(0, 10);
+    }
+
+    function formatPhone(value) {
+      const digits = phoneDigits(value);
+      if (digits.length <= 3) return digits;
+      if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+
+    document.querySelector('input[name="phone"]')?.addEventListener('input', (event) => {
+      event.target.value = formatPhone(event.target.value);
+    });
 
     async function loadSettings() {
       const res = await fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' });
@@ -126,6 +141,13 @@ import Base from '../layouts/Base.astro';
     document.getElementById('business-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const formData = Object.fromEntries(new FormData(e.target));
+      if (formData.phone) {
+        formData.phone = formatPhone(formData.phone);
+        if (phoneDigits(formData.phone).length !== 10) {
+          window.showToast('Enter a 10-digit phone number', 'error');
+          return;
+        }
+      }
       await fetch(`${API_URL}/v1/settings/org`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

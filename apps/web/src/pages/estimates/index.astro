@@ -14,7 +14,7 @@ import Base from '../../layouts/Base.astro';
 
     <section class="bg-white border rounded-lg shadow-sm p-3 sm:p-4 mb-4">
       <div class="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
-        <input id="search" placeholder="Search customer, phone, or email" class="w-full px-3 py-2 border rounded-lg" />
+        <input id="search" type="search" autocomplete="off" enterkeyhint="search" placeholder="Search customer, phone, or email" class="w-full px-3 py-2 border rounded-lg" />
         <select id="status-filter" class="w-full px-3 py-2 border rounded-lg">
           <option value="all">All statuses</option>
           <option value="sent">Sent</option>

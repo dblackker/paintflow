@@ -37,15 +37,15 @@ import Base from '../../layouts/Base.astro';
           <div class="grid sm:grid-cols-3 gap-3">
             <label class="block">
               <span class="text-sm text-gray-600">Good multiplier</span>
-              <input id="good-multiplier" type="number" step="0.01" value="0.90" class="mt-1 w-full px-3 py-2 border rounded-lg">
+              <input id="good-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="0.90" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label class="block">
               <span class="text-sm text-gray-600">Better multiplier</span>
-              <input id="better-multiplier" type="number" step="0.01" value="1.00" class="mt-1 w-full px-3 py-2 border rounded-lg">
+              <input id="better-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.00" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label class="block">
               <span class="text-sm text-gray-600">Best multiplier</span>
-              <input id="best-multiplier" type="number" step="0.01" value="1.18" class="mt-1 w-full px-3 py-2 border rounded-lg">
+              <input id="best-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.18" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
           </div>
         </div>
@@ -57,19 +57,19 @@ import Base from '../../layouts/Base.astro';
           <div class="grid grid-cols-2 gap-3 text-sm">
             <label>
               <span class="text-gray-600">Labor rate</span>
-              <input id="labor-rate" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+              <input id="labor-rate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label>
               <span class="text-gray-600">Material markup %</span>
-              <input id="markup" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+              <input id="markup" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label>
               <span class="text-gray-600">Sales tax %</span>
-              <input id="tax-rate" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+              <input id="tax-rate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label>
               <span class="text-gray-600">Deposit %</span>
-              <input id="deposit-percent" type="number" step="0.01" class="mt-1 w-full px-3 py-2 border rounded-lg">
+              <input id="deposit-percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
           </div>
         </div>
@@ -129,23 +129,23 @@ import Base from '../../layouts/Base.astro';
       div.innerHTML = `
         <label class="block sm:col-span-1">
           <span class="text-xs text-gray-600">Description</span>
-          <input data-field="desc" value="${escapeHtml(item.desc || '')}" placeholder="Scope item" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <input data-field="desc" autocomplete="off" value="${escapeHtml(item.desc || '')}" placeholder="Scope item" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
           <span class="text-xs text-gray-600">Qty</span>
-          <input data-field="qty" type="number" step="0.01" value="${item.qty || 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <input data-field="qty" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.qty || 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
           <span class="text-xs text-gray-600">Unit</span>
-          <input data-field="unit" value="${escapeHtml(item.unit || 'each')}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <input data-field="unit" autocomplete="off" value="${escapeHtml(item.unit || 'each')}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
           <span class="text-xs text-gray-600">Labor hrs/unit</span>
-          <input data-field="laborHours" type="number" step="0.01" value="${item.laborHours || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <input data-field="laborHours" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.laborHours || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
           <span class="text-xs text-gray-600">Material $/unit</span>
-          <input data-field="materialCost" type="number" step="0.01" value="${item.materialCost || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <input data-field="materialCost" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.materialCost || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <button type="button" class="remove-item px-3 py-2 border rounded-lg text-sm">Remove</button>
       `;

@@ -111,6 +111,7 @@ const selectedPlan = plans[plan];
                 name="companyName"
                 type="text"
                 autocomplete="organization"
+                enterkeyhint="next"
                 required
                 class="w-full rounded-lg border px-3 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Acme Painting Co."
@@ -124,6 +125,7 @@ const selectedPlan = plans[plan];
                 name="name"
                 type="text"
                 autocomplete="name"
+                enterkeyhint="next"
                 class="w-full rounded-lg border px-3 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Daniel"
               />
@@ -136,6 +138,8 @@ const selectedPlan = plans[plan];
                 name="email"
                 type="email"
                 autocomplete="email"
+                inputmode="email"
+                enterkeyhint="send"
                 required
                 class="w-full rounded-lg border px-3 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="owner@example.com"

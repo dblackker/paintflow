@@ -40,8 +40,8 @@
           <option value="Lowes">Lowes</option>
           <option value="Other">Other</option>
         </select>
-        <input name="invoiceNumber" placeholder="Invoice #" class="w-full px-3 py-2 border rounded-lg">
-        <textarea name="csvData" placeholder="Paste CSV data here..." rows="8" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" required></textarea>
+        <input name="invoiceNumber" autocomplete="off" enterkeyhint="next" placeholder="Invoice #" class="w-full px-3 py-2 border rounded-lg">
+        <textarea name="csvData" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste CSV data here..." rows="8" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" required></textarea>
         <p class="text-xs text-gray-600">CSV columns: Description, SKU, Quantity, Unit Cost, Total</p>
         <div class="flex gap-3">
           <button type="button" onclick="closeModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
