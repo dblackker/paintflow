@@ -82,6 +82,15 @@ import Base from '../../layouts/Base.astro';
         render();
       } catch (err) {
         console.error('Failed to load estimates', err);
+        document.getElementById('summary').innerHTML = '';
+        document.getElementById('estimates-list').innerHTML = `
+          <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-red-800">
+            <p class="font-medium">Estimates could not be loaded</p>
+            <p class="text-sm mt-1">${escapeHtml(err.message || 'Check that the API server is running and try again.')}</p>
+            <button id="retry-estimates" type="button" class="mt-4 px-4 py-2 bg-red-700 text-white rounded-lg text-sm">Retry</button>
+          </div>
+        `;
+        document.getElementById('retry-estimates')?.addEventListener('click', loadEstimates);
         window.showToast('Failed to load estimates', 'error');
       }
     }

@@ -22,14 +22,14 @@
     }, 3000);
   };
   
-  // Global error handler
+  // Keep global handlers diagnostic-only. Page-level code should show contextual
+  // user-facing messages, otherwise a background rejection can create a vague
+  // "Request failed" toast on an otherwise working screen.
   window.addEventListener('error', (e) => {
     console.error('Global error:', e.error);
-    window.showToast('An error occurred', 'error');
   });
   
   window.addEventListener('unhandledrejection', (e) => {
     console.error('Unhandled rejection:', e.reason);
-    window.showToast('Request failed', 'error');
   });
 </script>
