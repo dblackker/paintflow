@@ -115,7 +115,11 @@ import Base from '../layouts/Base.astro';
       const calRes = await fetch(`${API_URL}/v1/calendar/status`, { credentials: 'include' });
       const { connected } = await calRes.json();
       document.getElementById('calendar-status').textContent = connected ? 'Connected' : 'Not connected';
-      document.getElementById('stripe-status').textContent = 'Configure in Stripe dashboard';
+      const stripeRes = await fetch(`${API_URL}/v1/stripe/status`, { credentials: 'include' });
+      const { data: stripe } = await stripeRes.json();
+      document.getElementById('stripe-status').innerHTML = stripe?.onboardingComplete
+        ? '<span class="text-green-700">Ready for deposits</span>'
+        : '<a href="/payments/stripe" class="text-blue-600 hover:underline">Set up payments</a>';
       document.getElementById('qb-status').textContent = 'Check QuickBooks settings';
     }
 

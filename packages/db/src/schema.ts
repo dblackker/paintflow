@@ -132,6 +132,18 @@ export const googleCalendarConnections = pgTable('google_calendar_connections', 
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const stripeConnections = pgTable('stripe_connections', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull().unique(),
+  stripeAccountId: varchar('stripe_account_id', { length: 100 }).notNull().unique(),
+  chargesEnabled: boolean('charges_enabled').notNull().default(false),
+  payoutsEnabled: boolean('payouts_enabled').notNull().default(false),
+  detailsSubmitted: boolean('details_submitted').notNull().default(false),
+  onboardingComplete: boolean('onboarding_complete').notNull().default(false),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const reviewRequests = pgTable('review_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),

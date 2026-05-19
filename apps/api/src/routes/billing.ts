@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { estimates, leads, quickbooksConnections } from '@paintflow/db/schema';
+import { estimates, leads, quickbooksConnections, stripeConnections } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { createCheckoutSession, verifyWebhookSignature } from '../lib/stripe';
@@ -21,6 +21,13 @@ billing.post('/checkout', async (c) => {
   if (!estimate) {
     return c.json({ error: 'Estimate not found' }, 404);
   }
+
+  const stripeConnection = await db.query.stripeConnections.findFirst({
+    where: eq(stripeConnections.orgId, estimate.orgId),
+  });
+  if (!stripeConnection?.onboardingComplete) {
+    return c.json({ error: 'Stripe payments are not ready for this workspace' }, 409);
+  }
   
   const packages = estimate.packages as Array<{ name: string; total: number }>;
   const pkg = packages.find((p) => p.name === packageName);
@@ -39,6 +46,7 @@ billing.post('/checkout', async (c) => {
       successUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}/success`,
       cancelUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}`,
       metadata: { estimateId, orgId: estimate.orgId, packageName },
+      connectedAccountId: stripeConnection.stripeAccountId,
     });
     
     return c.json({ 

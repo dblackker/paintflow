@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { estimates, jobs, leads, portalTokens } from '@paintflow/db/schema';
+import { estimates, jobs, leads, portalTokens, stripeConnections } from '@paintflow/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
@@ -93,6 +93,13 @@ portalApp.post('/:token/pay', async (c) => {
   if (!portalToken || new Date() > portalToken.expiresAt) {
     return c.json({ error: 'Invalid token' }, 404);
   }
+
+  const stripeConnection = await db.query.stripeConnections.findFirst({
+    where: eq(stripeConnections.orgId, portalToken.orgId),
+  });
+  if (!stripeConnection?.onboardingComplete) {
+    return c.json({ error: 'Online payments are not ready for this contractor' }, 409);
+  }
   
   // Create Stripe payment intent
   const stripe = new (await import('stripe')).default(c.env.STRIPE_SECRET_KEY);
@@ -105,6 +112,8 @@ portalApp.post('/:token/pay', async (c) => {
       orgId: portalToken.orgId,
       portalToken: token,
     },
+  }, {
+    stripeAccount: stripeConnection.stripeAccountId,
   });
   
   return c.json({ data: { clientSecret: paymentIntent.client_secret } });

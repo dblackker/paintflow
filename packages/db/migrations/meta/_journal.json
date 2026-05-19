@@ -29,6 +29,13 @@
       "when": 1779142003000,
       "tag": "0003_enterprise_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779166000000,
+      "tag": "0004_stripe_connections",
+      "breakpoints": true
     }
   ]
 }

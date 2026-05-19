@@ -13,6 +13,7 @@ export interface Env {
   STRIPE_STARTER_PRICE_ID: string;
   STRIPE_PRO_PRICE_ID: string;
   STRIPE_ENTERPRISE_PRICE_ID: string;
+  STRIPE_CONNECT_CLIENT_ID?: string;
   TWILIO_ACCOUNT_SID: string;
   TWILIO_AUTH_TOKEN: string;
   TWILIO_PHONE_NUMBER: string;

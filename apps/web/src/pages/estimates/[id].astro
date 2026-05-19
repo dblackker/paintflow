@@ -253,8 +253,12 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ estimateId, packageName: selectedPackage }),
           });
-          const { checkoutUrl } = await checkoutRes.json();
-          if (!checkoutRes.ok || !checkoutUrl) throw new Error('Failed to create payment checkout');
+          const checkoutPayload = await checkoutRes.json();
+          const { checkoutUrl } = checkoutPayload;
+          if (checkoutRes.status === 409) {
+            throw new Error('Online deposits are not available yet. Please contact your contractor to arrange payment.');
+          }
+          if (!checkoutRes.ok || !checkoutUrl) throw new Error(checkoutPayload.error || 'Failed to create payment checkout');
           window.location.href = checkoutUrl;
         } catch (err) {
           alert(err.message || 'Failed to process signature');

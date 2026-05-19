@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { orgSettings, serviceAreas, teamMembers, orgBranding } from '@paintflow/db/schema';
+import { orgSettings, serviceAreas, teamMembers, orgBranding, stripeConnections } from '@paintflow/db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -67,7 +67,7 @@ function normalizeOrgSettingsPatch(input: z.infer<typeof orgSettingsPatchSchema>
   return patch;
 }
 
-function onboardingState(settings: typeof orgSettings.$inferSelect | null, serviceAreaCount: number) {
+function onboardingState(settings: typeof orgSettings.$inferSelect | null, serviceAreaCount: number, hasPayments = false) {
   const hasBusinessBasics = Boolean(settings?.companyName && settings.phone && settings.email && settings.address);
   const hasPricing = Boolean(settings?.defaultLaborRate && settings.materialMarkupPercent && settings.depositPercent);
   const completed = Boolean(settings?.onboardingCompletedAt);
@@ -75,7 +75,7 @@ function onboardingState(settings: typeof orgSettings.$inferSelect | null, servi
     { key: 'business', label: 'Business profile', complete: hasBusinessBasics },
     { key: 'pricing', label: 'Pricing defaults', complete: hasPricing },
     { key: 'serviceAreas', label: 'Service areas', complete: serviceAreaCount > 0 },
-    { key: 'connectors', label: 'Payment and accounting setup', complete: false },
+    { key: 'connectors', label: 'Payment setup', complete: hasPayments },
   ];
   const completedSteps = steps.filter((step) => step.complete).length;
 
@@ -125,12 +125,15 @@ settings.get('/onboarding', async (c) => {
   }
 
   const areas = await db.select().from(serviceAreas).where(eq(serviceAreas.orgId, orgId));
+  const stripe = await db.query.stripeConnections.findFirst({
+    where: eq(stripeConnections.orgId, orgId),
+  });
 
   return c.json({
     data: {
       settings,
       serviceAreas: areas,
-      progress: onboardingState(settings, areas.length),
+      progress: onboardingState(settings, areas.length, Boolean(stripe?.onboardingComplete)),
     },
   });
 });

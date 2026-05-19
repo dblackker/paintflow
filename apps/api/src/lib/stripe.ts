@@ -4,12 +4,14 @@ export async function createCheckoutSession(env: any, params: {
   successUrl: string;
   cancelUrl: string;
   metadata: Record<string, string>;
+  connectedAccountId?: string;
 }) {
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      ...(params.connectedAccountId ? { 'Stripe-Account': params.connectedAccountId } : {}),
     },
     body: new URLSearchParams({
       'mode': 'payment',
