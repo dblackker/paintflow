@@ -516,10 +516,8 @@ import Base from '../../layouts/Base.astro';
       div.innerHTML = `
         <div class="flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
           <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room, side, or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
-          <select class="px-2 py-2 border rounded text-sm" data-area-type>
-            <option value="interior">Interior</option>
-            <option value="exterior">Exterior</option>
-          </select>
+          <input type="hidden" data-area-type value="${estimateAreaType()}">
+          <span class="rounded-full border bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600" data-area-label>${estimateAreaLabel()}</span>
           <div class="flex gap-3">
             <button type="button" class="copy-room text-sm text-blue-600">Copy</button>
             <button type="button" class="remove-room text-sm text-red-600">Remove</button>
@@ -974,8 +972,8 @@ import Base from '../../layouts/Base.astro';
       const qtyWrap = surface.querySelector('[data-measure="quantity"]');
 
       if (rate && isExteriorRate(rate) && room) {
-        room.querySelector('[data-area-type]').value = 'exterior';
-        syncAreaType(room);
+        document.getElementById('estimate-type').value = 'exterior';
+        applyEstimateType();
       }
 
       widthWrap.classList.toggle('hidden', !config.showWidth);
@@ -999,21 +997,33 @@ import Base from '../../layouts/Base.astro';
     }
 
     function applyEstimateType() {
-      const type = document.getElementById('estimate-type').value;
-      const firstRoom = document.querySelector('#rooms-container > div');
-      if (!firstRoom) return;
-      if (type === 'exterior') {
-        firstRoom.querySelector('[data-area-type]').value = 'exterior';
-      } else if (type === 'interior') {
-        firstRoom.querySelector('[data-area-type]').value = 'interior';
-      }
+      document.querySelectorAll('#rooms-container > div').forEach((room) => {
+        room.querySelector('[data-area-type]').value = estimateAreaType();
+        room.querySelector('[data-area-label]').textContent = estimateAreaLabel();
+      });
       syncScopeBuilderVisibility();
+    }
+
+    function estimateAreaType() {
+      return document.getElementById('estimate-type')?.value === 'exterior' ? 'exterior' : 'interior';
+    }
+
+    function estimateAreaLabel() {
+      const type = document.getElementById('estimate-type')?.value || 'interior';
+      return ({
+        interior: 'Interior scope',
+        exterior: 'Exterior scope',
+        cabinet: 'Specialty scope',
+        custom: 'Custom scope',
+      })[type] || 'Scope';
     }
 
     function syncAreaType(room) {
       const ownsScopeBuilder = room.dataset.scopeOwner === 'true';
       const estimateType = document.getElementById('estimate-type')?.value || 'interior';
-      const isExterior = room.querySelector('[data-area-type]').value === 'exterior';
+      room.querySelector('[data-area-type]').value = estimateAreaType();
+      room.querySelector('[data-area-label]').textContent = estimateAreaLabel();
+      const isExterior = estimateAreaType() === 'exterior';
       room.querySelector('[data-interior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'interior' || isExterior);
       room.querySelector('[data-exterior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'exterior' || !isExterior);
       updateInteriorPreview(room);
@@ -1177,7 +1187,7 @@ import Base from '../../layouts/Base.astro';
     }
 
     function exteriorQuantityFromAssumptions(room, rate) {
-      if (!room || room.querySelector('[data-area-type]')?.value !== 'exterior') return 0;
+      if (!room || estimateAreaType() !== 'exterior') return 0;
       const quantities = exteriorAssumptionQuantities(room);
 
       switch (rateKind(rate)) {
@@ -1577,11 +1587,6 @@ import Base from '../../layouts/Base.astro';
       if (event.target.closest('main')) calculateTotal();
     });
     document.addEventListener('change', (event) => {
-      if (event.target.matches('[data-area-type]')) {
-        const room = event.target.closest('#rooms-container > div');
-        syncAreaType(room);
-        room.querySelectorAll('[data-surface-item]').forEach(syncSurfaceMeasurement);
-      }
       if (event.target.matches('[data-interior]')) {
         updateInteriorPreview(event.target.closest('#rooms-container > div'));
       }
