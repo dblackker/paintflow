@@ -1,4 +1,6 @@
 ---
+import Toast from '../components/Toast.astro';
+
 interface Props {
   title?: string;
 }
@@ -49,6 +51,7 @@ const { title = 'PaintFlow' } = Astro.props;
   <main>
     <slot />
   </main>
+  <Toast />
   <script>
     document.getElementById('mobile-menu')?.addEventListener('click', () => {
       document.getElementById('mobile-nav')?.classList.toggle('hidden');

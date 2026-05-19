@@ -77,7 +77,8 @@ import Base from '../../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <h3 class="font-semibold text-gray-900 mb-3">Package Preview</h3>
           <div id="package-preview" class="space-y-3"></div>
-          <button type="submit" class="w-full mt-4 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Create Estimate</button>
+          <button id="create-estimate-btn" type="submit" class="w-full mt-4 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:cursor-not-allowed disabled:opacity-60">Create Estimate</button>
+          <p id="create-estimate-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
         </div>
       </aside>
     </form>
@@ -218,6 +219,8 @@ import Base from '../../layouts/Base.astro';
 
     document.getElementById('estimate-form').addEventListener('submit', async (event) => {
       event.preventDefault();
+      const button = document.getElementById('create-estimate-btn');
+      const status = document.getElementById('create-estimate-status');
       const leadId = new FormData(event.target).get('leadId');
       const packages = buildPackages();
 
@@ -231,15 +234,22 @@ import Base from '../../layouts/Base.astro';
       }
 
       try {
+        button.disabled = true;
+        button.textContent = 'Creating estimate...';
+        status.textContent = 'Creating estimate and opening the customer proposal...';
+        status.classList.remove('hidden');
         const { data } = await apiJson(`${API_URL}/v1/estimates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, packages }),
         });
-        window.showToast('Estimate created');
+        window.showToast('Estimate created. Opening it now.');
         window.location.href = `/estimates/${data.id}`;
       } catch (err) {
         window.showToast(err.message || 'Failed to create estimate', 'error');
+        status.textContent = err.message || 'Failed to create estimate';
+        button.disabled = false;
+        button.textContent = 'Create Estimate';
       }
     });
 

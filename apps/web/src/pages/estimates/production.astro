@@ -62,13 +62,15 @@
             <label><span class="text-gray-600">Better</span><input id="better-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.00" class="mt-1 w-full px-2 py-2 border rounded"></label>
             <label><span class="text-gray-600">Best</span><input id="best-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.18" class="mt-1 w-full px-2 py-2 border rounded"></label>
           </div>
-          <button id="save-estimate" class="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">
+          <button id="save-estimate" class="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
             Create Estimate
           </button>
+          <p id="save-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
         </div>
       </aside>
     </div>
   </main>
+  <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
@@ -83,6 +85,18 @@
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
     }
 
     async function apiJson(url, options = {}) {
@@ -270,20 +284,36 @@
     });
 
     document.getElementById('save-estimate').addEventListener('click', async () => {
+      const button = document.getElementById('save-estimate');
+      const status = document.getElementById('save-status');
       const leadId = document.getElementById('lead-select').value;
       const packages = buildPackages();
-      if (!leadId) return alert('Select a customer first');
-      if (packages.length === 0) return alert('Add at least one measured surface');
+      if (!leadId) {
+        showToast('Select a customer first', 'error');
+        return;
+      }
+      if (packages.length === 0) {
+        showToast('Add at least one measured surface', 'error');
+        return;
+      }
 
       try {
+        button.disabled = true;
+        button.textContent = 'Creating estimate...';
+        status.textContent = 'Creating estimate and opening the customer proposal...';
+        status.classList.remove('hidden');
         const { data } = await apiJson(`${API_URL}/v1/estimates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, packages }),
         });
+        showToast('Estimate created. Opening it now.');
         window.location.href = `/estimates/${data.id}`;
       } catch (err) {
-        alert(err.message || 'Failed to create estimate');
+        showToast(err.message || 'Failed to create estimate', 'error');
+        status.textContent = err.message || 'Failed to create estimate';
+        button.disabled = false;
+        button.textContent = 'Create Estimate';
       }
     });
 
