@@ -505,10 +505,10 @@ import Base from '../../layouts/Base.astro';
               </label>
             </div>
           </div>
-          <div class="relative mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="relative mt-3 inline-flex items-center gap-1.5">
             <button type="button" class="generate-interior-scope inline-flex justify-center rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800">Add interior scope from room counts</button>
-            <button type="button" class="assumption-info inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-300 bg-white text-xs font-semibold text-emerald-700" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
-            <div class="hidden absolute right-0 top-10 z-20 w-80 rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
+            <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 bg-white/80 text-[11px] font-medium leading-none text-emerald-700 hover:bg-white" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
+            <div class="hidden absolute left-0 top-10 z-20 w-80 rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
               <p class="font-semibold text-gray-900">Interior assumptions</p>
               <p class="mt-1">Creates itemized editable lines for each generated room, such as Bedroom 1 walls, Bedroom 1 ceiling, Bedroom 1 trim, and Bedroom 1 doors.</p>
               <p class="mt-2">Room allowances estimate perimeter, ceiling area, opening deductions, baseboards, casing, crown, and doors. Override any generated line as measurements improve.</p>
@@ -564,10 +564,10 @@ import Base from '../../layouts/Base.astro';
               </div>
             </div>
           </div>
-          <div class="relative mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="relative mt-3 inline-flex items-center gap-1.5">
             <button type="button" class="generate-exterior-scope inline-flex justify-center rounded-md bg-blue-700 px-3 py-2 text-sm font-medium text-white hover:bg-blue-800">Add exterior scope from assumptions</button>
-            <button type="button" class="assumption-info inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 bg-white text-xs font-semibold text-blue-700" aria-label="Explain exterior assumptions" aria-expanded="false">?</button>
-            <div class="hidden absolute right-0 top-10 z-20 w-80 rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Exterior assumptions explanation">
+            <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-blue-300 bg-white/80 text-[11px] font-medium leading-none text-blue-700 hover:bg-white" aria-label="Explain exterior assumptions" aria-expanded="false">?</button>
+            <div class="hidden absolute left-0 top-10 z-20 w-80 rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Exterior assumptions explanation">
               <p class="font-semibold text-gray-900">Exterior assumptions</p>
               <p class="mt-1">These fields do not add price by themselves. Generate exterior scope, then each line prices from the assumptions while its measurement override is blank.</p>
               <p class="mt-2">The generator adds missing siding, soffit, fascia, trim, and corner-board lines. Existing exterior lines are kept, and every generated line can be overridden.</p>
