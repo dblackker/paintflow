@@ -13,24 +13,24 @@
 
       <section id="estimate-content" class="hidden space-y-5">
         <div class="bg-white rounded-lg shadow-sm border p-5 sm:p-8">
-          <div id="brand-block" class="mb-5"></div>
-          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
             <div>
-              <h1 class="text-3xl font-bold text-gray-900">Painting Estimate</h1>
-              <p class="text-gray-600 mt-2">Review the package options below and choose the one that fits your project.</p>
+              <div id="brand-block" class="mb-5"></div>
+              <h1 class="text-3xl font-bold text-gray-900">Painting Proposal</h1>
+              <p class="text-gray-600 mt-2">Review the project scope, selected products, and total investment.</p>
             </div>
             <div class="sm:text-right">
               <p class="text-sm text-gray-600">Estimate #</p>
               <p class="font-mono" id="estimate-id"></p>
             </div>
           </div>
-          <div id="packages-container" class="grid lg:grid-cols-3 gap-4"></div>
+          <div id="proposal-container"></div>
         </div>
 
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-5">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-5" id="accept-panel">
           <h3 class="font-semibold text-gray-900 mb-2">Ready to proceed?</h3>
-          <p class="text-gray-700 mb-4">Select a package to review terms, sign, and pay the deposit.</p>
-          <div id="accept-buttons" class="grid sm:grid-cols-3 gap-3"></div>
+          <p class="text-gray-700 mb-4">Approve the proposal to review terms, sign, and pay the deposit.</p>
+          <div id="accept-buttons"></div>
         </div>
 
         <div class="text-center text-sm text-gray-600">
@@ -83,8 +83,9 @@
     <script>
       const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
       const estimateId = window.location.pathname.split('/').pop();
-      const labels = { good: 'Good', better: 'Better', best: 'Best' };
+      const labels = { good: 'Good', better: 'Better', best: 'Best', proposal: 'Proposal' };
       let selectedPackage = null;
+      let primaryColor = '#2563eb';
       let canvas;
       let ctx;
       let isDrawing = false;
@@ -115,6 +116,10 @@
             document.title = `${data.branding.companyName} - Estimate`;
             document.getElementById('brand-block').innerHTML = `<p class="text-sm font-semibold text-gray-700">${escapeHtml(data.branding.companyName)}</p>`;
           }
+          if (data.branding?.primaryColor) {
+            primaryColor = data.branding.primaryColor;
+            document.getElementById('accept-panel').style.borderColor = primaryColor;
+          }
           if (data.branding?.logoUrl) {
             document.getElementById('brand-block').innerHTML = `<img src="${escapeHtml(data.branding.logoUrl)}" class="h-12 mb-3" alt="Logo" />` + document.getElementById('brand-block').innerHTML;
           }
@@ -125,7 +130,7 @@
           }
 
           document.getElementById('estimate-id').textContent = data.id.slice(0, 8);
-          renderPackages(data.packages || []);
+          renderProposal(data.packages || []);
           document.getElementById('loading').classList.add('hidden');
           document.getElementById('estimate-content').classList.remove('hidden');
           setupSignaturePad();
@@ -135,33 +140,54 @@
         }
       }
 
-      function renderPackages(packages) {
-        document.getElementById('packages-container').innerHTML = packages.map(pkg => {
-          const items = packageItems(pkg);
-          return `
-            <article class="border rounded-lg p-4 ${pkg.name === 'better' ? 'border-blue-500 ring-1 ring-blue-500' : ''}">
-              <div class="mb-4">
-                <p class="text-sm text-gray-500">${pkg.name === 'better' ? 'Recommended' : '&nbsp;'}</p>
-                <h2 class="text-xl font-semibold">${escapeHtml(labels[pkg.name] || pkg.name)} Package</h2>
-                <p class="text-3xl font-bold mt-2">${money(pkg.total)}</p>
-              </div>
-              <div class="space-y-2">
+      function itemMaterial(item) {
+        if (!item.material?.name) return '';
+        const name = [item.material.brand, item.material.name].filter(Boolean).join(' ');
+        const quantity = item.material.quantity ? `${Number(item.material.quantity)} ${item.material.unit || 'unit'}${Number(item.material.quantity) === 1 ? '' : 's'}` : '';
+        return `<p class="text-xs text-gray-600 mt-1">Product: ${escapeHtml(name)}${quantity ? ` - ${escapeHtml(quantity)}` : ''}</p>`;
+      }
+
+      function renderProposal(packages) {
+        const pkg = packages.find(item => item.name === 'proposal') || packages.find(item => /better|recommended/i.test(item.name)) || packages[0];
+        const items = packageItems(pkg || {});
+        if (!pkg || items.length === 0) {
+          showError();
+          return;
+        }
+
+        document.getElementById('proposal-container').innerHTML = `
+          <div class="grid lg:grid-cols-[1fr_280px] gap-6">
+            <section>
+              <h2 class="text-lg font-semibold text-gray-900 mb-3">Project Scope</h2>
+              <div class="divide-y rounded-lg border">
                 ${items.map(item => `
-                  <div class="border-t pt-2">
-                    <p class="font-medium text-sm">${escapeHtml(item.desc)}</p>
-                    <p class="text-xs text-gray-600">${Number(item.qty || 0)} x ${money(item.rate)}${item.category ? ` - ${escapeHtml(item.category)}` : ''}</p>
+                  <div class="p-4">
+                    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                      <div>
+                        <p class="font-medium text-gray-950">${escapeHtml(item.desc)}</p>
+                        <p class="text-sm text-gray-600 mt-1">${escapeHtml(item.notes || `${Number(item.qty || 0)} ${item.category || 'item'}`)}</p>
+                        ${itemMaterial(item)}
+                      </div>
+                      <p class="font-semibold">${money(Number(item.qty || 1) * Number(item.rate || 0))}</p>
+                    </div>
                   </div>
                 `).join('')}
               </div>
-            </article>
-          `;
-        }).join('');
+            </section>
+            <aside class="rounded-lg border p-5 bg-gray-50 self-start">
+              <p class="text-sm text-gray-600">Total proposal</p>
+              <p class="text-4xl font-bold mt-2" style="color: ${primaryColor}">${money(pkg.total)}</p>
+              ${pkg.tax ? `<p class="text-sm text-gray-600 mt-2">Includes ${money(pkg.tax)} estimated tax.</p>` : ''}
+              <p class="text-sm text-gray-600 mt-4">This price includes labor, selected paint products, prep, and listed materials for the scope shown.</p>
+            </aside>
+          </div>
+        `;
 
-        document.getElementById('accept-buttons').innerHTML = packages.map(pkg => `
-          <button onclick="selectPackage('${escapeHtml(pkg.name)}')" class="px-4 py-3 ${pkg.name === 'better' ? 'bg-blue-600 text-white' : 'bg-white border'} rounded-lg font-medium hover:opacity-90">
-            Accept ${escapeHtml(labels[pkg.name] || pkg.name)} - ${money(pkg.total)}
+        document.getElementById('accept-buttons').innerHTML = `
+          <button onclick="selectPackage('${escapeHtml(pkg.name)}')" class="w-full sm:w-auto px-5 py-3 text-white rounded-lg font-medium hover:opacity-90" style="background-color: ${primaryColor}">
+            Approve Proposal - ${money(pkg.total)}
           </button>
-        `).join('');
+        `;
       }
 
       function showError() {

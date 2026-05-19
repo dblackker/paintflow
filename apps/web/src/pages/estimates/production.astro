@@ -47,16 +47,22 @@ import Base from '../../layouts/Base.astro';
             <div class="flex justify-between"><span class="text-gray-600">Labor</span><span id="labor-total" class="font-medium">$0.00</span></div>
             <div class="flex justify-between"><span class="text-gray-600">Materials</span><span id="materials-total" class="font-medium">$0.00</span></div>
             <div class="flex justify-between"><span class="text-gray-600">Tax</span><span id="tax-total" class="font-medium">$0.00</span></div>
-            <div class="flex justify-between border-t pt-2 text-base"><span class="font-semibold">Better package</span><span id="total-cost" class="font-bold text-blue-600">$0.00</span></div>
+            <div class="flex justify-between border-t pt-2 text-base"><span class="font-semibold">Proposal total</span><span id="total-cost" class="font-bold text-blue-600">$0.00</span></div>
           </div>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <h2 class="font-semibold text-gray-900 mb-3">Package Multipliers</h2>
-          <div class="grid grid-cols-3 gap-2 text-sm">
-            <label><span class="text-gray-600">Good</span><input id="good-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="0.90" class="mt-1 w-full px-2 py-2 border rounded"></label>
-            <label><span class="text-gray-600">Better</span><input id="better-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.00" class="mt-1 w-full px-2 py-2 border rounded"></label>
-            <label><span class="text-gray-600">Best</span><input id="best-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.18" class="mt-1 w-full px-2 py-2 border rounded"></label>
+          <h2 class="font-semibold text-gray-900 mb-3">Paint Products</h2>
+          <div class="space-y-3 text-sm">
+            <label class="block">
+              <span class="text-gray-600">Wall/finish paint</span>
+              <select id="paint-material" class="mt-1 w-full px-3 py-2 border rounded-lg"></select>
+            </label>
+            <label class="block">
+              <span class="text-gray-600">Primer</span>
+              <select id="primer-material" class="mt-1 w-full px-3 py-2 border rounded-lg"></select>
+            </label>
+            <p id="material-note" class="text-xs text-gray-500"></p>
           </div>
           <button id="save-estimate" class="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
             Create Estimate
@@ -71,6 +77,7 @@ import Base from '../../layouts/Base.astro';
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const prepMultipliers = { none: 0.8, light: 1, standard: 1.2, heavy: 1.5 };
     let rates = [];
+    let materialsCatalog = [];
     let settings = {};
     let roomCounter = 0;
 
@@ -110,16 +117,19 @@ import Base from '../../layouts/Base.astro';
 
     async function loadSetup() {
       clearSetupError();
-      const [ratesRes, leadsRes, settingsRes] = await Promise.all([
+      const [ratesRes, leadsRes, settingsRes, materialsRes] = await Promise.all([
         apiJson(`${API_URL}/v1/production-rates`),
         apiJson(`${API_URL}/v1/leads?limit=200`),
         apiJson(`${API_URL}/v1/settings/org`),
+        apiJson(`${API_URL}/v1/materials`),
       ]);
       rates = ratesRes.data;
       settings = settingsRes.data;
+      materialsCatalog = materialsRes.data || [];
       document.getElementById('lead-select').innerHTML =
         '<option value="">Select customer...</option>' +
         leadsRes.data.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)}</option>`).join('');
+      renderMaterialSelectors();
       const templateRooms = consumeTemplateRooms();
       if (templateRooms.length) {
         templateRooms.forEach(room => addRoom(room.name || 'Template room', room.items || []));
@@ -132,6 +142,34 @@ import Base from '../../layouts/Base.astro';
 
     function rateOptions() {
       return rates.map(rate => `<option value="${rate.id}">${escapeHtml(rate.description || `${rate.category} ${rate.surfaceType}`)} (${rate.ratePerHour} ${rate.unit}/hr)</option>`).join('');
+    }
+
+    function renderMaterialSelectors() {
+      const paintOptions = materialsCatalog
+        .filter(material => ['paint', 'primer'].includes(String(material.category || '').toLowerCase()))
+        .map(material => `<option value="${material.id}">${escapeHtml([material.brand, material.name].filter(Boolean).join(' - '))} (${money(material.costPerUnit)}/${escapeHtml(material.unit)})</option>`)
+        .join('');
+      const noMaterial = '<option value="">Use pricing default</option>';
+      document.getElementById('paint-material').innerHTML = noMaterial + paintOptions;
+      document.getElementById('primer-material').innerHTML = noMaterial + paintOptions;
+      document.getElementById('material-note').textContent = paintOptions
+        ? 'Coverage, unit cost, and markup are pulled from Materials.'
+        : 'Add paint and primer products in Materials to calculate product-specific costs.';
+    }
+
+    function selectedMaterial(id) {
+      return materialsCatalog.find(material => material.id === id);
+    }
+
+    function materialCostForQuantity(quantity, material) {
+      if (!material || !material.coverageSqFt || !material.costPerUnit) return null;
+      const coverage = Number(material.coverageSqFt || 0);
+      if (coverage <= 0) return null;
+      const units = Math.max(1, Math.ceil(quantity / coverage));
+      const cost = units * Number(material.costPerUnit || 0);
+      const markup = Number(material.markupPercent ?? settings.materialMarkupPercent ?? 0);
+      const price = cost * (1 + markup / 100);
+      return { units, cost, markup, price };
     }
 
     function consumeTemplateRooms() {
@@ -223,9 +261,11 @@ import Base from '../../layouts/Base.astro';
       div.querySelector('[data-field="rateId"]').value = rateId;
     }
 
-    function collectItems(multiplier = 1) {
+    function collectItems() {
       const taxRate = Number(settings.salesTaxRate || 0);
       const materialMarkup = Number(settings.materialMarkupPercent || 0) / 100;
+      const paint = selectedMaterial(document.getElementById('paint-material').value);
+      const primer = selectedMaterial(document.getElementById('primer-material').value);
       const items = [];
       let labor = 0;
       let materials = 0;
@@ -246,19 +286,33 @@ import Base from '../../layouts/Base.astro';
           const prep = surface.querySelector('[data-field="prepLevel"]').value;
           const itemHours = (quantity / Number(rate.ratePerHour || 1)) * Number(rate.coats || 2) * (prepMultipliers[prep] || 1.2);
           const itemLabor = itemHours * Number(rate.hourlyRate || settings.defaultLaborRate || 65);
-          const materialUnit = Number(rate.hourlyRate || settings.defaultLaborRate || 65) * 0.12;
-          const itemMaterials = quantity * materialUnit * (1 + materialMarkup);
-          const itemTotal = (itemLabor + itemMaterials) * multiplier;
+          const isPrimerHeavy = prep === 'heavy' || /primer|prep|cabinet/i.test(`${rate.category} ${rate.description}`);
+          const material = isPrimerHeavy && primer ? primer : paint;
+          const productCost = materialCostForQuantity(quantity, material);
+          const fallbackMaterialUnit = Number(rate.hourlyRate || settings.defaultLaborRate || 65) * 0.12;
+          const itemMaterials = productCost ? productCost.price : quantity * fallbackMaterialUnit * (1 + materialMarkup);
+          const itemTotal = itemLabor + itemMaterials;
 
           hours += itemHours;
-          labor += itemLabor * multiplier;
-          materials += itemMaterials * multiplier;
+          labor += itemLabor;
+          materials += itemMaterials;
           items.push({
             desc: `${roomName}: ${rate.description || `${rate.category} ${rate.surfaceType}`}`,
             qty: 1,
             rate: Number(itemTotal.toFixed(2)),
             category: rate.unit,
-            notes: `${quantity.toFixed(1)} ${rate.unit}, ${itemHours.toFixed(1)} labor hours, ${prep} prep`,
+            notes: `${quantity.toFixed(1)} ${rate.unit}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}`,
+            material: material ? {
+              id: material.id,
+              name: material.name,
+              brand: material.brand,
+              supplier: material.supplier,
+              unit: material.unit,
+              quantity: productCost?.units,
+              costPerUnit: Number(material.costPerUnit || 0),
+              markupPercent: Number(material.markupPercent ?? settings.materialMarkupPercent ?? 0),
+              price: productCost ? Number(productCost.price.toFixed(2)) : Number(itemMaterials.toFixed(2)),
+            } : undefined,
           });
           surface.querySelector('[data-line-total]').textContent = money(itemTotal);
         });
@@ -270,22 +324,20 @@ import Base from '../../layouts/Base.astro';
     }
 
     function buildPackages() {
-      return ['good', 'better', 'best'].map(name => {
-        const multiplier = Number(document.getElementById(`${name}-multiplier`).value || 1);
-        const result = collectItems(multiplier);
-        return {
-          name,
-          subtotal: Number((result.labor + result.materials).toFixed(2)),
-          tax: Number(result.tax.toFixed(2)),
-          total: Number(result.total.toFixed(2)),
-          items: result.items,
-          lineItems: result.items,
-        };
-      }).filter(pkg => pkg.items.length > 0);
+      const result = collectItems();
+      if (result.items.length === 0) return [];
+      return [{
+        name: 'proposal',
+        subtotal: Number((result.labor + result.materials).toFixed(2)),
+        tax: Number(result.tax.toFixed(2)),
+        total: Number(result.total.toFixed(2)),
+        items: result.items,
+        lineItems: result.items,
+      }];
     }
 
     function calculateTotal() {
-      const result = collectItems(1);
+      const result = collectItems();
       document.getElementById('total-hours').textContent = result.hours.toFixed(1);
       document.getElementById('labor-total').textContent = money(result.labor);
       document.getElementById('materials-total').textContent = money(result.materials);

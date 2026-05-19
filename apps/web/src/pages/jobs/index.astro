@@ -16,15 +16,42 @@ import Base from '../../layouts/Base.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    let teamMembers = [];
+
+    function money(value) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function apiJson(url, options = {}) {
+      const res = await fetch(url, { credentials: 'include', ...options });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function teamOptions() {
+      return teamMembers.map(member => `
+        <option value="${member.id}" data-rate="${Number(member.hourlyRate || 0)}">
+          ${escapeHtml(member.name)}${member.role ? ` - ${escapeHtml(member.role)}` : ''} (${money(member.hourlyRate)}/hr)
+        </option>
+      `).join('');
+    }
     
     async function loadJobs() {
       try {
-        const res = await fetch(`${API_URL}/v1/jobs`, { credentials: 'include' });
-        if (res.status === 401) {
-          window.location.href = '/login';
-          return;
-        }
-        const { data } = await res.json();
+        const [{ data }, membersRes] = await Promise.all([
+          apiJson(`${API_URL}/v1/jobs`),
+          apiJson(`${API_URL}/v1/team/members`),
+        ]);
+        teamMembers = membersRes.data || [];
         const container = document.getElementById('jobs-list');
         
         if (data.length === 0) {
@@ -82,13 +109,20 @@ import Base from '../../layouts/Base.astro';
                 
                 <div id="time-${job.id}" class="hidden mb-4 p-4 bg-gray-50 rounded-lg">
                   <form class="time-form space-y-3" data-job-id="${job.id}">
-                    <div class="grid grid-cols-2 gap-3">
-                      <input type="number" min="0" step="0.25" inputmode="decimal" autocomplete="off" name="hours" placeholder="Hours" required class="px-3 py-2 border rounded text-sm" />
-                      <input type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" name="rate" placeholder="Rate" value="65" required class="px-3 py-2 border rounded text-sm" />
-                    </div>
+                    ${teamMembers.length ? `
+                      <select name="teamMemberId" autocomplete="off" required class="w-full px-3 py-2 border rounded text-sm">
+                        <option value="">Select team member...</option>
+                        ${teamOptions()}
+                      </select>
+                    ` : `
+                      <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+                        Add crew members in <a href="/team" class="font-medium underline">Team</a> before logging labor.
+                      </div>
+                    `}
+                    <input type="number" min="0" step="0.25" inputmode="decimal" autocomplete="off" name="hours" placeholder="Hours worked" required class="w-full px-3 py-2 border rounded text-sm" />
                     <input type="date" name="date" autocomplete="off" required class="w-full px-3 py-2 border rounded text-sm" />
-                    <input type="text" name="description" autocomplete="off" placeholder="Description" class="w-full px-3 py-2 border rounded text-sm" />
-                    <button type="submit" class="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">Log Time</button>
+                    <input type="text" name="description" autocomplete="off" placeholder="Work performed" class="w-full px-3 py-2 border rounded text-sm" />
+                    <button type="submit" ${teamMembers.length ? '' : 'disabled'} class="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">Log Team Hours</button>
                   </form>
                 </div>
                 <div class="flex gap-2 pt-4 border-t">
@@ -113,22 +147,28 @@ import Base from '../../layouts/Base.astro';
             const jobId = e.target.dataset.jobId;
             
             try {
-              await fetch(`${API_URL}/v1/jobs/${jobId}/time-entries`, {
+              const button = e.target.querySelector('button[type="submit"]');
+              button.disabled = true;
+              button.textContent = 'Logging time...';
+              await apiJson(`${API_URL}/v1/team/time`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({
+                  jobId,
+                  teamMemberId: formData.get('teamMemberId'),
                   hours: parseFloat(formData.get('hours')),
-                  rate: parseFloat(formData.get('rate')),
                   description: formData.get('description'),
-                  date: formData.get('date'),
+                  date: new Date(`${formData.get('date')}T12:00:00`).toISOString(),
                 }),
               });
               window.showToast('Time logged', 'success');
               loadJobs();
             } catch (err) {
               console.error(err);
-              window.showToast('Failed to log time', 'error');
+              window.showToast(err.message || 'Failed to log time', 'error');
+              const button = e.target.querySelector('button[type="submit"]');
+              button.disabled = false;
+              button.textContent = 'Log Team Hours';
             }
           });
         });

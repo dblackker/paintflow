@@ -15,6 +15,19 @@ function sumBy<T>(items: T[], pick: (item: T) => unknown) {
   return items.reduce((total, item) => total + money(pick(item)), 0);
 }
 
+function selectedEstimatePackage(estimate: typeof estimates.$inferSelect | undefined) {
+  const packages = Array.isArray(estimate?.packages) ? estimate.packages as any[] : [];
+  return packages.find((pkg) => pkg.name === 'proposal') ??
+    packages.find((pkg) => /better|recommended/i.test(String(pkg.name))) ??
+    packages[0];
+}
+
+function estimatedMaterialsFromPackage(estimate: typeof estimates.$inferSelect | undefined) {
+  const pkg = selectedEstimatePackage(estimate);
+  const items = Array.isArray(pkg?.items) ? pkg.items : Array.isArray(pkg?.lineItems) ? pkg.lineItems : [];
+  return items.reduce((total: number, item: any) => total + money(item?.material?.price), 0);
+}
+
 async function getJobForOrg(db: ReturnType<typeof createDb>, orgId: string, jobId: string) {
   return db.query.jobs.findFirst({
     where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)),
@@ -139,7 +152,7 @@ jobsApp.get('/:id/costing', async (c) => {
   const suppliesTotal = sumBy(supplyCosts, (cost) => cost.totalCost);
   const expensesTotal = sumBy(expenseCosts, (cost) => cost.totalCost);
   const actualCost = laborTotal + materialsTotal + suppliesTotal + expensesTotal;
-  const estimatedMaterialCost = sumBy(estimatedMaterials, (material) => material.totalCost);
+  const estimatedMaterialCost = sumBy(estimatedMaterials, (material) => material.totalCost) || estimatedMaterialsFromPackage(estimate);
   const grossProfit = totalRevenue - actualCost;
   const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
   const costToRevenue = totalRevenue > 0 ? (actualCost / totalRevenue) * 100 : 0;

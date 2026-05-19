@@ -47,6 +47,12 @@ const orgSettingsPatchSchema = z.object({
   onboardingCompletedAt: z.string().datetime().optional(),
 }).strict();
 
+const brandingPatchSchema = z.object({
+  companyName: optionalText(255),
+  logoUrl: optionalText(2000),
+  primaryColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+}).strict();
+
 function normalizeOrgSettingsPatch(input: z.infer<typeof orgSettingsPatchSchema>) {
   const patch: Record<string, unknown> = {};
 
@@ -164,6 +170,51 @@ settings.patch('/org', async (c) => {
     .returning();
   
   return c.json({ data: settings });
+});
+
+settings.get('/branding', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const [settings, branding] = await Promise.all([
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+    db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) }),
+  ]);
+
+  return c.json({
+    data: {
+      companyName: branding?.companyName || settings?.companyName || '',
+      logoUrl: branding?.logoUrl || '',
+      primaryColor: branding?.primaryColor || '#2563eb',
+    },
+  });
+});
+
+settings.patch('/branding', async (c) => {
+  const orgId = c.get('orgId');
+  const parsed = brandingPatchSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const patch = Object.fromEntries(
+    Object.entries(parsed.data).filter(([, value]) => value !== undefined)
+  );
+  if (Object.keys(patch).length === 0) {
+    return c.json({ error: 'No supported branding fields provided' }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const [branding] = await db
+    .insert(orgBranding)
+    .values({ orgId, ...patch })
+    .onConflictDoUpdate({
+      target: orgBranding.orgId,
+      set: { ...patch, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({ data: branding });
 });
 
 // GET /v1/settings/service-areas

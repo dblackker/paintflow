@@ -22,6 +22,17 @@ const estimateLineItemSchema = z.object({
   rate: z.coerce.number().nonnegative(),
   category: z.string().trim().max(80).optional(),
   notes: z.string().trim().max(500).optional(),
+  material: z.object({
+    id: z.string().uuid().optional(),
+    name: z.string().trim().max(255).optional(),
+    brand: z.string().trim().max(100).optional(),
+    supplier: z.string().trim().max(255).optional(),
+    unit: z.string().trim().max(20).optional(),
+    quantity: z.coerce.number().nonnegative().optional(),
+    costPerUnit: z.coerce.number().nonnegative().optional(),
+    markupPercent: z.coerce.number().nonnegative().optional(),
+    price: z.coerce.number().nonnegative().optional(),
+  }).optional(),
 });
 
 const estimatePackageSchema = z.object({
