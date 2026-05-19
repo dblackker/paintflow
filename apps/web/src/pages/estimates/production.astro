@@ -74,11 +74,11 @@ import Base from '../../layouts/Base.astro';
               <h2 class="text-lg font-semibold text-gray-900">Scope Builder</h2>
               <p class="text-sm text-gray-600">Generate a starter scope, then adjust rooms, surfaces, prep, methods, and measurements.</p>
             </div>
-            <button id="add-room" class="w-full sm:w-auto px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600">
-              Add Room or Area
-            </button>
           </div>
           <div id="rooms-container" class="space-y-4"></div>
+          <button id="add-room" class="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600">
+            Add Room or Area
+          </button>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="paint">
@@ -494,6 +494,12 @@ import Base from '../../layouts/Base.astro';
       return { units, cost, markup, price };
     }
 
+    function fallbackMaterialCost(quantity, rate, coats, materialMarkup) {
+      const unit = String(rate?.unit || 'sqft').toLowerCase();
+      const baseRate = unit === 'linear_ft' ? 0.18 : unit === 'each' ? 8 : 0.35;
+      return quantity * baseRate * Math.max(1, coats) * (1 + materialMarkup);
+    }
+
     function consumeTemplateRooms() {
       const raw = sessionStorage.getItem('templateRooms');
       if (!raw) return [];
@@ -820,6 +826,14 @@ import Base from '../../layouts/Base.astro';
         <span class="h-px flex-1 bg-gray-200"></span>
       `;
       container.appendChild(header);
+    }
+
+    function cleanupSurfaceGroups(container) {
+      container.querySelectorAll('[data-surface-group]').forEach((header) => {
+        const hasItems = Array.from(container.querySelectorAll('[data-surface-item]'))
+          .some(surface => surface.dataset.group === header.dataset.surfaceGroup);
+        if (!hasItems) header.remove();
+      });
     }
 
     function groupDisplayName(surface) {
@@ -1344,9 +1358,8 @@ import Base from '../../layouts/Base.astro';
           const itemLabor = itemHours * Number(rate.hourlyRate || settings.defaultLaborRate || 65);
           const isPrimerHeavy = prep === 'heavy' || /primer|prep|cabinet/i.test(`${rate.category} ${rate.description}`);
           const material = surfaceMaterial || (isPrimerHeavy && primer ? primer : paint);
-          const productCost = materialCostForQuantity(quantity, material);
-          const fallbackMaterialUnit = Number(rate.hourlyRate || settings.defaultLaborRate || 65) * 0.12;
-          const itemMaterials = productCost ? productCost.price : quantity * fallbackMaterialUnit * (1 + materialMarkup);
+          const productCost = materialCostForQuantity(quantity * coats, material);
+          const itemMaterials = productCost ? productCost.price : fallbackMaterialCost(quantity, rate, coats, materialMarkup);
           const itemTotal = itemLabor + itemMaterials;
           const lineLabel = surfaceDisplayName(surface, rate);
 
@@ -1563,7 +1576,11 @@ import Base from '../../layouts/Base.astro';
         syncScopeBuilderVisibility();
       }
       if (event.target.classList.contains('add-surface')) addSurface(event.target.closest('#rooms-container > div').id);
-      if (event.target.classList.contains('remove-surface')) event.target.closest('[data-surface-item]').remove();
+      if (event.target.classList.contains('remove-surface')) {
+        const container = event.target.closest('[data-items]');
+        event.target.closest('[data-surface-item]').remove();
+        cleanupSurfaceGroups(container);
+      }
       if (event.target.classList.contains('copy-surface')) {
         const room = event.target.closest('#rooms-container > div');
         addSurface(room.id, collectSurfaceData(event.target.closest('[data-surface-item]')));
