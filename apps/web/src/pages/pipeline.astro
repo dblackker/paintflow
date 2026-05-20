@@ -152,11 +152,7 @@ import Base from '../layouts/Base.astro';
     }
 
     function formatAddress(address = {}) {
-      return [address.street, [address.city, address.state].filter(Boolean).join(', '), address.postalCode].filter(Boolean).join(' ');
-    }
-
-    function mapsUrl(address) {
-      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+      return window.PaintFlowFormat?.address(address) || [address.street, [address.city, address.state].filter(Boolean).join(', '), address.postalCode].filter(Boolean).join(' ');
     }
 
     function stageCards(stageId) {
@@ -179,7 +175,7 @@ import Base from '../layouts/Base.astro';
     function renderCard(card) {
       const address = formatAddress(card.address);
       const addressLine = address
-        ? `<a class="mt-1 block truncate text-xs text-gray-600 hover:text-blue-700 hover:underline" href="${mapsUrl(address)}" target="_blank" rel="noreferrer">${escapeHtml(address)}</a>`
+        ? window.PaintFlowFormat?.addressLink(address, { className: 'mt-1 block truncate text-xs text-gray-600 hover:text-blue-700 hover:underline' }) || `<span class="mt-1 block truncate text-xs text-gray-600">${escapeHtml(address)}</span>`
         : `<p class="mt-1 truncate text-xs text-gray-600">${escapeHtml(card.source || 'No address')}</p>`;
       return `
         <article class="rounded-lg border bg-white p-3 shadow-sm">

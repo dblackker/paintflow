@@ -109,18 +109,16 @@ import Base from '../layouts/Base.astro';
       if (!item.leadId) return `<p class="font-medium text-gray-950">${escapeHtml(name)}</p>`;
       const address = formatAddress(item);
       return `
-        <a href="/leads/${item.leadId}" class="group block min-w-0 rounded-lg pr-2 hover:bg-gray-50">
-          <span class="min-w-0">
-            <span class="block truncate font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
-            <span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>
-            <span class="block truncate text-xs text-gray-500">${escapeHtml(item.leadPhone ? phone(item.leadPhone) : item.leadEmail || 'Open customer profile')}</span>
-          </span>
-        </a>
+        <div class="min-w-0 rounded-lg pr-2">
+          <a href="/leads/${item.leadId}" class="block truncate font-medium text-gray-950 hover:text-blue-700">${escapeHtml(name)}</a>
+          ${window.PaintFlowFormat?.addressLink(address) || `<span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>`}
+          <span class="block truncate text-xs text-gray-500">${escapeHtml(item.leadPhone ? phone(item.leadPhone) : item.leadEmail || 'Open customer profile')}</span>
+        </div>
       `;
     }
 
     function formatAddress(record) {
-      return [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+      return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
     }
 
     (async () => {

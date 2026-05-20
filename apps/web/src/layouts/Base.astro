@@ -36,6 +36,23 @@ const { title = 'PaintFlow' } = Astro.props;
         if (ten.length === 10) return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
         return raw;
       },
+      address(record = {}, prefix = '') {
+        const street = record[`${prefix}StreetAddress`] ?? record.streetAddress ?? record.street;
+        const city = record[`${prefix}City`] ?? record.city;
+        const state = record[`${prefix}State`] ?? record.state;
+        const postalCode = record[`${prefix}PostalCode`] ?? record.postalCode;
+        return [street, [city, state].filter(Boolean).join(', '), postalCode].filter(Boolean).join(' ');
+      },
+      mapsUrl(address) {
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address || '')}`;
+      },
+      addressLink(address, options = {}) {
+        const text = String(address || '').trim();
+        if (!text) return options.emptyText || 'No jobsite address';
+        const escaped = text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+        const classes = options.className || 'block truncate text-sm text-gray-700 hover:text-blue-700 hover:underline';
+        return `<a class="${classes}" href="${this.mapsUrl(text)}" target="_blank" rel="noreferrer">${escaped}</a>`;
+      },
       label(value) {
         const text = String(value || '').trim();
         if (!text) return '';

@@ -71,18 +71,16 @@ import Base from '../../layouts/Base.astro';
       const address = customer.address || 'No jobsite address';
       const contact = customer.contact || '';
       return `
-        <a href="/leads/${customer.leadId}" class="group block min-w-0 rounded-lg pr-2 hover:bg-gray-50">
-          <span class="min-w-0">
-            <span class="block truncate font-semibold text-gray-950 group-hover:text-blue-700">${escapeHtml(customer.name || 'Customer')}</span>
-            <span class="block truncate text-sm text-gray-700">${escapeHtml(address)}</span>
-            ${contact ? `<span class="block truncate text-xs text-gray-500">${escapeHtml(contact)}</span>` : ''}
-          </span>
-        </a>
+        <div class="min-w-0 rounded-lg pr-2">
+          <a href="/leads/${customer.leadId}" class="block truncate font-semibold text-gray-950 hover:text-blue-700">${escapeHtml(customer.name || 'Customer')}</a>
+          ${window.PaintFlowFormat?.addressLink(address) || `<span class="block truncate text-sm text-gray-700">${escapeHtml(address)}</span>`}
+          ${contact ? `<span class="block truncate text-xs text-gray-500">${escapeHtml(contact)}</span>` : ''}
+        </div>
       `;
     }
 
     function formatAddress(record) {
-      return [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+      return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
     }
 
     async function apiJson(url, options = {}) {

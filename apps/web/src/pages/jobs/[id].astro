@@ -169,6 +169,10 @@ import '../../styles/design-system.css';
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : '';
     const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     const formatAddress = (record) => [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+    const mapsUrl = (address) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address || '')}`;
+    const addressLink = (address) => address
+      ? `<a class="block truncate text-sm text-gray-700 hover:text-blue-700 hover:underline" href="${mapsUrl(address)}" target="_blank" rel="noreferrer">${escapeHtml(address)}</a>`
+      : '<span class="block truncate text-sm text-gray-700">No jobsite address</span>';
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
     const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
 
@@ -177,13 +181,11 @@ import '../../styles/design-system.css';
       const name = job.leadName || 'Customer';
       const address = formatAddress(job);
       return `
-        <a href="/leads/${job.leadId}" class="group mt-2 block min-w-0 rounded-lg pr-2 hover:bg-gray-50">
-          <span class="min-w-0">
-            <span class="block truncate font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
-            <span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>
-            <span class="block text-xs text-gray-500">${escapeHtml(job.leadPhone ? phone(job.leadPhone) : job.leadEmail || 'Open customer profile')}</span>
-          </span>
-        </a>
+        <div class="mt-2 min-w-0 rounded-lg pr-2">
+          <a href="/leads/${job.leadId}" class="block truncate font-medium text-gray-950 hover:text-blue-700">${escapeHtml(name)}</a>
+          ${addressLink(address)}
+          <span class="block text-xs text-gray-500">${escapeHtml(job.leadPhone ? phone(job.leadPhone) : job.leadEmail || 'Open customer profile')}</span>
+        </div>
       `;
     }
 

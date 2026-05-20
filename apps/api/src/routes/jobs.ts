@@ -188,6 +188,7 @@ jobsApp.get('/:id/costing', async (c) => {
         budget: money(job.budget),
         completedAt: job.completedAt,
         estimateId: job.estimateId,
+        leadId: job.leadId,
         leadName: lead?.name,
         leadEmail: lead?.email,
         leadPhone: lead?.phone,
