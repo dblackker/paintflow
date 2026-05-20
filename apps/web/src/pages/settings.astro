@@ -62,6 +62,21 @@ import Base from '../layouts/Base.astro';
           </form>
         </div>
 
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-2">Estimator Setup</h3>
+          <p class="text-sm text-gray-600">Keep labor production and paint product costs current before sending live estimates.</p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <a href="/materials" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
+              <span class="block font-medium text-gray-950">Paint products and costs</span>
+              <span class="mt-1 block text-sm text-gray-600">Enter cost per gallon/unit, coverage, supplier, SKU, and markup.</span>
+            </a>
+            <a href="/production-rates" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
+              <span class="block font-medium text-gray-950">Production rates</span>
+              <span class="mt-1 block text-sm text-gray-600">Tune sqft/hr, linear ft/hr, labor rate, coats, and prep defaults.</span>
+            </a>
+          </div>
+        </div>
+
         <!-- Connectors -->
         <div class="bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-4">Connectors</h3>

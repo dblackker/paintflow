@@ -46,6 +46,7 @@ import Base from '../layouts/Base.astro';
         <div class="flex flex-col gap-2 sm:flex-row">
           <a href="/leads?new=1" class="rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-medium text-white hover:bg-blue-700">Add first lead</a>
           <a href="/production-rates" class="rounded-lg border border-blue-200 bg-white px-4 py-3 text-center text-sm font-medium text-blue-800 hover:bg-blue-50">Tune rates</a>
+          <a href="/materials" class="rounded-lg border border-blue-200 bg-white px-4 py-3 text-center text-sm font-medium text-blue-800 hover:bg-blue-50">Add paint products</a>
         </div>
       </div>
     </section>
@@ -65,6 +66,7 @@ import Base from '../layouts/Base.astro';
           <div class="mt-4 grid gap-2">
             <a href="/leads?new=1" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Add a lead</a>
             <a href="/estimates/new" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Create an estimate</a>
+            <a href="/materials" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Add paint products</a>
             <a href="/templates" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Use an estimate template</a>
             <a href="/settings" class="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-gray-50">Business settings</a>
           </div>
@@ -73,6 +75,7 @@ import Base from '../layouts/Base.astro';
           <p class="font-semibold text-gray-900">Owner tools</p>
           <div class="mt-4 grid gap-2 text-sm">
             <a href="/production-rates" class="text-blue-700 hover:underline">Production rates</a>
+            <a href="/materials" class="text-blue-700 hover:underline">Paint products and material costs</a>
             <a href="/reporting/lead-sources" class="text-blue-700 hover:underline">Lead source reporting</a>
             <a href="/team" class="text-blue-700 hover:underline">Team and roles</a>
             <a href="/payments/stripe" class="text-blue-700 hover:underline">Stripe payment setup</a>
@@ -113,10 +116,11 @@ import Base from '../layouts/Base.astro';
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p class="font-medium text-yellow-900">Complete your setup</p>
-                    <p class="text-sm text-yellow-800 mt-1">Finish settings, service areas, and payments before your first live estimate.</p>
+                    <p class="text-sm text-yellow-800 mt-1">Finish settings, paint products, service areas, and payments before your first live estimate.</p>
                   </div>
                   <div class="flex flex-wrap gap-3">
                     <a href="/onboarding" class="text-sm font-medium text-yellow-900 hover:underline">Continue setup</a>
+                    <a href="/materials" class="text-sm font-medium text-yellow-900 hover:underline">Add paint products</a>
                     <a href="/payments/stripe" class="text-sm font-medium text-yellow-900 hover:underline">Set up payments</a>
                   </div>
                 </div>
