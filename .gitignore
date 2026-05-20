@@ -6,6 +6,7 @@ dist
 .turbo
 .env
 .env.local
+.dev.vars
 .DS_Store
 *.log
 .wrangler
