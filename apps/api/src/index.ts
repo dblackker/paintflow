@@ -40,13 +40,33 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const defaultOrigins = ['http://localhost:4321', 'http://127.0.0.1:4321', 'https://app.paintflow.app', 'https://paintflow.app'];
 
+function isAllowedOrigin(origin: string | undefined, configuredOrigins: string[], environment?: string) {
+  if (!origin) return null;
+  if (configuredOrigins.includes(origin)) return origin;
+
+  if (environment !== 'production') {
+    try {
+      const url = new URL(origin);
+      const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+      const port = Number(url.port || 0);
+      if (isLocalHost && port >= 4321 && port <= 4399) {
+        return origin;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 app.use('*', cors({
   origin: (origin, c) => {
     const configuredOrigins = c.env.CORS_ORIGINS
       ? c.env.CORS_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
       : defaultOrigins;
 
-    return configuredOrigins.includes(origin) ? origin : null;
+    return isAllowedOrigin(origin, configuredOrigins, c.env.ENVIRONMENT);
   },
   credentials: true,
 }));
