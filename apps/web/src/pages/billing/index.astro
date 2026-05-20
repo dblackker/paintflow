@@ -64,6 +64,13 @@ import Layout from '../../components/Layout.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const money = (value, options = {}) => new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: options.cents === false ? 0 : 2,
+      maximumFractionDigits: options.cents === false ? 0 : 2,
+    }).format(Number(value || 0));
+    const label = (value) => String(value || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
     
     async function loadSubscription() {
       try {

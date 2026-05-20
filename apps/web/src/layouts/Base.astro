@@ -15,6 +15,51 @@ const { title = 'PaintFlow' } = Astro.props;
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
+  <script is:inline>
+    window.PaintFlowFormat = {
+      money(value, options = {}) {
+        const amount = Number(value || 0);
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: options.cents === false ? 0 : 2,
+          maximumFractionDigits: options.cents === false ? 0 : 2,
+        }).format(amount);
+      },
+      number(value, options = {}) {
+        return new Intl.NumberFormat('en-US', options).format(Number(value || 0));
+      },
+      phone(value) {
+        const raw = String(value || '').trim();
+        const digits = raw.replace(/\D/g, '');
+        const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+        if (ten.length === 10) return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+        return raw;
+      },
+      label(value) {
+        const text = String(value || '').trim();
+        if (!text) return '';
+        const known = {
+          sqft: 'sq ft',
+          sq_ft: 'sq ft',
+          linear_ft: 'linear ft',
+          brush_roll: 'Brush & roll',
+          spray_backroll: 'Spray & back-roll',
+          spray_only: 'Spray only',
+          estimate_sent: 'Estimate sent',
+          in_progress: 'In progress',
+          past_due: 'Past due',
+        };
+        const key = text.toLowerCase();
+        if (known[key]) return known[key];
+        return text
+          .replace(/[_-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .replace(/\b\w/g, (char) => char.toUpperCase())
+          .replace(/\b(And|Or|Of|The)\b/g, (word) => word.toLowerCase());
+      },
+    };
+  </script>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <nav class="pf-app-nav shadow-sm border-b sticky top-0 z-10">

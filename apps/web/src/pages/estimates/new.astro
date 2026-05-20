@@ -95,9 +95,8 @@ import Base from '../../layouts/Base.astro';
       { desc: 'Paint walls and ceilings', qty: 1, unit: 'room', laborHours: 8, materialCost: 120 },
     ];
 
-    function money(value) {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
-    }
+    const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -132,7 +131,7 @@ import Base from '../../layouts/Base.astro';
         apiJson(`${API_URL}/v1/settings/org`),
       ]);
       const select = document.getElementById('lead-select');
-      select.innerHTML = '<option value="">Select lead...</option>' + leads.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)} ${lead.phone ? `(${escapeHtml(lead.phone)})` : ''}</option>`).join('');
+      select.innerHTML = '<option value="">Select lead...</option>' + leads.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)} ${lead.phone ? `(${escapeHtml(phone(lead.phone))})` : ''}</option>`).join('');
       document.getElementById('labor-rate').value = Number(settings.defaultLaborRate || 65).toFixed(2);
       document.getElementById('markup').value = Number(settings.materialMarkupPercent || 30).toFixed(2);
       document.getElementById('tax-rate').value = (Number(settings.salesTaxRate || 0.092) * 100).toFixed(2);

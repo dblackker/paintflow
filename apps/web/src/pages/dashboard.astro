@@ -101,6 +101,9 @@ import Base from '../layouts/Base.astro';
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+
     function customerProfileLink(item) {
       const name = item.clientName || 'Customer';
       if (!item.leadId) return `<p class="font-medium text-gray-950">${escapeHtml(name)}</p>`;
@@ -112,7 +115,7 @@ import Base from '../layouts/Base.astro';
           <span class="min-w-0">
             <span class="block truncate font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
             <span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>
-            <span class="block truncate text-xs text-gray-500">${escapeHtml(item.leadPhone || item.leadEmail || 'Open customer profile')}</span>
+            <span class="block truncate text-xs text-gray-500">${escapeHtml(item.leadPhone ? phone(item.leadPhone) : item.leadEmail || 'Open customer profile')}</span>
           </span>
         </a>
       `;
@@ -190,7 +193,7 @@ import Base from '../layouts/Base.astro';
             activity.innerHTML = data.recentActivity.map(e => `
               <div class="py-3 border-b last:border-0">
                 ${customerProfileLink(e)}
-                <p class="text-sm text-gray-600">Status: ${e.status}</p>
+                <p class="text-sm text-gray-600">Status: ${escapeHtml(label(e.status))}</p>
               </div>
             `).join('');
           }

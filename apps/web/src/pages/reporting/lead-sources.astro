@@ -81,6 +81,9 @@ import Layout from '../../components/Layout.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toFixed(options.cents === false ? 0 : 2)}`;
+    const count = (value) => window.PaintFlowFormat?.number(value) ?? Number(value || 0).toLocaleString('en-US');
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
     
     async function loadSources() {
       try {
@@ -118,9 +121,9 @@ import Layout from '../../components/Layout.astro';
         const totalRevenue = jobs.reduce((sum, j) => sum + Number(j.budget || 0), 0);
         const totalRoi = totalSpent > 0 ? ((totalRevenue - totalSpent) / totalSpent * 100).toFixed(0) : 0;
         
-        document.getElementById('total-leads').textContent = totalLeads;
-        document.getElementById('total-spent').textContent = `$${totalSpent.toFixed(0)}`;
-        document.getElementById('total-revenue').textContent = `$${totalRevenue.toFixed(0)}`;
+        document.getElementById('total-leads').textContent = count(totalLeads);
+        document.getElementById('total-spent').textContent = money(totalSpent, { cents: false });
+        document.getElementById('total-revenue').textContent = money(totalRevenue, { cents: false });
         document.getElementById('total-roi').textContent = `${totalRoi}%`;
         
         // Render table
@@ -133,14 +136,14 @@ import Layout from '../../components/Layout.astro';
         tbody.innerHTML = sourceStats.map(s => `
           <tr class="hover:bg-gray-50">
             <td class="px-4 py-3 font-medium">${s.name}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${s.type.replace('_', ' ')}</td>
-            <td class="px-4 py-3 text-right">${s.leads}</td>
-            <td class="px-4 py-3 text-right">$${Number(s.cost).toFixed(0)}</td>
-            <td class="px-4 py-3 text-right font-medium">$${s.revenue.toFixed(0)}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${label(s.type)}</td>
+            <td class="px-4 py-3 text-right">${count(s.leads)}</td>
+            <td class="px-4 py-3 text-right">${money(s.cost, { cents: false })}</td>
+            <td class="px-4 py-3 text-right font-medium">${money(s.revenue, { cents: false })}</td>
             <td class="px-4 py-3 text-right">
               <span class="px-2 py-1 text-xs rounded ${Number(s.roi) >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${s.roi}%</span>
             </td>
-            <td class="px-4 py-3 text-right text-sm text-gray-600">$${s.cpl}</td>
+            <td class="px-4 py-3 text-right text-sm text-gray-600">${money(s.cpl)}</td>
           </tr>
         `).join('');
       } catch (err) {

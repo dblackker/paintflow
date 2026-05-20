@@ -44,11 +44,12 @@ import Base from '../layouts/Base.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
-    const currency = (value) => new Intl.NumberFormat('en-US', {
+    const currency = (value) => window.PaintFlowFormat?.money(value, { cents: false }) ?? new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       maximumFractionDigits: 0,
     }).format(Number(value || 0));
+    const number = (value) => window.PaintFlowFormat?.number(value) ?? Number(value || 0).toLocaleString('en-US');
 
     async function loadReports() {
       try {
@@ -101,7 +102,7 @@ import Base from '../layouts/Base.astro';
       document.getElementById('win-rate').innerHTML = data.map(r => `
         <div class="flex justify-between py-2 border-b last:border-0">
           <span class="text-sm">${r.source}</span>
-          <span class="font-semibold text-sm">${r.winRate}% <span class="text-gray-500 font-normal">(${r.won}/${r.total})</span></span>
+          <span class="font-semibold text-sm">${r.winRate}% <span class="text-gray-500 font-normal">(${number(r.won)}/${number(r.total)})</span></span>
         </div>
       `).join('');
     }
@@ -114,7 +115,7 @@ import Base from '../layouts/Base.astro';
       document.getElementById('crew').innerHTML = data.map(r => `
         <div class="flex justify-between py-2 border-b last:border-0">
           <span class="text-sm">${r.name || 'Unknown'}</span>
-          <span class="text-sm font-medium">${Math.round(r.totalHours || 0)} hrs</span>
+          <span class="text-sm font-medium">${number(Math.round(r.totalHours || 0))} hrs</span>
         </div>
       `).join('');
     }

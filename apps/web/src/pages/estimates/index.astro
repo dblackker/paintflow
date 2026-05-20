@@ -56,9 +56,9 @@ import Base from '../../layouts/Base.astro';
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let estimates = [];
 
-    function money(value) {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
-    }
+    const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: options.cents === false ? 0 : 2, maximumFractionDigits: options.cents === false ? 0 : 2 })}`;
+    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -154,8 +154,8 @@ import Base from '../../layouts/Base.astro';
         <article class="bg-white rounded-lg shadow-sm border p-4">
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div class="min-w-0">
-              ${customerProfileLink({ leadId: estimate.leadId, name: estimate.leadName, address: formatAddress(estimate), contact: estimate.leadPhone || estimate.leadEmail || 'No contact' })}
-              <p class="text-xs text-gray-500 mt-1">${new Date(estimate.createdAt).toLocaleDateString()} - ${escapeHtml(estimate.status)}</p>
+              ${customerProfileLink({ leadId: estimate.leadId, name: estimate.leadName, address: formatAddress(estimate), contact: estimate.leadPhone ? phone(estimate.leadPhone) : estimate.leadEmail || 'No contact' })}
+              <p class="text-xs text-gray-500 mt-1">${new Date(estimate.createdAt).toLocaleDateString()} - ${escapeHtml(label(estimate.status))}</p>
             </div>
             <div class="sm:text-right">
               <p class="text-xl font-bold">${money(estimate.total)}</p>

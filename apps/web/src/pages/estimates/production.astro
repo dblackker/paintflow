@@ -148,9 +148,9 @@ import Base from '../../layouts/Base.astro';
     let editingEstimateId = new URLSearchParams(window.location.search).get('draft') || '';
     let editingEstimate = null;
 
-    function money(value) {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
-    }
+    const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const number = (value, options = {}) => window.PaintFlowFormat?.number(value, options) ?? Number(value || 0).toLocaleString('en-US', options);
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -233,9 +233,9 @@ import Base from '../../layouts/Base.astro';
       return categories.map(category => {
         const options = rates
           .filter(rate => (rate.category || 'Other') === category)
-          .map(rate => `<option value="${rate.id}">${escapeHtml(cleanRateLabel(rate))} (${rate.ratePerHour} ${rate.unit}/hr)</option>`)
+          .map(rate => `<option value="${rate.id}">${escapeHtml(cleanRateLabel(rate))} (${number(rate.ratePerHour)} ${label(rate.unit)}/hr)</option>`)
           .join('');
-        return `<optgroup label="${escapeHtml(category)}">${options}</optgroup>`;
+        return `<optgroup label="${escapeHtml(label(category))}">${options}</optgroup>`;
       }).join('');
     }
 
@@ -1418,7 +1418,7 @@ import Base from '../../layouts/Base.astro';
         <label class="block">
           <span class="text-xs text-gray-600">Category</span>
           <select data-field="category" class="mt-1 w-full px-3 py-2 border rounded-lg">
-            ${['add-on', 'prep', 'repair', 'discount', 'other'].map(category => `<option value="${category}" ${item.category === category ? 'selected' : ''}>${category}</option>`).join('')}
+            ${['add-on', 'prep', 'repair', 'discount', 'other'].map(category => `<option value="${category}" ${item.category === category ? 'selected' : ''}>${label(category)}</option>`).join('')}
           </select>
         </label>
         <div class="flex items-center justify-between gap-3">

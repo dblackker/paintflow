@@ -29,10 +29,12 @@ import Base from '../../layouts/Base.astro';
       declined: 'Declined',
     };
 
-    const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const currency = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : 'Not set';
     const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     const formatAddress = (record) => [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
 
     async function apiJson(path) {
       const res = await fetch(`${API_URL}${path}`, { credentials: 'include' });
@@ -108,7 +110,7 @@ import Base from '../../layouts/Base.astro';
               <p class="text-sm text-gray-600">Created ${dateLabel(job.createdAt)}${job.completedAt ? ` &middot; Completed ${dateLabel(job.completedAt)}` : ''}</p>
             </div>
             <div class="sm:text-right">
-              <span class="inline-flex px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(job.status)}</span>
+              <span class="inline-flex px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(label(job.status))}</span>
               <p class="text-sm font-medium mt-1">${job.budget == null ? 'No budget' : currency(job.budget)}</p>
             </div>
           </div>
@@ -160,7 +162,7 @@ import Base from '../../layouts/Base.astro';
         <div class="p-4 flex items-start gap-3">
           <div class="mt-1 h-2 w-2 rounded-full bg-blue-600"></div>
           <div>
-            <p class="text-sm font-medium">${escapeHtml(item.action.replaceAll('.', ' '))}</p>
+            <p class="text-sm font-medium">${escapeHtml(label(item.action.replaceAll('.', ' ')))}</p>
             <p class="text-xs text-gray-500">${dateLabel(item.createdAt)}</p>
           </div>
         </div>
@@ -201,7 +203,7 @@ import Base from '../../layouts/Base.astro';
               </div>
             </div>
             <div class="lg:text-right text-sm text-gray-700">
-              <p>${escapeHtml(customer.phone || 'No phone')}</p>
+              <p>${escapeHtml(customer.phone ? phone(customer.phone) : 'No phone')}</p>
               <p>${escapeHtml(customer.email || 'No email')}</p>
               <p class="mt-2 max-w-xs text-gray-600">${escapeHtml(formatAddress(customer) || '')}</p>
               <p class="text-gray-500 mt-2">Updated ${dateLabel(customer.updatedAt)}</p>

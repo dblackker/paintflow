@@ -101,6 +101,7 @@ import Base from '../layouts/Base.astro';
       won: 'Won',
       lost: 'Lost',
     };
+    const displayPhone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
     let leads = [];
     let leadSources = [];
 
@@ -199,7 +200,7 @@ import Base from '../layouts/Base.astro';
                 <a href="/leads/${lead.id}" class="font-semibold text-gray-950 truncate hover:text-blue-700">${escapeHtml(lead.name)}</a>
                 ${lead.qboCustomerId ? '<span class="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">QB</span>' : ''}
               </div>
-              <p class="text-sm text-gray-600 mt-1">${escapeHtml(lead.phone || lead.email || 'No contact')}</p>
+              <p class="text-sm text-gray-600 mt-1">${escapeHtml(lead.phone ? displayPhone(lead.phone) : lead.email || 'No contact')}</p>
               <p class="text-sm text-gray-800 mt-1">${escapeHtml(formatAddress(lead) || 'No jobsite address')}</p>
               <p class="text-xs text-gray-500 mt-1">${escapeHtml(lead.source || 'No source')} - ${new Date(lead.createdAt).toLocaleDateString()}</p>
             </div>

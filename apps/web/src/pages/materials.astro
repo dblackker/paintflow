@@ -50,6 +50,8 @@ import Base from '../layouts/Base.astro';
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const modal = document.getElementById('modal');
+    const money = (value) => window.PaintFlowFormat?.money(value) ?? `$${Number(value || 0).toFixed(2)}`;
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
 
     function closeModal() {
       modal?.classList.add('hidden');
@@ -69,16 +71,16 @@ import Base from '../layouts/Base.astro';
       const list = document.getElementById('materials-list');
       list.innerHTML = materials.length
         ? materials.map((m) => {
-            const price = (parseFloat(m.costPerUnit) * (1 + parseFloat(m.markupPercent) / 100)).toFixed(2);
+            const price = parseFloat(m.costPerUnit) * (1 + parseFloat(m.markupPercent) / 100);
             return `
               <div class="p-4 flex justify-between items-center hover:bg-gray-50">
                 <div>
                   <p class="font-medium">${m.name}</p>
-                  <p class="text-sm text-gray-600">${m.brand || ''} ${m.category}</p>
+                  <p class="text-sm text-gray-600">${m.brand || ''} ${label(m.category)}</p>
                 </div>
                 <div class="text-right">
-                  <p class="font-semibold">$${price}/${m.unit}</p>
-                  <p class="text-xs text-gray-500">Cost: $${m.costPerUnit}</p>
+                  <p class="font-semibold">${money(price)}/${m.unit}</p>
+                  <p class="text-xs text-gray-500">Cost: ${money(m.costPerUnit)}</p>
                 </div>
               </div>
             `;

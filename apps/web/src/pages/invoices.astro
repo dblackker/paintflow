@@ -59,6 +59,7 @@ Primer,SW-456,2,25.00,50.00</pre>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const money = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
 
     async function loadPurchases() {
       const res = await fetch(`${API_URL}/v1/invoices/purchases`, { credentials: 'include' });
@@ -80,7 +81,7 @@ Primer,SW-456,2,25.00,50.00</pre>
               <p class="text-sm text-gray-600">${p.invoiceNumber || 'No invoice #'} • ${new Date(p.createdAt).toLocaleDateString()}</p>
             </div>
             <div class="text-right">
-              <p class="font-semibold">$${parseFloat(p.totalAmount).toFixed(2)}</p>
+              <p class="font-semibold">${money(p.totalAmount)}</p>
               <p class="text-xs text-gray-500">${p.parsedData?.length || 0} items</p>
             </div>
           </div>
@@ -105,7 +106,7 @@ Primer,SW-456,2,25.00,50.00</pre>
       });
       const result = await res.json();
       if (res.ok) {
-        alert(`Processed ${result.data.itemsProcessed} items. Total: $${result.data.totalAmount.toFixed(2)}`);
+        alert(`Processed ${result.data.itemsProcessed.toLocaleString('en-US')} items. Total: ${money(result.data.totalAmount)}`);
         closeModal();
         loadPurchases();
       } else {

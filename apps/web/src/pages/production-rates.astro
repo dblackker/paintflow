@@ -27,6 +27,8 @@ import Base from '../layouts/Base.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toFixed(options.cents === false ? 0 : 2)}`;
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
 
     async function loadRates() {
       const res = await fetch(`${API_URL}/v1/production-rates`, { credentials: 'include' });
@@ -39,8 +41,8 @@ import Base from '../layouts/Base.astro';
       container.innerHTML = rates.map(r => `
         <div class="p-4 flex items-center justify-between" data-id="${r.id}">
           <div class="flex-1">
-            <p class="font-medium">${r.category} • ${r.surfaceType}</p>
-            <p class="text-sm text-gray-600">${r.ratePerHour} ${r.unit}/hr @ $${parseFloat(r.hourlyRate).toFixed(0)}/hr</p>
+            <p class="font-medium">${label(r.category)} • ${label(r.surfaceType)}</p>
+            <p class="text-sm text-gray-600">${Number(r.ratePerHour).toLocaleString('en-US')} ${label(r.unit)}/hr @ ${money(r.hourlyRate, { cents: false })}/hr</p>
             ${r.description ? `<p class="text-xs text-gray-500 mt-1">${r.description}</p>` : ''}
           </div>
           <div class="flex gap-2">

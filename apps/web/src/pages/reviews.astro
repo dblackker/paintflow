@@ -62,6 +62,7 @@ import Base from '../layouts/Base.astro';
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
 
     function customerProfileLink(req) {
       const name = req.leadName || 'Customer';
@@ -122,7 +123,7 @@ import Base from '../layouts/Base.astro';
               </div>
               <div class="flex items-center gap-3">
                 ${req.rating ? `<div class="text-yellow-500">${'⭐'.repeat(parseInt(req.rating))}</div>` : ''}
-                <span class="px-2 py-1 text-xs rounded ${statusColors[req.status] || 'bg-gray-100'}">${req.status}</span>
+                <span class="px-2 py-1 text-xs rounded ${statusColors[req.status] || 'bg-gray-100'}">${escapeHtml(label(req.status))}</span>
               </div>
             </div>
           `;

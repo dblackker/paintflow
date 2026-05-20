@@ -164,11 +164,13 @@ import '../../styles/design-system.css';
     let timeEntries = [];
     let jobPhotos = [];
 
-    const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const currency = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : '';
     const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     const formatAddress = (record) => [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
 
     function customerProfileLink(job) {
       if (!job.leadId) return '<p class="text-gray-600">No customer linked</p>';
@@ -181,7 +183,7 @@ import '../../styles/design-system.css';
           <span class="min-w-0">
             <span class="block truncate font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
             <span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>
-            <span class="block text-xs text-gray-500">Open customer profile</span>
+            <span class="block text-xs text-gray-500">${escapeHtml(job.leadPhone ? phone(job.leadPhone) : job.leadEmail || 'Open customer profile')}</span>
           </span>
         </a>
       `;
@@ -247,7 +249,7 @@ import '../../styles/design-system.css';
           <div>
             <h2 class="text-2xl font-semibold">${escapeHtml(job.name)}</h2>
             ${customerProfileLink(job)}
-            <p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium">${escapeHtml(job.status)}</span></p>
+            <p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium">${escapeHtml(label(job.status))}</span></p>
           </div>
           <div class="text-left md:text-right">
             <p class="text-3xl font-bold">${currency(revenue.total)}</p>
@@ -287,7 +289,7 @@ import '../../styles/design-system.css';
           <div>
             <div class="flex items-center gap-2">
               <p class="font-medium">${escapeHtml(cost.description)}</p>
-              <span class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(cost.category)}</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(label(cost.category))}</span>
             </div>
             <p class="text-sm text-gray-600">${Number(cost.quantity).toFixed(2)} x ${currency(cost.unitCost)} · ${dateLabel(cost.createdAt)}</p>
           </div>
@@ -372,7 +374,7 @@ import '../../styles/design-system.css';
           </div>
           <div class="text-right">
             <p class="font-semibold">${currency(order.amount)}</p>
-            <span class="px-2 py-0.5 text-xs rounded ${order.status === 'approved' || order.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${escapeHtml(order.status)}</span>
+            <span class="px-2 py-0.5 text-xs rounded ${order.status === 'approved' || order.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${escapeHtml(label(order.status))}</span>
           </div>
         </div>
       `).join('');

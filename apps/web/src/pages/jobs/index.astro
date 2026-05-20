@@ -18,9 +18,9 @@ import Base from '../../layouts/Base.astro';
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let teamMembers = [];
 
-    function money(value) {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
-    }
+    const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: options.cents === false ? 0 : 2, maximumFractionDigits: options.cents === false ? 0 : 2 })}`;
+    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -31,7 +31,7 @@ import Base from '../../layouts/Base.astro';
       const name = job.leadName || 'Customer';
       const initial = escapeHtml(String(name).trim().charAt(0).toUpperCase() || 'C');
       const address = formatAddress(job);
-      const contact = job.leadPhone || job.leadEmail || 'Open customer profile';
+      const contact = job.leadPhone ? phone(job.leadPhone) : job.leadEmail || 'Open customer profile';
       return `
         <a href="/leads/${job.leadId}" class="group mt-2 inline-flex min-w-0 items-center gap-3 rounded-lg pr-2 hover:bg-gray-50">
           <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 group-hover:bg-blue-100">${initial}</span>
@@ -96,7 +96,7 @@ import Base from '../../layouts/Base.astro';
               <div class="flex justify-between items-start mb-4">
                 <div>
                   <h3 class="text-lg font-semibold">${job.name}</h3>
-                  <p class="text-sm text-gray-600">${job.status}</p>
+                  <p class="text-sm text-gray-600">${label(job.status)}</p>
                   ${customerProfileLink(job)}
                 </div>
                 <div class="flex items-center gap-3">
@@ -112,15 +112,15 @@ import Base from '../../layouts/Base.astro';
               <div class="grid grid-cols-3 gap-4 text-sm mb-4">
                 <div>
                   <p class="text-gray-600">Revenue</p>
-                  <p class="font-semibold">$${Number(job.costing.revenue.total).toFixed(2)}</p>
+                  <p class="font-semibold">${money(job.costing.revenue.total)}</p>
                 </div>
                 <div>
                   <p class="text-gray-600">Actual Cost</p>
-                  <p class="font-semibold">$${Number(job.costing.costs.total).toFixed(2)}</p>
+                  <p class="font-semibold">${money(job.costing.costs.total)}</p>
                 </div>
                 <div>
                   <p class="text-gray-600">Profit</p>
-                  <p class="font-semibold">$${Number(job.costing.profitability.grossProfit).toFixed(2)}</p>
+                  <p class="font-semibold">${money(job.costing.profitability.grossProfit)}</p>
                 </div>
               </div>
               
@@ -301,8 +301,8 @@ import Base from '../../layouts/Base.astro';
         container.innerHTML = data.map(co => `
           <div class="text-sm p-2 border rounded ${co.status === 'approved' ? 'bg-green-50' : ''}">
             <div class="flex justify-between">
-              <span class="font-medium">$${Number(co.amount).toFixed(2)}</span>
-              <span class="text-xs px-2 py-0.5 rounded ${co.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${co.status}</span>
+              <span class="font-medium">${money(co.amount)}</span>
+              <span class="text-xs px-2 py-0.5 rounded ${co.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${label(co.status)}</span>
             </div>
             <p class="text-xs text-gray-600 mt-1">${co.description}</p>
             ${co.status === 'pending' ? `<button onclick="approveChangeOrder('${co.id}', '${jobId}')" class="mt-1 text-xs text-blue-600">Approve</button>` : ''}
