@@ -97,6 +97,25 @@ import Base from '../layouts/Base.astro';
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
 
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function customerProfileLink(item) {
+      const name = item.clientName || 'Customer';
+      if (!item.leadId) return `<p class="font-medium text-gray-950">${escapeHtml(name)}</p>`;
+      const initial = escapeHtml(String(name).trim().charAt(0).toUpperCase() || 'C');
+      return `
+        <a href="/leads/${item.leadId}" class="group inline-flex min-w-0 items-center gap-3 rounded-lg pr-2 hover:bg-gray-50">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 group-hover:bg-blue-100">${initial}</span>
+          <span class="min-w-0">
+            <span class="block truncate font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
+            <span class="block truncate text-xs text-gray-500">${escapeHtml(item.leadPhone || item.leadEmail || 'Open customer profile')}</span>
+          </span>
+        </a>
+      `;
+    }
+
     (async () => {
       try {
         const res = await fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' });
@@ -164,7 +183,7 @@ import Base from '../layouts/Base.astro';
           } else {
             activity.innerHTML = data.recentActivity.map(e => `
               <div class="py-3 border-b last:border-0">
-                <p class="font-medium text-gray-950">${e.clientName || 'Estimate'}</p>
+                ${customerProfileLink(e)}
                 <p class="text-sm text-gray-600">Status: ${e.status}</p>
               </div>
             `).join('');

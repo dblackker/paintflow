@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
 import { leads, estimates, jobs } from '@paintflow/db/schema';
-import { eq, and, gte, count } from 'drizzle-orm';
+import { eq, and, gte, count, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -38,10 +38,21 @@ dashboard.get('/stats', async (c) => {
   
   // Recent activity (last 5 estimates)
   const recentEstimates = await db
-    .select()
+    .select({
+      id: estimates.id,
+      leadId: estimates.leadId,
+      status: estimates.status,
+      total: estimates.total,
+      createdAt: estimates.createdAt,
+      sentAt: estimates.sentAt,
+      clientName: leads.name,
+      leadPhone: leads.phone,
+      leadEmail: leads.email,
+    })
     .from(estimates)
+    .leftJoin(leads, and(eq(estimates.leadId, leads.id), eq(leads.orgId, orgId)))
     .where(eq(estimates.orgId, orgId))
-    .orderBy(estimates.createdAt)
+    .orderBy(desc(estimates.createdAt))
     .limit(5);
   
   return c.json({

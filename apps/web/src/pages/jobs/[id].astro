@@ -169,6 +169,21 @@ import '../../styles/design-system.css';
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : '';
     const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
+    function customerProfileLink(job) {
+      if (!job.leadId) return '<p class="text-gray-600">No customer linked</p>';
+      const name = job.leadName || 'Customer';
+      const initial = escapeHtml(String(name).trim().charAt(0).toUpperCase() || 'C');
+      return `
+        <a href="/leads/${job.leadId}" class="group mt-2 inline-flex min-w-0 items-center gap-3 rounded-lg pr-2 hover:bg-gray-50">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700 group-hover:bg-blue-100">${initial}</span>
+          <span class="min-w-0">
+            <span class="block truncate font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
+            <span class="block text-xs text-gray-500">Open customer profile</span>
+          </span>
+        </a>
+      `;
+    }
+
     async function api(path, options = {}) {
       const res = await fetch(`${API_URL}${path}`, {
         credentials: 'include',
@@ -228,7 +243,7 @@ import '../../styles/design-system.css';
         <div class="flex flex-col md:flex-row md:justify-between gap-4">
           <div>
             <h2 class="text-2xl font-semibold">${escapeHtml(job.name)}</h2>
-            <p class="text-gray-600">${escapeHtml(job.leadName || 'No customer linked')}</p>
+            ${customerProfileLink(job)}
             <p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium">${escapeHtml(job.status)}</span></p>
           </div>
           <div class="text-left md:text-right">

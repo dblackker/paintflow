@@ -58,6 +58,25 @@ import Base from '../layouts/Base.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function customerProfileLink(req) {
+      const name = req.leadName || 'Customer';
+      if (!req.leadId) return `<p class="font-medium text-sm">${escapeHtml(name)}</p>`;
+      const initial = escapeHtml(String(name).trim().charAt(0).toUpperCase() || 'C');
+      return `
+        <a href="/leads/${req.leadId}" class="group inline-flex min-w-0 items-center gap-3 rounded-lg pr-2 hover:bg-gray-50">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 group-hover:bg-blue-100">${initial}</span>
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
+            <span class="block truncate text-xs text-gray-500">Open customer profile</span>
+          </span>
+        </a>
+      `;
+    }
     
     async function loadAnalytics() {
       try {
@@ -91,7 +110,7 @@ import Base from '../layouts/Base.astro';
           return `
             <div class="p-4 flex justify-between items-center">
               <div>
-                <p class="font-medium text-sm">${req.leadName || 'Customer'}</p>
+                ${customerProfileLink(req)}
                 <p class="text-sm text-gray-600">${req.jobName || 'Job'}</p>
                 <p class="text-xs text-gray-500">${new Date(req.createdAt).toLocaleDateString()}</p>
               </div>

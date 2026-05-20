@@ -38,11 +38,27 @@ jobsApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  const allJobs = await db.query.jobs.findMany({
-    where: eq(jobs.orgId, orgId),
-    orderBy: (jobs, { desc }) => [desc(jobs.createdAt)],
-    limit: 50,
-  });
+  const allJobs = await db
+    .select({
+      id: jobs.id,
+      orgId: jobs.orgId,
+      leadId: jobs.leadId,
+      estimateId: jobs.estimateId,
+      name: jobs.name,
+      status: jobs.status,
+      budget: jobs.budget,
+      completedAt: jobs.completedAt,
+      createdAt: jobs.createdAt,
+      updatedAt: jobs.updatedAt,
+      leadName: leads.name,
+      leadPhone: leads.phone,
+      leadEmail: leads.email,
+    })
+    .from(jobs)
+    .leftJoin(leads, and(eq(jobs.leadId, leads.id), eq(leads.orgId, orgId)))
+    .where(eq(jobs.orgId, orgId))
+    .orderBy(desc(jobs.createdAt))
+    .limit(50);
   
   return c.json({ data: allJobs });
 });

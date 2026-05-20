@@ -26,6 +26,22 @@ import Base from '../../layouts/Base.astro';
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    function customerProfileLink(job) {
+      if (!job.leadId) return '';
+      const name = job.leadName || 'Customer';
+      const initial = escapeHtml(String(name).trim().charAt(0).toUpperCase() || 'C');
+      const contact = job.leadPhone || job.leadEmail || 'Open customer profile';
+      return `
+        <a href="/leads/${job.leadId}" class="group mt-2 inline-flex min-w-0 items-center gap-3 rounded-lg pr-2 hover:bg-gray-50">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700 group-hover:bg-blue-100">${initial}</span>
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
+            <span class="block truncate text-xs text-gray-500">${escapeHtml(contact)}</span>
+          </span>
+        </a>
+      `;
+    }
+
     async function apiJson(url, options = {}) {
       const res = await fetch(url, { credentials: 'include', ...options });
       if (res.status === 401) {
@@ -75,6 +91,7 @@ import Base from '../../layouts/Base.astro';
                 <div>
                   <h3 class="text-lg font-semibold">${job.name}</h3>
                   <p class="text-sm text-gray-600">${job.status}</p>
+                  ${customerProfileLink(job)}
                 </div>
                 <div class="flex items-center gap-3">
                   ${job.status === 'completed' ? `
