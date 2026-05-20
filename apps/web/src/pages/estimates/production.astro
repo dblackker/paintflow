@@ -558,49 +558,21 @@ import Base from '../../layouts/Base.astro';
             <label class="col-span-2 sm:col-span-2">
               <span class="text-xs text-emerald-900">Trim scope</span>
               <select data-interior="trimScope" class="mt-1 w-full px-2 py-2 border rounded">
+                <option value="none">None</option>
                 <option value="base">Baseboards</option>
                 <option value="base-casing" selected>Baseboards + casing</option>
                 <option value="base-crown-casing">Baseboards + crown + casing</option>
               </select>
             </label>
-            <div class="col-span-2 sm:col-span-2 grid gap-2 min-[420px]:grid-cols-2">
-              <label class="inline-flex items-center gap-2 rounded border bg-white px-2 py-2 text-xs text-emerald-900">
+            <div class="col-span-2 grid self-end gap-2 sm:col-span-2 min-[420px]:grid-cols-2">
+              <label class="inline-flex h-9 items-center gap-2 rounded border bg-white px-2 text-xs leading-none text-emerald-900">
                 <input data-interior="includeCeilings" type="checkbox" class="rounded border-gray-300" checked>
                 Ceilings
               </label>
-              <label class="inline-flex items-center gap-2 rounded border bg-white px-2 py-2 text-xs text-emerald-900">
+              <label class="inline-flex h-9 items-center gap-2 rounded border bg-white px-2 text-xs leading-none text-emerald-900">
                 <input data-interior="includeDoors" type="checkbox" class="rounded border-gray-300" checked>
                 Doors
               </label>
-            </div>
-          </div>
-          <div class="mt-3 rounded-md border border-emerald-200 bg-white p-3">
-            <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p class="text-sm font-medium text-emerald-950">Typical room dimensions</p>
-                <p class="text-xs text-emerald-800">Length x width in feet. These drive walls, ceilings, and trim for generated rooms.</p>
-              </div>
-              <span class="text-xs text-emerald-700">Override after measuring</span>
-            </div>
-            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              ${[
-                ['bedroom', 'Bedroom', 12, 12],
-                ['bathroom', 'Bathroom', 8, 8],
-                ['livingRoom', 'Living room', 18, 16],
-                ['diningRoom', 'Dining room', 14, 12],
-                ['kitchen', 'Kitchen', 14, 12],
-                ['hallway', 'Hallway', 14, 4],
-                ['closet', 'Closet', 6, 4],
-              ].map(([key, label, length, width]) => `
-                <div class="rounded border bg-gray-50 p-2">
-                  <p class="mb-1 text-xs font-medium text-gray-700">${label}</p>
-                  <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
-                    <input aria-label="${label} length" data-interior-size="${key}" data-dimension="length" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="${length}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" placeholder="Length">
-                    <span class="text-xs text-gray-500">x</span>
-                    <input aria-label="${label} width" data-interior-size="${key}" data-dimension="width" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="${width}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" placeholder="Width">
-                  </div>
-                </div>
-              `).join('')}
             </div>
           </div>
           <div class="relative mt-3 inline-flex items-center gap-1.5">
@@ -609,7 +581,7 @@ import Base from '../../layouts/Base.astro';
             <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
               <p class="font-semibold text-gray-900">Interior assumptions</p>
               <p class="mt-1">Creates itemized editable lines for each generated room, such as Bedroom 1 walls, Bedroom 1 ceiling, Bedroom 1 trim, and Bedroom 1 doors.</p>
-              <p class="mt-2">Length x width estimates perimeter and ceiling area, then applies opening deductions, baseboards, casing, crown, and doors. Override any generated line as measurements improve.</p>
+              <p class="mt-2">Uses standard room allowances for length, width, windows, doors, and wall height, then applies opening deductions and the selected trim scope. Override any generated line as measurements improve.</p>
             </div>
           </div>
           <div class="mt-3 rounded-md border border-emerald-200 bg-white p-3 text-xs text-emerald-950" data-interior-preview></div>
@@ -1154,7 +1126,7 @@ import Base from '../../layouts/Base.astro';
       const ceilings = assumptions.includeCeilings ? roomItem.length * roomItem.width : 0;
       const casing = assumptions.trimScope.includes('casing') ? (roomItem.doors * 14) + (roomItem.windows * 16) : 0;
       const crown = assumptions.trimScope.includes('crown') ? perimeter : 0;
-      const trim = perimeter + casing + crown;
+      const trim = assumptions.trimScope === 'none' ? 0 : perimeter + casing + crown;
       const doors = assumptions.includeDoors ? Math.round(roomItem.doors) : 0;
       return { walls, ceilings, trim, doors };
     }
@@ -1193,7 +1165,7 @@ import Base from '../../layouts/Base.astro';
         .join(', ');
 
       if (!quantities.roomCount) {
-        preview.innerHTML = '<p class="font-medium">Add room counts to preview assumed interior quantities.</p><p class="mt-1 text-emerald-800">Room dimensions are entered as length x width.</p>';
+        preview.innerHTML = '<p class="font-medium">Add room counts to preview assumed interior quantities.</p><p class="mt-1 text-emerald-800">Generated rooms use standard allowances and remain editable after they are added.</p>';
         return;
       }
 
