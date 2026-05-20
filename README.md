@@ -189,21 +189,23 @@ Configure in Stripe Dashboard:
 
 ## Architectural Decisions
 
-### Why Magic Links Instead of Passwords?
+### Authentication Strategy
 
-**Decision:** Use magic link authentication (no passwords)
+**Decision:** Use passwordless magic link authentication for core SMB sign-in, with SSO/MFA as the enterprise upgrade path instead of a home-grown password database.
 
 **Rationale:**
 - Painting contractors use mobile devices on job sites
 - Password managers uncommon in this demographic
-- Reduces support burden (no "forgot password" tickets)
-- More secure (no password breaches, phishing-resistant)
-- Better UX (one click vs typing password)
+- Reduces support burden because there is no app password to reset
+- Avoids storing password hashes and handling password breach workflows
+- Better mobile UX for owners, estimators, and crew leads
+- Enterprise customers typically expect Google/Microsoft SSO, SAML/OIDC, MFA, audit logs, and admin session controls
 
 **Trade-offs:**
 - Email deliverability dependency
 - 15-minute token expiration
 - Requires email provider (MailChannels)
+- Magic link requests are rate-limited per email and per IP/network. Defaults are higher in development for demos and configurable with `MAGIC_LINK_EMAIL_LIMIT` and `MAGIC_LINK_IP_LIMIT`.
 
 ### Why Hono on Cloudflare Workers?
 

@@ -7,6 +7,8 @@ export interface Env {
   PUBLIC_URL: string;
   CORS_ORIGINS?: string;
   COOKIE_DOMAIN?: string;
+  MAGIC_LINK_EMAIL_LIMIT?: string;
+  MAGIC_LINK_IP_LIMIT?: string;
   RESEND_API_KEY: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;

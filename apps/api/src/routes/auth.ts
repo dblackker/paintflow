@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Context, Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { createSession } from '../auth';
 import type { Env } from '../types';
@@ -105,6 +105,8 @@ const DEFAULT_ROLES = [
   { name: 'Crew', permissions: ['view_assigned_jobs', 'log_time', 'upload_photos'], isSystem: true },
 ];
 
+const MAGIC_LINK_WINDOW_SECONDS = 3600;
+
 function sessionCookie(value: string, env: Env, maxAge: number) {
   const parts = [
     `session=${value}`,
@@ -123,6 +125,61 @@ function sessionCookie(value: string, env: Env, maxAge: number) {
   }
 
   return parts.join('; ');
+}
+
+function parseLimit(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function magicLinkLimits(env: Env) {
+  const isDevelopment = env.ENVIRONMENT === 'development';
+  return {
+    email: parseLimit(env.MAGIC_LINK_EMAIL_LIMIT, isDevelopment ? 100 : 10),
+    ip: parseLimit(env.MAGIC_LINK_IP_LIMIT, isDevelopment ? 300 : 60),
+  };
+}
+
+function clientIp(c: Context<{ Bindings: Env }>) {
+  return c.req.header('cf-connecting-ip')
+    || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+    || 'unknown';
+}
+
+function minutesUntil(timestamp: number) {
+  return Math.max(1, Math.ceil((timestamp - Date.now()) / 60000));
+}
+
+async function checkMagicLinkBucket(env: Env, key: string, limit: number) {
+  const now = Date.now();
+  const existing = await env.KV.get(key);
+  let state = { count: 0, resetAt: now + MAGIC_LINK_WINDOW_SECONDS * 1000 };
+
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing) as { count?: number; resetAt?: number };
+      if (typeof parsed.count === 'number' && typeof parsed.resetAt === 'number' && parsed.resetAt > now) {
+        state = { count: parsed.count, resetAt: parsed.resetAt };
+      }
+    } catch {
+      const parsedCount = Number.parseInt(existing, 10);
+      if (Number.isFinite(parsedCount)) {
+        state = { count: parsedCount, resetAt: now + MAGIC_LINK_WINDOW_SECONDS * 1000 };
+      }
+    }
+  }
+
+  if (state.count >= limit) {
+    return { allowed: false, resetAt: state.resetAt, retryAfterMinutes: minutesUntil(state.resetAt) };
+  }
+
+  state.count += 1;
+  await env.KV.put(key, JSON.stringify(state), {
+    expirationTtl: Math.max(60, Math.ceil((state.resetAt - now) / 1000)),
+  });
+
+  return { allowed: true, resetAt: state.resetAt, retryAfterMinutes: 0 };
 }
 
 async function seedWorkspaceDefaults(
@@ -228,14 +285,32 @@ auth.post('/magic-link', async (c) => {
     ? companyName.trim()
     : `${displayName}'s Painting Co`;
   
-  // Rate limiting: max 3 magic links per hour per email
-  const rateLimitKey = `ratelimit:magic-link:${normalizedEmail}`;
-  const rateLimit = await c.env.KV.get(rateLimitKey);
-  const count = rateLimit ? parseInt(rateLimit) : 0;
-  if (count >= 3) {
-    return c.json({ error: 'Too many requests. Try again in an hour.' }, 429);
+  const limits = magicLinkLimits(c.env);
+  const emailBucket = await checkMagicLinkBucket(
+    c.env,
+    `ratelimit:magic-link:email:${normalizedEmail}`,
+    limits.email
+  );
+  if (!emailBucket.allowed) {
+    return c.json({
+      error: `Too many sign-in links for this email. Try again in ${emailBucket.retryAfterMinutes} minute${emailBucket.retryAfterMinutes === 1 ? '' : 's'}.`,
+      code: 'MAGIC_LINK_EMAIL_RATE_LIMIT',
+      retryAfterMinutes: emailBucket.retryAfterMinutes,
+    }, 429);
   }
-  await c.env.KV.put(rateLimitKey, (count + 1).toString(), { expirationTtl: 3600 });
+
+  const ipBucket = await checkMagicLinkBucket(
+    c.env,
+    `ratelimit:magic-link:ip:${clientIp(c)}`,
+    limits.ip
+  );
+  if (!ipBucket.allowed) {
+    return c.json({
+      error: `Too many sign-in requests from this network. Try again in ${ipBucket.retryAfterMinutes} minute${ipBucket.retryAfterMinutes === 1 ? '' : 's'}.`,
+      code: 'MAGIC_LINK_IP_RATE_LIMIT',
+      retryAfterMinutes: ipBucket.retryAfterMinutes,
+    }, 429);
+  }
   
   
   const db = createDb(c.env.DATABASE_URL);
