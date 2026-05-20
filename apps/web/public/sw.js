@@ -6,6 +6,14 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+self.addEventListener('push', (event) => {
+  event.waitUntil(self.registration.showNotification('PaintFlow notification', {
+    body: 'Open PaintFlow to review new customer activity.',
+    tag: 'paintflow-notification',
+    data: { url: '/notifications' },
+  }));
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || '/notifications';

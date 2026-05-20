@@ -34,6 +34,7 @@ import reportsRoutes from './routes/reports';
 import payrollRoutes from './routes/payroll';
 import rolesRoutes from './routes/roles';
 import notificationsRoutes from './routes/notifications';
+import pushRoutes from './routes/push';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -92,6 +93,7 @@ app.route('/v1/reports', reportsRoutes);
 app.route('/v1/payroll', payrollRoutes);
 app.route('/v1/roles', rolesRoutes);
 app.route('/v1/notifications', notificationsRoutes);
+app.route('/v1/push', pushRoutes);
 
 app.get('/api/cron/drips', async (c) => {
   const authHeader = c.req.header('authorization');

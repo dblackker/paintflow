@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, estimates, leads, messages } from '@paintflow/db/schema';
+import { auditLogs, estimates, leads, messages, notificationEvents, notificationReads } from '@paintflow/db/schema';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -11,8 +11,10 @@ const notifications = new Hono<{ Bindings: Env; Variables: Variables }>();
 notifications.use('*', authMiddleware);
 
 const markReadSchema = z.object({
+  notificationIds: z.array(z.string().uuid()).optional(),
   messageIds: z.array(z.string().uuid()).optional(),
   allMessages: z.boolean().optional(),
+  allNotifications: z.boolean().optional(),
 });
 
 const importantAuditActions = [
@@ -34,9 +36,36 @@ function estimateEventTitle(action: string) {
 
 notifications.get('/', async (c) => {
   const orgId = c.get('orgId');
+  const userId = c.get('userId');
   const db = createDb(c.env.DATABASE_URL);
 
-  const [messageRows, auditRows] = await Promise.all([
+  const [eventRows, messageRows, auditRows] = await Promise.all([
+    db.select({
+      id: notificationEvents.id,
+      type: notificationEvents.type,
+      title: notificationEvents.title,
+      body: notificationEvents.body,
+      href: notificationEvents.href,
+      priority: notificationEvents.priority,
+      sourceType: notificationEvents.sourceType,
+      sourceId: notificationEvents.sourceId,
+      leadId: notificationEvents.leadId,
+      metadata: notificationEvents.metadata,
+      createdAt: notificationEvents.createdAt,
+      readAt: notificationReads.readAt,
+      leadName: leads.name,
+      leadPhone: leads.phone,
+    })
+      .from(notificationEvents)
+      .leftJoin(notificationReads, and(
+        eq(notificationReads.notificationId, notificationEvents.id),
+        eq(notificationReads.orgId, orgId),
+        eq(notificationReads.userId, userId || '00000000-0000-0000-0000-000000000000'),
+      ))
+      .leftJoin(leads, and(eq(notificationEvents.leadId, leads.id), eq(leads.orgId, orgId)))
+      .where(eq(notificationEvents.orgId, orgId))
+      .orderBy(desc(notificationEvents.createdAt))
+      .limit(100),
     db.select({
       id: messages.id,
       leadId: messages.leadId,
@@ -70,6 +99,27 @@ notifications.get('/', async (c) => {
       .orderBy(desc(auditLogs.createdAt))
       .limit(80),
   ]);
+
+  const persistentNotifications = eventRows.map((event) => ({
+    id: event.id,
+    source: 'notification',
+    sourceId: event.id,
+    type: event.type,
+    title: event.title,
+    body: event.body || '',
+    createdAt: event.createdAt,
+    read: Boolean(event.readAt),
+    priority: event.priority,
+    href: event.href || '/notifications',
+    customer: event.leadId ? {
+      id: event.leadId,
+      name: event.leadName || 'Customer',
+      phone: event.leadPhone,
+    } : null,
+  }));
+  const persistentSourceKeys = new Set(eventRows
+    .filter((event) => event.sourceType && event.sourceId)
+    .map((event) => `${event.sourceType}:${event.sourceId}`));
 
   const messageNotifications = messageRows.map((message) => ({
     id: `message:${message.id}`,
@@ -110,7 +160,10 @@ notifications.get('/', async (c) => {
     };
   });
 
-  const data = [...messageNotifications, ...auditNotifications]
+  const legacyNotifications = [...messageNotifications, ...auditNotifications]
+    .filter((item) => !persistentSourceKeys.has(`${item.source}:${item.sourceId}`));
+
+  const data = [...persistentNotifications, ...legacyNotifications]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 120);
 
@@ -131,11 +184,11 @@ notifications.post('/mark-read', async (c) => {
   }
 
   const db = createDb(c.env.DATABASE_URL);
+  const userId = c.get('userId');
   if (parsed.data.allMessages) {
     await db.update(messages)
       .set({ read: true })
       .where(and(eq(messages.orgId, orgId), eq(messages.direction, 'inbound')));
-    return c.json({ data: { updated: true } });
   }
 
   const ids = parsed.data.messageIds || [];
@@ -143,6 +196,16 @@ notifications.post('/mark-read', async (c) => {
     await db.update(messages)
       .set({ read: true })
       .where(and(eq(messages.orgId, orgId), inArray(messages.id, ids)));
+  }
+
+  const eventIds = parsed.data.allNotifications
+    ? (await db.select({ id: notificationEvents.id }).from(notificationEvents).where(eq(notificationEvents.orgId, orgId))).map((row) => row.id)
+    : parsed.data.notificationIds || [];
+
+  if (userId && eventIds.length) {
+    await db.insert(notificationReads)
+      .values(eventIds.map((notificationId) => ({ orgId, userId, notificationId })))
+      .onConflictDoNothing();
   }
 
   return c.json({ data: { updated: true } });

@@ -7,6 +7,7 @@ import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, estimateEmailTemplate } from '../lib/email';
 import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
+import { createNotificationAndPush } from '../lib/web-push';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -211,6 +212,22 @@ estimatesApp.post('/:id/sign', async (c) => {
     ipAddress: ip,
     userAgent,
   });
+
+  const lead = await db.query.leads.findFirst({
+    where: eq(leads.id, estimate.leadId),
+  });
+  await createNotificationAndPush(c.env, {
+    orgId: estimate.orgId,
+    type: 'estimate.accepted',
+    title: `Estimate accepted${lead?.name ? ` by ${lead.name}` : ''}`,
+    body: `${name} accepted a ${estimateContractValue(estimate, packageName, selectedOptions).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} proposal.`,
+    href: `/jobs/${job.id}`,
+    priority: 'high',
+    sourceType: 'estimate',
+    sourceId: estimate.id,
+    leadId: estimate.leadId,
+    metadata: { jobId: job.id, signedBy: name, packageName },
+  }).catch((err) => console.error('Push notification failed:', err));
   
   return c.json({ data: { id: estimate.id, status: 'accepted', jobId: job.id } });
 });

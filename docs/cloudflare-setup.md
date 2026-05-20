@@ -93,7 +93,24 @@ corepack pnpm wrangler secret put CRON_SECRET --env production
 corepack pnpm wrangler secret put TWILIO_ACCOUNT_SID --env production
 corepack pnpm wrangler secret put TWILIO_AUTH_TOKEN --env production
 corepack pnpm wrangler secret put TWILIO_PHONE_NUMBER --env production
+corepack pnpm wrangler secret put VAPID_PRIVATE_KEY --env production
 ```
+
+For Web Push, generate an ES256 VAPID key pair and set:
+
+- `VAPID_PUBLIC_KEY` as a Worker variable in `apps/api/wrangler.toml`.
+- `VAPID_PRIVATE_KEY` as a Worker secret. Use PKCS#8 PEM format, including the `-----BEGIN PRIVATE KEY-----` wrapper.
+- `VAPID_SUBJECT` as a contact URI such as `mailto:ops@yourdomain.com`.
+
+Example key generation with OpenSSL:
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout -out vapid-private-ec.pem
+openssl pkcs8 -topk8 -nocrypt -in vapid-private-ec.pem -out vapid-private-pkcs8.pem
+openssl ec -in vapid-private-ec.pem -pubout -out vapid-public.pem
+```
+
+The browser-facing `VAPID_PUBLIC_KEY` must be the URL-safe uncompressed P-256 public key value used by `PushManager.subscribe`. Keep the private key only in Cloudflare secrets.
 
 Optional integration secrets when implemented/configured:
 

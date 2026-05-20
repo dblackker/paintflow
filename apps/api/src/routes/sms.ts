@@ -6,6 +6,7 @@ import { and, desc, eq, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendSMS, formatPhoneNumber } from '../lib/twilio';
+import { createNotificationAndPush } from '../lib/web-push';
 
 const sms = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -37,7 +38,7 @@ sms.post('/inbound', async (c) => {
   
   // Store inbound message
   if (lead) {
-    await db.insert(messages).values({
+    const [message] = await db.insert(messages).values({
       orgId: lead.orgId,
       leadId: lead.id,
       direction: 'inbound',
@@ -45,7 +46,20 @@ sms.post('/inbound', async (c) => {
       toNumber: c.env.TWILIO_PHONE_NUMBER,
       body,
       twilioSid: sid,
-    });
+    }).returning();
+
+    await createNotificationAndPush(c.env, {
+      orgId: lead.orgId,
+      type: 'message.inbound',
+      title: `New message from ${lead.name}`,
+      body,
+      href: `/sms?leadId=${lead.id}`,
+      priority: 'high',
+      sourceType: 'message',
+      sourceId: message.id,
+      leadId: lead.id,
+      metadata: { from },
+    }).catch((err) => console.error('Push notification failed:', err));
     
     console.log(`SMS from ${lead.name}: ${body}`);
   }

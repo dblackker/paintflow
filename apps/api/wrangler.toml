@@ -7,6 +7,8 @@ APP_URL = "http://localhost:8787"
 PUBLIC_URL = "https://app.paintflow.app"
 CORS_ORIGINS = "http://localhost:4321,https://app.paintflow.app,https://paintflow.app"
 ENVIRONMENT = "development"
+VAPID_PUBLIC_KEY = ""
+VAPID_SUBJECT = "mailto:admin@paintflow.app"
 
 [[kv_namespaces]]
 binding = "KV"
@@ -22,7 +24,7 @@ preview_bucket_name = "paintflow-uploads-preview"
 crons = ["0 9 * * *"]
 
 [env.production]
-vars = { APP_URL = "https://api.paintflow.app", PUBLIC_URL = "https://app.paintflow.app", CORS_ORIGINS = "https://app.paintflow.app,https://paintflow.app", ENVIRONMENT = "production", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter", STRIPE_PRO_PRICE_ID = "price_replace_pro", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise" }
+vars = { APP_URL = "https://api.paintflow.app", PUBLIC_URL = "https://app.paintflow.app", CORS_ORIGINS = "https://app.paintflow.app,https://paintflow.app", ENVIRONMENT = "production", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter", STRIPE_PRO_PRICE_ID = "price_replace_pro", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise", VAPID_PUBLIC_KEY = "", VAPID_SUBJECT = "mailto:admin@paintflow.app" }
 routes = [
   { pattern = "api.paintflow.app/*", zone_name = "paintflow.app" }
 ]
@@ -36,4 +38,4 @@ binding = "R2"
 bucket_name = "paintflow-uploads"
 
 [env.staging]
-vars = { APP_URL = "https://api-staging.paintflow.app", PUBLIC_URL = "https://staging.paintflow.app", CORS_ORIGINS = "https://staging.paintflow.app", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter_test", STRIPE_PRO_PRICE_ID = "price_replace_pro_test", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise_test" }
+vars = { APP_URL = "https://api-staging.paintflow.app", PUBLIC_URL = "https://staging.paintflow.app", CORS_ORIGINS = "https://staging.paintflow.app", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter_test", STRIPE_PRO_PRICE_ID = "price_replace_pro_test", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise_test", VAPID_PUBLIC_KEY = "", VAPID_SUBJECT = "mailto:admin@paintflow.app" }

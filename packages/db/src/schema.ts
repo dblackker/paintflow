@@ -480,6 +480,42 @@ export const userRoles = pgTable('user_roles', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const notificationEvents = pgTable('notification_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  type: varchar('type', { length: 100 }).notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  body: text('body'),
+  href: text('href'),
+  priority: varchar('priority', { length: 20 }).notNull().default('normal'),
+  sourceType: varchar('source_type', { length: 50 }),
+  sourceId: uuid('source_id'),
+  leadId: uuid('lead_id').references(() => leads.id),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const notificationReads = pgTable('notification_reads', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  userId: uuid('user_id').references(() => users.id),
+  notificationId: uuid('notification_id').references(() => notificationEvents.id).notNull(),
+  readAt: timestamp('read_at').defaultNow().notNull(),
+});
+
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  userId: uuid('user_id').references(() => users.id),
+  endpoint: text('endpoint').notNull(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  userAgent: text('user_agent'),
+  disabledAt: timestamp('disabled_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const rolesRelations = relations(roles, ({ many }) => ({
   userRoles: many(userRoles),
 }));
