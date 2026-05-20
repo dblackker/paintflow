@@ -1,0 +1,139 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Notifications">
+  <div class="min-h-screen bg-gray-50">
+    <main class="mx-auto max-w-4xl px-4 py-5 sm:px-6 lg:px-8">
+      <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold text-gray-950">Notifications</h1>
+          <p class="mt-1 text-sm text-gray-600">New messages, accepted estimates, and important customer activity.</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="enable-browser-notifications" class="btn-secondary btn-sm" type="button">Enable browser alerts</button>
+          <button id="mark-all-read" class="btn-primary btn-sm" type="button">Mark read</button>
+        </div>
+      </div>
+
+      <section class="overflow-hidden rounded-lg border bg-white shadow-sm">
+        <div id="notification-list" class="divide-y">
+          <div class="p-8 text-center text-gray-500">Loading notifications...</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const list = document.getElementById('notification-list');
+    const readAuditKey = 'paintflow.readAuditNotifications';
+    let notifications = [];
+
+    const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const timeLabel = (value) => value ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const readAuditIds = () => new Set(JSON.parse(localStorage.getItem(readAuditKey) || '[]'));
+    const saveReadAuditIds = (ids) => localStorage.setItem(readAuditKey, JSON.stringify(Array.from(ids).slice(-500)));
+
+    async function apiJson(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function hydrateReadState(items) {
+      const auditRead = readAuditIds();
+      return items.map((item) => item.source === 'audit' && auditRead.has(item.id) ? { ...item, read: true } : item);
+    }
+
+    function render() {
+      if (!notifications.length) {
+        list.innerHTML = '<div class="p-8 text-center text-sm text-gray-500">No notifications yet.</div>';
+        return;
+      }
+
+      list.innerHTML = notifications.map((item) => `
+        <a href="${escapeHtml(item.href || '#')}" class="block p-4 hover:bg-gray-50 ${item.read ? '' : 'bg-blue-50'}" data-id="${item.id}" data-source="${item.source}" data-source-id="${item.sourceId}">
+          <div class="flex items-start gap-3">
+            <div class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${item.read ? 'bg-gray-300' : item.priority === 'high' ? 'bg-blue-600' : 'bg-green-600'}"></div>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <p class="font-medium text-gray-950">${escapeHtml(item.title)}</p>
+                <p class="shrink-0 text-xs text-gray-500">${timeLabel(item.createdAt)}</p>
+              </div>
+              <p class="mt-1 line-clamp-2 text-sm text-gray-600">${escapeHtml(item.body)}</p>
+              ${item.customer ? `<p class="mt-2 text-xs text-gray-500">${escapeHtml(item.customer.name || 'Customer')}</p>` : ''}
+            </div>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    async function loadNotifications() {
+      const payload = await apiJson('/v1/notifications');
+      if (!payload) return;
+      notifications = hydrateReadState(payload.data || []);
+      render();
+    }
+
+    async function markAllRead() {
+      document.getElementById('mark-all-read').disabled = true;
+      try {
+        await apiJson('/v1/notifications/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({ allMessages: true }),
+        });
+        const auditRead = readAuditIds();
+        notifications.filter((item) => item.source === 'audit').forEach((item) => auditRead.add(item.id));
+        saveReadAuditIds(auditRead);
+        notifications = notifications.map((item) => ({ ...item, read: true }));
+        render();
+        window.showToast('Notifications marked read');
+      } catch (err) {
+        window.showToast(err.message || 'Failed to mark notifications read', 'error');
+      } finally {
+        document.getElementById('mark-all-read').disabled = false;
+      }
+    }
+
+    async function enableBrowserNotifications() {
+      if (!('Notification' in window)) {
+        window.showToast('This browser does not support notifications', 'error');
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      localStorage.setItem('paintflow.browserNotifications', permission === 'granted' ? 'enabled' : 'disabled');
+      window.showToast(permission === 'granted' ? 'Browser alerts enabled' : 'Browser alerts not enabled', permission === 'granted' ? 'success' : 'error');
+    }
+
+    list.addEventListener('click', async (event) => {
+      const row = event.target.closest('[data-id]');
+      if (!row) return;
+      if (row.dataset.source === 'audit') {
+        const auditRead = readAuditIds();
+        auditRead.add(row.dataset.id);
+        saveReadAuditIds(auditRead);
+        return;
+      }
+      if (row.dataset.source === 'message') {
+        await apiJson('/v1/notifications/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({ messageIds: [row.dataset.sourceId] }),
+        }).catch(() => {});
+      }
+    });
+
+    document.getElementById('mark-all-read').addEventListener('click', markAllRead);
+    document.getElementById('enable-browser-notifications').addEventListener('click', enableBrowserNotifications);
+    loadNotifications().catch((err) => {
+      list.innerHTML = `<div class="p-8 text-center text-red-600">${escapeHtml(err.message || 'Failed to load notifications')}</div>`;
+    });
+  </script>
+</Base>

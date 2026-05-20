@@ -4,8 +4,8 @@
   "description": "CRM for painting contractors",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "background_color": "#f6f7f4",
+  "theme_color": "#176b5b",
   "icons": [
     {
       "src": "/icon-192.png",

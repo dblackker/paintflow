@@ -35,6 +35,29 @@ const { title = 'PaintFlow' } = Astro.props;
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <div class="relative">
+            <button id="notifications-button" type="button" class="btn-icon relative" aria-label="Open notifications" aria-expanded="false">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9"></path>
+              </svg>
+              <span id="notifications-badge" class="hidden absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[11px] font-bold leading-none text-white"></span>
+            </button>
+            <div id="notifications-menu" class="hidden absolute right-0 mt-2 w-[min(92vw,380px)] overflow-hidden rounded-lg border bg-white shadow-lg">
+              <div class="flex items-center justify-between gap-3 border-b p-3">
+                <div>
+                  <p class="font-semibold text-gray-950">Notifications</p>
+                  <p class="text-xs text-gray-500">Messages and customer events</p>
+                </div>
+                <a href="/notifications" class="text-sm font-medium text-blue-700">View all</a>
+              </div>
+              <div id="notifications-preview" class="max-h-96 overflow-y-auto">
+                <div class="p-4 text-sm text-gray-500">Loading...</div>
+              </div>
+              <div class="border-t p-2">
+                <button id="notifications-enable" type="button" class="w-full rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Enable browser alerts</button>
+              </div>
+            </div>
+          </div>
           <button type="button" data-logout class="pf-logout-button hidden md:inline-flex">Log out</button>
           <button id="mobile-menu" class="pf-mobile-menu-button md:hidden" aria-label="Open navigation" aria-expanded="false">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -52,6 +75,7 @@ const { title = 'PaintFlow' } = Astro.props;
         <a href="/jobs" class="block py-2 text-sm">Jobs</a>
         <a href="/reports" class="block py-2 text-sm">Reports</a>
         <a href="/team" class="block py-2 text-sm">Team</a>
+        <a href="/notifications" class="block py-2 text-sm">Notifications</a>
         <button type="button" data-logout class="pf-mobile-logout-button">Log out</button>
       </div>
     </div>
@@ -62,12 +86,137 @@ const { title = 'PaintFlow' } = Astro.props;
   <Toast />
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const notificationState = {
+      items: [],
+      lastSeenKey: 'paintflow.lastSeenNotificationId',
+      auditReadKey: 'paintflow.readAuditNotifications',
+      browserKey: 'paintflow.browserNotifications',
+    };
+
+    function escapeNotificationHtml(value = '') {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    function readAuditNotifications() {
+      try {
+        return new Set(JSON.parse(localStorage.getItem(notificationState.auditReadKey) || '[]'));
+      } catch {
+        return new Set();
+      }
+    }
+
+    function notificationTime(value) {
+      return value ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    }
+
+    function applyLocalNotificationReadState(items) {
+      const auditRead = readAuditNotifications();
+      return items.map((item) => item.source === 'audit' && auditRead.has(item.id) ? { ...item, read: true } : item);
+    }
+
+    function renderNotificationsPreview() {
+      const preview = document.getElementById('notifications-preview');
+      const badge = document.getElementById('notifications-badge');
+      if (!preview || !badge) return;
+
+      const unread = notificationState.items.filter((item) => !item.read).length;
+      badge.textContent = unread > 99 ? '99+' : String(unread);
+      badge.classList.toggle('hidden', unread === 0);
+
+      const items = notificationState.items.slice(0, 6);
+      if (!items.length) {
+        preview.innerHTML = '<div class="p-4 text-sm text-gray-500">No notifications yet.</div>';
+        return;
+      }
+
+      preview.innerHTML = items.map((item) => `
+        <a href="${escapeNotificationHtml(item.href || '/notifications')}" class="block border-b p-3 last:border-b-0 hover:bg-gray-50 ${item.read ? '' : 'bg-blue-50'}">
+          <div class="flex items-start gap-2">
+            <span class="mt-1 h-2 w-2 shrink-0 rounded-full ${item.read ? 'bg-gray-300' : 'bg-blue-600'}"></span>
+            <span class="min-w-0">
+              <span class="block truncate text-sm font-medium text-gray-950">${escapeNotificationHtml(item.title)}</span>
+              <span class="mt-0.5 block truncate text-xs text-gray-600">${escapeNotificationHtml(item.body)}</span>
+              <span class="mt-1 block text-xs text-gray-500">${notificationTime(item.createdAt)}</span>
+            </span>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    async function loadNotificationsForNav({ notify = false } = {}) {
+      try {
+        const response = await fetch(`${API_URL}/v1/notifications`, { credentials: 'include' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const incoming = applyLocalNotificationReadState(payload.data || []);
+        const previousTopId = localStorage.getItem(notificationState.lastSeenKey);
+        const newestUnread = incoming.find((item) => !item.read);
+        notificationState.items = incoming;
+        renderNotificationsPreview();
+
+        if (newestUnread && previousTopId && newestUnread.id !== previousTopId) {
+          window.showToast?.(newestUnread.title, 'info');
+          if (notify && localStorage.getItem(notificationState.browserKey) === 'enabled' && 'Notification' in window && Notification.permission === 'granted') {
+            const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.ready.catch(() => null) : null;
+            if (registration?.showNotification) {
+              registration.showNotification(newestUnread.title, {
+                body: newestUnread.body,
+                tag: newestUnread.id,
+                data: { url: newestUnread.href || '/notifications' },
+              });
+            } else {
+              new Notification(newestUnread.title, {
+                body: newestUnread.body,
+                tag: newestUnread.id,
+              });
+            }
+          }
+        }
+        if (incoming[0]?.id) {
+          localStorage.setItem(notificationState.lastSeenKey, incoming[0].id);
+        }
+      } catch (error) {
+        console.warn('Notifications unavailable', error);
+      }
+    }
+
+    async function enableBrowserNotifications() {
+      if (!('Notification' in window)) {
+        window.showToast?.('This browser does not support notifications', 'error');
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      localStorage.setItem(notificationState.browserKey, permission === 'granted' ? 'enabled' : 'disabled');
+      window.showToast?.(permission === 'granted' ? 'Browser alerts enabled' : 'Browser alerts not enabled', permission === 'granted' ? 'success' : 'error');
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((error) => console.warn('Service worker registration failed', error));
+    }
 
     document.getElementById('mobile-menu')?.addEventListener('click', () => {
       document.getElementById('mobile-nav')?.classList.toggle('hidden');
       const button = document.getElementById('mobile-menu');
       button?.setAttribute('aria-expanded', String(document.getElementById('mobile-nav') && !document.getElementById('mobile-nav')?.classList.contains('hidden')));
     });
+
+    document.getElementById('notifications-button')?.addEventListener('click', () => {
+      const menu = document.getElementById('notifications-menu');
+      const button = document.getElementById('notifications-button');
+      menu?.classList.toggle('hidden');
+      button?.setAttribute('aria-expanded', String(menu && !menu.classList.contains('hidden')));
+    });
+
+    document.addEventListener('click', (event) => {
+      const menu = document.getElementById('notifications-menu');
+      const button = document.getElementById('notifications-button');
+      if (!menu || !button || menu.classList.contains('hidden')) return;
+      if (menu.contains(event.target) || button.contains(event.target)) return;
+      menu.classList.add('hidden');
+      button.setAttribute('aria-expanded', 'false');
+    });
+
+    document.getElementById('notifications-enable')?.addEventListener('click', enableBrowserNotifications);
 
     document.querySelectorAll('[data-logout]').forEach((button) => {
       button.addEventListener('click', async () => {
@@ -89,6 +238,9 @@ const { title = 'PaintFlow' } = Astro.props;
         }
       });
     });
+
+    loadNotificationsForNav();
+    setInterval(() => loadNotificationsForNav({ notify: true }), 30000);
   </script>
 </body>
 </html>
