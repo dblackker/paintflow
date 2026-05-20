@@ -594,13 +594,42 @@ import Base from '../../layouts/Base.astro';
               </label>
             </div>
           </div>
+          <div class="mt-3 rounded-md border border-emerald-200 bg-white p-3">
+            <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p class="text-sm font-medium text-emerald-950">Typical room dimensions</p>
+                <p class="text-xs text-emerald-800">Length x width in feet. These drive walls, ceilings, and trim for generated rooms.</p>
+              </div>
+              <span class="text-xs text-emerald-700">Override after measuring</span>
+            </div>
+            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              ${[
+                ['bedroom', 'Bedroom', 12, 12],
+                ['bathroom', 'Bathroom', 8, 8],
+                ['livingRoom', 'Living room', 18, 16],
+                ['diningRoom', 'Dining room', 14, 12],
+                ['kitchen', 'Kitchen', 14, 12],
+                ['hallway', 'Hallway', 14, 4],
+                ['closet', 'Closet', 6, 4],
+              ].map(([key, label, length, width]) => `
+                <div class="rounded border bg-gray-50 p-2">
+                  <p class="mb-1 text-xs font-medium text-gray-700">${label}</p>
+                  <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
+                    <input aria-label="${label} length" data-interior-size="${key}" data-dimension="length" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="${length}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" placeholder="Length">
+                    <span class="text-xs text-gray-500">x</span>
+                    <input aria-label="${label} width" data-interior-size="${key}" data-dimension="width" type="number" min="0" step="0.5" inputmode="decimal" autocomplete="off" value="${width}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" placeholder="Width">
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
           <div class="relative mt-3 inline-flex items-center gap-1.5">
-            <button type="button" class="generate-interior-scope inline-flex justify-center rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800">Add interior scope from room counts</button>
+            <button type="button" class="generate-interior-scope inline-flex justify-center rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800">Add interior scope from room schedule</button>
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 bg-white/80 text-[11px] font-medium leading-none text-emerald-700 hover:bg-white" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
             <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
               <p class="font-semibold text-gray-900">Interior assumptions</p>
               <p class="mt-1">Creates itemized editable lines for each generated room, such as Bedroom 1 walls, Bedroom 1 ceiling, Bedroom 1 trim, and Bedroom 1 doors.</p>
-              <p class="mt-2">Room allowances estimate perimeter, ceiling area, opening deductions, baseboards, casing, crown, and doors. Override any generated line as measurements improve.</p>
+              <p class="mt-2">Length x width estimates perimeter and ceiling area, then applies opening deductions, baseboards, casing, crown, and doors. Override any generated line as measurements improve.</p>
             </div>
           </div>
           <div class="mt-3 rounded-md border border-emerald-200 bg-white p-3 text-xs text-emerald-950" data-interior-preview></div>
@@ -1089,16 +1118,36 @@ import Base from '../../layouts/Base.astro';
       };
     }
 
+    function interiorRoomDimension(room, roomType, dimension, fallback) {
+      const input = room?.querySelector(`[data-interior-size="${roomType}"][data-dimension="${dimension}"]`);
+      const value = Number(input?.value || fallback);
+      return Number.isFinite(value) && value > 0 ? value : fallback;
+    }
+
+    function interiorRoomSize(room, roomType, fallbackLength, fallbackWidth) {
+      return {
+        length: interiorRoomDimension(room, roomType, 'length', fallbackLength),
+        width: interiorRoomDimension(room, roomType, 'width', fallbackWidth),
+      };
+    }
+
     function interiorRoomTypes(room) {
       const assumptions = interiorAssumptions(room);
+      const bedroom = interiorRoomSize(room, 'bedroom', 12, 12);
+      const bathroom = interiorRoomSize(room, 'bathroom', 8, 8);
+      const livingRoom = interiorRoomSize(room, 'livingRoom', 18, 16);
+      const diningRoom = interiorRoomSize(room, 'diningRoom', 14, 12);
+      const kitchen = interiorRoomSize(room, 'kitchen', 14, 12);
+      const hallway = interiorRoomSize(room, 'hallway', 14, 4);
+      const closet = interiorRoomSize(room, 'closet', 6, 4);
       return [
-        { name: 'Bedroom', count: assumptions.bedrooms, length: 12, width: 12, windows: 1, doors: 1 },
-        { name: 'Bathroom', count: assumptions.bathrooms, length: 8, width: 8, windows: 0.5, doors: 1 },
-        { name: 'Living room', count: assumptions.livingRooms, length: 18, width: 16, windows: 3, doors: 1 },
-        { name: 'Dining room', count: assumptions.diningRooms, length: 14, width: 12, windows: 2, doors: 1 },
-        { name: 'Kitchen', count: assumptions.kitchens, length: 14, width: 12, windows: 1, doors: 1 },
-        { name: 'Hallway', count: assumptions.hallways, length: 14, width: 4, windows: 0, doors: 0 },
-        { name: 'Closet', count: assumptions.closets, length: 6, width: 4, windows: 0, doors: 1 },
+        { name: 'Bedroom', count: assumptions.bedrooms, ...bedroom, windows: 1, doors: 1 },
+        { name: 'Bathroom', count: assumptions.bathrooms, ...bathroom, windows: 0.5, doors: 1 },
+        { name: 'Living room', count: assumptions.livingRooms, ...livingRoom, windows: 3, doors: 1 },
+        { name: 'Dining room', count: assumptions.diningRooms, ...diningRoom, windows: 2, doors: 1 },
+        { name: 'Kitchen', count: assumptions.kitchens, ...kitchen, windows: 1, doors: 1 },
+        { name: 'Hallway', count: assumptions.hallways, ...hallway, windows: 0, doors: 0 },
+        { name: 'Closet', count: assumptions.closets, ...closet, windows: 0, doors: 1 },
       ].filter(type => type.count > 0);
     }
 
@@ -1153,14 +1202,18 @@ import Base from '../../layouts/Base.astro';
       if (!preview) return;
       const quantities = interiorAssumptionQuantities(room);
       const hasInteriorSurface = Array.from(room.querySelectorAll('[data-surface-item]')).some((surface) => interiorSurfaceKind(surface));
+      const roomSchedule = interiorRoomTypes(room)
+        .map(type => `${type.count} ${type.name.toLowerCase()} @ ${type.length} x ${type.width}`)
+        .join(', ');
 
       if (!quantities.roomCount) {
-        preview.innerHTML = '<p class="font-medium">Add room counts to preview assumed interior quantities.</p>';
+        preview.innerHTML = '<p class="font-medium">Add room counts to preview assumed interior quantities.</p><p class="mt-1 text-emerald-800">Room dimensions are entered as length x width.</p>';
         return;
       }
 
       preview.innerHTML = `
         <div class="font-medium">${hasInteriorSurface ? 'Assumed quantities feeding selected interior lines' : 'Assumed quantities ready for interior lines'}</div>
+        <div class="mt-1 text-emerald-800">${escapeHtml(roomSchedule)}</div>
         <div class="mt-2 grid gap-2 min-[420px]:grid-cols-2 sm:grid-cols-4">
           <span>Walls: ${quantities.walls.toFixed(0)} sqft</span>
           <span>Ceilings: ${quantities.ceilings.toFixed(0)} sqft</span>
@@ -1622,7 +1675,7 @@ import Base from '../../layouts/Base.astro';
       }
     });
     document.addEventListener('input', (event) => {
-      if (event.target.matches('[data-interior]')) {
+      if (event.target.matches('[data-interior], [data-interior-size]')) {
         updateInteriorPreview(event.target.closest('#rooms-container > div'));
       }
       if (event.target.matches('[data-exterior]')) {
@@ -1631,7 +1684,7 @@ import Base from '../../layouts/Base.astro';
       if (event.target.closest('main')) calculateTotal();
     });
     document.addEventListener('change', (event) => {
-      if (event.target.matches('[data-interior]')) {
+      if (event.target.matches('[data-interior], [data-interior-size]')) {
         updateInteriorPreview(event.target.closest('#rooms-container > div'));
       }
       if (event.target.matches('[data-field="rateId"]')) {

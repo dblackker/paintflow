@@ -57,12 +57,21 @@ import Base from '../layouts/Base.astro';
           <div class="text-xs text-gray-500 mb-3">
             ${(template.rooms || []).length} room(s) - Used ${template.usageCount || 0}x
           </div>
+          ${roomDimensionsSummary(template.rooms || [])}
           <div class="flex gap-2">
             <button type="button" onclick="useTemplate('${template.id}')" class="flex-1 py-2 bg-blue-600 text-white rounded text-sm">Use Template</button>
             <button type="button" onclick="deleteTemplate('${template.id}')" class="px-3 py-2 border rounded text-sm">Delete</button>
           </div>
         </div>
       `).join('');
+    }
+
+    function roomDimensionsSummary(rooms) {
+      const summary = rooms
+        .filter(room => Number(room.length) > 0 && Number(room.width) > 0)
+        .map(room => `${escapeHtml(room.name)}: ${Number(room.length)} x ${Number(room.width)}`)
+        .join(' · ');
+      return summary ? `<div class="mb-3 text-xs text-gray-600">${summary}</div>` : '';
     }
 
     function escapeHtml(value) {

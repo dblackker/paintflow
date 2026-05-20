@@ -18,6 +18,8 @@ const templateSchema = z.object({
   rooms: z.array(z.object({
     name: z.string(),
     roomType: z.string().optional(),
+    length: z.number().positive().optional(),
+    width: z.number().positive().optional(),
     items: z.array(z.object({
       category: z.string(),
       productionRateId: z.string().optional(),
@@ -39,6 +41,8 @@ const BUILTIN_TEMPLATES = [
     rooms: [{
       name: 'Master Bedroom',
       roomType: 'bedroom',
+      length: 15,
+      width: 12,
       items: [
         { category: 'walls', quantity: 480, prepLevel: 'standard' },
         { category: 'ceiling', quantity: 180, prepLevel: 'standard' },
@@ -55,6 +59,8 @@ const BUILTIN_TEMPLATES = [
     rooms: [{
       name: 'Kitchen',
       roomType: 'kitchen',
+      length: 15,
+      width: 10,
       items: [
         { category: 'walls', quantity: 400, prepLevel: 'standard' },
         { category: 'ceiling', quantity: 150, prepLevel: 'standard' },
@@ -71,6 +77,8 @@ const BUILTIN_TEMPLATES = [
     rooms: [{
       name: 'Living Room',
       roomType: 'living_room',
+      length: 20,
+      width: 12,
       items: [
         { category: 'walls', quantity: 560, prepLevel: 'standard' },
         { category: 'ceiling', quantity: 240, prepLevel: 'standard' },
@@ -87,6 +95,8 @@ const BUILTIN_TEMPLATES = [
     rooms: [{
       name: 'Bathroom',
       roomType: 'bathroom',
+      length: 10,
+      width: 6,
       items: [
         { category: 'walls', quantity: 280, prepLevel: 'heavy' },
         { category: 'ceiling', quantity: 60, prepLevel: 'standard' },
