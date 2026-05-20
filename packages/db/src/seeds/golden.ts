@@ -88,7 +88,13 @@ async function findDemoOrg(db: Db) {
   });
 }
 
-async function deleteDemoOrg(db: Db, orgId: string, ownerEmail: string) {
+async function findDemoOwner(db: Db) {
+  return db.query.users.findFirst({
+    where: eq(users.email, goldenSeed.owner.email),
+  });
+}
+
+async function deleteOrgData(db: Db, orgId: string) {
   const estimateRows = await db.select({ id: estimates.id }).from(estimates).where(eq(estimates.orgId, orgId));
   const estimateIds = estimateRows.map((row) => row.id);
   const roomRows = estimateIds.length
@@ -133,14 +139,31 @@ async function deleteDemoOrg(db: Db, orgId: string, ownerEmail: string) {
   await db.delete(orgSettings).where(eq(orgSettings.orgId, orgId));
   await db.delete(memberships).where(eq(memberships.orgId, orgId));
   await db.delete(organizations).where(eq(organizations.id, orgId));
-  await db.delete(users).where(eq(users.email, ownerEmail));
+}
+
+async function deleteDemoState(db: Db) {
+  const orgIds = new Set<string>();
+  const existing = await findDemoOrg(db);
+  const owner = await findDemoOwner(db);
+
+  if (existing) orgIds.add(existing.id);
+
+  if (owner) {
+    const ownerMemberships = await db.select({ orgId: memberships.orgId }).from(memberships).where(eq(memberships.userId, owner.id));
+    for (const membership of ownerMemberships) {
+      orgIds.add(membership.orgId);
+    }
+  }
+
+  for (const orgId of orgIds) {
+    await deleteOrgData(db, orgId);
+  }
+
+  await db.delete(users).where(eq(users.email, goldenSeed.owner.email));
 }
 
 async function seed(db: Db) {
-  const existing = await findDemoOrg(db);
-  if (existing) {
-    await deleteDemoOrg(db, existing.id, goldenSeed.owner.email);
-  }
+  await deleteDemoState(db);
 
   const [org] = await db.insert(organizations).values(goldenSeed.organization).returning();
   const [owner] = await db.insert(users).values(goldenSeed.owner).returning();
