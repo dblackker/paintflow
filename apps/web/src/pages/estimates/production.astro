@@ -114,9 +114,14 @@ import Base from '../../layouts/Base.astro';
             </label>
             <p id="material-note" class="text-xs text-gray-500"></p>
           </div>
-          <button id="save-estimate" class="w-full mt-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
-            Create Estimate
-          </button>
+          <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            <button id="save-draft" class="w-full py-3 border border-blue-200 bg-white text-blue-700 rounded-lg font-medium hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60">
+              Save Draft
+            </button>
+            <button id="save-estimate" class="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+              Create Estimate
+            </button>
+          </div>
           <p id="save-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
         </div>
 
@@ -207,7 +212,7 @@ import Base from '../../layouts/Base.astro';
         templateRooms.forEach(room => addRoom(room.name || 'Template room', room.items || []));
         window.showToast('Template loaded into the production estimator.');
       } else {
-        addRoom('Interior');
+        addRoom('Interior', [], { seedSurface: false });
       }
       applyEstimateType();
       calculateTotal();
@@ -505,7 +510,7 @@ import Base from '../../layouts/Base.astro';
       }
     }
 
-    function addRoom(name = '', templateItems = []) {
+    function addRoom(name = '', templateItems = [], options = {}) {
       roomCounter++;
       const roomId = `room-${roomCounter}`;
       const div = document.createElement('div');
@@ -655,7 +660,7 @@ import Base from '../../layouts/Base.astro';
       updateExteriorPreview(div);
       if (templateItems.length) {
         templateItems.forEach(item => addSurface(roomId, item));
-      } else {
+      } else if (options.seedSurface !== false) {
         addSurface(roomId);
       }
       return div;
@@ -1663,8 +1668,9 @@ import Base from '../../layouts/Base.astro';
       if (event.target.closest('main')) calculateTotal();
     });
 
-    document.getElementById('save-estimate').addEventListener('click', async () => {
-      const button = document.getElementById('save-estimate');
+    async function persistEstimate(statusValue = 'sent') {
+      const button = document.getElementById(statusValue === 'draft' ? 'save-draft' : 'save-estimate');
+      const otherButton = document.getElementById(statusValue === 'draft' ? 'save-estimate' : 'save-draft');
       const status = document.getElementById('save-status');
       const leadId = document.getElementById('lead-select').value;
       const packages = buildPackages();
@@ -1672,29 +1678,36 @@ import Base from '../../layouts/Base.astro';
         window.showToast('Select a customer first', 'error');
         return;
       }
-      if (packages.length === 0) {
+      if (statusValue !== 'draft' && packages.length === 0) {
         window.showToast('Add at least one measured substrate', 'error');
         return;
       }
 
       try {
         button.disabled = true;
-        button.textContent = 'Creating estimate...';
-        status.textContent = 'Creating estimate and opening the customer proposal...';
+        otherButton.disabled = true;
+        button.textContent = statusValue === 'draft' ? 'Saving draft...' : 'Creating estimate...';
+        status.textContent = statusValue === 'draft' ? 'Saving draft estimate...' : 'Creating estimate and opening the customer proposal...';
         status.classList.remove('hidden');
         const { data } = await apiJson(`${API_URL}/v1/estimates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leadId, packages }),
+          body: JSON.stringify({ leadId, packages, status: statusValue }),
         });
-        window.showToast('Estimate created. Opening it now.');
-        window.location.href = `/estimates/${data.id}`;
+        window.showToast(statusValue === 'draft' ? 'Draft saved.' : 'Estimate created. Opening it now.');
+        window.location.href = statusValue === 'draft' ? '/estimates?status=draft' : `/estimates/${data.id}`;
       } catch (err) {
-        window.showToast(err.message || 'Failed to create estimate', 'error');
-        status.textContent = err.message || 'Failed to create estimate';
+        window.showToast(err.message || 'Failed to save estimate', 'error');
+        status.textContent = err.message || 'Failed to save estimate';
         button.disabled = false;
-        button.textContent = 'Create Estimate';
+        otherButton.disabled = false;
+        button.textContent = statusValue === 'draft' ? 'Save Draft' : 'Create Estimate';
       }
+    }
+
+    document.getElementById('save-draft').addEventListener('click', () => persistEstimate('draft'));
+    document.getElementById('save-estimate').addEventListener('click', () => {
+      persistEstimate('sent');
     });
 
     loadSetup().catch((err) => {

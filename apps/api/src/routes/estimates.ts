@@ -97,7 +97,16 @@ const estimatePackageSchema = z.object({
 
 const createEstimateSchema = z.object({
   leadId: z.string().uuid(),
-  packages: z.array(estimatePackageSchema).min(1).max(5),
+  status: z.enum(['draft', 'sent']).default('sent'),
+  packages: z.array(estimatePackageSchema).max(5),
+}).superRefine((data, ctx) => {
+  if (data.status === 'sent' && data.packages.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Sent estimates need at least one priced package',
+      path: ['packages'],
+    });
+  }
 });
 
 function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, packageName: string | undefined, selectedOptions: z.infer<typeof selectedOptionSchema>[]) {
@@ -250,25 +259,29 @@ estimatesApp.post('/', async (c) => {
     return c.json({ error: 'Lead not found' }, 404);
   }
 
+  const isDraft = parsed.data.status === 'draft';
   const recommendedPackage = parsed.data.packages.find((pkg) => /better|recommended/i.test(pkg.name))
     ?? parsed.data.packages[0];
+  const estimateTotal = recommendedPackage ? Number(recommendedPackage.total).toFixed(2) : '0.00';
 
   const [estimate] = await db.insert(estimates)
     .values({
       orgId,
       leadId: lead.id,
       packages: parsed.data.packages,
-      total: Number(recommendedPackage.total).toFixed(2),
-      status: 'sent',
-      sentAt: new Date(),
+      total: estimateTotal,
+      status: isDraft ? 'draft' : 'sent',
+      sentAt: isDraft ? null : new Date(),
     })
     .returning();
 
-  await db.update(leads)
-    .set({ status: 'estimate_sent', updatedAt: new Date() })
-    .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
+  if (!isDraft) {
+    await db.update(leads)
+      .set({ status: 'estimate_sent', updatedAt: new Date() })
+      .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
+  }
 
-  await db.insert(auditLogs).values([
+  const auditEntries: Array<typeof auditLogs.$inferInsert> = [
     {
       orgId,
       userId: c.get('userId'),
@@ -281,6 +294,23 @@ estimatesApp.post('/', async (c) => {
         total: estimate.total,
       },
     },
+  ];
+
+  if (isDraft) {
+    auditEntries.push({
+      orgId,
+      userId: c.get('userId'),
+      action: 'estimate.draft.saved',
+      entityType: 'estimate',
+      entityId: estimate.id,
+      metadata: {
+        leadId: lead.id,
+        packageCount: parsed.data.packages.length,
+        total: estimate.total,
+      },
+    });
+  } else {
+    auditEntries.push(
     {
       orgId,
       userId: c.get('userId'),
@@ -293,7 +323,10 @@ estimatesApp.post('/', async (c) => {
         total: estimate.total,
       },
     },
-  ]);
+    );
+  }
+
+  await db.insert(auditLogs).values(auditEntries);
 
   return c.json({
     data: {
