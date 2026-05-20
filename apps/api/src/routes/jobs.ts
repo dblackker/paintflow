@@ -239,6 +239,10 @@ const createCostSchema = z.object({
   unitCost: z.coerce.number().positive(),
 });
 
+const updateCostSchema = createCostSchema.partial().refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one field is required',
+});
+
 jobsApp.post('/:id/costs', async (c) => {
   const orgId = c.get('orgId');
   const jobId = c.req.param('id');
@@ -265,6 +269,40 @@ jobsApp.post('/:id/costs', async (c) => {
   }).returning();
   
   return c.json({ data: cost }, 201);
+});
+
+jobsApp.patch('/:id/costs/:costId', async (c) => {
+  const orgId = c.get('orgId');
+  const jobId = c.req.param('id');
+  const costId = c.req.param('costId');
+  const parsed = updateCostSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const job = await getJobForOrg(db, orgId, jobId);
+  if (!job) return c.json({ error: 'Not found' }, 404);
+
+  const existing = await db.query.jobCosts.findFirst({
+    where: and(eq(jobCosts.id, costId), eq(jobCosts.jobId, jobId), eq(jobCosts.orgId, orgId)),
+  });
+  if (!existing) return c.json({ error: 'Cost not found' }, 404);
+
+  const quantity = parsed.data.quantity ?? money(existing.quantity);
+  const unitCost = parsed.data.unitCost ?? money(existing.unitCost);
+  const [cost] = await db.update(jobCosts)
+    .set({
+      ...('category' in parsed.data ? { category: parsed.data.category } : {}),
+      ...('description' in parsed.data ? { description: parsed.data.description } : {}),
+      ...('quantity' in parsed.data ? { quantity: quantity.toString() } : {}),
+      ...('unitCost' in parsed.data ? { unitCost: unitCost.toString() } : {}),
+      totalCost: (quantity * unitCost).toString(),
+    })
+    .where(and(eq(jobCosts.id, costId), eq(jobCosts.jobId, jobId), eq(jobCosts.orgId, orgId)))
+    .returning();
+
+  return c.json({ data: cost });
 });
 
 jobsApp.delete('/:id/costs/:costId', async (c) => {

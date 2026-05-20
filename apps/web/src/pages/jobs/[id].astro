@@ -133,8 +133,9 @@ import '../../styles/design-system.css';
 
   <div id="cost-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-20 flex items-center justify-center p-4">
     <div class="bg-white rounded-lg p-6 w-full max-w-md">
-      <h3 class="text-lg font-semibold mb-4">Add Job Cost</h3>
+      <h3 id="cost-modal-title" class="text-lg font-semibold mb-4">Add Job Cost</h3>
       <form id="cost-form" class="space-y-3">
+        <input type="hidden" name="costId">
         <select name="category" required class="w-full px-3 py-2 border rounded">
           <option value="materials">Materials</option>
           <option value="supplies">Supplies</option>
@@ -150,7 +151,7 @@ import '../../styles/design-system.css';
         </div>
         <div class="flex gap-3 pt-3">
           <button type="button" id="cancel-cost-btn" class="flex-1 px-4 py-2 border rounded">Cancel</button>
-          <button class="flex-1 px-4 py-2 bg-blue-600 text-white rounded">Add</button>
+          <button id="save-cost-btn" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded">Add</button>
         </div>
       </form>
     </div>
@@ -295,7 +296,10 @@ import '../../styles/design-system.css';
           </div>
           <div class="flex items-center justify-between gap-3 sm:justify-end sm:text-right">
             <p class="font-semibold">${currency(cost.totalCost)}</p>
-            <button type="button" class="rounded-md border px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-delete-cost="${cost.id}" data-cost-description="${escapeHtml(cost.description)}">Remove</button>
+            <div class="flex items-center gap-2">
+              <button type="button" class="rounded-md border px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50" data-edit-cost="${cost.id}">Edit</button>
+              <button type="button" class="rounded-md border px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-delete-cost="${cost.id}" data-cost-description="${escapeHtml(cost.description)}">Remove</button>
+            </div>
           </div>
         </div>
       `).join('');
@@ -466,28 +470,59 @@ import '../../styles/design-system.css';
       `;
     }
 
-    document.getElementById('add-cost-btn').addEventListener('click', () => {
+    function openCostModal(cost = null) {
+      const form = document.getElementById('cost-form');
+      form.reset();
+      form.elements.costId.value = cost?.id || '';
+      if (cost) {
+        form.elements.category.value = cost.category;
+        form.elements.description.value = cost.description || '';
+        form.elements.quantity.value = Number(cost.quantity || 0);
+        form.elements.unitCost.value = Number(cost.unitCost || 0);
+      }
+      document.getElementById('cost-modal-title').textContent = cost ? 'Edit Job Cost' : 'Add Job Cost';
+      document.getElementById('save-cost-btn').textContent = cost ? 'Save' : 'Add';
       document.getElementById('cost-modal').classList.remove('hidden');
+      form.elements.description.focus();
+    }
+
+    function closeCostModal() {
+      document.getElementById('cost-modal').classList.add('hidden');
+      document.getElementById('cost-form').reset();
+      document.getElementById('cost-modal-title').textContent = 'Add Job Cost';
+      document.getElementById('save-cost-btn').textContent = 'Add';
+    }
+
+    document.getElementById('add-cost-btn').addEventListener('click', () => {
+      openCostModal();
     });
 
     document.getElementById('cancel-cost-btn').addEventListener('click', () => {
-      document.getElementById('cost-modal').classList.add('hidden');
+      closeCostModal();
     });
 
     document.getElementById('cost-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       const data = Object.fromEntries(new FormData(form));
-      await api(`/v1/jobs/${jobId}/costs`, {
-        method: 'POST',
+      const costId = data.costId;
+      delete data.costId;
+      await api(costId ? `/v1/jobs/${jobId}/costs/${costId}` : `/v1/jobs/${jobId}/costs`, {
+        method: costId ? 'PATCH' : 'POST',
         body: JSON.stringify(data),
       });
-      form.reset();
-      document.getElementById('cost-modal').classList.add('hidden');
+      closeCostModal();
       await loadCosting();
     });
 
     document.getElementById('cost-list').addEventListener('click', async (event) => {
+      const editButton = event.target.closest('[data-edit-cost]');
+      if (editButton) {
+        const cost = costing.lists.costs.find((item) => item.id === editButton.dataset.editCost);
+        if (cost) openCostModal(cost);
+        return;
+      }
+
       const button = event.target.closest('[data-delete-cost]');
       if (!button) return;
       const description = button.dataset.costDescription || 'this cost';
