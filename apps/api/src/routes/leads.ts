@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { leads, quickbooksConnections } from '@paintflow/db/schema';
-import { and, desc, eq, ilike, or } from 'drizzle-orm';
+import { auditLogs, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@paintflow/db/schema';
+import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createQBCustomer } from '../lib/quickbooks';
@@ -118,6 +118,67 @@ leadsApp.post('/', async (c) => {
   }
   
   return c.json({ data: lead }, 201);
+});
+
+leadsApp.get('/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const customer = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.orgId, orgId)),
+  });
+
+  if (!customer) {
+    return c.json({ error: 'Lead not found' }, 404);
+  }
+
+  const [customerEstimates, customerJobs, customerMessages, customerActivity] = await Promise.all([
+    db.select().from(estimates)
+      .where(and(eq(estimates.orgId, orgId), eq(estimates.leadId, id)))
+      .orderBy(desc(estimates.createdAt)),
+    db.select().from(jobs)
+      .where(and(eq(jobs.orgId, orgId), eq(jobs.leadId, id)))
+      .orderBy(desc(jobs.createdAt)),
+    db.select().from(messages)
+      .where(and(eq(messages.orgId, orgId), eq(messages.leadId, id)))
+      .orderBy(desc(messages.createdAt))
+      .limit(50),
+    db.select().from(auditLogs)
+      .where(and(eq(auditLogs.orgId, orgId), eq(auditLogs.entityType, 'lead'), eq(auditLogs.entityId, id)))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(50),
+  ]);
+
+  const estimateIds = customerEstimates.map((estimate) => estimate.id);
+  const jobIds = customerJobs.map((job) => job.id);
+
+  const [photosForEstimates, photosForJobs] = await Promise.all([
+    estimateIds.length
+      ? db.select().from(estimatePhotos)
+        .where(inArray(estimatePhotos.estimateId, estimateIds))
+        .orderBy(desc(estimatePhotos.createdAt))
+      : Promise.resolve([]),
+    jobIds.length
+      ? db.select().from(jobPhotos)
+        .where(and(eq(jobPhotos.orgId, orgId), inArray(jobPhotos.jobId, jobIds)))
+        .orderBy(desc(jobPhotos.createdAt))
+      : Promise.resolve([]),
+  ]);
+
+  return c.json({
+    data: {
+      customer,
+      estimates: customerEstimates,
+      jobs: customerJobs,
+      messages: customerMessages,
+      activity: customerActivity,
+      photos: {
+        estimates: photosForEstimates,
+        jobs: photosForJobs,
+      },
+    },
+  });
 });
 
 leadsApp.patch('/:id', async (c) => {

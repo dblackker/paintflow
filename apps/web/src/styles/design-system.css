@@ -340,6 +340,12 @@ button[class*="bg-blue"][class*="text-white"]:active {
   border-color: var(--pf-primary);
 }
 
+.btn-sm {
+  font-size: 0.875rem;
+  min-height: 2rem;
+  padding: 0.4rem 0.7rem;
+}
+
 .btn-icon {
   background: var(--pf-surface-muted);
   border: 1px solid var(--pf-border);

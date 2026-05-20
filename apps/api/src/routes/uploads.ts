@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { expenses } from '@paintflow/db/schema';
+import { expenses, jobPhotos, jobs } from '@paintflow/db/schema';
+import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -70,13 +71,25 @@ uploads.post('/photo', async (c) => {
     return c.json({ error: 'Missing file or jobId' }, 400);
   }
   
-  // Upload to R2 (mock for now)
+  const db = createDb(c.env.DATABASE_URL);
+  const job = await db.query.jobs.findFirst({
+    where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)),
+  });
+
+  if (!job) {
+    return c.json({ error: 'Job not found' }, 404);
+  }
+
+  // Upload to R2 when configured, otherwise keep the existing local-dev CDN stub.
   const key = `photos/${jobId}/${Date.now()}-${file.name}`;
+  if (c.env.R2) {
+    await c.env.R2.put(key, file.stream(), {
+      httpMetadata: { contentType: file.type || 'application/octet-stream' },
+    });
+  }
   const url = `https://cdn.paintflow.app/${key}`;
   
   // Save to DB
-  const { jobPhotos } = await import('@paintflow/db/schema');
-  const db = createDb(c.env.DATABASE_URL);
   const [photo] = await db.insert(jobPhotos).values({
     orgId,
     jobId,
@@ -93,8 +106,6 @@ uploads.post('/photo', async (c) => {
 uploads.get('/photos/:jobId', async (c) => {
   const orgId = c.get('orgId');
   const jobId = c.req.param('jobId');
-  const { jobPhotos } = await import('@paintflow/db/schema');
-  const { eq, and } = await import('drizzle-orm');
   
   const db = createDb(c.env.DATABASE_URL);
   const photos = await db.select().from(jobPhotos)

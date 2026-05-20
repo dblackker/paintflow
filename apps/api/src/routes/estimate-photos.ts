@@ -45,8 +45,6 @@ photosApp.get('/:estimateId', async (c) => {
 photosApp.post('/:estimateId', async (c) => {
   const orgId = c.get('orgId');
   const estimateId = c.req.param('estimateId');
-  const body = await c.req.json();
-  const parsed = photoSchema.parse(body);
   const db = createDb(c.env.DATABASE_URL);
   
   // Verify estimate belongs to org
@@ -57,6 +55,37 @@ photosApp.post('/:estimateId', async (c) => {
   if (!estimate) {
     return c.json({ error: 'Estimate not found' }, 404);
   }
+
+  const contentType = c.req.header('content-type') || '';
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File | null;
+    const roomId = formData.get('roomId') as string | null;
+    const caption = formData.get('caption') as string | null;
+
+    if (!file) {
+      return c.json({ error: 'Missing file' }, 400);
+    }
+
+    const key = `estimate-photos/${estimateId}/${Date.now()}-${file.name}`;
+    if (c.env.R2) {
+      await c.env.R2.put(key, file.stream(), {
+        httpMetadata: { contentType: file.type || 'application/octet-stream' },
+      });
+    }
+
+    const [photo] = await db.insert(estimatePhotos).values({
+      estimateId,
+      roomId: roomId || undefined,
+      url: `https://cdn.paintflow.app/${key}`,
+      annotations: caption ? [{ text: caption }] : [],
+    }).returning();
+
+    return c.json({ data: photo }, 201);
+  }
+
+  const body = await c.req.json();
+  const parsed = photoSchema.parse(body);
   
   const [photo] = await db.insert(estimatePhotos).values({
     estimateId,

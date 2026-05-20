@@ -1,0 +1,255 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+
+<Base title="Customer Detail">
+  <div class="min-h-screen bg-gray-50">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+      <a href="/leads" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-950 mb-4">&larr; Leads</a>
+      <div id="customer-root" class="space-y-5">
+        <div class="bg-white border rounded-lg p-8 text-center text-gray-500">Loading customer...</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const leadId = window.location.pathname.split('/').pop();
+    const root = document.getElementById('customer-root');
+
+    const statusLabels = {
+      new: 'New',
+      contacted: 'Contacted',
+      estimate_sent: 'Estimate sent',
+      won: 'Won',
+      lost: 'Lost',
+      draft: 'Draft',
+      sent: 'Sent',
+      accepted: 'Accepted',
+      declined: 'Declined',
+    };
+
+    const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : 'Not set';
+    const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+    async function apiJson(path) {
+      const res = await fetch(`${API_URL}${path}`, { credentials: 'include' });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function latestEstimate(estimates) {
+      return [...estimates].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    }
+
+    function nextAction({ customer, estimates, jobs }) {
+      const activeJob = jobs.find((job) => !['completed', 'cancelled'].includes(job.status));
+      if (activeJob) {
+        return { label: 'Open active job', href: `/jobs/${activeJob.id}` };
+      }
+      const sent = estimates.find((estimate) => estimate.status === 'sent');
+      if (sent) {
+        return { label: 'Follow up on estimate', href: `/estimates/${sent.id}` };
+      }
+      const draft = estimates.find((estimate) => estimate.status === 'draft');
+      if (draft) {
+        return { label: 'Edit draft estimate', href: `/estimates/production?estimateId=${draft.id}` };
+      }
+      return { label: 'Create estimate', href: `/estimates/production?leadId=${customer.id}` };
+    }
+
+    function renderStat(label, value, help) {
+      return `
+        <div class="bg-white border rounded-lg p-4">
+          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">${label}</p>
+          <p class="text-2xl font-semibold text-gray-950 mt-1">${value}</p>
+          <p class="text-xs text-gray-500 mt-1">${help}</p>
+        </div>
+      `;
+    }
+
+    function renderEstimates(estimates) {
+      if (!estimates.length) {
+        return '<div class="p-5 text-sm text-gray-500">No estimates yet.</div>';
+      }
+      return estimates.map((estimate) => `
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="font-medium">${currency(estimate.total)}</p>
+              <span class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(statusLabels[estimate.status] || estimate.status)}</span>
+            </div>
+            <p class="text-sm text-gray-600">Created ${dateLabel(estimate.createdAt)}${estimate.sentAt ? ` &middot; Sent ${dateLabel(estimate.sentAt)}` : ''}${estimate.signedAt ? ` &middot; Accepted ${dateLabel(estimate.signedAt)}` : ''}</p>
+          </div>
+          <div class="flex gap-2 sm:justify-end">
+            ${estimate.status === 'draft' ? `<a class="btn-secondary btn-sm" href="/estimates/production?estimateId=${estimate.id}">Edit</a>` : ''}
+            <a class="btn-secondary btn-sm" href="/estimates/${estimate.id}">Open</a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderJobs(jobs) {
+      if (!jobs.length) {
+        return '<div class="p-5 text-sm text-gray-500">No jobs yet. Accepted estimates will become production work here.</div>';
+      }
+      return jobs.map((job) => `
+        <a class="block p-4 hover:bg-gray-50" href="/jobs/${job.id}">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <p class="font-medium text-gray-950">${escapeHtml(job.name)}</p>
+              <p class="text-sm text-gray-600">Created ${dateLabel(job.createdAt)}${job.completedAt ? ` &middot; Completed ${dateLabel(job.completedAt)}` : ''}</p>
+            </div>
+            <div class="sm:text-right">
+              <span class="inline-flex px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(job.status)}</span>
+              <p class="text-sm font-medium mt-1">${job.budget == null ? 'No budget' : currency(job.budget)}</p>
+            </div>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    function renderMessages(messages) {
+      if (!messages.length) {
+        return '<div class="p-5 text-sm text-gray-500">No message history yet.</div>';
+      }
+      return messages.map((message) => `
+        <div class="p-4">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-medium">${message.direction === 'inbound' ? 'Customer' : 'Team'} message</p>
+            <p class="text-xs text-gray-500">${dateLabel(message.createdAt)}</p>
+          </div>
+          <p class="text-sm text-gray-700 mt-1">${escapeHtml(message.body)}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderPhotos(photos) {
+      const all = [...photos.estimates.map((photo) => ({ ...photo, source: 'Estimate' })), ...photos.jobs.map((photo) => ({ ...photo, source: 'Job' }))];
+      if (!all.length) {
+        return '<div class="p-5 text-sm text-gray-500">No site or job photos yet.</div>';
+      }
+      return `
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
+          ${all.slice(0, 12).map((photo) => `
+            <a href="${escapeHtml(photo.url)}" target="_blank" rel="noreferrer" class="block border rounded-lg overflow-hidden bg-gray-50">
+              <div class="aspect-[4/3] bg-gray-100 flex items-center justify-center text-xs text-gray-500">Photo</div>
+              <div class="p-2">
+                <p class="text-xs font-medium text-gray-700">${escapeHtml(photo.source)} photo</p>
+                <p class="text-xs text-gray-500">${dateLabel(photo.createdAt)}</p>
+              </div>
+            </a>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderActivity(activity, customer) {
+      const items = activity.length ? activity : [
+        { action: 'lead.created', entityType: 'lead', createdAt: customer.createdAt },
+        ...(customer.updatedAt && customer.updatedAt !== customer.createdAt ? [{ action: 'lead.updated', entityType: 'lead', createdAt: customer.updatedAt }] : []),
+      ];
+      return items.map((item) => `
+        <div class="p-4 flex items-start gap-3">
+          <div class="mt-1 h-2 w-2 rounded-full bg-blue-600"></div>
+          <div>
+            <p class="text-sm font-medium">${escapeHtml(item.action.replaceAll('.', ' '))}</p>
+            <p class="text-xs text-gray-500">${dateLabel(item.createdAt)}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderFollowUps(data) {
+      const followUps = [];
+      const sentEstimate = data.estimates.find((estimate) => estimate.status === 'sent');
+      const acceptedEstimate = data.estimates.find((estimate) => estimate.status === 'accepted');
+      const completedJob = data.jobs.find((job) => job.status === 'completed');
+      if (sentEstimate) followUps.push(`Follow up on estimate sent ${dateLabel(sentEstimate.sentAt || sentEstimate.createdAt)}.`);
+      if (acceptedEstimate && !data.jobs.some((job) => job.estimateId === acceptedEstimate.id)) followUps.push('Accepted estimate needs a scheduled job.');
+      if (completedJob) followUps.push('Completed job is ready for review request and before/after photo selection.');
+      if (!followUps.length) followUps.push('No urgent follow-up detected. Keep contact details current and create the next estimate when ready.');
+      return followUps.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+    }
+
+    function render(data) {
+      const customer = data.customer;
+      const action = nextAction(data);
+      const recentEstimate = latestEstimate(data.estimates);
+      root.innerHTML = `
+        <section class="bg-white border rounded-lg p-5 sm:p-6">
+          <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h1 class="text-2xl sm:text-3xl font-semibold text-gray-950">${escapeHtml(customer.name)}</h1>
+                <span class="px-2 py-0.5 text-xs rounded bg-blue-50 text-blue-700">${escapeHtml(statusLabels[customer.status] || customer.status)}</span>
+              </div>
+              <p class="text-sm text-gray-600 mt-2">${escapeHtml(customer.source || 'No source')} &middot; Created ${dateLabel(customer.createdAt)}</p>
+              <div class="flex flex-wrap gap-2 mt-4">
+                <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `tel:${customer.phone}` : '#'}">Call</a>
+                <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `sms:${customer.phone}` : '#'}">Text</a>
+                <a class="btn-secondary btn-sm ${customer.email ? '' : 'pointer-events-none opacity-50'}" href="${customer.email ? `mailto:${customer.email}` : '#'}">Email</a>
+                <a class="btn-primary btn-sm" href="${action.href}">${action.label}</a>
+              </div>
+            </div>
+            <div class="lg:text-right text-sm text-gray-700">
+              <p>${escapeHtml(customer.phone || 'No phone')}</p>
+              <p>${escapeHtml(customer.email || 'No email')}</p>
+              <p class="text-gray-500 mt-2">Updated ${dateLabel(customer.updatedAt)}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          ${renderStat('Estimates', data.estimates.length, recentEstimate ? `${currency(recentEstimate.total)} latest` : 'No estimate yet')}
+          ${renderStat('Jobs', data.jobs.length, data.jobs.find((job) => job.status !== 'completed') ? 'Active production' : 'No active job')}
+          ${renderStat('Messages', data.messages.length, 'Recent contact history')}
+          ${renderStat('Photos', data.photos.estimates.length + data.photos.jobs.length, 'Estimate and job media')}
+        </section>
+
+        <section class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)] gap-5">
+          <div class="space-y-5">
+            <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b"><h2 class="font-semibold">Estimates</h2></div>
+              <div class="divide-y">${renderEstimates(data.estimates)}</div>
+            </section>
+            <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b"><h2 class="font-semibold">Jobs</h2></div>
+              <div class="divide-y">${renderJobs(data.jobs)}</div>
+            </section>
+            <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b"><h2 class="font-semibold">Photos</h2></div>
+              ${renderPhotos(data.photos)}
+            </section>
+          </div>
+          <aside class="space-y-5">
+            <section class="bg-white border rounded-lg">
+              <div class="p-4 border-b"><h2 class="font-semibold">Follow-Up</h2></div>
+              <ul class="p-4 text-sm text-gray-700 space-y-2 list-disc list-inside">${renderFollowUps(data)}</ul>
+            </section>
+            <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b"><h2 class="font-semibold">Messages</h2></div>
+              <div class="divide-y max-h-[420px] overflow-auto">${renderMessages(data.messages)}</div>
+            </section>
+            <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b"><h2 class="font-semibold">Activity</h2></div>
+              <div class="divide-y">${renderActivity(data.activity, customer)}</div>
+            </section>
+          </aside>
+        </section>
+      `;
+    }
+
+    apiJson(`/v1/leads/${leadId}`)
+      .then((payload) => payload && render(payload.data))
+      .catch((err) => {
+        root.innerHTML = `<div class="bg-white border rounded-lg p-8 text-center text-red-600">${escapeHtml(err.message || 'Failed to load customer')}</div>`;
+      });
+  </script>
+</Base>
