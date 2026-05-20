@@ -189,7 +189,7 @@ export const orgSettings = pgTable('org_settings', {
   estimateValidDays: integer('estimate_valid_days').default(30),
   
   // Payment
-  paymentTerms: varchar('payment_terms', { length: 50 }).default('Due on completion'),
+  paymentTerms: varchar('payment_terms', { length: 255 }).default('Due on completion'),
   acceptChecks: boolean('accept_checks').default(true),
   acceptCash: boolean('accept_cash').default(true),
   
