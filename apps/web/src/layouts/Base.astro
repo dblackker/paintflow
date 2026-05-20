@@ -136,6 +136,7 @@ const { title = 'PaintFlow' } = Astro.props;
     const notificationState = {
       items: [],
       lastSeenKey: 'paintflow.lastSeenNotificationId',
+      notifiedKey: 'paintflow.notifiedNotificationIds',
       auditReadKey: 'paintflow.readAuditNotifications',
       browserKey: 'paintflow.browserNotifications',
     };
@@ -150,6 +151,21 @@ const { title = 'PaintFlow' } = Astro.props;
       } catch {
         return new Set();
       }
+    }
+
+    function readNotifiedNotifications() {
+      try {
+        return new Set(JSON.parse(localStorage.getItem(notificationState.notifiedKey) || '[]'));
+      } catch {
+        return new Set();
+      }
+    }
+
+    function rememberNotifiedNotifications(items) {
+      const notified = readNotifiedNotifications();
+      items.forEach((item) => notified.add(item.id));
+      const recent = Array.from(notified).slice(-250);
+      localStorage.setItem(notificationState.notifiedKey, JSON.stringify(recent));
     }
 
     function notificationTime(value) {
@@ -197,11 +213,14 @@ const { title = 'PaintFlow' } = Astro.props;
         const payload = await response.json();
         const incoming = applyLocalNotificationReadState(payload.data || []);
         const previousTopId = localStorage.getItem(notificationState.lastSeenKey);
-        const newestUnread = incoming.find((item) => !item.read);
+        const existingNotified = localStorage.getItem(notificationState.notifiedKey);
+        const notified = readNotifiedNotifications();
+        const unreadItems = incoming.filter((item) => !item.read);
+        const newestUnread = unreadItems.find((item) => !notified.has(item.id));
         notificationState.items = incoming;
         renderNotificationsPreview();
 
-        if (newestUnread && previousTopId && newestUnread.id !== previousTopId) {
+        if (newestUnread && previousTopId && existingNotified) {
           window.showToast?.(newestUnread.title, 'info');
           if (notify && localStorage.getItem(notificationState.browserKey) === 'enabled' && 'Notification' in window && Notification.permission === 'granted') {
             const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.ready.catch(() => null) : null;
@@ -219,6 +238,7 @@ const { title = 'PaintFlow' } = Astro.props;
             }
           }
         }
+        rememberNotifiedNotifications(unreadItems);
         if (incoming[0]?.id) {
           localStorage.setItem(notificationState.lastSeenKey, incoming[0].id);
         }
