@@ -168,16 +168,19 @@ import '../../styles/design-system.css';
     const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : '';
     const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const formatAddress = (record) => [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
 
     function customerProfileLink(job) {
       if (!job.leadId) return '<p class="text-gray-600">No customer linked</p>';
       const name = job.leadName || 'Customer';
       const initial = escapeHtml(String(name).trim().charAt(0).toUpperCase() || 'C');
+      const address = formatAddress(job);
       return `
         <a href="/leads/${job.leadId}" class="group mt-2 inline-flex min-w-0 items-center gap-3 rounded-lg pr-2 hover:bg-gray-50">
           <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700 group-hover:bg-blue-100">${initial}</span>
           <span class="min-w-0">
             <span class="block truncate font-medium text-gray-950 group-hover:text-blue-700">${escapeHtml(name)}</span>
+            <span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>
             <span class="block text-xs text-gray-500">Open customer profile</span>
           </span>
         </a>

@@ -22,6 +22,10 @@ const leadBaseSchema = z.object({
     (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,
     z.string().trim().email().max(255).optional()
   ),
+  streetAddress: z.string().trim().max(255).optional(),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(50).optional(),
+  postalCode: z.string().trim().max(20).optional(),
   source: z.string().trim().max(100).optional(),
   status: leadStatusSchema.optional(),
 });
@@ -64,7 +68,10 @@ leadsApp.get('/', async (c) => {
     filters.push(or(
       ilike(leads.name, `%${q}%`),
       ilike(leads.email, `%${q}%`),
-      ilike(leads.phone, `%${q}%`)
+      ilike(leads.phone, `%${q}%`),
+      ilike(leads.streetAddress, `%${q}%`),
+      ilike(leads.city, `%${q}%`),
+      ilike(leads.postalCode, `%${q}%`)
     )!);
   }
   
@@ -98,6 +105,10 @@ leadsApp.post('/', async (c) => {
     name: parsed.data.name,
     phone,
     email: parsed.data.email,
+    streetAddress: parsed.data.streetAddress,
+    city: parsed.data.city,
+    state: parsed.data.state,
+    postalCode: parsed.data.postalCode,
     source: parsed.data.source,
     status: parsed.data.status ?? 'new',
   }).returning();

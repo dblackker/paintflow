@@ -32,6 +32,7 @@ import Base from '../../layouts/Base.astro';
     const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : 'Not set';
     const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const formatAddress = (record) => [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
 
     async function apiJson(path) {
       const res = await fetch(`${API_URL}${path}`, { credentials: 'include' });
@@ -191,6 +192,7 @@ import Base from '../../layouts/Base.astro';
                 <span class="px-2 py-0.5 text-xs rounded bg-blue-50 text-blue-700">${escapeHtml(statusLabels[customer.status] || customer.status)}</span>
               </div>
               <p class="text-sm text-gray-600 mt-2">${escapeHtml(customer.source || 'No source')} &middot; Created ${dateLabel(customer.createdAt)}</p>
+              <p class="mt-3 text-base font-medium text-gray-950">${escapeHtml(formatAddress(customer) || 'No jobsite address on file')}</p>
               <div class="flex flex-wrap gap-2 mt-4">
                 <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `tel:${customer.phone}` : '#'}">Call</a>
                 <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `/sms?leadId=${customer.id}` : '#'}">Message</a>
@@ -201,6 +203,7 @@ import Base from '../../layouts/Base.astro';
             <div class="lg:text-right text-sm text-gray-700">
               <p>${escapeHtml(customer.phone || 'No phone')}</p>
               <p>${escapeHtml(customer.email || 'No email')}</p>
+              <p class="mt-2 max-w-xs text-gray-600">${escapeHtml(formatAddress(customer) || '')}</p>
               <p class="text-gray-500 mt-2">Updated ${dateLabel(customer.updatedAt)}</p>
             </div>
           </div>

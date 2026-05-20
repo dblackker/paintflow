@@ -257,6 +257,10 @@ estimatesApp.get('/', async (c) => {
     leadName: leadsById.get(estimate.leadId)?.name ?? 'Customer',
     leadPhone: leadsById.get(estimate.leadId)?.phone,
     leadEmail: leadsById.get(estimate.leadId)?.email,
+    leadStreetAddress: leadsById.get(estimate.leadId)?.streetAddress,
+    leadCity: leadsById.get(estimate.leadId)?.city,
+    leadState: leadsById.get(estimate.leadId)?.state,
+    leadPostalCode: leadsById.get(estimate.leadId)?.postalCode,
   }));
   
   return c.json({ data });

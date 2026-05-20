@@ -48,6 +48,10 @@ dashboard.get('/stats', async (c) => {
       clientName: leads.name,
       leadPhone: leads.phone,
       leadEmail: leads.email,
+      leadStreetAddress: leads.streetAddress,
+      leadCity: leads.city,
+      leadState: leads.state,
+      leadPostalCode: leads.postalCode,
     })
     .from(estimates)
     .leftJoin(leads, and(eq(estimates.leadId, leads.id), eq(leads.orgId, orgId)))

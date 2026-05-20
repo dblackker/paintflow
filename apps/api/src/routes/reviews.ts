@@ -156,6 +156,10 @@ reviews.get('/stats', async (c) => {
     return {
       ...req,
       leadName: lead?.name,
+      leadStreetAddress: lead?.streetAddress,
+      leadCity: lead?.city,
+      leadState: lead?.state,
+      leadPostalCode: lead?.postalCode,
       jobName: job?.name,
     };
   }));

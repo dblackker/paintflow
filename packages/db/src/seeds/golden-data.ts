@@ -70,11 +70,11 @@ export const goldenSeed = {
     { key: 'sundries', name: 'Tape, plastic, caulk, rollers', category: 'supplies', brand: 'Mixed', unit: 'each', costPerUnit: '185.00', markupPercent: '25.00', supplier: 'Warehouse stock', sku: 'SUNDRIES-JOB' },
   ],
   leads: [
-    { key: 'jessica', name: 'Jessica Park', phone: '+14155550101', email: 'jessica.park@example.com', source: 'Website form', status: 'estimate_sent' },
-    { key: 'robert', name: 'Robert Chen', phone: '+14155550102', email: 'robert.chen@example.com', source: 'Google Local Services', status: 'won' },
-    { key: 'emily', name: 'Emily Rivera', phone: '+14155550103', email: 'emily.rivera@example.com', source: 'Customer referral', status: 'new' },
-    { key: 'harper', name: 'Harper & Co Workspace', phone: '+14155550104', email: 'ops@harperco.example', source: 'Website form', status: 'contacted' },
-    { key: 'thompson', name: 'Thompson Residence', phone: '+14155550105', email: 'thompson@example.com', source: 'Yard sign', status: 'lost' },
+    { key: 'jessica', name: 'Jessica Park', phone: '+14155550101', email: 'jessica.park@example.com', streetAddress: '742 Noe St', city: 'San Francisco', state: 'CA', postalCode: '94114', source: 'Website form', status: 'estimate_sent' },
+    { key: 'robert', name: 'Robert Chen', phone: '+14155550102', email: 'robert.chen@example.com', streetAddress: '1818 Lake St', city: 'San Francisco', state: 'CA', postalCode: '94121', source: 'Google Local Services', status: 'won' },
+    { key: 'emily', name: 'Emily Rivera', phone: '+14155550103', email: 'emily.rivera@example.com', streetAddress: '95 South Park St', city: 'San Francisco', state: 'CA', postalCode: '94107', source: 'Customer referral', status: 'new' },
+    { key: 'harper', name: 'Harper & Co Workspace', phone: '+14155550104', email: 'ops@harperco.example', streetAddress: '420 Bryant St', city: 'San Francisco', state: 'CA', postalCode: '94107', source: 'Website form', status: 'contacted' },
+    { key: 'thompson', name: 'Thompson Residence', phone: '+14155550105', email: 'thompson@example.com', streetAddress: '1120 Ralston Ave', city: 'Burlingame', state: 'CA', postalCode: '94010', source: 'Yard sign', status: 'lost' },
   ],
   messages: [
     { leadKey: 'jessica', direction: 'outbound', fromNumber: '+14155550120', toNumber: '+14155550101', body: 'Hi Jessica, your painting proposal is ready. Reply with any color questions before Friday.' },

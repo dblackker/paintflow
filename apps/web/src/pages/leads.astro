@@ -60,6 +60,24 @@ import Base from '../layouts/Base.astro';
             </div>
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Jobsite street address</label>
+            <input name="streetAddress" autocomplete="street-address" enterkeyhint="next" placeholder="123 Main St" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-[1fr_96px_120px] gap-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
+              <input name="city" autocomplete="address-level2" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">State</label>
+              <input name="state" autocomplete="address-level1" maxlength="2" autocapitalize="characters" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">ZIP</label>
+              <input name="postalCode" autocomplete="postal-code" inputmode="numeric" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Source</label>
             <select name="source" id="lead-source" class="w-full px-3 py-3 border rounded-lg">
               <option value="">Select source...</option>
@@ -99,6 +117,10 @@ import Base from '../layouts/Base.astro';
       if (digits.length <= 3) return digits;
       if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
       return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+
+    function formatAddress(record) {
+      return [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
     }
 
     async function apiJson(url, options = {}) {
@@ -178,6 +200,7 @@ import Base from '../layouts/Base.astro';
                 ${lead.qboCustomerId ? '<span class="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">QB</span>' : ''}
               </div>
               <p class="text-sm text-gray-600 mt-1">${escapeHtml(lead.phone || lead.email || 'No contact')}</p>
+              <p class="text-sm text-gray-800 mt-1">${escapeHtml(formatAddress(lead) || 'No jobsite address')}</p>
               <p class="text-xs text-gray-500 mt-1">${escapeHtml(lead.source || 'No source')} - ${new Date(lead.createdAt).toLocaleDateString()}</p>
             </div>
             <select class="status-select w-full sm:w-44 px-3 py-2 border rounded-lg text-sm" data-id="${lead.id}">
@@ -239,6 +262,7 @@ import Base from '../layouts/Base.astro';
       e.preventDefault();
       const formData = new FormData(e.target);
       const data = Object.fromEntries(formData);
+      if (data.state) data.state = String(data.state).toUpperCase();
       if (data.phone) {
         data.phone = formatPhone(data.phone);
         if (phoneDigits(data.phone).length !== 10) {

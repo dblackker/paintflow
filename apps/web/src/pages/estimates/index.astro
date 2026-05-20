@@ -69,15 +69,22 @@ import Base from '../../layouts/Base.astro';
         return `<div class="font-semibold text-gray-950 truncate">${escapeHtml(customer?.name || 'Customer')}</div>`;
       }
       const initial = escapeHtml(String(customer.name || 'C').trim().charAt(0).toUpperCase() || 'C');
+      const address = customer.address || 'No jobsite address';
+      const contact = customer.contact || '';
       return `
         <a href="/leads/${customer.leadId}" class="group inline-flex min-w-0 items-center gap-3 rounded-lg pr-2 hover:bg-gray-50">
           <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700 group-hover:bg-blue-100">${initial}</span>
           <span class="min-w-0">
             <span class="block truncate font-semibold text-gray-950 group-hover:text-blue-700">${escapeHtml(customer.name || 'Customer')}</span>
-            <span class="block truncate text-xs text-gray-500">${escapeHtml(customer.contact || 'Open customer profile')}</span>
+            <span class="block truncate text-sm text-gray-700">${escapeHtml(address)}</span>
+            ${contact ? `<span class="block truncate text-xs text-gray-500">${escapeHtml(contact)}</span>` : ''}
           </span>
         </a>
       `;
+    }
+
+    function formatAddress(record) {
+      return [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
     }
 
     async function apiJson(url, options = {}) {
@@ -147,7 +154,7 @@ import Base from '../../layouts/Base.astro';
         <article class="bg-white rounded-lg shadow-sm border p-4">
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div class="min-w-0">
-              ${customerProfileLink({ leadId: estimate.leadId, name: estimate.leadName, contact: estimate.leadPhone || estimate.leadEmail || 'No contact' })}
+              ${customerProfileLink({ leadId: estimate.leadId, name: estimate.leadName, address: formatAddress(estimate), contact: estimate.leadPhone || estimate.leadEmail || 'No contact' })}
               <p class="text-xs text-gray-500 mt-1">${new Date(estimate.createdAt).toLocaleDateString()} - ${escapeHtml(estimate.status)}</p>
             </div>
             <div class="sm:text-right">

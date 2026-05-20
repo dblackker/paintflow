@@ -53,6 +53,10 @@ jobsApp.get('/', async (c) => {
       leadName: leads.name,
       leadPhone: leads.phone,
       leadEmail: leads.email,
+      leadStreetAddress: leads.streetAddress,
+      leadCity: leads.city,
+      leadState: leads.state,
+      leadPostalCode: leads.postalCode,
     })
     .from(jobs)
     .leftJoin(leads, and(eq(jobs.leadId, leads.id), eq(leads.orgId, orgId)))
@@ -187,6 +191,10 @@ jobsApp.get('/:id/costing', async (c) => {
         leadName: lead?.name,
         leadEmail: lead?.email,
         leadPhone: lead?.phone,
+        leadStreetAddress: lead?.streetAddress,
+        leadCity: lead?.city,
+        leadState: lead?.state,
+        leadPostalCode: lead?.postalCode,
       },
       revenue: {
         contract: contractValue,
