@@ -137,7 +137,7 @@ import Base from '../../layouts/Base.astro';
             </div>
             <div class="sm:text-right">
               <p class="text-xl font-bold">${money(estimate.total)}</p>
-              <a href="/estimates/${estimate.id}" class="inline-block mt-2 px-3 py-2 border rounded-lg text-sm hover:bg-gray-50">Open</a>
+              <a href="${estimate.status === 'draft' ? `/estimates/production?draft=${estimate.id}` : `/estimates/${estimate.id}`}" class="inline-block mt-2 px-3 py-2 border rounded-lg text-sm hover:bg-gray-50">${estimate.status === 'draft' ? 'Edit draft' : 'Open'}</a>
             </div>
           </div>
         </article>
@@ -146,6 +146,10 @@ import Base from '../../layouts/Base.astro';
 
     document.getElementById('search').addEventListener('input', render);
     document.getElementById('status-filter').addEventListener('change', render);
+    const initialStatus = new URLSearchParams(window.location.search).get('status');
+    if (initialStatus && ['all', 'sent', 'accepted', 'declined', 'draft'].includes(initialStatus)) {
+      document.getElementById('status-filter').value = initialStatus;
+    }
     loadEstimates();
   </script>
 </Base>

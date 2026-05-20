@@ -33,6 +33,10 @@ const estimateLineItemSchema = z.object({
   kind: z.enum(['surface', 'line_item']).optional(),
   customerVisible: z.boolean().optional(),
   optional: z.boolean().optional(),
+  productionRateId: z.string().uuid().optional(),
+  roomName: z.string().trim().max(255).optional(),
+  surfaceName: z.string().trim().max(255).optional(),
+  group: z.string().trim().max(255).optional(),
   dimensions: z.object({
     width: z.coerce.number().nonnegative().optional(),
     height: z.coerce.number().nonnegative().optional(),
@@ -334,6 +338,98 @@ estimatesApp.post('/', async (c) => {
       recommendedTotal: estimateContractValue(estimate),
     },
   }, 201);
+});
+
+estimatesApp.get('/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  return c.json({ data: estimate });
+});
+
+estimatesApp.patch('/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const parsed = createEstimateSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid input', details: parsed.error.flatten(), issues: parsed.error.issues }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!existing) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  if (existing.status !== 'draft') {
+    return c.json({ error: 'Only draft estimates can be edited' }, 409);
+  }
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, parsed.data.leadId), eq(leads.orgId, orgId)),
+  });
+
+  if (!lead) {
+    return c.json({ error: 'Lead not found' }, 404);
+  }
+
+  const isDraft = parsed.data.status === 'draft';
+  const recommendedPackage = parsed.data.packages.find((pkg) => /better|recommended/i.test(pkg.name))
+    ?? parsed.data.packages[0];
+  const estimateTotal = recommendedPackage ? Number(recommendedPackage.total).toFixed(2) : '0.00';
+  const now = new Date();
+
+  const [estimate] = await db.update(estimates)
+    .set({
+      leadId: lead.id,
+      packages: parsed.data.packages,
+      total: estimateTotal,
+      status: isDraft ? 'draft' : 'sent',
+      sentAt: isDraft ? existing.sentAt : now,
+      updatedAt: now,
+    })
+    .where(and(eq(estimates.id, id), eq(estimates.orgId, orgId)))
+    .returning();
+
+  if (!isDraft) {
+    await db.update(leads)
+      .set({ status: 'estimate_sent', updatedAt: now })
+      .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
+  }
+
+  await db.insert(auditLogs).values({
+    orgId,
+    userId: c.get('userId'),
+    action: isDraft ? 'estimate.draft.updated' : 'estimate.sent',
+    entityType: 'estimate',
+    entityId: estimate.id,
+    metadata: {
+      leadId: lead.id,
+      packageCount: parsed.data.packages.length,
+      total: estimate.total,
+      source: 'draft_edit',
+    },
+  });
+
+  return c.json({
+    data: {
+      ...estimate,
+      recommendedTotal: estimateContractValue(estimate),
+    },
+  });
 });
 
 estimatesApp.get('/:id/activity', async (c) => {

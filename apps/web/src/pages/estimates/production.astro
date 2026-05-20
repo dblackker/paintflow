@@ -145,6 +145,8 @@ import Base from '../../layouts/Base.astro';
     let materialsCatalog = [];
     let settings = {};
     let roomCounter = 0;
+    let editingEstimateId = new URLSearchParams(window.location.search).get('draft') || '';
+    let editingEstimate = null;
 
     function money(value) {
       return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
@@ -194,11 +196,13 @@ import Base from '../../layouts/Base.astro';
 
     async function loadSetup() {
       clearSetupError();
-      const [ratesRes, leadsRes, settingsRes, materialsRes] = await Promise.all([
+      const draftRequest = editingEstimateId ? apiJson(`${API_URL}/v1/estimates/${editingEstimateId}`) : Promise.resolve(null);
+      const [ratesRes, leadsRes, settingsRes, materialsRes, draftRes] = await Promise.all([
         apiJson(`${API_URL}/v1/production-rates`),
         apiJson(`${API_URL}/v1/leads?limit=200`),
         apiJson(`${API_URL}/v1/settings/org`),
         apiJson(`${API_URL}/v1/materials`),
+        draftRequest,
       ]);
       rates = ratesRes.data;
       settings = settingsRes.data;
@@ -207,12 +211,18 @@ import Base from '../../layouts/Base.astro';
         '<option value="">Select customer...</option>' +
         leadsRes.data.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)}</option>`).join('');
       renderMaterialSelectors();
-      const templateRooms = consumeTemplateRooms();
-      if (templateRooms.length) {
-        templateRooms.forEach(room => addRoom(room.name || 'Template room', room.items || []));
-        window.showToast('Template loaded into the production estimator.');
+      editingEstimate = draftRes?.data || null;
+      if (editingEstimate) {
+        hydrateDraftEstimate(editingEstimate);
+        window.showToast('Draft loaded.');
       } else {
-        addRoom('Interior', [], { seedSurface: false });
+        const templateRooms = consumeTemplateRooms();
+        if (templateRooms.length) {
+          templateRooms.forEach(room => addRoom(room.name || 'Template room', room.items || []));
+          window.showToast('Template loaded into the production estimator.');
+        } else {
+          addRoom('Interior', [], { seedSurface: false });
+        }
       }
       applyEstimateType();
       calculateTotal();
@@ -465,6 +475,104 @@ import Base from '../../layouts/Base.astro';
 
     function selectedMaterial(id) {
       return materialsCatalog.find(material => material.id === id);
+    }
+
+    function packageItems(pkg) {
+      return Array.isArray(pkg?.items) ? pkg.items : Array.isArray(pkg?.lineItems) ? pkg.lineItems : [];
+    }
+
+    function draftSurfaceParts(item) {
+      const [area = 'Interior', rawLabel = item.desc || 'Scope item'] = String(item.desc || '').split(/:\s(.+)/);
+      const label = rawLabel || area;
+      const surfaceMatch = label.match(/^(.*)\s+(walls?|ceilings?|trim|doors?|cabinets?|siding|soffits?|fascia|corner boards?)$/i);
+      return {
+        roomName: item.roomName || area.trim() || 'Interior',
+        label: label.trim(),
+        group: item.group || (surfaceMatch ? surfaceMatch[1].trim() : ''),
+        surfaceName: item.surfaceName || (surfaceMatch ? surfaceMatch[2].trim() : label.trim()),
+      };
+    }
+
+    function rateForDraftItem(item) {
+      if (item.productionRateId && rates.some(rate => rate.id === item.productionRateId)) return item.productionRateId;
+      const text = `${item.desc || ''} ${item.category || ''}`.toLowerCase();
+      const unit = String(item.dimensions?.unit || item.category || '').toLowerCase();
+      const kind = /ceiling/.test(text) ? 'ceilings'
+        : /trim|baseboard|casing|crown/.test(text) ? 'trim'
+          : /door/.test(text) ? 'doors'
+            : /soffit/.test(text) ? 'soffits'
+              : /fascia/.test(text) ? 'fascia'
+                : /siding/.test(text) ? 'siding'
+                  : 'walls';
+      return rates.find(rate => rateKind(rate) === kind && String(rate.unit || '').toLowerCase() === unit)?.id
+        || rates.find(rate => interiorRateKind(rate) === kind && String(rate.unit || '').toLowerCase() === unit)?.id
+        || rates.find(rate => rateKind(rate) === kind)?.id
+        || rates.find(rate => interiorRateKind(rate) === kind)?.id
+        || '';
+    }
+
+    function hydrateDraftEstimate(estimate) {
+      if (!estimate || estimate.status !== 'draft') {
+        window.showToast('Only draft estimates can be edited here.', 'error');
+        return;
+      }
+      document.getElementById('lead-select').value = estimate.leadId || '';
+      document.querySelector('h2').textContent = 'Edit Draft Estimate';
+      document.getElementById('save-estimate').textContent = 'Send Estimate';
+      document.getElementById('rooms-container').innerHTML = '';
+      document.getElementById('line-items-container').innerHTML = '';
+      roomCounter = 0;
+
+      const pkg = Array.isArray(estimate.packages) ? estimate.packages[0] : null;
+      const items = packageItems(pkg);
+      if (!items.length) {
+        addRoom('Interior', [], { seedSurface: false });
+        return;
+      }
+
+      const roomsByName = new Map();
+      items.filter(item => item.kind !== 'line_item').forEach((item) => {
+        const parts = draftSurfaceParts(item);
+        if (!roomsByName.has(parts.roomName)) {
+          const room = addRoom(parts.roomName, [], { seedSurface: false });
+          roomsByName.set(parts.roomName, room);
+        }
+        const room = roomsByName.get(parts.roomName);
+        if (parts.group) ensureSurfaceGroup(room.querySelector('[data-items]'), parts.group);
+        addSurface(room.id, {
+          productionRateId: rateForDraftItem(item),
+          label: parts.label,
+          group: parts.group,
+          surfaceName: parts.surfaceName,
+          width: item.dimensions?.width || '',
+          height: item.dimensions?.height || '',
+          quantity: item.dimensions?.quantity || '',
+          coats: item.labor?.coats || 2,
+          prepLevel: item.labor?.prepLevel || 'standard',
+          applicationMethod: item.labor?.applicationMethod || 'brush_roll',
+          prepAdjustmentHours: item.labor?.prepAdjustmentHours || '',
+          paintAdjustmentHours: item.labor?.paintAdjustmentHours || '',
+          materialId: item.material?.id || '',
+          colorName: item.material?.colorName || '',
+          colorCode: item.material?.colorCode || '',
+          colorStatus: item.material?.status || 'TBD',
+          crewNote: item.material?.crewNote || '',
+          customerVisible: item.customerVisible !== false,
+          optional: Boolean(item.optional),
+        });
+      });
+
+      items.filter(item => item.kind === 'line_item').forEach(item => addLineItem({
+        desc: item.desc,
+        qty: item.qty,
+        rate: item.rate,
+        category: item.category,
+        customerVisible: item.customerVisible,
+        optional: item.optional,
+      }));
+
+      if (!roomsByName.size) addRoom('Interior', [], { seedSurface: false });
+      document.getElementById('discount').value = Number(pkg?.discount || 0);
     }
 
     function materialOption(material, selectedId = '') {
@@ -1415,6 +1523,10 @@ import Base from '../../layouts/Base.astro';
             kind: 'surface',
             customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
             optional: isOptional,
+            productionRateId: rate.id,
+            roomName,
+            group: surface.dataset.group || '',
+            surfaceName: surface.dataset.surfaceName || '',
             dimensions: { width, height, quantity, unit: rate.unit },
             notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}${colorName ? `, ${colorName}` : ''}${colorCode ? ` (${colorCode})` : ''}${crewNote ? `, crew: ${crewNote}` : ''}`,
             labor: {
@@ -1689,12 +1801,14 @@ import Base from '../../layouts/Base.astro';
         button.textContent = statusValue === 'draft' ? 'Saving draft...' : 'Creating estimate...';
         status.textContent = statusValue === 'draft' ? 'Saving draft estimate...' : 'Creating estimate and opening the customer proposal...';
         status.classList.remove('hidden');
-        const { data } = await apiJson(`${API_URL}/v1/estimates`, {
-          method: 'POST',
+        const isEditingDraft = Boolean(editingEstimateId);
+        const { data } = await apiJson(isEditingDraft ? `${API_URL}/v1/estimates/${editingEstimateId}` : `${API_URL}/v1/estimates`, {
+          method: isEditingDraft ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, packages, status: statusValue }),
         });
         window.showToast(statusValue === 'draft' ? 'Draft saved.' : 'Estimate created. Opening it now.');
+        editingEstimateId = data.id;
         window.location.href = statusValue === 'draft' ? '/estimates?status=draft' : `/estimates/${data.id}`;
       } catch (err) {
         window.showToast(err.message || 'Failed to save estimate', 'error');
