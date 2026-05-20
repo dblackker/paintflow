@@ -8,11 +8,19 @@ type EstimatePackage = {
   subtotal?: number | string;
 };
 
+type SelectedOption = {
+  desc?: string;
+  qty?: number | string;
+  rate?: number | string;
+  category?: string;
+};
+
 type AcceptedEstimate = typeof estimates.$inferSelect;
 
 type HandoffInput = {
   packageName?: string | null;
   signedBy?: string | null;
+  selectedOptions?: SelectedOption[];
   ipAddress?: string | null;
   userAgent?: string | null;
 };
@@ -41,10 +49,14 @@ export function selectEstimatePackage(
 
 export function estimateContractValue(
   estimate: AcceptedEstimate,
-  packageName?: string | null
+  packageName?: string | null,
+  selectedOptions: SelectedOption[] = []
 ): number {
   const selected = selectEstimatePackage(estimate, packageName);
-  return money(selected?.total ?? estimate.total);
+  const optionTotal = selectedOptions.reduce((sum, option) => {
+    return sum + money(option.qty || 1) * money(option.rate);
+  }, 0);
+  return money(selected?.total ?? estimate.total) + optionTotal;
 }
 
 export async function createJobFromAcceptedEstimate(
@@ -56,7 +68,7 @@ export async function createJobFromAcceptedEstimate(
     where: and(eq(jobs.orgId, estimate.orgId), eq(jobs.estimateId, estimate.id)),
   });
 
-  const contractValue = estimateContractValue(estimate, input.packageName);
+  const contractValue = estimateContractValue(estimate, input.packageName, input.selectedOptions ?? []);
 
   if (existingJob) {
     await db.update(leads)
@@ -101,6 +113,7 @@ export async function createJobFromAcceptedEstimate(
       packageName: selectedPackage?.name ?? input.packageName ?? null,
       contractValue,
       signedBy: input.signedBy ?? null,
+      selectedOptions: input.selectedOptions ?? [],
     },
     ipAddress: input.ipAddress ?? null,
     userAgent: input.userAgent ?? null,

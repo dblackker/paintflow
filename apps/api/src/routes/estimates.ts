@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
+import { auditLogs, estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -10,10 +10,18 @@ import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/est
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const selectedOptionSchema = z.object({
+  desc: z.string().trim().min(1).max(500),
+  qty: z.coerce.number().positive().default(1),
+  rate: z.coerce.number().nonnegative(),
+  category: z.string().trim().max(120).optional(),
+});
+
 const signSchema = z.object({
   name: z.string().min(1).max(255),
   signatureData: z.string().min(1).max(100000),
   packageName: z.string().optional(),
+  selectedOptions: z.array(selectedOptionSchema).max(20).optional(),
 });
 
 const estimateLineItemSchema = z.object({
@@ -24,6 +32,7 @@ const estimateLineItemSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   kind: z.enum(['surface', 'line_item']).optional(),
   customerVisible: z.boolean().optional(),
+  optional: z.boolean().optional(),
   dimensions: z.object({
     width: z.coerce.number().nonnegative().optional(),
     height: z.coerce.number().nonnegative().optional(),
@@ -91,6 +100,32 @@ const createEstimateSchema = z.object({
   packages: z.array(estimatePackageSchema).min(1).max(5),
 });
 
+function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, packageName: string | undefined, selectedOptions: z.infer<typeof selectedOptionSchema>[]) {
+  const packages = Array.isArray(estimate.packages) ? estimate.packages as Array<{ name: string; items?: unknown[]; lineItems?: unknown[] }> : [];
+  const pkg = packages.find((item) => item.name === packageName) ?? packages.find((item) => item.name === 'proposal') ?? packages[0];
+  const optionalItems = (Array.isArray(pkg?.items) ? pkg.items : Array.isArray(pkg?.lineItems) ? pkg.lineItems : []) as Array<{
+    desc?: string;
+    qty?: number;
+    rate?: number;
+    category?: string;
+    optional?: boolean;
+    customerVisible?: boolean;
+  }>;
+  const allowed = new Map(optionalItems
+    .filter((item) => item.optional && item.customerVisible !== false)
+    .map((item) => [`${item.desc}|${Number(item.qty || 1)}|${Number(item.rate || 0)}`, item]));
+
+  return selectedOptions
+    .map((option) => allowed.get(`${option.desc}|${Number(option.qty || 1)}|${Number(option.rate || 0)}`))
+    .filter((option): option is NonNullable<typeof option> => Boolean(option))
+    .map((option) => ({
+      desc: String(option.desc),
+      qty: Number(option.qty || 1),
+      rate: Number(option.rate || 0),
+      category: option.category,
+    }));
+}
+
 estimatesApp.get('/:id/public', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
@@ -134,7 +169,7 @@ estimatesApp.post('/:id/sign', async (c) => {
     return c.json({ error: 'Invalid input', details: parsed.error.errors }, 400);
   }
   
-  const { name, signatureData, packageName } = parsed.data;
+  const { name, signatureData, packageName, selectedOptions = [] } = parsed.data;
   
   const db = createDb(c.env.DATABASE_URL);
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
@@ -158,6 +193,7 @@ estimatesApp.post('/:id/sign', async (c) => {
 
   const job = await createJobFromAcceptedEstimate(db, estimate, {
     packageName,
+    selectedOptions: selectedOptionsForPackage(estimate, packageName, selectedOptions),
     signedBy: name,
     ipAddress: ip,
     userAgent,
@@ -232,12 +268,112 @@ estimatesApp.post('/', async (c) => {
     .set({ status: 'estimate_sent', updatedAt: new Date() })
     .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
 
+  await db.insert(auditLogs).values([
+    {
+      orgId,
+      userId: c.get('userId'),
+      action: 'estimate.created',
+      entityType: 'estimate',
+      entityId: estimate.id,
+      metadata: {
+        leadId: lead.id,
+        packageCount: parsed.data.packages.length,
+        total: estimate.total,
+      },
+    },
+    {
+      orgId,
+      userId: c.get('userId'),
+      action: 'estimate.sent',
+      entityType: 'estimate',
+      entityId: estimate.id,
+      metadata: {
+        leadId: lead.id,
+        channel: 'in_app',
+        total: estimate.total,
+      },
+    },
+  ]);
+
   return c.json({
     data: {
       ...estimate,
       recommendedTotal: estimateContractValue(estimate),
     },
   }, 201);
+});
+
+estimatesApp.get('/:id/activity', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const rows = await db.query.auditLogs.findMany({
+    where: and(eq(auditLogs.orgId, orgId), eq(auditLogs.entityType, 'estimate'), eq(auditLogs.entityId, id)),
+    orderBy: [desc(auditLogs.createdAt)],
+    limit: 100,
+  });
+
+  return c.json({ data: rows });
+});
+
+estimatesApp.post('/:id/send-email', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, estimate.leadId), eq(leads.orgId, orgId)),
+  });
+
+  if (!lead?.email) {
+    return c.json({ error: 'Lead email is required before sending an estimate' }, 400);
+  }
+
+  const branding = await db.query.orgBranding.findFirst({
+    where: eq(orgBranding.orgId, orgId),
+  });
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const total = estimateContractValue(estimate).toFixed(2);
+  const html = estimateEmailTemplate({
+    estimateId: estimate.id,
+    leadName: lead.name,
+    total,
+    baseUrl,
+    companyName: branding?.companyName || 'your painting contractor',
+  });
+
+  await sendEmail(c.env, lead.email, `Painting estimate from ${branding?.companyName || 'PaintFlow'}`, html);
+  await db.insert(auditLogs).values({
+    orgId,
+    userId: c.get('userId'),
+    action: 'estimate.email.sent',
+    entityType: 'estimate',
+    entityId: estimate.id,
+    metadata: {
+      leadId: lead.id,
+      email: lead.email,
+      link: `${baseUrl}/estimates/${estimate.id}`,
+    },
+  });
+
+  return c.json({ data: { sent: true, to: lead.email } });
 });
 
 estimatesApp.post('/:id/portal-link', async (c) => {
@@ -275,6 +411,18 @@ estimatesApp.post('/:id/portal-link', async (c) => {
   
   const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
   const link = `${baseUrl}/portal/${token}`;
+
+  await db.insert(auditLogs).values({
+    orgId,
+    userId: c.get('userId'),
+    action: 'estimate.portal_link.created',
+    entityType: 'estimate',
+    entityId: estimate.id,
+    metadata: {
+      leadId: lead.id,
+      expiresAt: expiresAt.toISOString(),
+    },
+  });
   
   return c.json({ data: { link, token, expiresAt } });
 });

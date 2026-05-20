@@ -7,7 +7,7 @@ import Base from '../../layouts/Base.astro';
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
         <h2 class="text-2xl font-bold text-gray-900">Production Estimate</h2>
-        <p class="text-sm text-gray-600 mt-1">Build pricing from measured surfaces, prep level, production rates, labor, and materials.</p>
+        <p class="text-sm text-gray-600 mt-1">Build pricing from measured substrates, prep level, production rates, labor, and materials.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-2">
         <a href="/templates" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Templates</a>
@@ -22,27 +22,6 @@ import Base from '../../layouts/Base.astro';
         <button id="retry-setup" type="button" class="px-3 py-2 bg-red-700 text-white rounded-lg text-sm">Retry</button>
         <a href="/settings" class="px-3 py-2 border border-red-300 rounded-lg text-sm">Check settings</a>
       </div>
-    </div>
-
-    <div class="mb-5 rounded-lg border bg-white p-2 shadow-sm">
-      <nav class="grid grid-cols-2 gap-2 text-sm md:grid-cols-4" aria-label="Estimator workflow">
-        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-blue-700 bg-blue-50" data-jump-stage="setup">
-          <span class="block text-xs text-blue-500">1. Setup</span>
-          Customer & estimate type
-        </button>
-        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-50" data-jump-stage="scope">
-          <span class="block text-xs text-gray-500">2. Scope</span>
-          Rooms, surfaces, rates
-        </button>
-        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-50" data-jump-stage="paint">
-          <span class="block text-xs text-gray-500">3. Paint Schedule</span>
-          Product, color, ordering
-        </button>
-        <button type="button" class="workflow-step rounded-md px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-50" data-jump-stage="review">
-          <span class="block text-xs text-gray-500">4. Review</span>
-          Readiness & proposal
-        </button>
-      </nav>
     </div>
 
     <div class="grid lg:grid-cols-[1fr_340px] gap-5">
@@ -65,14 +44,14 @@ import Base from '../../layouts/Base.astro';
               </select>
             </label>
           </div>
-          <p class="mt-3 text-sm text-gray-600">Choose the estimate type first. The quick-scope builder appears once, then surfaces become editable production lines.</p>
+          <p class="mt-3 text-sm text-gray-600">Choose the estimate type first. The quick-scope builder appears once, then substrates become editable production lines.</p>
         </div>
 
         <div class="scroll-mt-24 space-y-4" data-stage="scope">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 class="text-lg font-semibold text-gray-900">Scope Builder</h2>
-              <p class="text-sm text-gray-600">Generate a starter scope, then adjust rooms, surfaces, prep, methods, and measurements.</p>
+              <p class="text-sm text-gray-600">Generate a starter scope, then adjust rooms, substrates, prep, methods, and measurements.</p>
             </div>
           </div>
           <div id="rooms-container" class="space-y-4"></div>
@@ -85,9 +64,9 @@ import Base from '../../layouts/Base.astro';
           <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 class="font-semibold text-gray-900">Paint Schedule</h2>
-              <p class="text-sm text-gray-600">Production handoff by surface: product, color, status, and order units.</p>
+              <p class="text-sm text-gray-600">Production handoff by substrate: product, color, status, and order units.</p>
             </div>
-            <span id="paint-schedule-count" class="text-sm font-medium text-gray-700">0 surfaces</span>
+            <span id="paint-schedule-count" class="text-sm font-medium text-gray-700">0 substrates</span>
           </div>
           <div id="paint-schedule" class="mt-3 space-y-2 text-sm text-gray-700"></div>
         </div>
@@ -112,12 +91,13 @@ import Base from '../../layouts/Base.astro';
             <div class="flex justify-between"><span class="text-gray-600">Labor</span><span id="labor-total" class="font-medium">$0.00</span></div>
             <div class="flex justify-between"><span class="text-gray-600">Materials</span><span id="materials-total" class="font-medium">$0.00</span></div>
             <div class="flex justify-between"><span class="text-gray-600">Adjustments</span><span id="adjustments-total" class="font-medium">$0.00</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Customer options</span><span id="optional-total" class="font-medium">$0.00</span></div>
             <label class="flex items-center justify-between gap-3 border-t pt-2">
               <span class="text-gray-600">Discount</span>
               <input id="discount" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="0" class="w-28 px-2 py-1 border rounded text-right">
             </label>
             <div class="flex justify-between"><span class="text-gray-600">Tax</span><span id="tax-total" class="font-medium">$0.00</span></div>
-            <div class="flex justify-between border-t pt-2 text-base"><span class="font-semibold">Proposal total</span><span id="total-cost" class="font-bold text-blue-600">$0.00</span></div>
+            <div class="flex justify-between border-t pt-2 text-base"><span class="font-semibold">Base proposal total</span><span id="total-cost" class="font-bold text-blue-600">$0.00</span></div>
           </div>
         </div>
 
@@ -461,7 +441,7 @@ import Base from '../../layouts/Base.astro';
         showWidth: true,
         showHeight: true,
         showQty: true,
-        helper: 'Area surfaces use width times height, with optional direct square-foot override.',
+        helper: 'Area substrates use width times height, with optional direct square-foot override.',
       };
     }
 
@@ -694,7 +674,7 @@ import Base from '../../layouts/Base.astro';
           <div class="mt-3 rounded-md border border-blue-200 bg-white p-3 text-xs text-blue-950" data-assumption-preview></div>
         </div>
         <div class="space-y-3" data-items></div>
-        <button type="button" class="add-surface mt-3 text-sm text-blue-600">Add surface</button>
+        <button type="button" class="add-surface mt-3 text-sm text-blue-600">Add substrate</button>
       `;
       document.getElementById('rooms-container').appendChild(div);
       syncScopeBuilderVisibility();
@@ -747,7 +727,7 @@ import Base from '../../layouts/Base.astro';
         <div class="${item.group ? 'mb-2 text-sm font-medium text-gray-700' : 'hidden'}" data-surface-title>${escapeHtml(item.surfaceName || item.label || '')}</div>
         <div class="grid gap-2 mb-2 sm:grid-cols-3">
           <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="rateId">
-            <option value="">Select surface...</option>
+            <option value="">Select substrate...</option>
             ${rateOptions()}
           </select>
           <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="applicationMethod">
@@ -800,11 +780,17 @@ import Base from '../../layouts/Base.astro';
           </select>
           <input type="text" autocomplete="off" placeholder="Crew note / production handoff" value="${escapeHtml(item.crewNote || '')}" class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="crewNote">
         </div>
-        <div class="flex justify-between items-center text-sm">
-          <label class="inline-flex items-center gap-2 text-gray-600">
-            <input type="checkbox" class="rounded border-gray-300" data-field="customerVisible" ${item.customerVisible === false ? '' : 'checked'}>
-            Show on proposal
-          </label>
+        <div class="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-gray-600">
+              <input type="checkbox" class="rounded border-gray-300" data-field="customerVisible" ${item.customerVisible === false ? '' : 'checked'}>
+              Show on proposal
+            </label>
+            <label class="inline-flex items-center gap-2 text-gray-600" title="Optional items are customer-selectable add-ons and are excluded from the base proposal total.">
+              <input type="checkbox" class="rounded border-gray-300" data-field="optional" ${item.optional ? 'checked' : ''}>
+              Customer option
+            </label>
+          </div>
           <div class="flex items-center gap-3">
             <span class="text-gray-600" data-line-total>$0.00</span>
             <button type="button" class="copy-surface text-blue-600">Copy</button>
@@ -1324,6 +1310,7 @@ import Base from '../../layouts/Base.astro';
         colorStatus: surface.querySelector('[data-field="colorStatus"]').value,
         crewNote: surface.querySelector('[data-field="crewNote"]').value,
         customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
+        optional: surface.querySelector('[data-field="optional"]').checked,
       };
     }
 
@@ -1350,10 +1337,16 @@ import Base from '../../layouts/Base.astro';
           </select>
         </label>
         <div class="flex items-center justify-between gap-3">
-          <label class="inline-flex items-center gap-2 text-xs text-gray-600">
-            <input type="checkbox" class="rounded border-gray-300" data-field="customerVisible" ${item.customerVisible === false ? '' : 'checked'}>
-            Show
-          </label>
+          <div class="flex flex-col gap-1">
+            <label class="inline-flex items-center gap-2 text-xs text-gray-600">
+              <input type="checkbox" class="rounded border-gray-300" data-field="customerVisible" ${item.customerVisible === false ? '' : 'checked'}>
+              Show
+            </label>
+            <label class="inline-flex items-center gap-2 text-xs text-gray-600" title="Show as a customer-selectable option.">
+              <input type="checkbox" class="rounded border-gray-300" data-field="optional" ${item.optional ? 'checked' : ''}>
+              Option
+            </label>
+          </div>
           <button type="button" class="remove-line-item text-sm text-red-600">Remove</button>
         </div>
       `;
@@ -1394,6 +1387,7 @@ import Base from '../../layouts/Base.astro';
       let materials = 0;
       let adjustments = 0;
       let hours = 0;
+      let optionalTotal = 0;
 
       document.querySelectorAll('#rooms-container > div').forEach(room => {
         const roomName = room.querySelector('[data-room-name]').value.trim() || 'Area';
@@ -1427,10 +1421,15 @@ import Base from '../../layouts/Base.astro';
           const itemMaterials = productCost ? productCost.price : fallbackMaterialCost(quantity, rate, coats, materialMarkup);
           const itemTotal = itemLabor + itemMaterials;
           const lineLabel = surfaceDisplayName(surface, rate);
+          const isOptional = surface.querySelector('[data-field="optional"]').checked;
 
-          hours += itemHours;
-          labor += itemLabor;
-          materials += itemMaterials;
+          if (isOptional) {
+            optionalTotal += itemTotal;
+          } else {
+            hours += itemHours;
+            labor += itemLabor;
+            materials += itemMaterials;
+          }
           items.push({
             desc: `${roomName}: ${lineLabel}`,
             qty: 1,
@@ -1438,6 +1437,7 @@ import Base from '../../layouts/Base.astro';
             category: rate.unit,
             kind: 'surface',
             customerVisible: surface.querySelector('[data-field="customerVisible"]').checked,
+            optional: isOptional,
             dimensions: { width, height, quantity, unit: rate.unit },
             notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}${colorName ? `, ${colorName}` : ''}${colorCode ? ` (${colorCode})` : ''}${crewNote ? `, crew: ${crewNote}` : ''}`,
             labor: {
@@ -1477,7 +1477,9 @@ import Base from '../../layouts/Base.astro';
         const rate = Number(row.querySelector('[data-field="rate"]').value || 0);
         if (!desc || qty <= 0 || rate <= 0) return;
         const total = qty * rate;
-        adjustments += total;
+        const isOptional = row.querySelector('[data-field="optional"]').checked;
+        if (isOptional) optionalTotal += total;
+        else adjustments += total;
         items.push({
           desc,
           qty,
@@ -1485,6 +1487,7 @@ import Base from '../../layouts/Base.astro';
           category: row.querySelector('[data-field="category"]').value,
           kind: 'line_item',
           customerVisible: row.querySelector('[data-field="customerVisible"]').checked,
+          optional: isOptional,
           notes: 'Estimate-specific line item',
         });
       });
@@ -1493,7 +1496,7 @@ import Base from '../../layouts/Base.astro';
       const subtotal = labor + materials + adjustments;
       const taxableSubtotal = Math.max(subtotal - discount, 0);
       const tax = taxableSubtotal * taxRate;
-      return { items, hours, labor, materials, adjustments, discount, tax, subtotal, total: taxableSubtotal + tax };
+      return { items, hours, labor, materials, adjustments, optionalTotal, discount, tax, subtotal, total: taxableSubtotal + tax };
     }
 
     function buildPackages() {
@@ -1505,6 +1508,7 @@ import Base from '../../layouts/Base.astro';
         discount: Number(result.discount.toFixed(2)),
         tax: Number(result.tax.toFixed(2)),
         total: Number(result.total.toFixed(2)),
+        optionalTotal: Number(result.optionalTotal.toFixed(2)),
         items: result.items,
         lineItems: result.items,
       }];
@@ -1516,6 +1520,7 @@ import Base from '../../layouts/Base.astro';
       document.getElementById('labor-total').textContent = money(result.labor);
       document.getElementById('materials-total').textContent = money(result.materials);
       document.getElementById('adjustments-total').textContent = money(result.adjustments);
+      document.getElementById('optional-total').textContent = money(result.optionalTotal);
       document.getElementById('tax-total').textContent = money(result.tax);
       document.getElementById('total-cost').textContent = money(result.total);
       updatePaintSchedule(result.items);
@@ -1527,7 +1532,7 @@ import Base from '../../layouts/Base.astro';
       const panel = document.getElementById('paint-schedule');
       const count = document.getElementById('paint-schedule-count');
       const surfaceItems = items.filter(item => item.kind === 'surface' && item.customerVisible !== false);
-      count.textContent = `${surfaceItems.length} surface${surfaceItems.length === 1 ? '' : 's'}`;
+      count.textContent = `${surfaceItems.length} substrate${surfaceItems.length === 1 ? '' : 's'}`;
       if (!surfaceItems.length) {
         panel.innerHTML = '<p class="rounded-md border border-dashed border-gray-300 p-3 text-gray-500">Add scope lines to build the paint schedule.</p>';
         return;
@@ -1575,11 +1580,11 @@ import Base from '../../layouts/Base.astro';
       panel.innerHTML = `
         <div class="flex justify-between"><span>Paint order units</span><span class="font-medium">${orderUnits.toFixed(0)}</span></div>
         <div class="flex justify-between ${statusClass(missingCustomer)}"><span>Missing customer</span><span class="font-medium">${missingCustomer}</span></div>
-        <div class="flex justify-between ${statusClass(zeroQuantitySurfaces)}"><span>Zero-quantity surfaces</span><span class="font-medium">${zeroQuantitySurfaces}</span></div>
+        <div class="flex justify-between ${statusClass(zeroQuantitySurfaces)}"><span>Zero-quantity substrates</span><span class="font-medium">${zeroQuantitySurfaces}</span></div>
         <div class="flex justify-between ${statusClass(missingProduct)}"><span>Missing products</span><span class="font-medium">${missingProduct}</span></div>
         <div class="flex justify-between ${statusClass(missingColor)}"><span>Color selections needed</span><span class="font-medium">${missingColor}</span></div>
         <div class="flex justify-between ${statusClass(unapprovedColor)}"><span>Colors awaiting approval</span><span class="font-medium">${unapprovedColor}</span></div>
-        <p class="text-xs text-gray-500">Use per-surface product and color fields to prepare ordering and job handoff. Sheen should live in the selected paint product because it changes cost and coverage.</p>
+        <p class="text-xs text-gray-500">Use per-substrate product and color fields to prepare ordering and job handoff. Sheen should live in the selected paint product because it changes cost and coverage.</p>
       `;
     }
 
@@ -1590,13 +1595,6 @@ import Base from '../../layouts/Base.astro';
         paint: result.items.some(item => item.material?.colorName && item.material?.colorCode && item.material?.status !== 'TBD'),
         review: result.total > 0,
       };
-      document.querySelectorAll('.workflow-step').forEach((button) => {
-        const stage = button.dataset.jumpStage;
-        const isReady = checks[stage];
-        button.classList.toggle('bg-blue-50', stage === 'setup' && !isReady);
-        button.classList.toggle('bg-green-50', isReady);
-        button.classList.toggle('text-green-700', isReady);
-      });
     }
 
     document.getElementById('add-room').addEventListener('click', () => addRoom());
@@ -1604,11 +1602,6 @@ import Base from '../../layouts/Base.astro';
     document.getElementById('estimate-type').addEventListener('change', () => {
       applyEstimateType();
       calculateTotal();
-    });
-    document.querySelectorAll('[data-jump-stage]').forEach(button => {
-      button.addEventListener('click', () => {
-        document.querySelector(`[data-stage="${button.dataset.jumpStage}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
     });
     document.getElementById('retry-setup').addEventListener('click', () => {
       loadSetup().catch((err) => {
@@ -1708,7 +1701,7 @@ import Base from '../../layouts/Base.astro';
         return;
       }
       if (packages.length === 0) {
-        window.showToast('Add at least one measured surface', 'error');
+        window.showToast('Add at least one measured substrate', 'error');
         return;
       }
 
