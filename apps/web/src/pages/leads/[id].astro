@@ -193,7 +193,7 @@ import Base from '../../layouts/Base.astro';
               <p class="text-sm text-gray-600 mt-2">${escapeHtml(customer.source || 'No source')} &middot; Created ${dateLabel(customer.createdAt)}</p>
               <div class="flex flex-wrap gap-2 mt-4">
                 <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `tel:${customer.phone}` : '#'}">Call</a>
-                <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `sms:${customer.phone}` : '#'}">Text</a>
+                <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `/sms?leadId=${customer.id}` : '#'}">Message</a>
                 <a class="btn-secondary btn-sm ${customer.email ? '' : 'pointer-events-none opacity-50'}" href="${customer.email ? `mailto:${customer.email}` : '#'}">Email</a>
                 <a class="btn-primary btn-sm" href="${action.href}">${action.label}</a>
               </div>
@@ -234,7 +234,10 @@ import Base from '../../layouts/Base.astro';
               <ul class="p-4 text-sm text-gray-700 space-y-2 list-disc list-inside">${renderFollowUps(data)}</ul>
             </section>
             <section class="bg-white border rounded-lg overflow-hidden">
-              <div class="p-4 border-b"><h2 class="font-semibold">Messages</h2></div>
+              <div class="p-4 border-b flex items-center justify-between gap-3">
+                <h2 class="font-semibold">Messages</h2>
+                <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `/sms?leadId=${customer.id}` : '#'}">Open thread</a>
+              </div>
               <div class="divide-y max-h-[420px] overflow-auto">${renderMessages(data.messages)}</div>
             </section>
             <section class="bg-white border rounded-lg overflow-hidden">

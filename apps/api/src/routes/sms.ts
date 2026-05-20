@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { leads, messages } from '@paintflow/db/schema';
-import { and, eq, or, desc } from 'drizzle-orm';
+import { and, desc, eq, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendSMS, formatPhoneNumber } from '../lib/twilio';
@@ -10,6 +10,7 @@ import { sendSMS, formatPhoneNumber } from '../lib/twilio';
 const sms = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 sms.use('/inbox', authMiddleware);
+sms.use('/thread/*', authMiddleware);
 sms.use('/send', authMiddleware);
 
 const sendSchema = z.object({
@@ -58,14 +59,56 @@ sms.get('/inbox', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  const msgs = await db
-    .select()
+  const rows = await db
+    .select({
+      id: messages.id,
+      orgId: messages.orgId,
+      leadId: messages.leadId,
+      direction: messages.direction,
+      fromNumber: messages.fromNumber,
+      toNumber: messages.toNumber,
+      body: messages.body,
+      twilioSid: messages.twilioSid,
+      read: messages.read,
+      createdAt: messages.createdAt,
+      leadName: leads.name,
+      leadPhone: leads.phone,
+      leadEmail: leads.email,
+      leadStatus: leads.status,
+    })
     .from(messages)
+    .leftJoin(leads, and(eq(messages.leadId, leads.id), eq(leads.orgId, orgId)))
     .where(eq(messages.orgId, orgId))
     .orderBy(desc(messages.createdAt))
-    .limit(50);
+    .limit(200);
   
-  return c.json({ data: msgs });
+  return c.json({ data: rows });
+});
+
+sms.get('/thread/:leadId', async (c) => {
+  const orgId = c.get('orgId');
+  const leadId = c.req.param('leadId');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, leadId), eq(leads.orgId, orgId)),
+  });
+
+  if (!lead) {
+    return c.json({ error: 'Lead not found' }, 404);
+  }
+
+  const thread = await db.select()
+    .from(messages)
+    .where(and(eq(messages.orgId, orgId), eq(messages.leadId, leadId)))
+    .orderBy(messages.createdAt)
+    .limit(300);
+
+  await db.update(messages)
+    .set({ read: true })
+    .where(and(eq(messages.orgId, orgId), eq(messages.leadId, leadId), eq(messages.direction, 'inbound')));
+
+  return c.json({ data: { lead, messages: thread } });
 });
 
 sms.post('/send', async (c) => {

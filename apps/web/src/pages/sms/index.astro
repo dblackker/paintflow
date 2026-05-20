@@ -2,155 +2,299 @@
 import Base from '../../layouts/Base.astro';
 ---
 
-<Base title="SMS">
+<Base title="Messages">
   <div class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/leads" class="text-gray-600 hover:text-gray-900">Leads</a>
-              <a href="/sms" class="text-blue-600 font-medium">SMS</a>
-            </nav>
+    <main class="mx-auto flex min-h-screen max-w-7xl flex-col px-0 sm:px-4 lg:px-8">
+      <header class="border-b bg-white px-4 py-3 sm:mt-5 sm:rounded-t-lg sm:border sm:border-b-0">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h1 class="text-xl font-semibold text-gray-950">Messages</h1>
+            <p class="text-sm text-gray-600">Team-visible SMS history tied to each customer.</p>
           </div>
+          <a href="/leads" class="btn-secondary btn-sm shrink-0">Customers</a>
         </div>
-      </div>
-    </nav>
+      </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="grid grid-cols-12 gap-6 h-[calc(100vh-12rem)]">
-        <div class="col-span-4 bg-white rounded-lg shadow-sm border flex flex-col">
-          <div class="p-4 border-b">
-            <h2 class="font-semibold">Conversations</h2>
+      <section class="grid min-h-[calc(100vh-5.5rem)] flex-1 grid-cols-1 overflow-hidden bg-white sm:min-h-[calc(100vh-8rem)] sm:rounded-b-lg sm:border lg:grid-cols-[360px_minmax(0,1fr)]">
+        <aside id="conversation-pane" class="flex min-h-0 flex-col border-r lg:flex">
+          <div class="border-b p-3">
+            <label class="block">
+              <span class="sr-only">Search conversations</span>
+              <input id="conversation-search" type="search" autocomplete="off" enterkeyhint="search" class="input" placeholder="Search customer, phone, or message">
+            </label>
           </div>
-          <div id="conversations" class="flex-1 overflow-y-auto divide-y">
-            <div class="p-8 text-center text-gray-500">Loading...</div>
+          <div id="conversation-list" class="min-h-0 flex-1 overflow-y-auto divide-y">
+            <div class="p-8 text-center text-gray-500">Loading conversations...</div>
           </div>
-        </div>
+        </aside>
 
-        <div class="col-span-8 bg-white rounded-lg shadow-sm border flex flex-col">
-          <div class="p-4 border-b">
-            <h3 class="font-semibold" id="thread-name">Select a conversation</h3>
+        <section id="thread-pane" class="hidden min-h-0 flex-col lg:flex">
+          <div class="flex items-center gap-3 border-b p-3">
+            <button id="back-to-inbox" class="btn-secondary btn-sm lg:hidden" type="button">Inbox</button>
+            <div class="min-w-0 flex-1">
+              <h2 id="thread-name" class="truncate font-semibold text-gray-950">Select a conversation</h2>
+              <p id="thread-meta" class="truncate text-sm text-gray-600">Customer history will appear here.</p>
+            </div>
+            <a id="customer-link" class="btn-secondary btn-sm hidden" href="#">CRM</a>
           </div>
-          <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-3">
-            <div class="text-center text-gray-500 mt-8">Select a conversation to view messages</div>
+
+          <div id="messages" class="min-h-0 flex-1 overflow-y-auto bg-gray-50 p-3 sm:p-5">
+            <div class="mx-auto mt-10 max-w-sm rounded-lg border bg-white p-5 text-center text-sm text-gray-600">
+              Select a conversation to view the full SMS history.
+            </div>
           </div>
-          <div class="p-4 border-t">
-            <form id="send-form" class="flex gap-2">
-              <input id="message-input" autocomplete="off" enterkeyhint="send" placeholder="Type a message..." class="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" disabled />
-              <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50" disabled>Send</button>
+
+          <div id="composer-wrap" class="border-t bg-white p-3 sm:p-4">
+            <div id="quick-replies" class="mb-2 flex gap-2 overflow-x-auto pb-1"></div>
+            <form id="send-form" class="grid grid-cols-[1fr_auto] gap-2">
+              <label class="min-w-0">
+                <span class="sr-only">Message</span>
+                <textarea id="message-input" rows="1" maxlength="1000" enterkeyhint="send" class="input max-h-32 min-h-11 resize-none" placeholder="Type a message..." disabled></textarea>
+              </label>
+              <button id="send-button" type="submit" class="btn-primary self-end" disabled>Send</button>
             </form>
+            <div class="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500">
+              <span id="send-status">SMS is logged to the customer CRM history.</span>
+              <span id="char-count">0/1000</span>
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
+      </section>
     </main>
   </div>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const params = new URLSearchParams(window.location.search);
+    const initialLeadId = params.get('leadId');
+    const conversationPane = document.getElementById('conversation-pane');
+    const threadPane = document.getElementById('thread-pane');
+    const listEl = document.getElementById('conversation-list');
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const sendStatus = document.getElementById('send-status');
+    const charCount = document.getElementById('char-count');
+    const customerLink = document.getElementById('customer-link');
+    const quickRepliesEl = document.getElementById('quick-replies');
+    const quickReplyTemplates = [
+      'Hi, just checking in on your painting project. Do you have any questions for us?',
+      'We can take a look this week. What day works best for you?',
+      'Thanks. I’ll update your estimate and send it over shortly.',
+      'Your job is on schedule. I’ll send another update after today’s work is complete.',
+    ];
+    let conversations = [];
     let selectedLeadId = null;
-    let allMessages = [];
-    
-    async function loadConversations() {
-      try {
-        const res = await fetch(`${API_URL}/v1/sms/inbox`, { credentials: 'include' });
-        if (res.status === 401) {
-          window.location.href = '/login';
-          return;
+    let currentThread = [];
+    let isSending = false;
+
+    const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const dateTime = (value) => value ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    const dateShort = (value) => value ? new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+
+    async function apiJson(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function groupConversations(rows) {
+      const grouped = new Map();
+      rows.forEach((message) => {
+        if (!message.leadId) return;
+        if (!grouped.has(message.leadId)) {
+          grouped.set(message.leadId, {
+            leadId: message.leadId,
+            leadName: message.leadName || `Customer ${message.leadId.slice(0, 8)}`,
+            leadPhone: message.leadPhone || '',
+            leadEmail: message.leadEmail || '',
+            leadStatus: message.leadStatus || '',
+            lastMessage: message,
+            unread: 0,
+            messages: [],
+          });
         }
-        const { data } = await res.json();
-        allMessages = data;
-        
-        // Group by lead
-        const conversations = {};
-        data.forEach(msg => {
-          if (msg.leadId) {
-            if (!conversations[msg.leadId]) {
-              conversations[msg.leadId] = { leadId: msg.leadId, messages: [], lastMessage: null };
-            }
-            conversations[msg.leadId].messages.push(msg);
-            if (!conversations[msg.leadId].lastMessage || new Date(msg.createdAt) > new Date(conversations[msg.leadId].lastMessage.createdAt)) {
-              conversations[msg.leadId].lastMessage = msg;
-            }
-          }
-        });
-        
-        const container = document.getElementById('conversations');
-        const convArray = Object.values(conversations).sort((a, b) => 
-          new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt)
-        );
-        
-        if (convArray.length === 0) {
-          container.innerHTML = '<div class="p-8 text-center text-gray-500">No messages yet</div>';
-          return;
-        }
-        
-        container.innerHTML = convArray.map(conv => `
-          <div class="p-4 hover:bg-gray-50 cursor-pointer" onclick="selectConversation('${conv.leadId}')">
-            <p class="font-medium text-sm">Lead ${conv.leadId.slice(0,8)}</p>
-            <p class="text-sm text-gray-600 truncate">${conv.lastMessage.body}</p>
-            <p class="text-xs text-gray-500 mt-1">${new Date(conv.lastMessage.createdAt).toLocaleDateString()}</p>
+        const conversation = grouped.get(message.leadId);
+        conversation.messages.push(message);
+        if (new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt)) conversation.lastMessage = message;
+        if (message.direction === 'inbound' && !message.read) conversation.unread += 1;
+      });
+      return Array.from(grouped.values()).sort((a, b) => new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt));
+    }
+
+    function conversationMatches(conversation, query) {
+      if (!query) return true;
+      const haystack = [
+        conversation.leadName,
+        conversation.leadPhone,
+        conversation.leadEmail,
+        conversation.leadStatus,
+        conversation.lastMessage?.body,
+      ].join(' ').toLowerCase();
+      return haystack.includes(query.toLowerCase());
+    }
+
+    function renderConversations() {
+      const query = document.getElementById('conversation-search').value.trim();
+      const visible = conversations.filter((conversation) => conversationMatches(conversation, query));
+      if (!visible.length) {
+        listEl.innerHTML = '<div class="p-8 text-center text-sm text-gray-500">No conversations match this view.</div>';
+        return;
+      }
+
+      listEl.innerHTML = visible.map((conversation) => `
+        <button class="w-full p-3 text-left hover:bg-gray-50 ${conversation.leadId === selectedLeadId ? 'bg-blue-50' : ''}" data-lead-id="${conversation.leadId}">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <p class="truncate font-medium text-gray-950">${escapeHtml(conversation.leadName)}</p>
+                ${conversation.unread ? `<span class="rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">${conversation.unread}</span>` : ''}
+              </div>
+              <p class="truncate text-sm text-gray-600">${escapeHtml(conversation.lastMessage?.body || '')}</p>
+              <p class="mt-1 text-xs text-gray-500">${escapeHtml(conversation.leadPhone || 'No phone')} &middot; ${escapeHtml(conversation.leadStatus || 'No status')}</p>
+            </div>
+            <span class="shrink-0 text-xs text-gray-500">${dateShort(conversation.lastMessage?.createdAt)}</span>
+          </div>
+        </button>
+      `).join('');
+    }
+
+    function renderQuickReplies() {
+      quickRepliesEl.innerHTML = quickReplyTemplates.map((reply) => `
+        <button type="button" class="btn-secondary btn-sm shrink-0 quick-reply" data-reply="${escapeHtml(reply)}">${escapeHtml(reply.split('.')[0])}</button>
+      `).join('');
+    }
+
+    function renderThread(lead, thread) {
+      currentThread = thread;
+      document.getElementById('thread-name').textContent = lead.name;
+      document.getElementById('thread-meta').textContent = [lead.phone || 'No phone', lead.email, lead.status].filter(Boolean).join(' · ');
+      customerLink.href = `/leads/${lead.id}`;
+      customerLink.classList.remove('hidden');
+      inputEl.disabled = !lead.phone;
+      sendButton.disabled = !lead.phone;
+      inputEl.placeholder = lead.phone ? 'Type a message...' : 'Add a phone number before sending SMS';
+
+      if (!thread.length) {
+        messagesEl.innerHTML = `
+          <div class="mx-auto mt-10 max-w-sm rounded-lg border bg-white p-5 text-center text-sm text-gray-600">
+            No messages yet. Start with a concise, customer-friendly update.
+          </div>
+        `;
+      } else {
+        messagesEl.innerHTML = thread.map((message) => `
+          <div class="mb-3 flex ${message.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
+            <div class="max-w-[82%] rounded-2xl px-3 py-2 shadow-sm ${message.direction === 'outbound' ? 'bg-blue-600 text-white rounded-br-md' : 'bg-white border text-gray-900 rounded-bl-md'}">
+              <p class="whitespace-pre-wrap text-sm leading-relaxed">${escapeHtml(message.body)}</p>
+              <p class="mt-1 text-[11px] ${message.direction === 'outbound' ? 'text-blue-50' : 'text-gray-500'}">${dateTime(message.createdAt)}</p>
+            </div>
           </div>
         `).join('');
-      } catch (err) {
-        console.error('Failed to load conversations', err);
-        window.showToast('Failed to load messages', 'error');
+      }
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      conversationPane.classList.add('hidden');
+      threadPane.classList.remove('hidden');
+      threadPane.classList.add('flex');
+      if (window.innerWidth >= 1024) conversationPane.classList.remove('hidden');
+    }
+
+    async function loadConversations({ keepThread = true } = {}) {
+      const payload = await apiJson('/v1/sms/inbox');
+      if (!payload) return;
+      conversations = groupConversations(payload.data || []);
+      renderConversations();
+      if (initialLeadId && !selectedLeadId) {
+        await selectConversation(initialLeadId);
+      } else if (keepThread && selectedLeadId) {
+        await selectConversation(selectedLeadId, { silent: true });
       }
     }
-    
-    window.selectConversation = (leadId) => {
+
+    async function selectConversation(leadId, { silent = false } = {}) {
       selectedLeadId = leadId;
-      const messages = allMessages.filter(m => m.leadId === leadId).sort((a, b) => 
-        new Date(a.createdAt) - new Date(b.createdAt)
-      );
-      
-      document.getElementById('thread-name').textContent = `Lead ${leadId.slice(0,8)}`;
-      document.getElementById('message-input').disabled = false;
-      document.querySelector('#send-form button').disabled = false;
-      
-      const container = document.getElementById('messages');
-      container.innerHTML = messages.map(msg => `
-        <div class="flex ${msg.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
-          <div class="max-w-xs px-3 py-2 rounded-lg ${msg.direction === 'outbound' ? 'bg-blue-600 text-white' : 'bg-gray-200'}">
-            <p class="text-sm">${msg.body}</p>
-            <p class="text-xs mt-1 opacity-70">${new Date(msg.createdAt).toLocaleTimeString()}</p>
-          </div>
-        </div>
-      `).join('');
-      
-      container.scrollTop = container.scrollHeight;
-    };
-    
-    document.getElementById('send-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const input = document.getElementById('message-input');
-      const body = input.value.trim();
-      if (!body || !selectedLeadId) return;
-      
+      renderConversations();
+      if (!silent) {
+        sendStatus.textContent = 'Loading conversation...';
+      }
+      const payload = await apiJson(`/v1/sms/thread/${leadId}`);
+      if (!payload) return;
+      renderThread(payload.data.lead, payload.data.messages || []);
+      sendStatus.textContent = 'SMS is logged to the customer CRM history.';
+    }
+
+    async function sendMessage(body) {
+      if (!body || !selectedLeadId || isSending) return;
+      isSending = true;
+      sendButton.disabled = true;
+      sendButton.textContent = 'Sending...';
+      sendStatus.textContent = 'Sending message...';
       try {
-        const res = await fetch(`${API_URL}/v1/sms/send`, {
+        await apiJson('/v1/sms/send', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ body, leadId: selectedLeadId, to: '' }),
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({ body, leadId: selectedLeadId }),
         });
-        
-        if (res.ok) {
-          input.value = '';
-          loadConversations();
-          setTimeout(() => window.selectConversation(selectedLeadId), 500);
-        } else {
-          window.showToast('Failed to send message', 'error');
-        }
+        inputEl.value = '';
+        updateCharCount();
+        await loadConversations({ keepThread: true });
+        sendStatus.textContent = 'Message sent and logged.';
       } catch (err) {
-        console.error('Failed to send message', err);
-        window.showToast('Failed to send message', 'error');
+        sendStatus.textContent = err.message || 'Failed to send message';
+        window.showToast(err.message || 'Failed to send message', 'error');
+      } finally {
+        isSending = false;
+        sendButton.disabled = !selectedLeadId;
+        sendButton.textContent = 'Send';
+      }
+    }
+
+    function updateCharCount() {
+      charCount.textContent = `${inputEl.value.length}/1000`;
+      inputEl.style.height = 'auto';
+      inputEl.style.height = `${Math.min(inputEl.scrollHeight, 128)}px`;
+    }
+
+    listEl.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-lead-id]');
+      if (!button) return;
+      selectConversation(button.dataset.leadId);
+    });
+
+    document.getElementById('back-to-inbox').addEventListener('click', () => {
+      threadPane.classList.add('hidden');
+      conversationPane.classList.remove('hidden');
+    });
+
+    document.getElementById('conversation-search').addEventListener('input', renderConversations);
+    inputEl.addEventListener('input', updateCharCount);
+    inputEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        document.getElementById('send-form').requestSubmit();
       }
     });
-    
-    loadConversations();
-    setInterval(loadConversations, 10000);
+    document.getElementById('send-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      sendMessage(inputEl.value.trim());
+    });
+    document.getElementById('quick-replies').addEventListener('click', (event) => {
+      const button = event.target.closest('.quick-reply');
+      if (!button || inputEl.disabled) return;
+      inputEl.value = button.dataset.reply || '';
+      inputEl.focus();
+      updateCharCount();
+    });
+
+    renderQuickReplies();
+    updateCharCount();
+    loadConversations().catch((err) => {
+      listEl.innerHTML = `<div class="p-8 text-center text-red-600">${escapeHtml(err.message || 'Failed to load messages')}</div>`;
+    });
+    setInterval(() => loadConversations({ keepThread: true }).catch(() => {}), 15000);
   </script>
 </Base>
