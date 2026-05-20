@@ -1,25 +1,16 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Production Rates - PaintFlow</title>
-  <link rel="stylesheet" href="/styles/mobile.css">
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <h1 class="text-xl font-semibold">Production Rates</h1>
-        <a href="/settings" class="text-sm text-gray-600">Back</a>
-      </div>
-    </div>
-  </nav>
-
+<Base title="Production Rates - PaintFlow">
   <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+    <div class="mb-6 flex items-center justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Settings</p>
+        <h1 class="text-2xl font-semibold text-gray-950">Production Rates</h1>
+      </div>
+      <a href="/settings" class="rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Back</a>
+    </div>
     <p class="text-gray-600 mb-6">Set your production rates for accurate estimates. Rates are sq ft per hour.</p>
 
     <div class="bg-white rounded-lg shadow-sm border divide-y" id="rates-list">
@@ -89,5 +80,4 @@
 
     loadRates();
   </script>
-</body>
-</html>
+</Base>

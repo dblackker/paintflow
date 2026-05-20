@@ -34,11 +34,14 @@ const { title = 'PaintFlow' } = Astro.props;
             <a href="/team" class="pf-nav-link text-sm">Team</a>
           </div>
         </div>
-        <button id="mobile-menu" class="pf-mobile-menu-button md:hidden" aria-label="Open navigation" aria-expanded="false">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-          </svg>
-        </button>
+        <div class="flex items-center gap-2">
+          <button type="button" data-logout class="pf-logout-button hidden md:inline-flex">Log out</button>
+          <button id="mobile-menu" class="pf-mobile-menu-button md:hidden" aria-label="Open navigation" aria-expanded="false">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
     <div id="mobile-nav" class="pf-mobile-nav hidden md:hidden border-t">
@@ -49,6 +52,7 @@ const { title = 'PaintFlow' } = Astro.props;
         <a href="/jobs" class="block py-2 text-sm">Jobs</a>
         <a href="/reports" class="block py-2 text-sm">Reports</a>
         <a href="/team" class="block py-2 text-sm">Team</a>
+        <button type="button" data-logout class="pf-mobile-logout-button">Log out</button>
       </div>
     </div>
   </nav>
@@ -57,10 +61,33 @@ const { title = 'PaintFlow' } = Astro.props;
   </main>
   <Toast />
   <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+
     document.getElementById('mobile-menu')?.addEventListener('click', () => {
       document.getElementById('mobile-nav')?.classList.toggle('hidden');
       const button = document.getElementById('mobile-menu');
       button?.setAttribute('aria-expanded', String(document.getElementById('mobile-nav') && !document.getElementById('mobile-nav')?.classList.contains('hidden')));
+    });
+
+    document.querySelectorAll('[data-logout]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Logging out...';
+
+        try {
+          const response = await fetch(`${API_URL}/v1/auth/logout`, {
+            method: 'POST',
+            credentials: 'include',
+          });
+
+          if (!response.ok) throw new Error('Logout failed');
+          window.location.href = '/login';
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = 'Log out';
+          window.showToast?.('Could not log out. Check that the API server is running.', 'error');
+        }
+      });
     });
   </script>
 </body>

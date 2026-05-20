@@ -232,6 +232,30 @@ button[class*="bg-blue"][class*="text-white"]:active {
   padding: 0.55rem;
 }
 
+.pf-logout-button {
+  align-items: center;
+  border: 1px solid var(--pf-border);
+  border-radius: 999px;
+  color: var(--pf-text-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.85rem;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.pf-logout-button:hover {
+  background-color: var(--pf-surface-tint);
+  border-color: var(--pf-border-strong);
+  color: var(--pf-text);
+}
+
+.pf-logout-button:disabled,
+.pf-mobile-logout-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .pf-mobile-nav {
   background: rgb(255 255 255 / 0.94);
   border-color: var(--pf-border);
@@ -245,6 +269,21 @@ button[class*="bg-blue"][class*="text-white"]:active {
 }
 
 .pf-mobile-nav a:hover {
+  background: var(--pf-surface-tint);
+  color: var(--pf-text);
+}
+
+.pf-mobile-logout-button {
+  border-radius: 0.65rem;
+  color: var(--pf-text-muted);
+  display: block;
+  font-size: 0.875rem;
+  padding: 0.75rem;
+  text-align: left;
+  width: 100%;
+}
+
+.pf-mobile-logout-button:hover {
   background: var(--pf-surface-tint);
   color: var(--pf-text);
 }
