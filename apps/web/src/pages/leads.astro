@@ -170,7 +170,7 @@ import Base from '../layouts/Base.astro';
       }
 
       list.innerHTML = leads.map(lead => `
-        <article class="bg-white rounded-lg shadow-sm border p-4">
+        <article class="lead-card bg-white rounded-lg shadow-sm border p-4 cursor-pointer hover:border-blue-300 hover:shadow-md transition" data-href="/leads/${lead.id}" tabindex="0" role="link" aria-label="Open ${escapeHtml(lead.name)} customer detail">
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
@@ -186,10 +186,9 @@ import Base from '../layouts/Base.astro';
           </div>
           <div class="grid grid-cols-3 gap-2 mt-4 text-sm">
             <a class="text-center px-3 py-2 border rounded-lg ${lead.phone ? 'text-gray-800' : 'text-gray-400 pointer-events-none'}" href="${lead.phone ? `tel:${lead.phone}` : '#'}">Call</a>
-            <button class="quick-sms px-3 py-2 border rounded-lg ${lead.phone ? 'text-gray-800' : 'text-gray-400'}" data-id="${lead.id}" ${lead.phone ? '' : 'disabled'}>Text</button>
+            <a class="text-center px-3 py-2 border rounded-lg ${lead.phone ? 'text-gray-800' : 'text-gray-400 pointer-events-none'}" href="${lead.phone ? `/sms?leadId=${lead.id}` : '#'}">Text</a>
             <a class="text-center px-3 py-2 border rounded-lg ${lead.email ? 'text-gray-800' : 'text-gray-400 pointer-events-none'}" href="${lead.email ? `mailto:${lead.email}` : '#'}">Email</a>
           </div>
-          <a href="/leads/${lead.id}" class="mt-3 inline-flex text-sm font-medium text-blue-700 hover:text-blue-900">Open customer detail</a>
         </article>
       `).join('');
     }
@@ -220,27 +219,20 @@ import Base from '../layouts/Base.astro';
       }
     });
 
-    document.getElementById('leads-list')?.addEventListener('click', async (e) => {
-      if (!e.target.classList.contains('quick-sms')) return;
-      const lead = leads.find(item => item.id === e.target.dataset.id);
-      const body = window.prompt('Send a quick follow-up text:', `Hi ${lead?.name || ''}, thanks for reaching out. When is a good time for us to look at your painting project?`);
-      if (!body) return;
-      try {
-        await apiJson(`${API_URL}/v1/sms/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leadId: e.target.dataset.id, body }),
-        });
-        await apiJson(`${API_URL}/v1/leads/${e.target.dataset.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'contacted' }),
-        });
-        window.showToast('Text sent');
-        loadLeads();
-      } catch (err) {
-        window.showToast(err.message || 'Failed to send text', 'error');
-      }
+    document.getElementById('leads-list')?.addEventListener('click', (e) => {
+      if (e.target.closest('a, button, select, input, textarea, label')) return;
+      const card = e.target.closest('.lead-card');
+      if (!card?.dataset.href) return;
+      window.location.href = card.dataset.href;
+    });
+
+    document.getElementById('leads-list')?.addEventListener('keydown', (e) => {
+      if (!['Enter', ' '].includes(e.key)) return;
+      if (e.target.closest('a, button, select, input, textarea, label')) return;
+      const card = e.target.closest('.lead-card');
+      if (!card?.dataset.href) return;
+      e.preventDefault();
+      window.location.href = card.dataset.href;
     });
 
     document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
