@@ -267,6 +267,22 @@ jobsApp.post('/:id/costs', async (c) => {
   return c.json({ data: cost }, 201);
 });
 
+jobsApp.delete('/:id/costs/:costId', async (c) => {
+  const orgId = c.get('orgId');
+  const jobId = c.req.param('id');
+  const costId = c.req.param('costId');
+  const db = createDb(c.env.DATABASE_URL);
+  const job = await getJobForOrg(db, orgId, jobId);
+  if (!job) return c.json({ error: 'Not found' }, 404);
+
+  const [cost] = await db.delete(jobCosts)
+    .where(and(eq(jobCosts.id, costId), eq(jobCosts.jobId, jobId), eq(jobCosts.orgId, orgId)))
+    .returning();
+
+  if (!cost) return c.json({ error: 'Cost not found' }, 404);
+  return c.json({ data: { deleted: true, id: cost.id } });
+});
+
 const manualTimeSchema = z.object({
   hours: z.coerce.number().positive(),
   rate: z.coerce.number().positive(),

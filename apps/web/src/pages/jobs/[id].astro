@@ -285,15 +285,18 @@ import '../../styles/design-system.css';
         return;
       }
       container.innerHTML = costs.map((cost) => `
-        <div class="p-4 flex justify-between gap-4">
-          <div>
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3 sm:items-start">
+          <div class="min-w-0">
             <div class="flex items-center gap-2">
               <p class="font-medium">${escapeHtml(cost.description)}</p>
               <span class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700">${escapeHtml(label(cost.category))}</span>
             </div>
             <p class="text-sm text-gray-600">${Number(cost.quantity).toFixed(2)} x ${currency(cost.unitCost)} · ${dateLabel(cost.createdAt)}</p>
           </div>
-          <p class="font-semibold">${currency(cost.totalCost)}</p>
+          <div class="flex items-center justify-between gap-3 sm:justify-end sm:text-right">
+            <p class="font-semibold">${currency(cost.totalCost)}</p>
+            <button type="button" class="rounded-md border px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-delete-cost="${cost.id}" data-cost-description="${escapeHtml(cost.description)}">Remove</button>
+          </div>
         </div>
       `).join('');
     }
@@ -482,6 +485,23 @@ import '../../styles/design-system.css';
       form.reset();
       document.getElementById('cost-modal').classList.add('hidden');
       await loadCosting();
+    });
+
+    document.getElementById('cost-list').addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-delete-cost]');
+      if (!button) return;
+      const description = button.dataset.costDescription || 'this cost';
+      if (!confirm(`Remove ${description}? This will update job costing totals.`)) return;
+      button.disabled = true;
+      button.textContent = 'Removing...';
+      try {
+        await api(`/v1/jobs/${jobId}/costs/${button.dataset.deleteCost}`, { method: 'DELETE' });
+        await loadCosting();
+      } catch (err) {
+        alert(err.message || 'Failed to remove cost');
+        button.disabled = false;
+        button.textContent = 'Remove';
+      }
     });
 
     document.getElementById('timecard-form').addEventListener('submit', async (event) => {
