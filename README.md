@@ -50,9 +50,14 @@ ENVIRONMENT=development
 
 3. **Database setup:**
 ```bash
-npm run db:push
-npm run db:seed
+corepack pnpm db:push
+corepack pnpm db:seed:golden
 ```
+
+The golden seed is safe to rerun. It resets only the demo workspace with slug
+`golden-brush-demo` and keeps the rest of the database untouched. The fixture
+data lives in `packages/db/src/seeds/golden-data.ts`; the executable seeder is
+`packages/db/src/seeds/golden.ts`.
 
 4. **Run dev servers:**
 ```bash
