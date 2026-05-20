@@ -36,8 +36,8 @@ import Base from '../../layouts/Base.astro';
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
     const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
 
-    async function apiJson(path) {
-      const res = await fetch(`${API_URL}${path}`, { credentials: 'include' });
+    async function apiJson(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
       if (res.status === 401) {
         window.location.href = '/login';
         return null;
@@ -169,6 +169,25 @@ import Base from '../../layouts/Base.astro';
       `).join('');
     }
 
+    function renderActivities(activities = []) {
+      if (!activities.length) {
+        return '<div class="p-4 text-sm text-gray-500">No planned activities yet.</div>';
+      }
+      return activities.map((activity) => `
+        <div class="p-4 flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="text-sm font-medium text-gray-950">${escapeHtml(activity.title)}</p>
+              <span class="rounded-full px-2 py-0.5 text-xs font-medium ${activity.status === 'done' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}">${escapeHtml(label(activity.status))}</span>
+            </div>
+            <p class="mt-1 text-xs text-gray-500">${escapeHtml(label(activity.type))}${activity.dueAt ? ` &middot; Due ${new Date(activity.dueAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ' &middot; No due date'}</p>
+            ${activity.notes ? `<p class="mt-2 text-sm text-gray-600">${escapeHtml(activity.notes)}</p>` : ''}
+          </div>
+          ${activity.status === 'open' ? `<button type="button" class="rounded-md border px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50" data-complete-activity="${activity.id}">Done</button>` : ''}
+        </div>
+      `).join('');
+    }
+
     function renderFollowUps(data) {
       const followUps = [];
       const sentEstimate = data.estimates.find((estimate) => estimate.status === 'sent');
@@ -239,6 +258,30 @@ import Base from '../../layouts/Base.astro';
               <ul class="p-4 text-sm text-gray-700 space-y-2 list-disc list-inside">${renderFollowUps(data)}</ul>
             </section>
             <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b">
+                <h2 class="font-semibold">Activities</h2>
+              </div>
+              <form id="customer-activity-form" class="border-b p-4 space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <select name="type" class="rounded-md border px-3 py-2 text-sm" aria-label="Activity type">
+                    <option value="follow_up">Follow-up</option>
+                    <option value="call">Call</option>
+                    <option value="text">Text</option>
+                    <option value="email">Email</option>
+                    <option value="site_visit">Site visit</option>
+                    <option value="task">Task</option>
+                    <option value="note">Note</option>
+                  </select>
+                  <input name="dueAt" type="datetime-local" class="rounded-md border px-3 py-2 text-sm" aria-label="Due date">
+                </div>
+                <input name="title" required maxlength="255" class="w-full rounded-md border px-3 py-2 text-sm" placeholder="Next action">
+                <div class="flex justify-end">
+                  <button id="customer-activity-save" type="submit" class="btn-primary btn-sm">Save activity</button>
+                </div>
+              </form>
+              <div id="customer-activities-list" class="divide-y">${renderActivities(data.activities)}</div>
+            </section>
+            <section class="bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b flex items-center justify-between gap-3">
                 <h2 class="font-semibold">Messages</h2>
                 <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `/sms?leadId=${customer.id}` : '#'}">Open thread</a>
@@ -259,5 +302,52 @@ import Base from '../../layouts/Base.astro';
       .catch((err) => {
         root.innerHTML = `<div class="bg-white border rounded-lg p-8 text-center text-red-600">${escapeHtml(err.message || 'Failed to load customer')}</div>`;
       });
+
+    document.addEventListener('submit', async (event) => {
+      if (event.target?.id !== 'customer-activity-form') return;
+      event.preventDefault();
+      const form = event.target;
+      const save = document.getElementById('customer-activity-save');
+      const formData = new FormData(form);
+      save.disabled = true;
+      try {
+        await apiJson('/v1/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({
+            leadId,
+            type: formData.get('type'),
+            title: formData.get('title'),
+            dueAt: formData.get('dueAt') ? new Date(formData.get('dueAt')).toISOString() : null,
+          }),
+        });
+        window.showToast?.('Activity saved', 'success');
+        const payload = await apiJson(`/v1/leads/${leadId}`);
+        if (payload) render(payload.data);
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to save activity', 'error');
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    document.addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-complete-activity]');
+      if (!button) return;
+      button.disabled = true;
+      try {
+        await apiJson(`/v1/activities/${button.dataset.completeActivity}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'done' }),
+        });
+        window.showToast?.('Activity completed', 'success');
+        const payload = await apiJson(`/v1/leads/${leadId}`);
+        if (payload) render(payload.data);
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to update activity', 'error');
+        button.disabled = false;
+      }
+    });
   </script>
 </Base>

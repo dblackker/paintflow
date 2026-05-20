@@ -57,6 +57,13 @@
       "when": 1779166003000,
       "tag": "0007_demo_address_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779166004000,
+      "tag": "0008_activities_pipeline",
+      "breakpoints": true
     }
   ]
 }

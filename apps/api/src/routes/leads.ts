@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@paintflow/db/schema';
+import { activities, auditLogs, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@paintflow/db/schema';
 import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -144,7 +144,7 @@ leadsApp.get('/:id', async (c) => {
     return c.json({ error: 'Lead not found' }, 404);
   }
 
-  const [customerEstimates, customerJobs, customerMessages, customerActivity] = await Promise.all([
+  const [customerEstimates, customerJobs, customerMessages, customerActivity, customerActivities] = await Promise.all([
     db.select().from(estimates)
       .where(and(eq(estimates.orgId, orgId), eq(estimates.leadId, id)))
       .orderBy(desc(estimates.createdAt)),
@@ -159,6 +159,10 @@ leadsApp.get('/:id', async (c) => {
       .where(and(eq(auditLogs.orgId, orgId), eq(auditLogs.entityType, 'lead'), eq(auditLogs.entityId, id)))
       .orderBy(desc(auditLogs.createdAt))
       .limit(50),
+    db.select().from(activities)
+      .where(and(eq(activities.orgId, orgId), eq(activities.leadId, id)))
+      .orderBy(desc(activities.createdAt))
+      .limit(100),
   ]);
 
   const estimateIds = customerEstimates.map((estimate) => estimate.id);
@@ -184,6 +188,7 @@ leadsApp.get('/:id', async (c) => {
       jobs: customerJobs,
       messages: customerMessages,
       activity: customerActivity,
+      activities: customerActivities,
       photos: {
         estimates: photosForEstimates,
         jobs: photosForJobs,

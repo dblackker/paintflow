@@ -78,6 +78,24 @@ export const jobs = pgTable('jobs', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const activities = pgTable('activities', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id),
+  estimateId: uuid('estimate_id').references(() => estimates.id),
+  jobId: uuid('job_id').references(() => jobs.id),
+  userId: uuid('user_id').references(() => users.id),
+  type: varchar('type', { length: 50 }).notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  notes: text('notes'),
+  status: varchar('status', { length: 50 }).notNull().default('open'),
+  dueAt: timestamp('due_at'),
+  completedAt: timestamp('completed_at'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const expenses = pgTable('expenses', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
