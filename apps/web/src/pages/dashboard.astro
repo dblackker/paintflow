@@ -55,7 +55,7 @@ import Base from '../layouts/Base.astro';
       <div class="bg-white rounded-lg shadow-sm border p-5 sm:p-6">
         <div class="flex items-center justify-between gap-3 mb-4">
           <h3 class="text-lg font-semibold">Recent Activity</h3>
-          <a href="/pipeline" class="text-sm font-medium text-blue-700 hover:underline">View pipeline</a>
+          <a href="/activity" class="text-sm font-medium text-blue-700 hover:underline">View all activity</a>
         </div>
         <div id="recent-activity" class="text-gray-600">Loading...</div>
       </div>
@@ -137,7 +137,8 @@ import Base from '../layouts/Base.astro';
       return date.toLocaleDateString();
     }
 
-    function estimateActivityText(event) {
+    function activityText(event) {
+      if (event.title) return event.title;
       const action = event.activityLabel || (event.status === 'sent' ? 'Estimate sent' : `Estimate ${label(event.status).toLowerCase()}`);
       const total = Number(event.total || 0);
       const amount = total > 0 ? ` - ${money(total, { cents: false })}` : '';
@@ -201,7 +202,10 @@ import Base from '../layouts/Base.astro';
           }
 
           const activity = document.getElementById('recent-activity');
-          if (data.recentActivity.length === 0) {
+          const activityRes = await fetch(`${API_URL}/v1/activities/feed?limit=5`, { credentials: 'include' });
+          const activityPayload = activityRes.ok ? await activityRes.json() : { data: [] };
+          const recentActivity = activityPayload.data || data.recentActivity || [];
+          if (recentActivity.length === 0) {
             activity.innerHTML = `
               <div class="rounded-lg border border-dashed p-6 text-center">
                 <p class="font-medium text-gray-900">No activity yet</p>
@@ -210,15 +214,15 @@ import Base from '../layouts/Base.astro';
               </div>
             `;
           } else {
-            activity.innerHTML = `<div class="grid gap-3">${data.recentActivity.map(e => `
+            activity.innerHTML = `<div class="grid gap-3">${recentActivity.map(e => `
               <a href="${escapeHtml(e.href || `/estimates/${e.id}`)}" class="block rounded-lg border bg-white px-3 py-3 shadow-sm hover:border-blue-200 hover:bg-gray-50 hover:shadow-md">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div class="min-w-0">
-                    <p class="font-medium text-gray-950">${escapeHtml(estimateActivityText(e))}</p>
-                    <p class="mt-0.5 text-xs text-gray-500">${escapeHtml(relativeDate(e.activityAt || e.sentAt || e.createdAt))}</p>
+                    <p class="font-medium text-gray-950">${escapeHtml(activityText(e))}</p>
+                    <p class="mt-0.5 text-xs text-gray-500">${escapeHtml(relativeDate(e.occurredAt || e.activityAt || e.sentAt || e.createdAt))}</p>
                     <div class="mt-2">${customerProfileLink(e)}</div>
                   </div>
-                  <span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">${escapeHtml(label(e.status))}</span>
+                  <span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">${escapeHtml(label(e.status || e.source || 'activity'))}</span>
                 </div>
               </a>
             `).join('')}</div>`;

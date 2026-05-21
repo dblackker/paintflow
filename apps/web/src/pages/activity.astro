@@ -1,0 +1,175 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Activity - PaintFlow">
+  <main class="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+    <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">Activity</h2>
+        <p class="mt-1 text-sm text-gray-600">A chronological record of customer, estimate, job, and message activity.</p>
+      </div>
+      <a href="/dashboard" class="text-sm font-medium text-blue-700 hover:underline">Back to dashboard</a>
+    </div>
+
+    <section class="mb-4 rounded-lg border bg-white p-3 shadow-sm sm:p-4">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_160px_160px]">
+        <input id="activity-search" type="search" autocomplete="off" enterkeyhint="search" placeholder="Search customer, address, phone, or activity" class="w-full rounded-lg border px-3 py-2" />
+        <select id="activity-type" class="w-full rounded-lg border px-3 py-2">
+          <option value="all">All activity</option>
+          <option value="activity">Tasks & notes</option>
+          <option value="lead">Leads</option>
+          <option value="estimate">Estimates</option>
+          <option value="job">Jobs</option>
+          <option value="message">Messages</option>
+        </select>
+        <select id="activity-status" class="w-full rounded-lg border px-3 py-2">
+          <option value="all">All statuses</option>
+          <option value="open">Open</option>
+          <option value="done">Done</option>
+          <option value="draft">Draft</option>
+          <option value="sent">Sent</option>
+          <option value="accepted">Accepted</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="in_progress">In progress</option>
+          <option value="completed">Completed</option>
+          <option value="unread">Unread</option>
+        </select>
+      </div>
+    </section>
+
+    <section id="activity-feed" class="grid gap-3">
+      <div class="rounded-lg border bg-white p-8 text-center text-gray-500">Loading activity...</div>
+    </section>
+
+    <div class="mt-4 flex justify-center">
+      <button id="load-more-activity" type="button" class="hidden rounded-lg border bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">Load more</button>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    let nextCursor = null;
+    let loading = false;
+    let loadedActivity = [];
+
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function formatAddress(record) {
+      return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+    }
+
+    function relativeDate(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      const diffMs = Date.now() - date.getTime();
+      if (diffMs < 0) return 'Just now';
+      const diffMinutes = Math.floor(diffMs / 60000);
+      if (diffMinutes < 1) return 'Just now';
+      if (diffMinutes < 60) return `${diffMinutes}m ago`;
+      const diffHours = Math.floor(diffMinutes / 60);
+      if (diffHours < 24) return `${diffHours}hr ago`;
+      const diffDays = Math.floor(diffMs / 86400000);
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    function contactSummary(event) {
+      return window.PaintFlowUI?.contactSummary({
+        leadId: event.leadId,
+        name: event.clientName || 'Customer',
+        address: formatAddress(event),
+        phone: event.leadPhone,
+        email: event.leadEmail,
+      }) || `<p class="text-sm font-medium text-gray-950">${escapeHtml(event.clientName || 'Customer')}</p>`;
+    }
+
+    function eventTypeLabel(event) {
+      const sourceLabels = {
+        activity: 'Activity',
+        lead: 'Lead',
+        estimate: 'Estimate',
+        job: 'Job',
+        message: 'Message',
+      };
+      return sourceLabels[event.source] || label(event.type || 'Activity');
+    }
+
+    function renderActivity() {
+      const feed = document.getElementById('activity-feed');
+      const loadMore = document.getElementById('load-more-activity');
+      if (!loadedActivity.length) {
+        feed.innerHTML = '<div class="rounded-lg border border-dashed bg-white p-8 text-center text-gray-500">No activity matches this view.</div>';
+        loadMore.classList.add('hidden');
+        return;
+      }
+
+      feed.innerHTML = loadedActivity.map((event) => `
+        <a href="${escapeHtml(event.href || '#')}" class="block rounded-lg border bg-white p-4 shadow-sm hover:border-blue-200 hover:bg-gray-50 hover:shadow-md">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="font-medium text-gray-950">${escapeHtml(event.title || 'Activity recorded')}</p>
+                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">${escapeHtml(eventTypeLabel(event))}</span>
+                ${event.status ? `<span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">${escapeHtml(label(event.status))}</span>` : ''}
+              </div>
+              <p class="mt-1 text-xs text-gray-500">${escapeHtml(relativeDate(event.occurredAt))}</p>
+              ${event.body ? `<p class="mt-2 line-clamp-2 text-sm text-gray-600">${escapeHtml(event.body)}</p>` : ''}
+              <div class="mt-3">${contactSummary(event)}</div>
+            </div>
+          </div>
+        </a>
+      `).join('');
+      loadMore.classList.toggle('hidden', !nextCursor);
+      loadMore.textContent = loading ? 'Loading...' : 'Load more';
+      loadMore.disabled = loading;
+    }
+
+    async function loadActivity({ append = false } = {}) {
+      if (loading) return;
+      loading = true;
+      document.getElementById('load-more-activity').disabled = true;
+      const params = new URLSearchParams({ limit: '25' });
+      const q = document.getElementById('activity-search').value.trim();
+      const type = document.getElementById('activity-type').value;
+      const status = document.getElementById('activity-status').value;
+      if (q) params.set('q', q);
+      if (type !== 'all') params.set('type', type);
+      if (status !== 'all') params.set('status', status);
+      if (append && nextCursor) params.set('cursor', nextCursor);
+
+      try {
+        const res = await fetch(`${API_URL}/v1/activities/feed?${params.toString()}`, { credentials: 'include' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || 'Failed to load activity');
+        loadedActivity = append ? [...loadedActivity, ...(payload.data || [])] : (payload.data || []);
+        nextCursor = payload.nextCursor || null;
+      } catch (err) {
+        console.error(err);
+        window.showToast?.(err.message || 'Failed to load activity', 'error');
+      } finally {
+        loading = false;
+        renderActivity();
+      }
+    }
+
+    document.getElementById('load-more-activity')?.addEventListener('click', () => loadActivity({ append: true }));
+    document.getElementById('activity-type')?.addEventListener('change', () => loadActivity());
+    document.getElementById('activity-status')?.addEventListener('change', () => loadActivity());
+    document.getElementById('activity-search')?.addEventListener('input', () => {
+      clearTimeout(window.activitySearchTimer);
+      window.activitySearchTimer = setTimeout(() => loadActivity(), 250);
+    });
+
+    loadActivity();
+  </script>
+</Base>
