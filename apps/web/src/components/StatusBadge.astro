@@ -1,0 +1,141 @@
+---
+interface Props {
+  value?: string | null;
+  label?: string | null;
+  tone?: string | null;
+  defineOnly?: boolean;
+  class?: string;
+}
+
+const {
+  value = '',
+  label = '',
+  tone = '',
+  defineOnly = false,
+  class: className = '',
+} = Astro.props;
+---
+
+{!defineOnly && (
+  <status-badge
+    data-value={value}
+    data-label={label}
+    data-tone={tone}
+    class={className}
+  />
+)}
+
+<script is:inline>
+  (() => {
+    const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char]));
+
+    const escapeAttr = (value = '') => escapeHtml(value).replace(/`/g, '&#96;');
+
+    const normalize = (value = '') => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+
+    const labelFor = (value = '') => {
+      if (window.PaintFlowFormat?.label) return window.PaintFlowFormat.label(value);
+      return String(value || '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    };
+
+    const toneFor = (value = '', explicitTone = '') => {
+      if (explicitTone) return explicitTone;
+      const key = normalize(value);
+      const toneMap = {
+        accepted: 'success',
+        approved: 'success',
+        completed: 'success',
+        delivered: 'success',
+        done: 'success',
+        paid: 'success',
+        read: 'success',
+        responded: 'success',
+        won: 'success',
+        sent: 'info',
+        estimate_sent: 'info',
+        scheduled: 'info',
+        in_progress: 'active',
+        contacted: 'active',
+        open: 'active',
+        selected: 'active',
+        draft: 'neutral',
+        pending: 'neutral',
+        activity: 'neutral',
+        job: 'neutral',
+        lead: 'neutral',
+        message: 'neutral',
+        unread: 'warning',
+        changed: 'warning',
+        follow_up: 'warning',
+        feedback_collected: 'warning',
+        redirected_to_google: 'warning',
+        declined: 'danger',
+        failed: 'danger',
+        lost: 'danger',
+        cancelled: 'danger',
+        skipped: 'danger',
+        past_due: 'danger',
+      };
+      return toneMap[key] || 'neutral';
+    };
+
+    const classFor = (tone) => ({
+      success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      info: 'border-sky-200 bg-sky-50 text-sky-800',
+      active: 'border-blue-200 bg-blue-50 text-blue-800',
+      warning: 'border-amber-200 bg-amber-50 text-amber-800',
+      danger: 'border-red-200 bg-red-50 text-red-800',
+      neutral: 'border-gray-200 bg-gray-50 text-gray-700',
+    }[tone] || 'border-gray-200 bg-gray-50 text-gray-700');
+
+    const badgeMarkup = ({ value = '', label = '', tone = '', className = '' } = {}) => `
+      <status-badge
+        data-value="${escapeAttr(value)}"
+        data-label="${escapeAttr(label)}"
+        data-tone="${escapeAttr(tone)}"
+        class="${escapeAttr(className)}"
+      ></status-badge>
+    `;
+
+    class StatusBadgeElement extends HTMLElement {
+      static get observedAttributes() {
+        return ['data-value', 'data-label', 'data-tone'];
+      }
+
+      connectedCallback() {
+        this.render();
+      }
+
+      attributeChangedCallback() {
+        this.render();
+      }
+
+      render() {
+        const value = this.dataset.value || '';
+        const displayLabel = this.dataset.label || labelFor(value);
+        const tone = toneFor(value, this.dataset.tone || '');
+        this.innerHTML = `
+          <span class="inline-flex w-fit items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${classFor(tone)}">
+            ${escapeHtml(displayLabel)}
+          </span>
+        `;
+      }
+    }
+
+    if (!customElements.get('status-badge')) {
+      customElements.define('status-badge', StatusBadgeElement);
+    }
+
+    window.PaintFlowUI = window.PaintFlowUI || {};
+    window.PaintFlowUI.statusBadge = badgeMarkup;
+  })();
+</script>

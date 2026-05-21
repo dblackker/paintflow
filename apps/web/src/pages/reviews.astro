@@ -63,6 +63,7 @@ import Base from '../layouts/Base.astro';
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const statusBadge = (value) => window.PaintFlowUI?.statusBadge({ value }) || `<span class="px-2 py-1 text-xs rounded bg-gray-100">${escapeHtml(label(value))}</span>`;
 
     function customerProfileLink(req) {
       const name = req.leadName || 'Customer';
@@ -102,14 +103,6 @@ import Base from '../layouts/Base.astro';
         }
         
         container.innerHTML = data.requests.map(req => {
-          const statusColors = {
-            pending: 'bg-gray-100 text-gray-800',
-            sent: 'bg-blue-100 text-blue-800',
-            responded: 'bg-green-100 text-green-800',
-            redirected_to_google: 'bg-yellow-100 text-yellow-800',
-            feedback_collected: 'bg-red-100 text-red-800',
-          };
-          
           return `
             <div class="p-4 flex justify-between items-center">
               <div>
@@ -119,7 +112,7 @@ import Base from '../layouts/Base.astro';
               </div>
               <div class="flex items-center gap-3">
                 ${req.rating ? `<div class="text-yellow-500">${'⭐'.repeat(parseInt(req.rating))}</div>` : ''}
-                <span class="px-2 py-1 text-xs rounded ${statusColors[req.status] || 'bg-gray-100'}">${escapeHtml(label(req.status))}</span>
+                ${statusBadge(req.status)}
               </div>
             </div>
           `;

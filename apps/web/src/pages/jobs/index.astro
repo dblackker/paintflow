@@ -20,6 +20,7 @@ import Base from '../../layouts/Base.astro';
 
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: options.cents === false ? 0 : 2, maximumFractionDigits: options.cents === false ? 0 : 2 })}`;
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const statusBadge = (value) => window.PaintFlowUI?.statusBadge({ value }) || `<span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">${escapeHtml(label(value))}</span>`;
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -122,7 +123,7 @@ import Base from '../../layouts/Base.astro';
               <div class="flex justify-between items-start mb-4">
                 <div>
                   <h3 class="text-lg font-semibold">${escapeHtml(displayJobName(job))}</h3>
-                  <p class="text-sm text-gray-600">${label(job.status)}</p>
+                  <div class="mt-1">${statusBadge(job.status)}</div>
                   ${customerProfileLink(job)}
                 </div>
                 <div class="flex items-center gap-3">
@@ -328,7 +329,7 @@ import Base from '../../layouts/Base.astro';
           <div class="text-sm p-2 border rounded ${co.status === 'approved' ? 'bg-green-50' : ''}">
             <div class="flex justify-between">
               <span class="font-medium">${money(co.amount)}</span>
-              <span class="text-xs px-2 py-0.5 rounded ${co.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${label(co.status)}</span>
+              ${statusBadge(co.status)}
             </div>
             <p class="text-xs text-gray-600 mt-1">${co.description}</p>
             ${co.status === 'pending' ? `<button onclick="approveChangeOrder('${co.id}', '${jobId}')" class="mt-1 text-xs text-blue-600">Approve</button>` : ''}

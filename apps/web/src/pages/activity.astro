@@ -54,6 +54,7 @@ import Base from '../layouts/Base.astro';
     let loadedActivity = [];
 
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const statusBadge = (value, options = {}) => window.PaintFlowUI?.statusBadge({ value, ...options }) || `<span class="rounded-full border bg-gray-50 px-2.5 py-0.5 text-xs font-medium text-gray-700">${escapeHtml(options.label || label(value))}</span>`;
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -115,8 +116,8 @@ import Base from '../layouts/Base.astro';
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <p class="font-medium text-gray-950">${escapeHtml(event.title || 'Activity recorded')}</p>
-                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">${escapeHtml(eventTypeLabel(event))}</span>
-                ${event.status ? `<span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800">${escapeHtml(label(event.status))}</span>` : ''}
+                ${statusBadge(event.source, { label: eventTypeLabel(event), tone: 'neutral' })}
+                ${event.status ? statusBadge(event.status) : ''}
               </div>
               <p class="mt-1 text-xs text-gray-500">${escapeHtml(relativeDate(event.occurredAt))}</p>
               ${event.body ? `<p class="mt-2 line-clamp-2 text-sm text-gray-600">${escapeHtml(event.body)}</p>` : ''}

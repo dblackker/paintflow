@@ -103,6 +103,7 @@ import Base from '../layouts/Base.astro';
 
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: options.cents === false ? 0 : 2, maximumFractionDigits: options.cents === false ? 0 : 2 })}`;
+    const statusBadge = (value) => window.PaintFlowUI?.statusBadge({ value }) || `<span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">${escapeHtml(label(value))}</span>`;
 
     function customerProfileLink(item) {
       const name = item.clientName || 'Customer';
@@ -222,7 +223,7 @@ import Base from '../layouts/Base.astro';
                     <p class="mt-0.5 text-xs text-gray-500">${escapeHtml(relativeDate(e.occurredAt || e.activityAt || e.sentAt || e.createdAt))}</p>
                     <div class="mt-2">${customerProfileLink(e)}</div>
                   </div>
-                  <span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">${escapeHtml(label(e.status || e.source || 'activity'))}</span>
+                  <span class="shrink-0">${statusBadge(e.status || e.source || 'activity')}</span>
                 </div>
               </a>
             `).join('')}</div>`;

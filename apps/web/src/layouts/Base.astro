@@ -1,6 +1,7 @@
 ---
 import Toast from '../components/Toast.astro';
 import ContactSummary from '../components/ContactSummary.astro';
+import StatusBadge from '../components/StatusBadge.astro';
 import '../styles/design-system.css';
 
 interface Props {
@@ -149,6 +150,7 @@ const { title = 'PaintFlow' } = Astro.props;
     <slot />
   </main>
   <ContactSummary defineOnly />
+  <StatusBadge defineOnly />
   <Toast />
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
