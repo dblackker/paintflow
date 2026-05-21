@@ -2,6 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import ContactSummary from '../../components/ContactSummary.astro';
 import StatusBadge from '../../components/StatusBadge.astro';
+import Icon from '../../components/Icon.astro';
 
 const isDev = import.meta.env.DEV;
 
@@ -104,23 +105,17 @@ const statuses = ['draft', 'sent', 'scheduled', 'accepted', 'in_progress', 'paid
             <button class="btn-elevated pf-state-layer">Open menu</button>
           </div>
           <div class="mt-4 flex flex-wrap items-center gap-3">
-            <button class="btn-icon" aria-label="Standard icon action">
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"></path>
-              </svg>
+            <button class="btn-icon" aria-label="Add item">
+              <Icon name="plus" />
             </button>
-            <button class="btn-icon btn-icon-tonal" aria-label="Tonal icon action">
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"></path>
-              </svg>
+            <button class="btn-icon btn-icon-tonal" aria-label="Edit item">
+              <Icon name="edit" />
             </button>
-            <button class="btn-icon btn-icon-outlined" aria-label="Outlined icon action">
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"></path>
-              </svg>
+            <button class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Remove item">
+              <Icon name="trash" />
             </button>
             <button class="pf-fab">
-              <span aria-hidden="true">+</span>
+              <Icon name="plus" />
               Mobile create
             </button>
           </div>

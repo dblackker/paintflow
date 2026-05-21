@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
 ---
 
 <Base title="Time Tracking - PaintFlow">
@@ -16,9 +17,9 @@ import Base from '../layouts/Base.astro';
     <section class="surface-panel p-4 mb-6">
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full lg:w-auto lg:min-w-[22rem]">
-          <button id="prev-week" class="btn-secondary px-3" aria-label="Previous week">‹</button>
+          <button id="prev-week" class="btn-icon btn-icon-outlined" aria-label="Previous week"><Icon name="chevron-left" /></button>
           <span id="week-range" class="text-center font-semibold text-sm sm:text-base"></span>
-          <button id="next-week" class="btn-secondary px-3" aria-label="Next week">›</button>
+          <button id="next-week" class="btn-icon btn-icon-outlined" aria-label="Next week"><Icon name="chevron-right" /></button>
         </div>
         <div class="pf-segmented-group justify-center lg:justify-end" aria-label="Time grouping">
           <button type="button" data-view-mode="day">Day</button>
@@ -50,7 +51,7 @@ import Base from '../layouts/Base.astro';
           <h2 id="modal-title" class="text-lg font-semibold">Log Time</h2>
           <p class="text-sm text-gray-600">Labor cost is calculated from the team member's burdened rate.</p>
         </div>
-        <button type="button" id="close-modal-btn" class="btn-icon" aria-label="Close">x</button>
+        <button type="button" id="close-modal-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
       </div>
       <form id="time-form" class="space-y-4">
         <input type="hidden" name="id">
@@ -105,6 +106,15 @@ import Base from '../layouts/Base.astro';
 
     function escapeHtml(value = '') {
       return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    function iconSvg(name) {
+      const icons = {
+        edit: '<path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />',
+        plus: '<path d="M12 5v14M5 12h14" />',
+        trash: '<path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" />',
+      };
+      return `<svg class="pf-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || ''}</svg>`;
     }
 
     function getWeekStart(date) {
@@ -275,7 +285,7 @@ import Base from '../layouts/Base.astro';
         <section class="surface-panel overflow-hidden">
           <button type="button" onclick="toggleGroup('${groupKey}')" class="w-full px-3 py-2.5 bg-gray-50 border-b flex items-center justify-between gap-3 text-left hover:bg-gray-100">
             <div class="flex items-center gap-3">
-              <span class="btn-compact w-7 h-7 p-0" aria-hidden="true">${collapsed ? '+' : '-'}</span>
+              <span class="btn-icon h-7 w-7" aria-hidden="true">${collapsed ? iconSvg('plus') : '<span class="text-lg leading-none">-</span>'}</span>
               <div>
                 <h2 class="font-semibold text-sm sm:text-base">${escapeHtml(title)}</h2>
                 <p class="text-xs text-gray-600">${escapeHtml(subtitle)}</p>
@@ -324,8 +334,8 @@ import Base from '../layouts/Base.astro';
         cost: `<p class="hidden lg:block text-right font-medium">${currency(entry.totalCost)}</p>`,
         actions: `
           <div class="flex justify-end gap-1.5">
-            <button onclick="editEntry('${entry.id}')" class="btn-compact">Edit</button>
-            <button onclick="removeEntry('${entry.id}')" class="btn-compact text-red-700">Remove</button>
+            <button type="button" onclick="editEntry('${entry.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit time entry">${iconSvg('edit')}</button>
+            <button type="button" onclick="removeEntry('${entry.id}')" class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Remove time entry">${iconSvg('trash')}</button>
           </div>
         `,
       };

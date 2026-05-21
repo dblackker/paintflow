@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
 ---
 
 <Base title="Production Rates - PaintFlow">
@@ -20,8 +21,9 @@ import Base from '../layouts/Base.astro';
       <div class="p-4 text-center text-gray-500">Loading...</div>
     </div>
 
-    <button id="add-rate" class="w-full mt-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 touch-feedback">
-      + Add Custom Rate
+    <button id="add-rate" class="w-full mt-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 touch-feedback inline-flex items-center justify-center gap-2">
+      <Icon name="plus" />
+      Add Custom Rate
     </button>
   </main>
 
@@ -29,6 +31,13 @@ import Base from '../layouts/Base.astro';
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toFixed(options.cents === false ? 0 : 2)}`;
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const iconSvg = (name) => {
+      const icons = {
+        edit: '<path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />',
+        trash: '<path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5M14 11v5" />',
+      };
+      return `<svg class="pf-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || ''}</svg>`;
+    };
 
     async function loadRates() {
       const res = await fetch(`${API_URL}/v1/production-rates`, { credentials: 'include' });
@@ -45,9 +54,9 @@ import Base from '../layouts/Base.astro';
             <p class="text-sm text-gray-600">${Number(r.ratePerHour).toLocaleString('en-US')} ${label(r.unit)}/hr @ ${money(r.hourlyRate, { cents: false })}/hr</p>
             ${r.description ? `<p class="text-xs text-gray-500 mt-1">${r.description}</p>` : ''}
           </div>
-          <div class="flex gap-2">
-            <button onclick="editRate('${r.id}')" class="text-sm text-blue-600">Edit</button>
-            <button onclick="deleteRate('${r.id}')" class="text-sm text-red-600">Delete</button>
+          <div class="flex gap-1.5">
+            <button type="button" onclick="editRate('${r.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit ${label(r.category)} ${label(r.surfaceType)} rate">${iconSvg('edit')}</button>
+            <button type="button" onclick="deleteRate('${r.id}')" class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Delete ${label(r.category)} ${label(r.surfaceType)} rate">${iconSvg('trash')}</button>
           </div>
         </div>
       `).join('');

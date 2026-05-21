@@ -2,6 +2,7 @@
 import Toast from '../components/Toast.astro';
 import ContactSummary from '../components/ContactSummary.astro';
 import StatusBadge from '../components/StatusBadge.astro';
+import Icon from '../components/Icon.astro';
 import '../styles/design-system.css';
 
 interface Props {
@@ -102,9 +103,7 @@ const { title = 'PaintFlow' } = Astro.props;
         <div class="flex items-center gap-2">
           <div class="relative">
             <button id="notifications-button" type="button" class="btn-icon relative" aria-label="Open notifications" aria-expanded="false">
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9"></path>
-              </svg>
+              <Icon name="bell" />
               <span id="notifications-badge" class="hidden absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[11px] font-bold leading-none text-white"></span>
             </button>
             <div id="notifications-menu" class="hidden absolute right-0 mt-2 w-[min(92vw,380px)] overflow-hidden rounded-lg border bg-white shadow-lg">
@@ -125,9 +124,7 @@ const { title = 'PaintFlow' } = Astro.props;
           </div>
           <button type="button" data-logout class="pf-logout-button hidden lg:inline-flex">Log out</button>
           <button id="mobile-menu" class="pf-mobile-menu-button lg:hidden" aria-label="Open navigation" aria-expanded="false">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-            </svg>
+            <Icon name="menu" class="h-6 w-6" />
           </button>
         </div>
       </div>
