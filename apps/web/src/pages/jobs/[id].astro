@@ -491,7 +491,7 @@ import StatusBadge from '../../components/StatusBadge.astro';
             <p class="font-semibold">${currency(order.amount)}</p>
             ${order.paymentRequired ? `<p class="text-xs text-gray-500">${currency(order.paymentDueAmount || order.amount)} due on approval</p>` : '<p class="text-xs text-gray-500">No payment required</p>'}
             <div class="mt-3 flex flex-wrap sm:justify-end gap-2">
-              ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" data-send-change-order="${order.id}">${order.sentAt ? 'Copy approval link' : 'Send for approval'}</button>` : ''}
+              ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" title="Creates a secure customer portal link and copies it to your clipboard." data-send-change-order="${order.id}">${order.sentAt ? 'Copy fresh link' : 'Create approval link'}</button>` : ''}
               ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" data-approve-change-order="${order.id}">Mark approved</button>` : ''}
             </div>
           </div>
@@ -796,13 +796,14 @@ import StatusBadge from '../../components/StatusBadge.astro';
       if (sendButton) {
         sendButton.disabled = true;
         const originalText = sendButton.textContent;
-        sendButton.textContent = 'Preparing...';
+        sendButton.textContent = 'Creating link...';
         try {
           const payload = await api(`/v1/change-orders/${sendButton.dataset.sendChangeOrder}/portal-link`, { method: 'POST' });
           const link = payload?.data?.link;
           if (link) {
-            await navigator.clipboard?.writeText(link).catch(() => {});
-            window.showToast?.('Customer approval link copied', 'success');
+            const copied = await navigator.clipboard?.writeText(link).then(() => true).catch(() => false);
+            if (!copied) window.prompt('Copy approval link:', link);
+            window.showToast?.('Approval link copied. It expires in 14 days.', 'success');
           } else {
             window.showToast?.('Approval link created', 'success');
           }
