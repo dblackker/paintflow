@@ -58,6 +58,35 @@ uploads.get('/:key', async (c) => {
   return c.json({ url: `https://cdn.paintflow.app/${key}` });
 });
 
+// GET /v1/uploads/photos/file/:photoId
+uploads.get('/photos/file/:photoId', async (c) => {
+  const orgId = c.get('orgId');
+  const photoId = c.req.param('photoId');
+  const db = createDb(c.env.DATABASE_URL);
+  const photo = await db.query.jobPhotos.findFirst({
+    where: and(eq(jobPhotos.id, photoId), eq(jobPhotos.orgId, orgId)),
+  });
+
+  if (!photo) {
+    return c.json({ error: 'Photo not found' }, 404);
+  }
+
+  if (!c.env.R2) {
+    return c.redirect(photo.url, 302);
+  }
+
+  const object = await c.env.R2.get(photo.key);
+  if (!object) {
+    return c.redirect(photo.url, 302);
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('Cache-Control', 'private, max-age=300');
+  headers.set('ETag', object.httpEtag);
+  return new Response(object.body, { headers });
+});
+
 // POST /v1/uploads/photo
 uploads.post('/photo', async (c) => {
   const orgId = c.get('orgId');

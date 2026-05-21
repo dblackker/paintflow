@@ -37,6 +37,9 @@ import Base from '../../layouts/Base.astro';
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
     const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
     const statusBadge = (value, options = {}) => window.PaintFlowUI?.statusBadge({ value, ...options }) || `<span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">${escapeHtml(options.label || label(value))}</span>`;
+    const photoSrc = (photo) => photo?.source === 'Job' && photo?.id
+      ? `${API_URL}/v1/uploads/photos/file/${encodeURIComponent(photo.id)}`
+      : photo?.url || '';
 
     async function apiJson(path, options = {}) {
       const res = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
@@ -143,8 +146,16 @@ import Base from '../../layouts/Base.astro';
       return `
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
           ${all.slice(0, 12).map((photo) => `
-            <a href="${escapeHtml(photo.url)}" target="_blank" rel="noreferrer" class="block border rounded-lg overflow-hidden bg-gray-50">
-              <div class="aspect-[4/3] bg-gray-100 flex items-center justify-center text-xs text-gray-500">Photo</div>
+            <a href="${escapeHtml(photoSrc(photo))}" target="_blank" rel="noreferrer" class="block border rounded-lg overflow-hidden bg-gray-50">
+              <div class="aspect-[4/3] bg-gray-100">
+                <img
+                  src="${escapeHtml(photoSrc(photo))}"
+                  alt="${escapeHtml(`${photo.source} photo`)}"
+                  class="h-full w-full object-cover"
+                  loading="lazy"
+                  onerror="this.replaceWith(Object.assign(document.createElement('div'), { className: 'flex h-full w-full items-center justify-center p-3 text-center text-xs text-gray-500', textContent: 'Photo preview unavailable' }))"
+                >
+              </div>
               <div class="p-2">
                 <p class="text-xs font-medium text-gray-700">${escapeHtml(photo.source)} photo</p>
                 <p class="text-xs text-gray-500">${dateLabel(photo.createdAt)}</p>
