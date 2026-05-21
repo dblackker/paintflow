@@ -106,17 +106,19 @@ const DEFAULT_ROLES = [
 ];
 
 const MAGIC_LINK_WINDOW_SECONDS = 3600;
+const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
 
 function sessionCookie(value: string, env: Env, maxAge: number) {
+  const isCrossSiteDemo = env.ENVIRONMENT === 'demo';
   const parts = [
     `session=${value}`,
     'HttpOnly',
     'Path=/',
     `Max-Age=${maxAge}`,
-    'SameSite=Lax',
+    `SameSite=${isCrossSiteDemo ? 'None' : 'Lax'}`,
   ];
 
-  if (env.ENVIRONMENT === 'production') {
+  if (env.ENVIRONMENT === 'production' || isCrossSiteDemo) {
     parts.push('Secure');
   }
 
@@ -139,6 +141,10 @@ function magicLinkLimits(env: Env) {
     email: parseLimit(env.MAGIC_LINK_EMAIL_LIMIT, isDevelopment ? 100 : 10),
     ip: parseLimit(env.MAGIC_LINK_IP_LIMIT, isDevelopment ? 300 : 60),
   };
+}
+
+function canUseGoldenDemoLogin(env: Env, email: string) {
+  return email === GOLDEN_DEMO_EMAIL && ['development', 'demo'].includes(env.ENVIRONMENT);
 }
 
 function clientIp(c: Context<{ Bindings: Env }>) {
@@ -319,6 +325,35 @@ auth.post('/magic-link', async (c) => {
   let user = await db.query.users.findFirst({
     where: eq(users.email, normalizedEmail),
   });
+
+  if (canUseGoldenDemoLogin(c.env, normalizedEmail)) {
+    if (!user) {
+      return c.json({
+        error: 'Golden demo user has not been seeded in this database yet.',
+        code: 'DEMO_USER_NOT_SEEDED',
+      }, 404);
+    }
+
+    const membership = await db.query.memberships.findFirst({
+      where: eq(memberships.userId, user.id),
+    });
+
+    if (!membership?.orgId) {
+      return c.json({
+        error: 'Golden demo user is missing an organization membership.',
+        code: 'DEMO_USER_MISSING_MEMBERSHIP',
+      }, 409);
+    }
+
+    const sessionToken = await createSession(c.env, user.id, membership.orgId, normalizedEmail);
+    c.header('Set-Cookie', sessionCookie(sessionToken, c.env, 604800));
+
+    return c.json({
+      success: true,
+      autoLogin: true,
+      redirectUrl: `${c.env.PUBLIC_URL}/dashboard`,
+    });
+  }
   
   let orgId: string;
   let isNewUser = false;

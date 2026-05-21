@@ -73,6 +73,14 @@ import '../styles/design-system.css';
           const data = await res.json();
           
           if (res.ok) {
+            if (data.autoLogin && data.redirectUrl) {
+              message.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-800';
+              message.textContent = 'Signing you in to the demo workspace...';
+              message.classList.remove('hidden');
+              window.location.href = data.redirectUrl;
+              return;
+            }
+
             message.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-800';
             message.textContent = 'Check your email for a one-time sign-in link.';
             message.classList.remove('hidden');
