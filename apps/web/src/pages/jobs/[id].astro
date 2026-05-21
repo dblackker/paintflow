@@ -213,6 +213,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
       </form>
     </div>
   </div>
+  <div id="approval-link-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-30 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl">
+      <h3 class="text-lg font-semibold">Customer Approval Link</h3>
+      <p class="mt-1 text-sm text-gray-600">Send this secure portal link to the customer for change order approval and payment. It expires in 14 days.</p>
+      <label class="mt-4 block">
+        <span class="form-label">Approval link</span>
+        <input id="approval-link-input" readonly class="input" value="">
+      </label>
+      <div class="mt-4 flex flex-col sm:flex-row gap-3">
+        <button type="button" id="copy-approval-link-btn" class="btn-primary flex-1">Copy link</button>
+        <button type="button" id="close-approval-link-btn" class="btn-secondary flex-1">Close</button>
+      </div>
+    </div>
+  </div>
   <ContactSummary defineOnly />
   <StatusBadge defineOnly />
   <Toast />
@@ -621,6 +635,19 @@ import StatusBadge from '../../components/StatusBadge.astro';
       document.getElementById('change-order-form').reset();
     }
 
+    function openApprovalLinkModal(link) {
+      const input = document.getElementById('approval-link-input');
+      input.value = link;
+      document.getElementById('approval-link-modal').classList.remove('hidden');
+      input.focus();
+      input.select();
+    }
+
+    function closeApprovalLinkModal() {
+      document.getElementById('approval-link-modal').classList.add('hidden');
+      document.getElementById('approval-link-input').value = '';
+    }
+
     document.getElementById('add-cost-btn').addEventListener('click', () => {
       openCostModal();
     });
@@ -747,6 +774,18 @@ import StatusBadge from '../../components/StatusBadge.astro';
       closeChangeOrderModal();
     });
 
+    document.getElementById('close-approval-link-btn').addEventListener('click', () => {
+      closeApprovalLinkModal();
+    });
+
+    document.getElementById('copy-approval-link-btn').addEventListener('click', async () => {
+      const input = document.getElementById('approval-link-input');
+      input.focus();
+      input.select();
+      const copied = await navigator.clipboard?.writeText(input.value).then(() => true).catch(() => false);
+      window.showToast?.(copied ? 'Approval link copied' : 'Select the link and copy it manually', copied ? 'success' : 'error');
+    });
+
     document.getElementById('change-order-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!costing?.job?.estimateId) {
@@ -802,8 +841,12 @@ import StatusBadge from '../../components/StatusBadge.astro';
           const link = payload?.data?.link;
           if (link) {
             const copied = await navigator.clipboard?.writeText(link).then(() => true).catch(() => false);
-            if (!copied) window.prompt('Copy approval link:', link);
-            window.showToast?.('Approval link copied. It expires in 14 days.', 'success');
+            if (!copied) {
+              openApprovalLinkModal(link);
+              window.showToast?.('Select the link and copy it manually', 'error');
+            } else {
+              window.showToast?.('Approval link copied. It expires in 14 days.', 'success');
+            }
           } else {
             window.showToast?.('Approval link created', 'success');
           }
