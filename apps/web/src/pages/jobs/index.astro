@@ -44,13 +44,36 @@ import Base from '../../layouts/Base.astro';
       return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
     }
 
+    function streetAddress(job) {
+      return String(job.leadStreetAddress || '').trim();
+    }
+
+    function jobScope(job) {
+      const name = String(job.name || '').trim();
+      const haystack = name.toLowerCase();
+      if (/(exterior|siding|fascia|soffit|roofline|repaint)/.test(haystack)) return 'Exterior';
+      if (/(cabinet|vanity|built-in)/.test(haystack)) return 'Cabinets';
+      if (/(commercial|office|workspace|tenant)/.test(haystack)) return 'Commercial';
+      if (/(interior|bedroom|bathroom|kitchen|living|walls|ceilings|trim|doors)/.test(haystack)) return 'Interior';
+      return '';
+    }
+
     function displayJobName(job) {
       const name = String(job.name || '').trim();
       const leadName = String(job.leadName || '').trim();
-      if (leadName && name.toLowerCase() === `${leadName} - proposal`.toLowerCase()) {
-        return `${leadName} Painting Project`;
+      const street = streetAddress(job);
+      const scope = jobScope(job);
+      const genericNames = [
+        `${leadName} - proposal`,
+        `${leadName} painting project`,
+        `${leadName} painting`,
+        `${leadName} - job`,
+      ].map((item) => item.toLowerCase());
+      if (leadName && genericNames.includes(name.toLowerCase())) {
+        return [leadName, scope, street].filter(Boolean).join(' - ');
       }
-      return name || `${leadName || 'Customer'} Painting Project`;
+      if (leadName && scope && street && !name.includes(' - ')) return [leadName, scope, street].join(' - ');
+      return name || [leadName || 'Customer', street].filter(Boolean).join(' - ');
     }
 
     async function apiJson(url, options = {}) {

@@ -45,15 +45,16 @@ function jobScopeLabel(selectedPackage: EstimatePackage | null): string {
     .join(' ')
     .toLowerCase();
 
-  if (/(exterior|siding|fascia|soffit|roofline)/.test(text)) return 'Exterior Painting';
-  if (/(cabinet|vanity|built-in)/.test(text)) return 'Cabinet Painting';
-  if (/(commercial|office|workspace|tenant)/.test(text)) return 'Commercial Painting';
-  if (/(interior|bedroom|bathroom|kitchen|living|walls|ceilings|trim|doors)/.test(text)) return 'Interior Painting';
-  return 'Painting Project';
+  if (/(exterior|siding|fascia|soffit|roofline)/.test(text)) return 'Exterior';
+  if (/(cabinet|vanity|built-in)/.test(text)) return 'Cabinets';
+  if (/(commercial|office|workspace|tenant)/.test(text)) return 'Commercial';
+  if (/(interior|bedroom|bathroom|kitchen|living|walls|ceilings|trim|doors)/.test(text)) return 'Interior';
+  return 'Job';
 }
 
 export function buildJobName(lead: typeof leads.$inferSelect, selectedPackage: EstimatePackage | null): string {
-  return `${lead.name} ${jobScopeLabel(selectedPackage)}`;
+  const street = lead.streetAddress?.trim();
+  return [lead.name, jobScopeLabel(selectedPackage), street].filter(Boolean).join(' - ');
 }
 
 export function selectEstimatePackage(
