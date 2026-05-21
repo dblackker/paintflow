@@ -78,14 +78,79 @@ const isDev = import.meta.env.DEV;
       content: ">";
       font-weight: 700;
     }
+
+    @media (max-width: 640px) {
+      .dashboard-shell {
+        padding-top: 1rem;
+      }
+
+      .dashboard-hero {
+        margin-bottom: 0.85rem;
+      }
+
+      .dashboard-primary-actions {
+        display: grid;
+        gap: 0.4rem;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        width: 100%;
+      }
+
+      .dashboard-primary-actions a {
+        flex-direction: column;
+        font-size: 0.68rem;
+        gap: 0.15rem;
+        min-height: 3rem;
+        padding: 0.35rem 0.25rem;
+        text-align: center;
+      }
+
+      .dashboard-primary-actions .pf-icon {
+        height: 1.05rem;
+        width: 1.05rem;
+      }
+
+      .dashboard-metrics {
+        gap: 0.45rem;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-bottom: 0.9rem;
+      }
+
+      .dashboard-metric-card {
+        min-height: 4.35rem;
+        padding: 0.65rem !important;
+      }
+
+      .dashboard-metric-card p:first-child {
+        font-size: 0.68rem;
+        line-height: 1.05;
+      }
+
+      .dashboard-metric-card p:nth-child(2) {
+        font-size: 1.5rem;
+        line-height: 1;
+        margin-top: 0.25rem;
+      }
+
+      .dashboard-metric-card p:last-child {
+        display: none;
+      }
+
+      .dashboard-panel {
+        padding: 0.9rem !important;
+      }
+
+      .dashboard-activity-card {
+        padding: 0.7rem;
+      }
+    }
   </style>
   <main class="dashboard-shell mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
+    <div class="dashboard-hero flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-6">
       <div>
         <h2 class="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h2>
         <p class="text-sm sm:text-base text-gray-600 mt-1">Run today’s lead, estimate, and job workflow from one place.</p>
       </div>
-      <div id="dashboard-primary-actions" class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+      <div id="dashboard-primary-actions" class="dashboard-primary-actions grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         <a href="/leads?new=1" class="btn-primary btn-sm justify-center"><Icon name="plus" />Add lead</a>
         <a href="/estimates/production" class="btn-secondary btn-sm justify-center"><Icon name="file-text" />Estimate</a>
         <a href="/jobs" class="btn-secondary btn-sm justify-center"><Icon name="briefcase" />Jobs</a>
@@ -95,19 +160,19 @@ const isDev = import.meta.env.DEV;
 
     <section id="setup-slot"></section>
 
-    <section class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
+    <section class="dashboard-metrics grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
       <a href="/leads" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
-        <p class="text-sm text-gray-600">Active Leads</p>
+        <p class="text-sm text-gray-600">Active leads</p>
         <p class="text-3xl font-bold mt-2" id="active-leads">-</p>
         <p class="mt-3 text-sm font-medium text-blue-700">Open leads</p>
       </a>
       <a href="/estimates" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
-        <p class="text-sm text-gray-600">Estimates Sent</p>
+        <p class="text-sm text-gray-600">Estimates sent</p>
         <p class="text-3xl font-bold mt-2" id="estimates-sent">-</p>
         <p class="mt-3 text-sm font-medium text-blue-700">Review estimates</p>
       </a>
       <a href="/jobs" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
-        <p class="text-sm text-gray-600">Jobs This Month</p>
+        <p class="text-sm text-gray-600">Jobs this month</p>
         <p class="text-3xl font-bold mt-2" id="jobs-month">-</p>
         <p class="mt-3 text-sm font-medium text-blue-700">Open schedule</p>
       </a>

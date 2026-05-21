@@ -85,6 +85,7 @@ body {
   color: var(--pf-text);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   font: var(--pf-type-body);
+  overflow-x: hidden;
 }
 
 .hidden {
@@ -576,6 +577,10 @@ button[class*="bg-blue"][class*="text-white"]:active {
   display: none;
 }
 
+.pf-notifications-menu {
+  z-index: 60;
+}
+
 .btn-icon:hover {
   background: var(--pf-state-hover);
 }
@@ -843,4 +848,63 @@ button[class*="bg-blue"][class*="text-white"]:active {
 
 .pf-state-layer:active::after {
   opacity: 0.12;
+}
+
+@media (max-width: 640px) {
+  .pf-app-nav .h-16 {
+    height: 3.5rem;
+  }
+
+  .pf-brand-mark {
+    height: 1.75rem;
+    width: 1.75rem;
+  }
+
+  .pf-mobile-menu-button,
+  .btn-icon {
+    height: 2.25rem;
+    width: 2.25rem;
+  }
+
+  .pf-notifications-menu:not(.hidden) {
+    border-radius: 0.9rem;
+    left: 0.75rem;
+    max-height: calc(100dvh - 4.75rem);
+    position: fixed;
+    right: 0.75rem;
+    top: 3.75rem;
+    width: auto;
+  }
+
+  .pf-notifications-menu #notifications-preview {
+    max-height: calc(100dvh - 14rem);
+  }
+
+  .pf-notifications-menu a {
+    padding: 0.7rem 0.85rem;
+  }
+
+  .pf-notification-badge {
+    font-size: 0.625rem;
+    height: 1.05rem;
+    min-width: 1.05rem;
+    right: -0.2rem;
+    top: -0.2rem;
+  }
+
+  .btn-filled,
+  .btn-tonal,
+  .btn-outlined,
+  .btn-text,
+  .btn-elevated,
+  .btn-primary,
+  .btn-secondary {
+    min-height: 2.25rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .btn-sm {
+    min-height: 1.9rem;
+    padding: 0.35rem 0.55rem;
+  }
 }
