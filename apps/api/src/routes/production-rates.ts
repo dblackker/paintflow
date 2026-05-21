@@ -38,12 +38,13 @@ ratesApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  let rates = await db.query.productionRates.findMany({
+  let allRates = await db.query.productionRates.findMany({
     where: eq(productionRates.orgId, orgId),
   });
+  let rates = allRates.filter((rate) => rate.isActive !== false);
   
   // Seed defaults if empty
-  if (rates.length === 0) {
+  if (allRates.length === 0) {
     const seeded = await db.insert(productionRates).values(
       DEFAULT_RATES.map(r => ({
         orgId,
@@ -56,10 +57,11 @@ ratesApp.get('/', async (c) => {
       }))
     ).returning();
     rates = seeded;
+    allRates = seeded;
   } else {
     const missingExteriorDefaults = DEFAULT_RATES.filter((defaultRate) =>
       defaultRate.category.startsWith('exterior_') &&
-      !rates.some((rate) => rate.category === defaultRate.category)
+      !allRates.some((rate) => rate.category === defaultRate.category)
     );
 
     if (missingExteriorDefaults.length) {
@@ -75,6 +77,7 @@ ratesApp.get('/', async (c) => {
         }))
       ).returning();
       rates = [...rates, ...seeded];
+      allRates = [...allRates, ...seeded];
     }
   }
   
@@ -128,7 +131,8 @@ ratesApp.delete('/:id', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
   
-  await db.delete(productionRates)
+  await db.update(productionRates)
+    .set({ isActive: false, updatedAt: new Date() })
     .where(and(eq(productionRates.id, id), eq(productionRates.orgId, orgId)));
   
   return c.json({ success: true });

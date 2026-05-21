@@ -29,12 +29,13 @@ materialsApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  let data = await db.query.materials.findMany({
+  let allMaterials = await db.query.materials.findMany({
     where: eq(materials.orgId, orgId),
     orderBy: [desc(materials.createdAt)],
   });
+  let data = allMaterials.filter((material) => material.isActive !== false);
   
-  if (data.length === 0) {
+  if (allMaterials.length === 0) {
     const seeded = await db.insert(materials).values(
       DEFAULT_MATERIALS.map((m: any) => ({
         orgId,
@@ -50,6 +51,7 @@ materialsApp.get('/', async (c) => {
       }))
     ).returning();
     data = seeded;
+    allMaterials = seeded;
   }
   
   return c.json({ data });
@@ -103,7 +105,9 @@ materialsApp.delete('/:id', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
   
-  await db.delete(materials).where(and(eq(materials.id, id), eq(materials.orgId, orgId)));
+  await db.update(materials)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(materials.id, id), eq(materials.orgId, orgId)));
   
   return c.json({ success: true });
 });

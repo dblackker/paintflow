@@ -11,11 +11,11 @@ import Icon from '../components/Icon.astro';
         <h1 class="text-2xl font-semibold text-gray-950">Production Rates</h1>
       </div>
       <div class="flex flex-wrap gap-2">
-        <a href="/materials" class="rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Paint products</a>
-        <a href="/settings" class="rounded-lg border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Back</a>
+        <a href="/materials" class="btn-secondary btn-sm">Paint products</a>
+        <a href="/settings" class="btn-secondary btn-sm">Back</a>
       </div>
     </div>
-    <p class="text-gray-600 mb-6">Set your production rates for accurate estimates. Rates are sq ft per hour.</p>
+    <p class="text-gray-600 mb-6">Set your production rates for accurate estimates. Rates are how much your crew can complete per labor hour.</p>
 
     <div class="bg-white rounded-lg shadow-sm border divide-y" id="rates-list">
       <div class="p-4 text-center text-gray-500">Loading...</div>
@@ -27,10 +27,77 @@ import Icon from '../components/Icon.astro';
     </button>
   </main>
 
+  <div id="rate-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div class="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl sm:p-6">
+      <div class="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 id="rate-modal-title" class="text-lg font-semibold text-gray-950">Add Production Rate</h2>
+          <p class="text-sm text-gray-600">Rates power production estimates and job costing assumptions.</p>
+        </div>
+        <button type="button" id="close-rate-modal" class="btn-icon" aria-label="Close production rate form"><Icon name="close" /></button>
+      </div>
+      <form id="rate-form" class="space-y-4">
+        <input type="hidden" name="id">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label>
+            <span class="form-label">Category</span>
+            <input name="category" autocomplete="off" enterkeyhint="next" placeholder="walls, trim, exterior_siding" class="input" required>
+          </label>
+          <label>
+            <span class="form-label">Substrate</span>
+            <input name="surfaceType" autocomplete="off" enterkeyhint="next" placeholder="drywall, wood, stucco" class="input" required>
+          </label>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label>
+            <span class="form-label">Unit</span>
+            <select name="unit" class="input" required>
+              <option value="sqft">sq ft</option>
+              <option value="linear_ft">linear ft</option>
+              <option value="each">each</option>
+            </select>
+          </label>
+          <label>
+            <span class="form-label">Production per hour</span>
+            <input name="ratePerHour" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" placeholder="400" class="input" required>
+          </label>
+          <label>
+            <span class="form-label">Labor rate</span>
+            <input name="hourlyRate" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" placeholder="65" class="input" required>
+          </label>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label>
+            <span class="form-label">Prep multiplier</span>
+            <input name="prepMultiplier" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" placeholder="1" class="input" required>
+          </label>
+          <label>
+            <span class="form-label">Default coats</span>
+            <select name="coats" class="input" required>
+              <option value="1">1 coat</option>
+              <option value="2">2 coats</option>
+              <option value="3">3 coats</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span class="form-label">Description</span>
+          <input name="description" autocomplete="off" enterkeyhint="done" placeholder="Interior walls - roll" class="input">
+        </label>
+        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+          <button type="button" id="cancel-rate" class="btn-secondary flex-1">Cancel</button>
+          <button type="submit" id="save-rate" class="btn-primary flex-1">Save rate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toFixed(options.cents === false ? 0 : 2)}`;
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    let rates = [];
+
     const iconSvg = (name) => {
       const icons = {
         edit: '<path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />',
@@ -39,59 +106,114 @@ import Icon from '../components/Icon.astro';
       return `<svg class="pf-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || ''}</svg>`;
     };
 
+    function escapeHtml(value = '') {
+      return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
     async function loadRates() {
       const res = await fetch(`${API_URL}/v1/production-rates`, { credentials: 'include' });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
       const { data } = await res.json();
-      renderRates(data);
+      rates = data || [];
+      renderRates(rates);
     }
 
-    function renderRates(rates) {
+    function renderRates(items) {
       const container = document.getElementById('rates-list');
-      container.innerHTML = rates.map(r => `
-        <div class="p-4 flex items-center justify-between" data-id="${r.id}">
-          <div class="flex-1">
-            <p class="font-medium">${label(r.category)} • ${label(r.surfaceType)}</p>
-            <p class="text-sm text-gray-600">${Number(r.ratePerHour).toLocaleString('en-US')} ${label(r.unit)}/hr @ ${money(r.hourlyRate, { cents: false })}/hr</p>
-            ${r.description ? `<p class="text-xs text-gray-500 mt-1">${r.description}</p>` : ''}
+      container.innerHTML = items.length ? items.map((rate) => `
+        <div class="p-4 flex items-center justify-between gap-3" data-id="${rate.id}">
+          <div class="min-w-0 flex-1">
+            <p class="font-medium">${escapeHtml(label(rate.category))} &bull; ${escapeHtml(label(rate.surfaceType))}</p>
+            <p class="text-sm text-gray-600">${Number(rate.ratePerHour).toLocaleString('en-US')} ${escapeHtml(label(rate.unit))}/hr @ ${money(rate.hourlyRate, { cents: false })}/hr</p>
+            ${rate.description ? `<p class="text-xs text-gray-500 mt-1">${escapeHtml(rate.description)}</p>` : ''}
           </div>
-          <div class="flex gap-1.5">
-            <button type="button" onclick="editRate('${r.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit ${label(r.category)} ${label(r.surfaceType)} rate">${iconSvg('edit')}</button>
-            <button type="button" onclick="deleteRate('${r.id}')" class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Delete ${label(r.category)} ${label(r.surfaceType)} rate">${iconSvg('trash')}</button>
+          <div class="flex shrink-0 gap-1.5">
+            <button type="button" onclick="editRate('${rate.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit ${escapeHtml(label(rate.category))} ${escapeHtml(label(rate.surfaceType))} rate">${iconSvg('edit')}</button>
+            <button type="button" onclick="deleteRate('${rate.id}')" class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Delete ${escapeHtml(label(rate.category))} ${escapeHtml(label(rate.surfaceType))} rate">${iconSvg('trash')}</button>
           </div>
         </div>
-      `).join('');
+      `).join('') : '<div class="p-4 text-center text-gray-500">No production rates yet</div>';
     }
 
-    async function deleteRate(id) {
-      if (!confirm('Delete this rate?')) return;
-      await fetch(`${API_URL}/v1/production-rates/${id}`, { method: 'DELETE', credentials: 'include' });
-      loadRates();
+    function openRateModal(rate = null) {
+      const form = document.getElementById('rate-form');
+      form.reset();
+      form.elements.id.value = rate?.id || '';
+      form.elements.category.value = rate?.category || '';
+      form.elements.surfaceType.value = rate?.surfaceType || '';
+      form.elements.unit.value = rate?.unit || 'sqft';
+      form.elements.ratePerHour.value = rate?.ratePerHour || '';
+      form.elements.hourlyRate.value = rate?.hourlyRate || '50';
+      form.elements.prepMultiplier.value = rate?.prepMultiplier || '1';
+      form.elements.coats.value = String(rate?.coats || 2);
+      form.elements.description.value = rate?.description || '';
+      document.getElementById('rate-modal-title').textContent = rate ? 'Edit Production Rate' : 'Add Production Rate';
+      document.getElementById('save-rate').textContent = rate ? 'Save changes' : 'Save rate';
+      document.getElementById('rate-modal').classList.remove('hidden');
     }
 
-    function editRate(id) {
-      alert('Edit functionality coming soon');
+    function closeRateModal() {
+      document.getElementById('rate-modal').classList.add('hidden');
     }
 
-    document.getElementById('add-rate').addEventListener('click', async () => {
-      const category = prompt('Category (walls, ceilings, trim, cabinets):');
-      if (!category) return;
-      const ratePerHour = prompt('Rate per hour (sq ft):');
-      if (!ratePerHour) return;
-      
-      await fetch(`${API_URL}/v1/production-rates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+    window.editRate = (id) => {
+      const rate = rates.find((item) => item.id === id);
+      if (rate) openRateModal(rate);
+    };
+
+    window.deleteRate = async (id) => {
+      if (!confirm('Delete this rate? Existing estimates keep their saved pricing, but new estimates will no longer use this rate.')) return;
+      const res = await fetch(`${API_URL}/v1/production-rates/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) {
+        window.showToast?.('Could not delete production rate', 'error');
+        return;
+      }
+      window.showToast?.('Production rate deleted', 'success');
+      await loadRates();
+    };
+
+    document.getElementById('add-rate').addEventListener('click', () => openRateModal());
+    document.getElementById('cancel-rate').addEventListener('click', closeRateModal);
+    document.getElementById('close-rate-modal').addEventListener('click', closeRateModal);
+
+    document.getElementById('rate-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      const id = data.id;
+      delete data.id;
+      const payload = {
+        ...data,
+        ratePerHour: Number(data.ratePerHour),
+        hourlyRate: Number(data.hourlyRate),
+        prepMultiplier: Number(data.prepMultiplier || 1),
+        coats: Number(data.coats || 2),
+      };
+      const saveButton = document.getElementById('save-rate');
+      saveButton.disabled = true;
+      saveButton.textContent = id ? 'Saving...' : 'Adding...';
+      const res = await fetch(`${API_URL}/v1/production-rates${id ? `/${id}` : ''}`, {
+        method: id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
         credentials: 'include',
-        body: JSON.stringify({
-          category,
-          surfaceType: 'drywall',
-          ratePerHour: parseFloat(ratePerHour),
-          hourlyRate: 50,
-        }),
+        body: JSON.stringify(payload),
       });
-      loadRates();
+      saveButton.disabled = false;
+      saveButton.textContent = id ? 'Save changes' : 'Save rate';
+      if (!res.ok) {
+        window.showToast?.('Could not save production rate', 'error');
+        return;
+      }
+      closeRateModal();
+      window.showToast?.(id ? 'Production rate updated' : 'Production rate added', 'success');
+      await loadRates();
     });
 
-    loadRates();
+    loadRates().catch((error) => {
+      document.getElementById('rates-list').innerHTML = `<div class="p-4 text-center text-red-600">${escapeHtml(error.message || 'Failed to load rates')}</div>`;
+    });
   </script>
 </Base>
