@@ -95,19 +95,39 @@ const statuses = ['draft', 'sent', 'scheduled', 'accepted', 'in_progress', 'paid
 
         <div class="pf-card p-5">
           <h2 class="pf-title text-gray-950">Buttons</h2>
+          <p class="mt-2 text-sm text-gray-600">Use one filled action per decision area, then reduce emphasis from tonal to outlined to text.</p>
           <div class="mt-5 flex flex-wrap gap-3">
-            <button class="btn-primary pf-state-layer">Primary action</button>
-            <button class="btn-secondary pf-state-layer">Secondary</button>
-            <button class="btn-secondary btn-sm pf-state-layer">Small action</button>
-            <button class="btn-icon pf-state-layer" aria-label="Icon action">
+            <button class="btn-filled pf-state-layer">Save estimate</button>
+            <button class="btn-tonal pf-state-layer">Add lead</button>
+            <button class="btn-outlined pf-state-layer">Preview</button>
+            <button class="btn-text pf-state-layer">Cancel</button>
+            <button class="btn-elevated pf-state-layer">Open menu</button>
+          </div>
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            <button class="btn-icon" aria-label="Standard icon action">
               <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"></path>
               </svg>
             </button>
-            <button class="pf-fab pf-state-layer">
-              <span aria-hidden="true">+</span>
-              Add lead
+            <button class="btn-icon btn-icon-tonal" aria-label="Tonal icon action">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"></path>
+              </svg>
             </button>
+            <button class="btn-icon btn-icon-outlined" aria-label="Outlined icon action">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"></path>
+              </svg>
+            </button>
+            <button class="pf-fab">
+              <span aria-hidden="true">+</span>
+              Mobile create
+            </button>
+          </div>
+          <div class="mt-4 pf-segmented-group" aria-label="Estimate view">
+            <button type="button" aria-pressed="true">Summary</button>
+            <button type="button">Scope</button>
+            <button type="button">Costs</button>
           </div>
         </div>
 

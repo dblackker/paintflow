@@ -20,10 +20,10 @@ import Base from '../layouts/Base.astro';
           <span id="week-range" class="text-center font-semibold text-sm sm:text-base"></span>
           <button id="next-week" class="btn-secondary px-3" aria-label="Next week">›</button>
         </div>
-        <div class="flex flex-wrap justify-center lg:justify-end gap-1.5" aria-label="Time grouping">
-          <button type="button" class="btn-compact" data-view-mode="day">Day</button>
-          <button type="button" class="btn-compact" data-view-mode="job">Job</button>
-          <button type="button" class="btn-compact" data-view-mode="employee">Employee</button>
+        <div class="pf-segmented-group justify-center lg:justify-end" aria-label="Time grouping">
+          <button type="button" data-view-mode="day">Day</button>
+          <button type="button" data-view-mode="job">Job</button>
+          <button type="button" data-view-mode="employee">Employee</button>
         </div>
       </div>
     </section>

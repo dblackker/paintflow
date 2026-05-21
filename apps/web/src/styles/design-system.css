@@ -433,6 +433,11 @@ button[class*="bg-blue"][class*="text-white"]:active {
   font: var(--pf-type-label);
 }
 
+.btn-filled,
+.btn-tonal,
+.btn-outlined,
+.btn-text,
+.btn-elevated,
 .btn-primary,
 .btn-secondary,
 .btn-icon {
@@ -442,23 +447,30 @@ button[class*="bg-blue"][class*="text-white"]:active {
   font-weight: 700;
   justify-content: center;
   min-height: 2.5rem;
+  overflow: hidden;
+  position: relative;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
 }
 
+.btn-filled,
 .btn-primary {
   background: var(--pf-primary);
   border: 1px solid var(--pf-primary);
-  box-shadow: var(--pf-elevation-1);
   color: var(--md-sys-color-on-primary);
   padding: 0.65rem 1rem;
 }
 
+.btn-filled:hover,
 .btn-primary:hover {
-  background: color-mix(in srgb, var(--pf-primary) 92%, var(--md-sys-color-on-primary));
+  background: var(--pf-primary-hover);
   border-color: var(--pf-primary-hover);
-  box-shadow: var(--pf-elevation-2);
 }
 
+.btn-filled:disabled,
+.btn-tonal:disabled,
+.btn-outlined:disabled,
+.btn-text:disabled,
+.btn-elevated:disabled,
 .btn-primary:disabled,
 .btn-secondary:disabled,
 .btn-compact:disabled {
@@ -467,16 +479,52 @@ button[class*="bg-blue"][class*="text-white"]:active {
   transform: none;
 }
 
+.btn-tonal,
 .btn-secondary {
   background: var(--md-sys-color-secondary-container);
-  border: 1px solid var(--pf-border-strong);
+  border: 1px solid transparent;
   color: var(--md-sys-color-on-secondary-container);
   padding: 0.65rem 1rem;
 }
 
+.btn-tonal:hover,
 .btn-secondary:hover {
   background: color-mix(in srgb, var(--md-sys-color-secondary-container) 88%, var(--md-sys-color-on-secondary-container));
-  border-color: var(--pf-primary);
+}
+
+.btn-outlined {
+  background: transparent;
+  border: 1px solid var(--pf-border-strong);
+  color: var(--pf-primary);
+  padding: 0.65rem 1rem;
+}
+
+.btn-outlined:hover {
+  background: var(--pf-state-hover);
+}
+
+.btn-text {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--pf-primary);
+  padding: 0.65rem 0.75rem;
+}
+
+.btn-text:hover {
+  background: var(--pf-state-hover);
+}
+
+.btn-elevated {
+  background: var(--pf-card-surface);
+  border: 1px solid transparent;
+  box-shadow: var(--pf-elevation-1);
+  color: var(--pf-primary);
+  padding: 0.65rem 1rem;
+}
+
+.btn-elevated:hover {
+  background: color-mix(in srgb, var(--pf-card-surface) 92%, var(--pf-primary));
+  box-shadow: var(--pf-elevation-2);
 }
 
 .btn-sm {
@@ -486,11 +534,40 @@ button[class*="bg-blue"][class*="text-white"]:active {
 }
 
 .btn-icon {
-  background: var(--md-sys-color-surface-container);
-  border: 1px solid var(--pf-border);
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--pf-text);
-  height: 2.25rem;
-  width: 2.25rem;
+  height: 2.5rem;
+  padding: 0;
+  width: 2.5rem;
+}
+
+.btn-icon:hover {
+  background: var(--pf-state-hover);
+}
+
+.btn-icon-filled {
+  background: var(--pf-primary);
+  border-color: var(--pf-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+.btn-icon-filled:hover {
+  background: var(--pf-primary-hover);
+}
+
+.btn-icon-tonal {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.btn-icon-tonal:hover {
+  background: color-mix(in srgb, var(--md-sys-color-secondary-container) 88%, var(--md-sys-color-on-secondary-container));
+}
+
+.btn-icon-outlined {
+  border-color: var(--pf-border-strong);
+  color: var(--pf-primary);
 }
 
 .btn-compact {
@@ -513,15 +590,73 @@ button[class*="bg-blue"][class*="text-white"]:active {
   border-color: var(--pf-primary);
 }
 
+.pf-button-group,
+.pf-segmented-group {
+  align-items: center;
+  display: inline-flex;
+}
+
+.pf-button-group {
+  gap: 0.5rem;
+}
+
+.pf-segmented-group {
+  border-radius: var(--pf-radius-full);
+  isolation: isolate;
+}
+
+.pf-segmented-button,
+.pf-segmented-group > button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--pf-border-strong);
+  color: var(--pf-text);
+  display: inline-flex;
+  font: var(--pf-type-label);
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 3.75rem;
+  padding: 0.35rem 0.85rem;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.pf-segmented-button + .pf-segmented-button,
+.pf-segmented-group > button + button {
+  margin-left: -1px;
+}
+
+.pf-segmented-button:first-child,
+.pf-segmented-group > button:first-child {
+  border-radius: var(--pf-radius-full) 0 0 var(--pf-radius-full);
+}
+
+.pf-segmented-button:last-child,
+.pf-segmented-group > button:last-child {
+  border-radius: 0 var(--pf-radius-full) var(--pf-radius-full) 0;
+}
+
+.pf-segmented-button[aria-pressed="true"],
+.pf-segmented-button-active,
+.pf-segmented-group > button[aria-pressed="true"],
+.pf-segmented-group > .view-mode-active {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  z-index: 1;
+}
+
+.pf-segmented-button:hover,
+.pf-segmented-group > button:hover {
+  background: var(--pf-state-hover);
+}
+
 .view-mode-active {
-  background: var(--pf-primary);
-  border-color: var(--pf-primary);
-  color: white;
+  background: var(--md-sys-color-secondary-container);
+  border-color: var(--pf-border-strong);
+  color: var(--md-sys-color-on-secondary-container);
 }
 
 .view-mode-active:hover {
-  background: var(--pf-primary-hover);
-  border-color: var(--pf-primary-hover);
+  background: color-mix(in srgb, var(--md-sys-color-secondary-container) 88%, var(--md-sys-color-on-secondary-container));
 }
 
 .input {
