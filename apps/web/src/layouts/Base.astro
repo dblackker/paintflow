@@ -9,7 +9,6 @@ interface Props {
 }
 
 const { title = 'PaintFlow' } = Astro.props;
-const isDev = import.meta.env.DEV;
 ---
 
 <!DOCTYPE html>
@@ -98,7 +97,6 @@ const isDev = import.meta.env.DEV;
             <a href="/jobs" class="pf-nav-link text-sm">Jobs</a>
             <a href="/reports" class="pf-nav-link text-sm">Reports</a>
             <a href="/team" class="pf-nav-link text-sm">Team</a>
-            {isDev && <a href="/dev/design-system" class="pf-nav-link text-sm">Design System</a>}
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -143,7 +141,6 @@ const isDev = import.meta.env.DEV;
         <a href="/jobs" class="block py-2 text-sm">Jobs</a>
         <a href="/reports" class="block py-2 text-sm">Reports</a>
         <a href="/team" class="block py-2 text-sm">Team</a>
-        {isDev && <a href="/dev/design-system" class="block py-2 text-sm">Design System</a>}
         <a href="/notifications" class="block py-2 text-sm">Notifications</a>
         <button type="button" data-logout class="pf-mobile-logout-button">Log out</button>
       </div>
