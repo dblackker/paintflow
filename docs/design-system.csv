@@ -19,21 +19,21 @@ color,Background,token,--md-sys-color-background: #f9fafc,App body background (C
 color,On background,token,--md-sys-color-on-background: #191c20,Primary text on background (Dark Charcoal)
 color,Surface,token,--md-sys-color-surface: #f9fafc,Base app surface
 color,On surface,token,--md-sys-color-on-surface: #191c20,Primary text on surfaces
-color,Surface variant,token,--md-sys-color-surface-variant: #e0e2ec,Subtle containers and divider-adjacent areas
+color,Surface variant,token,--md-sys-color-surface-variant: #e0e2ec,Internal Material role for muted/variant surface treatments
 color,On surface variant,token,--md-sys-color-on-surface-variant: #43474e,Secondary text
 color,Outline,token,--md-sys-color-outline: #74777f,Strong borders and input outlines
 color,Outline variant,token,--md-sys-color-outline-variant: #c4c6cf,Subtle borders and card outlines
-color,Surface lowest,token,--md-sys-color-surface-container-lowest: #ffffff,White cards and highest-contrast panels
-color,Surface low,token,--md-sys-color-surface-container-low: #f1f3f9,Navigation and low-emphasis panels
-color,Surface container,token,--md-sys-color-surface-container: #ebedf4,Filled cards and grouped content
-color,Surface high,token,--md-sys-color-surface-container-high: #e5e8ee,Higher-emphasis panels
-color,Surface highest,token,--md-sys-color-surface-container-highest: #dfe2e8,Highest tonal surface without elevation
+color,Page surface,token,--pf-page-surface: surface,Full app background and empty space
+color,Card surface,token,--pf-card-surface: surface container lowest,Customer records forms and repeated list cards
+color,Filled panel surface,token,--pf-panel-surface: surface container,Grouped dashboards setup blocks and low-emphasis sections
+color,Raised surface,token,--pf-raised-surface: surface container high,Menus modals popovers and temporary focus
+color,Variant surface,token,--pf-variant-surface: surface variant,Muted treatments near outlines and secondary content
 color,Inverse surface,token,--md-sys-color-inverse-surface: #2e3135,Snackbar/toast dark surfaces
 color,Inverse on surface,token,--md-sys-color-inverse-on-surface: #f0f0f4,Text on inverse surface
 color,Surface tint,token,--md-sys-color-surface-tint: primary,Elevation tint role
 legacy alias,PaintFlow background,token,--pf-bg: background,Compatibility alias for app background
-legacy alias,PaintFlow surface,token,--pf-surface: surface lowest,Compatibility alias for cards
-legacy alias,PaintFlow muted surface,token,--pf-surface-muted: surface container,Compatibility alias for muted panels
+legacy alias,PaintFlow surface,token,--pf-surface: card surface,Compatibility alias for cards
+legacy alias,PaintFlow muted surface,token,--pf-surface-muted: filled panel surface,Compatibility alias for muted panels
 legacy alias,PaintFlow tinted surface,token,--pf-surface-tint: primary container,Compatibility alias for selected/active surfaces
 legacy alias,PaintFlow border,token,--pf-border: outline variant,Compatibility alias for subtle borders
 legacy alias,PaintFlow strong border,token,--pf-border-strong: outline,Compatibility alias for form borders
@@ -60,9 +60,10 @@ typography,Title,class,.pf-title,Cards and panels
 typography,Body,class,.pf-body,Operational content and CRM screens
 typography,Label,class,.pf-label,Labels/buttons/field captions
 surface,Surface panel,class,.surface-panel,Generic bordered elevated panel
-surface,Surface low,class,.pf-surface-low,Low tonal container
-surface,Surface,class,.pf-surface,Standard tonal container
-surface,Surface high,class,.pf-surface-high,Higher tonal container
+surface,Page surface,class,.pf-page-surface,Full app background and empty space
+surface,Card surface,class,.pf-card-surface,Customer records forms and repeated list cards
+surface,Filled panel surface,class,.pf-panel-surface,Grouped dashboards setup blocks and low-emphasis sections
+surface,Raised surface,class,.pf-raised-surface,Menus modals popovers and temporary focus
 card,Elevated card,class,.pf-card,Default card with border and elevation
 card,Filled card,class,.pf-card-filled,Filled tonal card without border emphasis
 card,Outlined card,class,.pf-card-outlined,Flat outlined card for repeated records

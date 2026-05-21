@@ -38,6 +38,11 @@
   --md-sys-color-surface-tint: var(--md-sys-color-primary);
 
   --pf-bg: var(--md-sys-color-background);
+  --pf-page-surface: var(--md-sys-color-surface);
+  --pf-card-surface: var(--md-sys-color-surface-container-lowest);
+  --pf-panel-surface: var(--md-sys-color-surface-container);
+  --pf-raised-surface: var(--md-sys-color-surface-container-high);
+  --pf-variant-surface: var(--md-sys-color-surface-variant);
   --pf-surface: var(--md-sys-color-surface-container-lowest);
   --pf-surface-muted: var(--md-sys-color-surface-container);
   --pf-surface-tint: var(--md-sys-color-primary-container);
@@ -346,32 +351,48 @@ button[class*="bg-blue"][class*="text-white"]:active {
 }
 
 .pf-surface-low {
-  background: var(--md-sys-color-surface-container-low);
+  background: var(--pf-panel-surface);
 }
 
 .pf-surface {
-  background: var(--md-sys-color-surface-container);
+  background: var(--pf-card-surface);
 }
 
 .pf-surface-high {
-  background: var(--md-sys-color-surface-container-high);
+  background: var(--pf-raised-surface);
+}
+
+.pf-page-surface {
+  background: var(--pf-page-surface);
+}
+
+.pf-card-surface {
+  background: var(--pf-card-surface);
+}
+
+.pf-panel-surface {
+  background: var(--pf-panel-surface);
+}
+
+.pf-raised-surface {
+  background: var(--pf-raised-surface);
 }
 
 .pf-card {
-  background: var(--md-sys-color-surface-container-lowest);
+  background: var(--pf-card-surface);
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--pf-radius);
   box-shadow: var(--pf-elevation-1);
 }
 
 .pf-card-filled {
-  background: var(--md-sys-color-surface-container);
+  background: var(--pf-panel-surface);
   border: 1px solid transparent;
   border-radius: var(--pf-radius);
 }
 
 .pf-card-outlined {
-  background: var(--md-sys-color-surface-container-lowest);
+  background: var(--pf-card-surface);
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--pf-radius);
 }
