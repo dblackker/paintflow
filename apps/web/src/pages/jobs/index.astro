@@ -128,7 +128,7 @@ import Base from '../../layouts/Base.astro';
                 </div>
                 <div class="flex items-center gap-3">
                   ${job.status === 'completed' ? `
-                    <button onclick="requestReview('${job.id}')" class="px-3 py-1 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200">
+                    <button onclick="requestReview('${job.id}')" class="btn-tonal btn-sm">
                       Request Review
                     </button>
                   ` : ''}
@@ -154,7 +154,10 @@ import Base from '../../layouts/Base.astro';
               <div class="pt-4 border-t">
                 <div class="flex justify-between items-center mb-3">
                   <h4 class="font-medium">Time Entries</h4>
-                  <button onclick="document.getElementById('time-${job.id}').classList.toggle('hidden')" class="text-sm text-blue-600 hover:text-blue-700">+ Log Time</button>
+                  <button onclick="document.getElementById('time-${job.id}').classList.toggle('hidden')" class="btn-text btn-sm">
+                    <span aria-hidden="true">+</span>
+                    Log Time
+                  </button>
                 </div>
                 
                 <div id="time-${job.id}" class="hidden mb-4 p-4 bg-gray-50 rounded-lg">
@@ -172,14 +175,14 @@ import Base from '../../layouts/Base.astro';
                     <input type="number" min="0" step="0.25" inputmode="decimal" autocomplete="off" name="hours" placeholder="Hours worked" required class="w-full px-3 py-2 border rounded text-sm" />
                     <input type="date" name="date" autocomplete="off" required class="w-full px-3 py-2 border rounded text-sm" />
                     <input type="text" name="description" autocomplete="off" placeholder="Work performed" class="w-full px-3 py-2 border rounded text-sm" />
-                    <button type="submit" ${teamMembers.length ? '' : 'disabled'} class="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">Log Team Hours</button>
+                    <button type="submit" ${teamMembers.length ? '' : 'disabled'} class="btn-primary w-full">Log Team Hours</button>
                   </form>
                 </div>
-                <div class="flex gap-2 pt-4 border-t">
-                  <a href="/jobs/${job.id}" class="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded hover:bg-blue-200">
+                <div class="flex flex-col sm:flex-row gap-2 pt-4 border-t">
+                  <a href="/jobs/${job.id}" class="btn-primary btn-sm">
                     Open Job
                   </a>
-                  <button onclick="markComplete('${job.id}')" class="px-3 py-1 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200 ${job.status === 'completed' ? 'hidden' : ''}">
+                  <button onclick="markComplete('${job.id}')" class="btn-tonal btn-sm ${job.status === 'completed' ? 'hidden' : ''}">
                     Mark Complete
                   </button>
                 </div>

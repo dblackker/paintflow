@@ -87,6 +87,10 @@ body {
   font: var(--pf-type-body);
 }
 
+.hidden {
+  display: none !important;
+}
+
 :focus-visible {
   outline: 3px solid rgb(26 86 148 / 0.32);
   outline-offset: 2px;
