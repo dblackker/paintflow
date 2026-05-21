@@ -9,6 +9,19 @@ const dashboard = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 dashboard.use('*', authMiddleware);
 
+function estimateActivityLabel(status: string, sentAt?: Date | null) {
+  if (status === 'accepted') return 'Estimate accepted';
+  if (status === 'declined') return 'Estimate declined';
+  if (status === 'sent') return 'Estimate sent';
+  if (status === 'draft') return 'Draft estimate created';
+  return sentAt ? 'Estimate sent' : 'Estimate updated';
+}
+
+function estimateActivityAt(status: string, createdAt: Date, sentAt?: Date | null) {
+  if (['sent', 'accepted', 'declined'].includes(status) && sentAt) return sentAt;
+  return createdAt;
+}
+
 // GET /v1/dashboard/stats
 dashboard.get('/stats', async (c) => {
   const orgId = c.get('orgId');
@@ -64,7 +77,13 @@ dashboard.get('/stats', async (c) => {
       activeLeads: activeLeads[0]?.count || 0,
       estimatesSent: estimatesSent[0]?.count || 0,
       jobsThisMonth: jobsThisMonth[0]?.count || 0,
-      recentActivity: recentEstimates,
+      recentActivity: recentEstimates.map((estimate) => ({
+        ...estimate,
+        activityType: 'estimate',
+        activityLabel: estimateActivityLabel(estimate.status, estimate.sentAt),
+        activityAt: estimateActivityAt(estimate.status, estimate.createdAt, estimate.sentAt),
+        href: `/estimates/${estimate.id}`,
+      })),
     }
   });
 });

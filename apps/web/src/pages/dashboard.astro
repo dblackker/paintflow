@@ -102,6 +102,7 @@ import Base from '../layouts/Base.astro';
     }
 
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
+    const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: options.cents === false ? 0 : 2, maximumFractionDigits: options.cents === false ? 0 : 2 })}`;
 
     function customerProfileLink(item) {
       const name = item.clientName || 'Customer';
@@ -118,6 +119,25 @@ import Base from '../layouts/Base.astro';
 
     function formatAddress(record) {
       return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+    }
+
+    function relativeDate(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      const diffMs = Date.now() - date.getTime();
+      const diffDays = Math.floor(diffMs / 86400000);
+      if (diffDays <= 0) return 'Today';
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      return date.toLocaleDateString();
+    }
+
+    function estimateActivityText(event) {
+      const action = event.activityLabel || (event.status === 'sent' ? 'Estimate sent' : `Estimate ${label(event.status).toLowerCase()}`);
+      const total = Number(event.total || 0);
+      const amount = total > 0 ? ` - ${money(total, { cents: false })}` : '';
+      const customer = event.clientName || 'customer';
+      return `${action} for ${customer}${amount}`;
     }
 
     (async () => {
@@ -186,10 +206,16 @@ import Base from '../layouts/Base.astro';
             `;
           } else {
             activity.innerHTML = data.recentActivity.map(e => `
-              <div class="py-3 border-b last:border-0">
-                ${customerProfileLink(e)}
-                <p class="text-sm text-gray-600">Status: ${escapeHtml(label(e.status))}</p>
-              </div>
+              <a href="${escapeHtml(e.href || `/estimates/${e.id}`)}" class="block rounded-lg border-b px-3 py-3 last:border-0 hover:bg-gray-50">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0">
+                    <p class="font-medium text-gray-950">${escapeHtml(estimateActivityText(e))}</p>
+                    <p class="mt-0.5 text-xs text-gray-500">${escapeHtml(relativeDate(e.activityAt || e.sentAt || e.createdAt))}</p>
+                    <div class="mt-2">${customerProfileLink(e)}</div>
+                  </div>
+                  <span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">${escapeHtml(label(e.status))}</span>
+                </div>
+              </a>
             `).join('');
           }
         }
