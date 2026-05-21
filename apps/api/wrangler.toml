@@ -12,8 +12,8 @@ VAPID_SUBJECT = "mailto:admin@paintflow.app"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "your_kv_namespace_id"
-preview_id = "your_preview_kv_namespace_id"
+id = "6a9fdefdab5b49abb12107e40c4a966e"
+preview_id = "a5f2ed59095e479088b1f4b9ef6c830d"
 
 [[r2_buckets]]
 binding = "R2"
@@ -39,3 +39,15 @@ bucket_name = "paintflow-uploads"
 
 [env.staging]
 vars = { APP_URL = "https://api-staging.paintflow.app", PUBLIC_URL = "https://staging.paintflow.app", CORS_ORIGINS = "https://staging.paintflow.app", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter_test", STRIPE_PRO_PRICE_ID = "price_replace_pro_test", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise_test", VAPID_PUBLIC_KEY = "", VAPID_SUBJECT = "mailto:admin@paintflow.app" }
+
+[env.demo]
+workers_dev = true
+vars = { APP_URL = "https://paintflow-api-demo.danielablack.workers.dev", PUBLIC_URL = "https://paintflow-demo.pages.dev", CORS_ORIGINS = "https://paintflow-demo.pages.dev", ENVIRONMENT = "demo", VAPID_PUBLIC_KEY = "", VAPID_SUBJECT = "mailto:admin@paintflow.app" }
+
+[[env.demo.kv_namespaces]]
+binding = "KV"
+id = "6a9fdefdab5b49abb12107e40c4a966e"
+
+[[env.demo.r2_buckets]]
+binding = "R2"
+bucket_name = "paintflow-uploads-preview"
