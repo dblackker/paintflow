@@ -12,6 +12,63 @@ import Icon from '../../components/Icon.astro';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Detail - PaintFlow</title>
+  <style>
+    @media (max-width: 640px) {
+      nav .h-16 {
+        height: 3.5rem;
+      }
+      nav h1 {
+        font-size: 1rem;
+      }
+      .job-detail-main {
+        padding-top: 1rem;
+      }
+      #job-header {
+        padding: 0.9rem;
+      }
+      #job-header h2 {
+        font-size: 1.2rem;
+        line-height: 1.2;
+      }
+      .job-section > div:first-child {
+        padding: 0.85rem;
+      }
+      .job-section form,
+      .job-section .p-4 {
+        padding: 0.85rem;
+      }
+      .cost-row,
+      .time-entry-row,
+      .change-order-row,
+      .purchase-row {
+        padding: 0.85rem;
+      }
+      .job-side-panel {
+        padding: 0.9rem;
+      }
+      .job-mobile-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .job-mobile-actions > * {
+        justify-content: center;
+      }
+      #cost-modal,
+      #change-order-modal,
+      #approval-link-modal {
+        align-items: end;
+        padding: 0;
+      }
+      #cost-modal > div,
+      #change-order-modal > div,
+      #approval-link-modal > div {
+        border-radius: 1rem 1rem 0 0;
+        max-height: 92dvh;
+        overflow-y: auto;
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
@@ -24,7 +81,7 @@ import Icon from '../../components/Icon.astro';
     </div>
   </nav>
 
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <main class="job-detail-main max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div id="job-header" class="bg-white rounded-lg shadow-sm border p-6 mb-6">
       <div class="text-center py-8 text-gray-500">Loading...</div>
     </div>
@@ -33,7 +90,7 @@ import Icon from '../../components/Icon.astro';
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 space-y-6">
-        <section class="bg-white rounded-lg shadow-sm border">
+        <section class="job-section bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b flex justify-between items-center">
             <div>
               <h2 class="font-semibold">Actual Costs</h2>
@@ -47,7 +104,7 @@ import Icon from '../../components/Icon.astro';
           <div id="cost-list" class="divide-y"></div>
         </section>
 
-        <section class="bg-white rounded-lg shadow-sm border">
+        <section class="job-section bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
               <h2 class="font-semibold">Crew Timecard</h2>
@@ -70,7 +127,7 @@ import Icon from '../../components/Icon.astro';
           </form>
         </section>
 
-        <section class="bg-white rounded-lg shadow-sm border">
+        <section class="job-section bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b">
             <h2 class="font-semibold">Labor Timecards</h2>
             <p class="text-xs text-gray-500">Crew hours tied to this job and rolled into actual labor costs.</p>
@@ -78,7 +135,7 @@ import Icon from '../../components/Icon.astro';
           <div id="time-entry-list" class="divide-y"></div>
         </section>
 
-        <section class="bg-white rounded-lg shadow-sm border">
+        <section class="job-section bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b flex justify-between items-center">
             <h2 class="font-semibold">Change Orders</h2>
             <button id="add-change-order-btn" type="button" class="btn-secondary btn-sm">Add Change Order</button>
@@ -86,7 +143,7 @@ import Icon from '../../components/Icon.astro';
           <div id="change-order-list" class="divide-y"></div>
         </section>
 
-        <section class="bg-white rounded-lg shadow-sm border">
+        <section class="job-section bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b">
             <h2 class="font-semibold">Material Purchases</h2>
             <p class="text-xs text-gray-500">Imported invoices linked to this job</p>
@@ -94,7 +151,7 @@ import Icon from '../../components/Icon.astro';
           <div id="purchase-list" class="divide-y"></div>
         </section>
 
-        <section class="bg-white rounded-lg shadow-sm border">
+        <section class="job-section bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 class="font-semibold">Job Photos</h2>
@@ -125,12 +182,12 @@ import Icon from '../../components/Icon.astro';
       </div>
 
       <aside class="space-y-6">
-        <section class="bg-white rounded-lg shadow-sm border p-6">
+        <section class="job-side-panel bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-4">Cost Breakdown</h3>
           <div id="breakdown" class="space-y-3"></div>
         </section>
 
-        <section class="bg-white rounded-lg shadow-sm border p-6">
+        <section class="job-side-panel bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-4">Budget Signals</h3>
           <div id="budget-signals" class="space-y-3 text-sm"></div>
         </section>
@@ -414,7 +471,7 @@ import Icon from '../../components/Icon.astro';
         return;
       }
       container.innerHTML = costs.map((cost) => `
-        <div class="p-4 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3 sm:items-start">
+        <div class="cost-row p-4 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3 sm:items-start">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <p class="font-medium">${escapeHtml(cost.description)}</p>
@@ -445,7 +502,7 @@ import Icon from '../../components/Icon.astro';
       }
 
       container.innerHTML = teamMembers.map((member) => `
-        <div class="p-3 sm:p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] gap-3 items-center bg-white">
+        <div class="time-entry-row p-3 sm:p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] gap-3 items-center bg-white">
           <label class="flex items-center gap-3 min-w-0">
             <input type="checkbox" data-member-enabled="${member.id}" class="h-5 w-5 rounded">
             <span class="min-w-0">
@@ -480,7 +537,7 @@ import Icon from '../../components/Icon.astro';
           <p class="font-semibold">${currency(totalCost)} labor cost</p>
         </div>
         ${timeEntries.map((entry) => `
-          <div class="p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+          <div class="time-entry-row p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
             <div>
               <p class="font-medium">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>
               <p class="text-sm text-gray-600">${Number(entry.hours).toFixed(2)} hrs on ${dateLabel(entry.date)}${entry.description ? ` &middot; ${escapeHtml(entry.description)}` : ''}</p>
@@ -502,7 +559,7 @@ import Icon from '../../components/Icon.astro';
         return;
       }
       container.innerHTML = orders.map((order) => `
-        <div class="p-4 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3">
+        <div class="change-order-row p-4 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-3">
           <div class="min-w-0">
             <p class="font-medium">${escapeHtml(order.description)}</p>
             <p class="text-sm text-gray-600">${escapeHtml(order.createdBy)} · ${dateLabel(order.createdAt)}</p>
@@ -515,7 +572,7 @@ import Icon from '../../components/Icon.astro';
           <div class="sm:text-right">
             <p class="font-semibold">${currency(order.amount)}</p>
             ${order.paymentRequired ? `<p class="text-xs text-gray-500">${currency(order.paymentDueAmount || order.amount)} due on approval</p>` : '<p class="text-xs text-gray-500">No payment required</p>'}
-            <div class="mt-3 flex flex-wrap sm:justify-end gap-2">
+            <div class="job-mobile-actions mt-3 flex flex-wrap sm:justify-end gap-2">
               ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" title="Creates a secure customer portal link and copies it to your clipboard." data-send-change-order="${order.id}">${order.sentAt ? 'Copy fresh link' : 'Create approval link'}</button>` : ''}
               ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" data-approve-change-order="${order.id}">Mark approved</button>` : ''}
             </div>
@@ -532,7 +589,7 @@ import Icon from '../../components/Icon.astro';
         return;
       }
       container.innerHTML = purchases.map((purchase) => `
-        <div class="p-4 flex justify-between gap-4">
+        <div class="purchase-row p-4 flex justify-between gap-4">
           <div>
             <p class="font-medium">${escapeHtml(purchase.supplier)}</p>
             <p class="text-sm text-gray-600">Invoice ${escapeHtml(purchase.invoiceNumber || 'not set')} · ${dateLabel(purchase.invoiceDate || purchase.createdAt)}</p>

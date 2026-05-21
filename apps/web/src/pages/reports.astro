@@ -3,6 +3,23 @@ import Base from '../layouts/Base.astro';
 ---
 
 <Base title="Reports - PaintFlow">
+  <style>
+    @media (max-width: 640px) {
+      .reports-grid {
+        gap: 0.85rem;
+      }
+      .reports-panel > div:first-child {
+        padding: 0.75rem;
+      }
+      .reports-panel > div:last-child {
+        padding: 0.75rem;
+      }
+      .report-row {
+        align-items: flex-start;
+        gap: 0.75rem;
+      }
+    }
+  </style>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div id="loading" class="text-center py-12">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -12,22 +29,22 @@ import Base from '../layouts/Base.astro';
     <div id="content" class="hidden">
       <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-lg shadow-sm border">
+      <div class="reports-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="reports-panel bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b">
             <h2 class="font-semibold">Win Rate by Source</h2>
           </div>
           <div id="win-rate" class="p-4 min-h-[100px]"></div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm border">
+        <div class="reports-panel bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b">
             <h2 class="font-semibold">Crew Performance</h2>
           </div>
           <div id="crew" class="p-4 min-h-[100px]"></div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-sm border lg:col-span-2">
+        <div class="reports-panel bg-white rounded-lg shadow-sm border lg:col-span-2">
           <div class="p-4 border-b">
             <h2 class="font-semibold">Profit Margins</h2>
           </div>
@@ -100,7 +117,7 @@ import Base from '../layouts/Base.astro';
         return;
       }
       document.getElementById('win-rate').innerHTML = data.map(r => `
-        <div class="flex justify-between py-2 border-b last:border-0">
+        <div class="report-row flex justify-between py-2 border-b last:border-0">
           <span class="text-sm">${r.source}</span>
           <span class="font-semibold text-sm">${r.winRate}% <span class="text-gray-500 font-normal">(${number(r.won)}/${number(r.total)})</span></span>
         </div>
@@ -113,7 +130,7 @@ import Base from '../layouts/Base.astro';
         return;
       }
       document.getElementById('crew').innerHTML = data.map(r => `
-        <div class="flex justify-between py-2 border-b last:border-0">
+        <div class="report-row flex justify-between py-2 border-b last:border-0">
           <span class="text-sm">${r.name || 'Unknown'}</span>
           <span class="text-sm font-medium">${number(Math.round(r.totalHours || 0))} hrs</span>
         </div>
@@ -128,7 +145,7 @@ import Base from '../layouts/Base.astro';
       document.getElementById('margins').innerHTML = `
         <div class="space-y-2">
           ${data.slice(0, 10).map(r => `
-            <div class="flex justify-between py-2 border-b last:border-0">
+            <div class="report-row flex justify-between py-2 border-b last:border-0">
               <div class="min-w-0 flex-1">
                 <p class="font-medium text-sm truncate">${r.title}</p>
                 <p class="text-xs text-gray-600">${currency(r.revenue)} revenue</p>

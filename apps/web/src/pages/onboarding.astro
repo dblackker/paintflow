@@ -5,7 +5,43 @@ const isWelcome = Astro.url.searchParams.get('welcome') === '1';
 ---
 
 <Base title="Onboarding">
-  <div class="min-h-screen bg-gray-50 p-4 sm:p-6">
+  <style>
+    @media (max-width: 640px) {
+      .onboarding-shell {
+        padding: 0.75rem;
+      }
+      .onboarding-card {
+        padding: 1rem;
+      }
+      .onboarding-card h1 {
+        font-size: 1.35rem;
+      }
+      .onboarding-aside {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .onboarding-aside > div {
+        padding: 0.85rem;
+      }
+      .onboarding-actions {
+        background: var(--pf-surface);
+        border-top: 1px solid var(--pf-border);
+        bottom: 0;
+        margin-inline: -1rem;
+        padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+        position: sticky;
+      }
+      .onboarding-actions > div {
+        display: grid;
+        flex: 1;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .onboarding-actions button {
+        justify-content: center;
+      }
+    }
+  </style>
+  <div class="onboarding-shell min-h-screen bg-gray-50 p-4 sm:p-6">
     {isWelcome && (
       <div class="max-w-5xl mx-auto mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
         <p class="font-semibold">Workspace created</p>
@@ -14,7 +50,7 @@ const isWelcome = Astro.url.searchParams.get('welcome') === '1';
     )}
 
     <div class="max-w-5xl mx-auto grid lg:grid-cols-[1fr_320px] gap-6">
-      <section class="bg-white rounded-lg shadow-sm border p-6 sm:p-8">
+      <section class="onboarding-card bg-white rounded-lg shadow-sm border p-6 sm:p-8">
         <div class="mb-8">
           <div class="flex items-center justify-between gap-4 mb-4">
             <div>
@@ -31,7 +67,7 @@ const isWelcome = Astro.url.searchParams.get('welcome') === '1';
         <div id="alert" class="hidden rounded-lg border p-3 mb-5 text-sm"></div>
         <div id="step-content"></div>
 
-        <div class="flex justify-between mt-8">
+        <div class="onboarding-actions flex justify-between mt-8">
           <button id="prev-btn" class="btn-text hidden">Back</button>
           <div class="ml-auto flex gap-3">
             <button id="skip-btn" class="btn-text">Finish later</button>
@@ -40,7 +76,7 @@ const isWelcome = Astro.url.searchParams.get('welcome') === '1';
         </div>
       </section>
 
-      <aside class="space-y-4">
+      <aside class="onboarding-aside space-y-4">
         <div class="bg-white rounded-lg shadow-sm border p-5">
           <p class="text-sm font-semibold text-gray-900 mb-3">Setup checklist</p>
           <div id="checklist" class="space-y-2 text-sm text-gray-700"></div>

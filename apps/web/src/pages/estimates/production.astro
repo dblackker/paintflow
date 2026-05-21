@@ -3,13 +3,68 @@ import Base from '../../layouts/Base.astro';
 ---
 
 <Base title="Production Estimate">
-  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+  <style>
+    @media (max-width: 640px) {
+      .production-estimator .production-top-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+      }
+      .production-estimator .production-top-actions > * {
+        justify-content: center;
+      }
+      .production-estimator [data-stage] {
+        scroll-margin-top: 4rem;
+      }
+      .production-room {
+        padding: 0.85rem;
+      }
+      .production-room-header {
+        gap: 0.65rem;
+      }
+      .production-room-header input[data-room-name] {
+        font-size: 1rem;
+      }
+      .production-room-actions {
+        justify-content: flex-end;
+      }
+      .production-assumptions {
+        padding: 0.75rem;
+      }
+      .production-assumptions .grid {
+        gap: 0.45rem;
+      }
+      .production-scope-action {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        width: 100%;
+      }
+      .production-scope-action .btn-primary {
+        min-width: 0;
+        white-space: normal;
+      }
+      .production-surface {
+        padding: 0.7rem;
+      }
+      .production-surface [data-measure-helper] {
+        display: none;
+      }
+      .production-surface-actions {
+        justify-content: space-between;
+        width: 100%;
+      }
+      .production-estimator aside > div {
+        padding: 0.85rem;
+      }
+    }
+  </style>
+  <main class="production-estimator max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
         <h2 class="text-2xl font-bold text-gray-900">Production Estimate</h2>
         <p class="text-sm text-gray-600 mt-1">Build pricing from measured substrates, prep level, production rates, labor, and materials.</p>
       </div>
-      <div class="flex flex-col sm:flex-row gap-2">
+      <div class="production-top-actions flex flex-col sm:flex-row gap-2">
         <a href="/templates" class="btn-secondary btn-sm justify-center">Templates</a>
         <a href="/estimates/new" class="btn-secondary btn-sm justify-center">Quick estimate</a>
       </div>
@@ -44,7 +99,7 @@ import Base from '../../layouts/Base.astro';
               </select>
             </label>
           </div>
-          <p class="mt-3 text-sm text-gray-600">Choose the estimate type first. The quick-scope builder appears once, then substrates become editable production lines.</p>
+          <p class="mobile-hide-copy mt-3 text-sm text-gray-600">Choose the estimate type first. The quick-scope builder appears once, then substrates become editable production lines.</p>
         </div>
 
         <div class="scroll-mt-24 space-y-4" data-stage="scope">
@@ -622,19 +677,19 @@ import Base from '../../layouts/Base.astro';
       roomCounter++;
       const roomId = `room-${roomCounter}`;
       const div = document.createElement('div');
-      div.className = 'bg-white rounded-lg shadow-sm border p-4';
+      div.className = 'production-room bg-white rounded-lg shadow-sm border p-4';
       div.id = roomId;
       div.innerHTML = `
-        <div class="flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
+        <div class="production-room-header flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
           <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room, side, or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
           <input type="hidden" data-area-type value="${estimateAreaType()}">
           <span class="rounded-full border bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600" data-area-label>${estimateAreaLabel()}</span>
-          <div class="flex gap-3">
+          <div class="production-room-actions flex gap-3">
             <button type="button" class="copy-room btn-text btn-sm">Copy</button>
             <button type="button" class="remove-room btn-text btn-sm text-red-700">Remove</button>
           </div>
         </div>
-        <div class="mb-4 rounded-lg border bg-emerald-50 p-3" data-interior-assumptions>
+        <div class="production-assumptions mb-4 rounded-lg border bg-emerald-50 p-3" data-interior-assumptions>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
             <label class="min-w-0">
               <span class="text-xs text-emerald-900">Bedrooms</span>
@@ -688,7 +743,7 @@ import Base from '../../layouts/Base.astro';
               </label>
             </div>
           </div>
-          <div class="relative mt-3 inline-flex items-center gap-1.5">
+          <div class="production-scope-action relative mt-3 inline-flex items-center gap-1.5">
             <button type="button" class="generate-interior-scope btn-primary btn-sm justify-center">Add interior scope from room schedule</button>
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 bg-white/80 text-[11px] font-medium leading-none text-emerald-700 hover:bg-white" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
             <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
@@ -699,7 +754,7 @@ import Base from '../../layouts/Base.astro';
           </div>
           <div class="mt-3 rounded-md border border-emerald-200 bg-white p-3 text-xs text-emerald-950" data-interior-preview></div>
         </div>
-        <div class="hidden mb-4 rounded-lg border bg-blue-50 p-3" data-exterior-assumptions>
+        <div class="production-assumptions hidden mb-4 rounded-lg border bg-blue-50 p-3" data-exterior-assumptions>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
             <label>
               <span class="text-xs text-blue-900">House perimeter</span>
@@ -747,7 +802,7 @@ import Base from '../../layouts/Base.astro';
               </div>
             </div>
           </div>
-          <div class="relative mt-3 inline-flex items-center gap-1.5">
+          <div class="production-scope-action relative mt-3 inline-flex items-center gap-1.5">
             <button type="button" class="generate-exterior-scope btn-primary btn-sm justify-center">Add exterior scope from assumptions</button>
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-blue-300 bg-white/80 text-[11px] font-medium leading-none text-blue-700 hover:bg-white" aria-label="Explain exterior assumptions" aria-expanded="false">?</button>
             <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Exterior assumptions explanation">
@@ -797,7 +852,7 @@ import Base from '../../layouts/Base.astro';
     function addSurface(roomId, item = {}) {
       const container = document.querySelector(`#${roomId} [data-items]`);
       const div = document.createElement('div');
-      div.className = 'border rounded-lg p-3 bg-gray-50';
+      div.className = 'production-surface border rounded-lg p-3 bg-gray-50';
       div.dataset.surfaceItem = 'true';
       if (item.group) div.dataset.group = item.group;
       if (item.surfaceName) div.dataset.surfaceName = item.surfaceName;
@@ -876,7 +931,7 @@ import Base from '../../layouts/Base.astro';
               Customer option
             </label>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="production-surface-actions flex items-center gap-3">
             <span class="text-gray-600" data-line-total>$0.00</span>
             <button type="button" class="copy-surface btn-text btn-sm">Copy</button>
             <button type="button" class="remove-surface btn-text btn-sm text-red-700">Remove</button>

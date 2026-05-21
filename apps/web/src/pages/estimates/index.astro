@@ -9,15 +9,15 @@ import Base from '../../layouts/Base.astro';
         <h2 class="text-2xl font-bold text-gray-900">Estimates</h2>
         <p class="text-sm text-gray-600 mt-1">Track sent, accepted, and declined painting proposals.</p>
       </div>
-      <a href="/estimates/production" class="btn-primary justify-center">Start estimate</a>
+      <a href="/estimates/production" class="btn-primary justify-center w-full sm:w-auto">Start estimate</a>
     </div>
 
-    <section class="grid md:grid-cols-2 gap-3 mb-4">
+    <section class="estimate-mode-grid grid md:grid-cols-2 gap-3 mb-4">
       <a href="/estimates/production" class="block bg-white border rounded-lg shadow-sm p-4 hover:border-blue-300 hover:shadow-md">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="font-semibold text-gray-950">Production estimate</h3>
-            <p class="text-sm text-gray-600 mt-1">Use measured surfaces, prep levels, production rates, labor, paint products, and templates.</p>
+            <p class="mobile-hide-copy text-sm text-gray-600 mt-1 sm:block">Use measured surfaces, prep levels, production rates, labor, paint products, and templates.</p>
           </div>
           <span class="shrink-0 rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-xs font-medium">Default</span>
         </div>
@@ -26,14 +26,14 @@ import Base from '../../layouts/Base.astro';
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="font-semibold text-gray-950">Quick line-item estimate</h3>
-            <p class="text-sm text-gray-600 mt-1">Build a simple estimate from manually entered scope items when takeoff detail is not needed.</p>
+            <p class="mobile-hide-copy text-sm text-gray-600 mt-1 sm:block">Build a simple estimate from manually entered scope items when takeoff detail is not needed.</p>
           </div>
           <span class="shrink-0 rounded-full bg-gray-100 text-gray-700 px-3 py-1 text-xs font-medium">Simple</span>
         </div>
       </a>
     </section>
 
-    <section class="bg-white border rounded-lg shadow-sm p-3 sm:p-4 mb-4">
+    <section class="mobile-filter-panel bg-white border rounded-lg shadow-sm p-3 sm:p-4 mb-4">
       <div class="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
         <input id="search" type="search" autocomplete="off" enterkeyhint="search" placeholder="Search customer, phone, or email" class="w-full px-3 py-2 border rounded-lg" />
         <select id="status-filter" class="w-full px-3 py-2 border rounded-lg">
@@ -148,7 +148,7 @@ import Base from '../../layouts/Base.astro';
       }
 
       container.innerHTML = list.map((estimate) => `
-        <article class="bg-white rounded-lg shadow-sm border p-4">
+        <article class="mobile-card-row bg-white rounded-lg shadow-sm border p-4">
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div class="min-w-0">
               ${customerProfileLink({ leadId: estimate.leadId, name: estimate.leadName, address: formatAddress(estimate), contact: estimate.leadPhone ? phone(estimate.leadPhone) : estimate.leadEmail || 'No contact' })}
@@ -157,8 +157,8 @@ import Base from '../../layouts/Base.astro';
                 ${statusBadge(estimate.status)}
               </div>
             </div>
-            <div class="sm:text-right">
-              <p class="text-xl font-bold">${money(estimate.total)}</p>
+            <div class="sm:text-right flex items-center justify-between gap-3 sm:block">
+              <p class="text-lg sm:text-xl font-bold">${money(estimate.total)}</p>
               <a href="${estimate.status === 'draft' ? `/estimates/production?draft=${estimate.id}` : `/estimates/${estimate.id}`}" class="btn-secondary btn-sm mt-2 justify-center">${estimate.status === 'draft' ? 'Edit draft' : 'Open'}</a>
             </div>
           </div>

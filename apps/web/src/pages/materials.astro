@@ -4,6 +4,27 @@ import Icon from '../components/Icon.astro';
 ---
 
 <Base title="Paint Products - PaintFlow">
+  <style>
+    @media (max-width: 640px) {
+      .materials-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: 100%;
+      }
+      .materials-actions > * {
+        justify-content: center;
+        min-width: 0;
+      }
+      .material-price {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .material-price > div:first-child {
+        text-align: left;
+      }
+    }
+  </style>
   <section class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
     <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -11,7 +32,7 @@ import Icon from '../components/Icon.astro';
         <h1 class="text-2xl font-semibold text-gray-950">Paint Products</h1>
         <p class="mt-1 text-sm text-gray-600">Track product cost, coverage, supplier, and markup for production estimates.</p>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="materials-actions flex flex-wrap gap-2">
         <a href="/production-rates" class="btn-secondary btn-sm">Production rates</a>
         <a href="/settings" class="btn-secondary btn-sm">Settings</a>
         <button id="add-material" class="btn-primary btn-sm">
@@ -26,7 +47,7 @@ import Icon from '../components/Icon.astro';
     </div>
   </section>
 
-  <div id="modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div id="modal" class="mobile-sheet hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-lg max-w-2xl w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="mb-4 flex items-start justify-between gap-4">
         <div>
@@ -86,7 +107,7 @@ import Icon from '../components/Icon.astro';
             <input name="sku" autocomplete="off" enterkeyhint="done" placeholder="Optional supplier SKU" class="input">
           </label>
         </div>
-        <div class="flex flex-col sm:flex-row gap-3 pt-2">
+        <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
           <button type="button" id="cancel-material" class="btn-secondary flex-1">Cancel</button>
           <button type="submit" id="save-material" class="btn-primary flex-1">Save product</button>
         </div>
@@ -155,13 +176,13 @@ import Icon from '../components/Icon.astro';
             const price = cost * (1 + markup / 100);
             const title = [material.brand, material.name].filter(Boolean).join(' ');
             return `
-              <div class="p-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center hover:bg-gray-50">
+              <div class="mobile-card-row p-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center hover:bg-gray-50">
                 <div class="min-w-0">
                   <p class="font-medium truncate">${escapeHtml(title || material.name)}</p>
                   <p class="text-sm text-gray-600">${escapeHtml(label(material.category))} &bull; ${escapeHtml(material.unit)}${material.coverageSqFt ? ` &bull; ${Number(material.coverageSqFt).toLocaleString('en-US')} sq ft/${escapeHtml(material.unit)}` : ''}</p>
                   <p class="text-xs text-gray-500 mt-1">${escapeHtml([material.supplier, material.sku].filter(Boolean).join(' - ') || 'No supplier details')}</p>
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="material-price flex items-center gap-3">
                   <div class="text-right">
                     <p class="font-semibold">${money(price)}/${escapeHtml(material.unit)}</p>
                     <p class="text-xs text-gray-500">Cost: ${money(material.costPerUnit)} &bull; ${Number(material.markupPercent || 0).toFixed(1)}% markup</p>

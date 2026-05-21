@@ -3,13 +3,53 @@ import Base from '../../layouts/Base.astro';
 ---
 
 <Base title="Jobs">
+  <style>
+    @media (max-width: 640px) {
+      .jobs-card {
+        padding: 0.85rem;
+      }
+      .jobs-card-header {
+        gap: 0.75rem;
+      }
+      .jobs-card h3 {
+        font-size: 1rem;
+        line-height: 1.25;
+      }
+      .jobs-margin {
+        align-items: end;
+        display: flex;
+        gap: 0.4rem;
+        justify-content: space-between;
+        width: 100%;
+      }
+      .jobs-metrics {
+        gap: 0.5rem;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-bottom: 0.75rem;
+      }
+      .jobs-metrics > div {
+        border: 1px solid var(--pf-border);
+        border-radius: var(--pf-radius);
+        padding: 0.55rem;
+      }
+      .jobs-metrics p:first-child {
+        font-size: 0.68rem;
+      }
+      .jobs-metrics p:last-child {
+        font-size: 0.85rem;
+      }
+      .jobs-time-panel {
+        padding: 0.75rem;
+      }
+    }
+  </style>
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
       <div class="mb-6">
         <h2 class="text-2xl font-bold text-gray-900">Jobs</h2>
         <p class="text-gray-600">Manage active projects, crews, photos, time, and job costs.</p>
       </div>
 
-      <div id="jobs-list" class="space-y-4">
+      <div id="jobs-list" class="space-y-3 sm:space-y-4">
         <div class="p-8 text-center text-gray-500">Loading jobs...</div>
       </div>
   </main>
@@ -119,24 +159,24 @@ import Base from '../../layouts/Base.astro';
           const marginColor = margin > 30 ? 'text-green-600' : margin > 15 ? 'text-yellow-600' : 'text-red-600';
           
           return `
-            <div class="bg-white rounded-lg shadow-sm border p-6">
-              <div class="flex justify-between items-start mb-4">
-                <div>
+            <div class="jobs-card bg-white rounded-lg shadow-sm border p-6">
+              <div class="jobs-card-header flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4">
+                <div class="min-w-0">
                   <h3 class="text-lg font-semibold">${escapeHtml(displayJobName(job))}</h3>
                   <div class="mt-1">${statusBadge(job.status)}</div>
                   ${customerProfileLink(job)}
                 </div>
-                <div class="flex items-center gap-3">
+                <div class="jobs-margin flex items-center gap-3">
                   ${job.status === 'completed' ? `
                     <button onclick="requestReview('${job.id}')" class="btn-tonal btn-sm">
                       Request Review
                     </button>
                   ` : ''}
-                  <span class="text-2xl font-bold ${marginColor}">${margin.toFixed(1)}%</span>
+                  <span class="text-xl sm:text-2xl font-bold ${marginColor}">${margin.toFixed(1)}%</span>
                 </div>
               </div>
               
-              <div class="grid grid-cols-3 gap-4 text-sm mb-4">
+              <div class="jobs-metrics grid grid-cols-3 gap-4 text-sm mb-4">
                 <div>
                   <p class="text-gray-600">Revenue</p>
                   <p class="font-semibold">${money(job.costing.revenue.total)}</p>
@@ -160,7 +200,7 @@ import Base from '../../layouts/Base.astro';
                   </button>
                 </div>
                 
-                <div id="time-${job.id}" class="hidden mb-4 p-4 bg-gray-50 rounded-lg">
+                <div id="time-${job.id}" class="jobs-time-panel hidden mb-4 p-4 bg-gray-50 rounded-lg">
                   <form class="time-form space-y-3" data-job-id="${job.id}">
                     ${teamMembers.length ? `
                       <select name="teamMemberId" autocomplete="off" required class="w-full px-3 py-2 border rounded text-sm">
@@ -178,11 +218,11 @@ import Base from '../../layouts/Base.astro';
                     <button type="submit" ${teamMembers.length ? '' : 'disabled'} class="btn-primary w-full">Log Team Hours</button>
                   </form>
                 </div>
-                <div class="flex flex-col sm:flex-row gap-2 pt-4 border-t">
-                  <a href="/jobs/${job.id}" class="btn-primary btn-sm">
+                <div class="mobile-action-row flex flex-col sm:flex-row gap-2 pt-4 border-t">
+                  <a href="/jobs/${job.id}" class="btn-primary btn-sm justify-center">
                     Open Job
                   </a>
-                  <button onclick="markComplete('${job.id}')" class="btn-tonal btn-sm ${job.status === 'completed' ? 'hidden' : ''}">
+                  <button onclick="markComplete('${job.id}')" class="btn-tonal btn-sm justify-center ${job.status === 'completed' ? 'hidden' : ''}">
                     Mark Complete
                   </button>
                 </div>
