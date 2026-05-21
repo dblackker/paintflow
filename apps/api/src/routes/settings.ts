@@ -47,6 +47,13 @@ const orgSettingsPatchSchema = z.object({
   onboardingCompletedAt: z.string().datetime().optional(),
 }).strict();
 
+const dashboardActionsSchema = z.object({
+  actions: z.array(z.object({
+    id: z.string().trim().min(1).max(80),
+    visible: z.boolean(),
+  })).max(20),
+}).strict();
+
 const brandingPatchSchema = z.object({
   companyName: optionalText(255),
   logoUrl: optionalText(2000),
@@ -99,6 +106,11 @@ function onboardingState(settings: typeof orgSettings.$inferSelect | null, servi
       href: '/billing',
     },
   };
+}
+
+function readBusinessHours(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
 }
 
 // GET /v1/settings/org
@@ -170,6 +182,55 @@ settings.patch('/org', async (c) => {
     .returning();
   
   return c.json({ data: settings });
+});
+
+settings.get('/dashboard-actions', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+
+  let settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+
+  if (!settings) {
+    [settings] = await db.insert(orgSettings).values({ orgId }).returning();
+  }
+
+  const preferences = readBusinessHours(settings.businessHours);
+  const actions = Array.isArray(preferences.dashboardQuickActions)
+    ? preferences.dashboardQuickActions
+    : [];
+
+  return c.json({ data: { actions } });
+});
+
+settings.put('/dashboard-actions', async (c) => {
+  const orgId = c.get('orgId');
+  const parsed = dashboardActionsSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  const currentPreferences = readBusinessHours(existing?.businessHours);
+  const businessHours = {
+    ...currentPreferences,
+    dashboardQuickActions: parsed.data.actions,
+  };
+
+  const [settings] = await db
+    .insert(orgSettings)
+    .values({ orgId, businessHours })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { businessHours, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({ data: { actions: readBusinessHours(settings.businessHours).dashboardQuickActions ?? [] } });
 });
 
 settings.get('/branding', async (c) => {
