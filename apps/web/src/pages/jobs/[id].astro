@@ -13,6 +13,10 @@ import Icon from '../../components/Icon.astro';
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Detail - PaintFlow</title>
   <style>
+    .job-photo-mobile-copy {
+      display: none;
+    }
+
     @media (max-width: 640px) {
       nav .h-16 {
         height: 3.5rem;
@@ -52,6 +56,12 @@ import Icon from '../../components/Icon.astro';
       }
       .job-mobile-actions > * {
         justify-content: center;
+      }
+      .job-photo-desktop-copy {
+        display: none;
+      }
+      .job-photo-mobile-copy {
+        display: inline;
       }
       #cost-modal,
       #change-order-modal,
@@ -155,7 +165,10 @@ import Icon from '../../components/Icon.astro';
           <div class="p-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 class="font-semibold">Job Photos</h2>
-              <p class="text-xs text-gray-500">Before, progress, and after photos for production proof and future marketing.</p>
+              <p class="text-xs text-gray-500">
+                <span class="job-photo-desktop-copy">Before, progress, and after photos for production proof and future marketing.</span>
+                <span class="job-photo-mobile-copy">Add photos from your gallery or take a new photo on site.</span>
+              </p>
             </div>
           </div>
           <form id="job-photo-form" class="p-4 grid grid-cols-1 md:grid-cols-[150px_1fr_1fr_auto] gap-3 items-end">
@@ -173,9 +186,10 @@ import Icon from '../../components/Icon.astro';
             </label>
             <label>
               <span class="form-label">Photo</span>
-              <input name="file" type="file" accept="image/*" capture="environment" class="input" required>
+              <input name="file" type="file" accept="image/*" class="input" required>
+              <span class="mt-1 block text-xs text-gray-500">Choose from gallery or camera.</span>
             </label>
-            <button id="job-photo-submit" class="btn-primary">Upload</button>
+            <button id="job-photo-submit" class="btn-primary">Add photo</button>
           </form>
           <div id="job-photo-list" class="border-t"></div>
         </section>
@@ -805,7 +819,7 @@ import Icon from '../../components/Icon.astro';
       const formData = new FormData(form);
       formData.set('jobId', jobId);
       submit.disabled = true;
-      submit.textContent = 'Uploading...';
+      submit.textContent = 'Adding...';
       try {
         const res = await fetch(`${API_URL}/v1/uploads/photo`, {
           method: 'POST',
@@ -821,7 +835,7 @@ import Icon from '../../components/Icon.astro';
         alert(err.message || 'Upload failed');
       } finally {
         submit.disabled = false;
-        submit.textContent = 'Upload';
+        submit.textContent = 'Add photo';
       }
     });
 
