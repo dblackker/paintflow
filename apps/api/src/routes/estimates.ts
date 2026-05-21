@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
+import { auditLogs, estimatePhotos, estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -155,6 +155,11 @@ estimatesApp.get('/:id/public', async (c) => {
   const branding = await db.query.orgBranding.findFirst({
     where: eq(orgBranding.orgId, estimate.orgId),
   });
+
+  const photos = await db.query.estimatePhotos.findMany({
+    where: eq(estimatePhotos.estimateId, estimate.id),
+    orderBy: (photos, { desc }) => [desc(photos.createdAt)],
+  });
   
   return c.json({ 
     data: {
@@ -165,6 +170,7 @@ estimatesApp.get('/:id/public', async (c) => {
       createdAt: estimate.createdAt,
       signedName: estimate.signedName,
       signedAt: estimate.signedAt,
+      photos,
       branding: branding ? {
         logoUrl: branding.logoUrl,
         primaryColor: branding.primaryColor,
