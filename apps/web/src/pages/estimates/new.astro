@@ -7,7 +7,7 @@ import Base from '../../layouts/Base.astro';
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
         <h2 class="text-2xl font-bold text-gray-900">Quick Estimate</h2>
-        <p class="text-sm text-gray-600 mt-1">Build fast Good, Better, and Best options from one set of painting line items.</p>
+        <p class="text-sm text-gray-600 mt-1">Build one simple proposal from a few priced scope rows.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-2">
         <a href="/estimates/production" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Use production estimator</a>
@@ -28,28 +28,13 @@ import Base from '../../layouts/Base.astro';
           <div class="flex items-start justify-between gap-3 mb-4">
             <div>
               <h3 class="font-semibold text-gray-900">Scope Items</h3>
-              <p class="text-sm text-gray-600">Use quantities for rooms, square feet, linear feet, doors, or hours.</p>
+              <p class="text-sm text-gray-600">Each row calculates: Qty x ((labor hours x labor rate) + materials with markup).</p>
             </div>
             <button type="button" id="add-item" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Add Item</button>
           </div>
           <div id="items" class="space-y-3"></div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm border p-4 sm:p-5">
-          <h3 class="font-semibold text-gray-900 mb-4">Package Adjustments</h3>
-          <div class="grid sm:grid-cols-3 gap-3">
-            <label class="block">
-              <span class="text-sm text-gray-600">Good multiplier</span>
-              <input id="good-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="0.90" class="mt-1 w-full px-3 py-2 border rounded-lg">
-            </label>
-            <label class="block">
-              <span class="text-sm text-gray-600">Better multiplier</span>
-              <input id="better-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.00" class="mt-1 w-full px-3 py-2 border rounded-lg">
-            </label>
-            <label class="block">
-              <span class="text-sm text-gray-600">Best multiplier</span>
-              <input id="best-multiplier" type="number" step="0.01" inputmode="decimal" autocomplete="off" value="1.18" class="mt-1 w-full px-3 py-2 border rounded-lg">
-            </label>
+          <div class="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+            Qty is the multiplier for the row. Measure is descriptive only and helps the customer understand the scope.
           </div>
         </div>
       </section>
@@ -78,7 +63,7 @@ import Base from '../../layouts/Base.astro';
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <h3 class="font-semibold text-gray-900 mb-3">Package Preview</h3>
+          <h3 class="font-semibold text-gray-900 mb-3">Proposal Preview</h3>
           <div id="package-preview" class="space-y-3"></div>
           <button id="create-estimate-btn" type="submit" class="w-full mt-4 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:cursor-not-allowed disabled:opacity-60">Create Estimate</button>
           <p id="create-estimate-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
@@ -89,10 +74,9 @@ import Base from '../../layouts/Base.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
-    const packageLabels = { good: 'Good', better: 'Better', best: 'Best' };
     const defaultItems = [
-      { desc: 'Prep, patching, masking, and setup', qty: 1, unit: 'job', laborHours: 4, materialCost: 75 },
-      { desc: 'Paint walls and ceilings', qty: 1, unit: 'room', laborHours: 8, materialCost: 120 },
+      { desc: 'Prep, patching, masking, and setup', qty: 0.25, unit: 'project', laborHours: 4, materialCost: 1 },
+      { desc: 'Paint walls and ceilings', qty: 0.25, unit: 'area', laborHours: 8, materialCost: 1 },
     ];
 
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
@@ -127,11 +111,13 @@ import Base from '../../layouts/Base.astro';
 
     async function loadSetup() {
       const [{ data: leads }, { data: settings }] = await Promise.all([
-        apiJson(`${API_URL}/v1/leads?status=new&limit=200`),
+        apiJson(`${API_URL}/v1/leads?status=all&limit=200`),
         apiJson(`${API_URL}/v1/settings/org`),
       ]);
       const select = document.getElementById('lead-select');
-      select.innerHTML = '<option value="">Select lead...</option>' + leads.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)} ${lead.phone ? `(${escapeHtml(phone(lead.phone))})` : ''}</option>`).join('');
+      select.innerHTML = leads.length
+        ? '<option value="">Select customer...</option>' + leads.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)} ${lead.phone ? `(${escapeHtml(phone(lead.phone))})` : ''}</option>`).join('')
+        : '<option value="">No customers found - add a lead first</option>';
       document.getElementById('labor-rate').value = Number(settings.defaultLaborRate || 65).toFixed(2);
       document.getElementById('markup').value = Number(settings.materialMarkupPercent || 30).toFixed(2);
       document.getElementById('tax-rate').value = (Number(settings.salesTaxRate || 0.092) * 100).toFixed(2);
@@ -140,7 +126,7 @@ import Base from '../../layouts/Base.astro';
 
     function addItem(item = {}) {
       const div = document.createElement('div');
-      div.className = 'grid gap-2 sm:grid-cols-[1fr_90px_90px_110px_110px_auto] items-end border rounded-lg p-3';
+      div.className = 'grid gap-2 sm:grid-cols-[1fr_90px_110px_120px_120px_auto] items-end border rounded-lg p-3';
       div.innerHTML = `
         <label class="block sm:col-span-1">
           <span class="text-xs text-gray-600">Description</span>
@@ -148,19 +134,19 @@ import Base from '../../layouts/Base.astro';
         </label>
         <label class="block">
           <span class="text-xs text-gray-600">Qty</span>
-          <input data-field="qty" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.qty || 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <input data-field="qty" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.qty ?? 0.25}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
-          <span class="text-xs text-gray-600">Unit</span>
-          <input data-field="unit" autocomplete="off" value="${escapeHtml(item.unit || 'each')}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <span class="text-xs text-gray-600">Measure</span>
+          <input data-field="unit" autocomplete="off" value="${escapeHtml(item.unit || 'item')}" placeholder="room, wall, day" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
-          <span class="text-xs text-gray-600">Labor hrs/unit</span>
+          <span class="text-xs text-gray-600">Labor hours</span>
           <input data-field="laborHours" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.laborHours || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
-          <span class="text-xs text-gray-600">Material $/unit</span>
-          <input data-field="materialCost" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.materialCost || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
+          <span class="text-xs text-gray-600">Materials cost</span>
+          <input data-field="materialCost" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.materialCost ?? 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <button type="button" class="remove-item px-3 py-2 border rounded-lg text-sm">Remove</button>
       `;
@@ -187,38 +173,37 @@ import Base from '../../layouts/Base.astro';
     function buildPackages() {
       const baseItems = collectBaseItems();
       const taxRate = Number(document.getElementById('tax-rate').value || 0) / 100;
-      return ['good', 'better', 'best'].map(name => {
-        const multiplier = Number(document.getElementById(`${name}-multiplier`).value || 1);
-        const items = baseItems.map(item => ({
-          desc: item.desc,
-          qty: item.qty,
-          rate: Number((item.rate * multiplier).toFixed(2)),
-          category: item.unit,
-          notes: `${item.laborHours} labor hrs/unit, ${money(item.materialCost)} materials/unit before markup`,
-        }));
-        const subtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
-        const tax = subtotal * taxRate;
-        const total = subtotal + tax;
-        return { name, subtotal, tax, total, items, lineItems: items };
-      }).filter(pkg => pkg.items.length > 0);
+      const items = baseItems.map(item => ({
+        desc: item.desc,
+        qty: item.qty,
+        rate: Number(item.rate.toFixed(2)),
+        category: item.unit,
+        notes: `${item.qty} ${item.unit}; ${item.laborHours} labor hours and ${money(item.materialCost)} materials before markup`,
+      }));
+      const subtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
+      const tax = subtotal * taxRate;
+      const total = subtotal + tax;
+      return items.length ? [{ name: 'proposal', subtotal, tax, total, items, lineItems: items }] : [];
     }
 
     function calculate() {
       const packages = buildPackages();
       const depositPercent = Number(document.getElementById('deposit-percent').value || 0) / 100;
-      document.getElementById('package-preview').innerHTML = ['good', 'better', 'best'].map(name => {
-        const pkg = packages.find(item => item.name === name);
-        const total = pkg?.total || 0;
-        return `
-          <div class="border rounded-lg p-3 ${name === 'better' ? 'border-blue-300 bg-blue-50' : ''}">
-            <div class="flex items-center justify-between">
-              <p class="font-medium">${packageLabels[name]}</p>
-              <p class="font-semibold">${money(total)}</p>
-            </div>
-            <p class="text-xs text-gray-600 mt-1">Deposit: ${money(total * depositPercent)}</p>
+      const pkg = packages[0];
+      const subtotal = pkg?.subtotal || 0;
+      const tax = pkg?.tax || 0;
+      const total = pkg?.total || 0;
+      document.getElementById('package-preview').innerHTML = `
+        <div class="border rounded-lg p-3">
+          <div class="space-y-2 text-sm">
+            <div class="flex items-center justify-between"><span class="text-gray-600">Scope rows</span><span class="font-medium">${pkg?.items.length || 0}</span></div>
+            <div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span class="font-medium">${money(subtotal)}</span></div>
+            <div class="flex items-center justify-between"><span class="text-gray-600">Estimated tax</span><span class="font-medium">${money(tax)}</span></div>
+            <div class="flex items-center justify-between border-t pt-2 text-base"><span class="font-semibold">Proposal total</span><span class="font-bold text-blue-700">${money(total)}</span></div>
+            <div class="flex items-center justify-between"><span class="text-gray-600">Deposit</span><span class="font-medium">${money(total * depositPercent)}</span></div>
           </div>
-        `;
-      }).join('');
+        </div>
+      `;
     }
 
     document.getElementById('add-item').addEventListener('click', () => addItem());
