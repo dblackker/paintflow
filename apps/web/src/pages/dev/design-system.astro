@@ -1,0 +1,196 @@
+---
+import Base from '../../layouts/Base.astro';
+import ContactSummary from '../../components/ContactSummary.astro';
+import StatusBadge from '../../components/StatusBadge.astro';
+
+const isDev = import.meta.env.DEV;
+
+const colorTokens = [
+  ['Primary', '--md-sys-color-primary', '--md-sys-color-on-primary'],
+  ['Primary container', '--md-sys-color-primary-container', '--md-sys-color-on-primary-container'],
+  ['Secondary', '--md-sys-color-secondary', '--md-sys-color-on-secondary'],
+  ['Secondary container', '--md-sys-color-secondary-container', '--md-sys-color-on-secondary-container'],
+  ['Tertiary', '--md-sys-color-tertiary', '--md-sys-color-on-tertiary'],
+  ['Tertiary container', '--md-sys-color-tertiary-container', '--md-sys-color-on-tertiary-container'],
+  ['Error', '--md-sys-color-error', '--md-sys-color-on-error'],
+  ['Error container', '--md-sys-color-error-container', '--md-sys-color-on-error-container'],
+  ['Surface lowest', '--md-sys-color-surface-container-lowest', '--md-sys-color-on-surface'],
+  ['Surface low', '--md-sys-color-surface-container-low', '--md-sys-color-on-surface'],
+  ['Surface', '--md-sys-color-surface-container', '--md-sys-color-on-surface'],
+  ['Surface high', '--md-sys-color-surface-container-high', '--md-sys-color-on-surface'],
+  ['Surface highest', '--md-sys-color-surface-container-highest', '--md-sys-color-on-surface'],
+  ['Surface variant', '--md-sys-color-surface-variant', '--md-sys-color-on-surface-variant'],
+];
+
+const statuses = ['draft', 'sent', 'scheduled', 'accepted', 'in_progress', 'paid', 'pending', 'past_due', 'declined'];
+---
+
+<Base title="Design System - PaintFlow">
+  {isDev ? (
+    <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <header class="mb-8 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div>
+          <p class="pf-label text-gray-600">Development only</p>
+          <h1 class="pf-headline mt-2 text-gray-950">PaintFlow Design System</h1>
+          <p class="mt-2 max-w-3xl text-gray-700">
+            Material Design 3-inspired tokens for contractor CRM workflows: clear role-based color, tonal surfaces,
+            purposeful elevation, touch-friendly actions, and compact operational density.
+          </p>
+        </div>
+        <div class="pf-card-filled p-4">
+          <p class="pf-label text-gray-600">Seed color</p>
+          <p class="mt-1 text-2xl font-bold text-gray-950">#176B5B</p>
+          <p class="text-sm text-gray-600">PaintFlow evergreen primary</p>
+        </div>
+      </header>
+
+      <section class="mb-8">
+        <div class="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <h2 class="pf-title text-gray-950">Color Roles</h2>
+            <p class="text-sm text-gray-600">Use roles by meaning, not by raw color.</p>
+          </div>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {colorTokens.map(([name, bg, fg]) => (
+            <div class="pf-token-swatch" style={`background: var(${bg}); color: var(${fg});`}>
+              <p class="font-semibold">{name}</p>
+              <p class="mt-1 text-xs opacity-80">{bg}</p>
+              <p class="text-xs opacity-80">{fg}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section class="mb-8 grid gap-4 lg:grid-cols-3">
+        <div class="pf-card p-5">
+          <h2 class="pf-title text-gray-950">Typography</h2>
+          <div class="mt-5 space-y-4">
+            <div><p class="pf-display">Display</p><p class="text-sm text-gray-600">Large moments only</p></div>
+            <div><p class="pf-headline">Headline</p><p class="text-sm text-gray-600">Page titles</p></div>
+            <div><p class="pf-title">Title</p><p class="text-sm text-gray-600">Cards and panels</p></div>
+            <div><p class="pf-body">Body text for operational content and dense CRM screens.</p></div>
+            <div><p class="pf-label">Label / Button / Field</p></div>
+          </div>
+        </div>
+
+        <div class="pf-card p-5">
+          <h2 class="pf-title text-gray-950">Buttons</h2>
+          <div class="mt-5 flex flex-wrap gap-3">
+            <button class="btn-primary pf-state-layer">Primary action</button>
+            <button class="btn-secondary pf-state-layer">Secondary</button>
+            <button class="btn-secondary btn-sm pf-state-layer">Small action</button>
+            <button class="btn-icon pf-state-layer" aria-label="Icon action">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"></path>
+              </svg>
+            </button>
+            <button class="pf-fab pf-state-layer">
+              <span aria-hidden="true">+</span>
+              Add lead
+            </button>
+          </div>
+        </div>
+
+        <div class="pf-card p-5">
+          <h2 class="pf-title text-gray-950">Inputs</h2>
+          <div class="mt-5 space-y-4">
+            <label>
+              <span class="form-label">Customer email</span>
+              <input class="input" type="email" autocomplete="email" placeholder="customer@example.com">
+            </label>
+            <label>
+              <span class="form-label">Job status</span>
+              <select class="input">
+                <option>Scheduled</option>
+                <option>In progress</option>
+                <option>Completed</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="mb-8 grid gap-4 lg:grid-cols-3">
+        <div class="pf-card-outlined p-5">
+          <h2 class="pf-title text-gray-950">Outlined Card</h2>
+          <p class="mt-2 text-sm text-gray-600">Use for repeated records in lists where separation matters more than depth.</p>
+        </div>
+        <div class="pf-card-filled p-5">
+          <h2 class="pf-title text-gray-950">Filled Card</h2>
+          <p class="mt-2 text-sm text-gray-600">Use for dashboards, grouped setup tasks, and low-emphasis panels.</p>
+        </div>
+        <div class="pf-card p-5 pf-elevation-2">
+          <h2 class="pf-title text-gray-950">Elevated Card</h2>
+          <p class="mt-2 text-sm text-gray-600">Use sparingly for floating menus, modals, and temporary surfaces.</p>
+        </div>
+      </section>
+
+      <section class="mb-8 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div class="pf-card p-5">
+          <h2 class="pf-title text-gray-950">Status Badges</h2>
+          <div class="mt-4 flex flex-wrap gap-2">
+            {statuses.map((status) => <StatusBadge value={status} />)}
+          </div>
+          <div class="mt-5 flex flex-wrap gap-2">
+            <button class="pf-filter-chip" aria-pressed="true">All</button>
+            <button class="pf-filter-chip">Open</button>
+            <button class="pf-filter-chip">Scheduled</button>
+            <button class="pf-filter-chip">Paid</button>
+            <span class="chip">Smart list</span>
+          </div>
+        </div>
+        <div class="pf-card p-5">
+          <h2 class="pf-title text-gray-950">Contact Summary</h2>
+          <div class="mt-4">
+            <ContactSummary
+              size="lg"
+              leadId="941a7640-e991-47d1-a1a3-1abfdcc13dde"
+              name="Emily Randall"
+              address="1487 Noe Street, San Francisco, CA 94131"
+              phone="+14155550102"
+              email="emily@example.com"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="pf-card p-5">
+        <h2 class="pf-title text-gray-950">CRM Pattern Example</h2>
+        <div class="mt-4 grid gap-3 md:grid-cols-3">
+          <article class="pf-card-outlined p-4">
+            <div class="flex items-center justify-between gap-3">
+              <p class="font-semibold text-gray-950">New lead</p>
+              <StatusBadge value="new" />
+            </div>
+            <p class="mt-2 text-sm text-gray-600">Estimate request from website form.</p>
+            <button class="btn-secondary btn-sm mt-4">Qualify</button>
+          </article>
+          <article class="pf-card-outlined p-4">
+            <div class="flex items-center justify-between gap-3">
+              <p class="font-semibold text-gray-950">Estimate sent</p>
+              <StatusBadge value="sent" />
+            </div>
+            <p class="mt-2 text-sm text-gray-600">$11,300 exterior repaint proposal.</p>
+            <button class="btn-secondary btn-sm mt-4">Follow up</button>
+          </article>
+          <article class="pf-card-outlined p-4">
+            <div class="flex items-center justify-between gap-3">
+              <p class="font-semibold text-gray-950">Production</p>
+              <StatusBadge value="in_progress" />
+            </div>
+            <p class="mt-2 text-sm text-gray-600">Crew is logging hours against job budget.</p>
+            <button class="btn-primary btn-sm mt-4">Open job</button>
+          </article>
+        </div>
+      </section>
+    </div>
+  ) : (
+    <div class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+      <div class="pf-card p-6">
+        <h1 class="pf-title text-gray-950">Design system preview is development-only</h1>
+        <p class="mt-2 text-gray-600">Run the app locally to view this component gallery.</p>
+      </div>
+    </div>
+  )}
+</Base>

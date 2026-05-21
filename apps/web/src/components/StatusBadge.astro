@@ -89,13 +89,13 @@ const {
     };
 
     const classFor = (tone) => ({
-      success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-      info: 'border-sky-200 bg-sky-50 text-sky-800',
-      active: 'border-blue-200 bg-blue-50 text-blue-800',
-      warning: 'border-amber-200 bg-amber-50 text-amber-800',
-      danger: 'border-red-200 bg-red-50 text-red-800',
-      neutral: 'border-gray-200 bg-gray-50 text-gray-700',
-    }[tone] || 'border-gray-200 bg-gray-50 text-gray-700');
+      success: 'pf-status-success',
+      info: 'pf-status-info',
+      active: 'pf-status-active',
+      warning: 'pf-status-warning',
+      danger: 'pf-status-danger',
+      neutral: 'pf-status-neutral',
+    }[tone] || 'pf-status-neutral');
 
     const badgeMarkup = ({ value = '', label = '', tone = '', className = '' } = {}) => `
       <status-badge
@@ -124,7 +124,7 @@ const {
         const displayLabel = this.dataset.label || labelFor(value);
         const tone = toneFor(value, this.dataset.tone || '');
         this.innerHTML = `
-          <span class="inline-flex w-fit items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${classFor(tone)}">
+          <span class="pf-status w-fit ${classFor(tone)}">
             ${escapeHtml(displayLabel)}
           </span>
         `;
