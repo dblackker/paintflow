@@ -19,7 +19,6 @@ import Base from '../../layouts/Base.astro';
     let teamMembers = [];
 
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: options.cents === false ? 0 : 2, maximumFractionDigits: options.cents === false ? 0 : 2 })}`;
-    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
 
     function escapeHtml(value) {
@@ -30,14 +29,13 @@ import Base from '../../layouts/Base.astro';
       if (!job.leadId) return '';
       const name = job.leadName || 'Customer';
       const address = formatAddress(job);
-      const contact = job.leadPhone ? phone(job.leadPhone) : job.leadEmail || 'Open customer profile';
-      return `
-        <div class="mt-2 min-w-0 rounded-lg pr-2">
-          <a href="/leads/${job.leadId}" class="block truncate text-sm font-medium text-gray-950 hover:text-blue-700">${escapeHtml(name)}</a>
-          ${window.PaintFlowFormat?.addressLink(address) || `<span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>`}
-          <span class="block truncate text-xs text-gray-500">${escapeHtml(contact)}</span>
-        </div>
-      `;
+      return `<div class="mt-2">${window.PaintFlowUI?.contactSummary({
+        leadId: job.leadId,
+        name,
+        address,
+        phone: job.leadPhone,
+        email: job.leadEmail,
+      }) || `<p class="text-sm font-medium text-gray-950">${escapeHtml(name)}</p>`}</div>`;
     }
 
     function formatAddress(record) {

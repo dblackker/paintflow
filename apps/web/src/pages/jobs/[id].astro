@@ -1,6 +1,7 @@
 ---
 import '../../styles/design-system.css';
 import Toast from '../../components/Toast.astro';
+import ContactSummary from '../../components/ContactSummary.astro';
 ---
 
 <!DOCTYPE html>
@@ -157,6 +158,7 @@ import Toast from '../../components/Toast.astro';
       </form>
     </div>
   </div>
+  <ContactSummary defineOnly />
   <Toast />
 
   <script>
@@ -192,14 +194,6 @@ import Toast from '../../components/Toast.astro';
         .replace(/\b\w/g, (char) => char.toUpperCase())
         .replace(/\b(And|Or|Of|The)\b/g, (word) => word.toLowerCase());
     };
-    const phone = (value) => {
-      if (window.PaintFlowFormat?.phone) return window.PaintFlowFormat.phone(value);
-      const raw = String(value || '').trim();
-      const digits = raw.replace(/\D/g, '');
-      const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
-      if (ten.length === 10) return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
-      return raw;
-    };
     const streetAddress = (job) => String(job.leadStreetAddress || '').trim();
     const jobScope = (job) => {
       const name = String(job.name || '').trim();
@@ -232,13 +226,14 @@ import Toast from '../../components/Toast.astro';
       if (!job.leadId) return '<p class="text-gray-600">No customer linked</p>';
       const name = job.leadName || 'Customer';
       const address = formatAddress(job);
-      return `
-        <div class="mt-2 min-w-0 rounded-lg pr-2">
-          <a href="/leads/${job.leadId}" class="block truncate font-medium text-gray-950 hover:text-blue-700">${escapeHtml(name)}</a>
-          ${addressLink(address)}
-          <span class="block text-xs text-gray-500">${escapeHtml(job.leadPhone ? phone(job.leadPhone) : job.leadEmail || 'Open customer profile')}</span>
-        </div>
-      `;
+      return `<div class="mt-2">${window.PaintFlowUI?.contactSummary({
+        leadId: job.leadId,
+        name,
+        address,
+        phone: job.leadPhone,
+        email: job.leadEmail,
+        size: 'md',
+      }) || `<p class="font-medium text-gray-950">${escapeHtml(name)}</p>${addressLink(address)}`}</div>`;
     }
 
     async function api(path, options = {}) {

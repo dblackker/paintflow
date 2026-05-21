@@ -101,7 +101,6 @@ import Base from '../layouts/Base.astro';
       won: 'Won',
       lost: 'Lost',
     };
-    const displayPhone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
     let leads = [];
     let leadSources = [];
 
@@ -122,6 +121,23 @@ import Base from '../layouts/Base.astro';
 
     function formatAddress(record) {
       return window.PaintFlowFormat?.address(record) || [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
+    }
+
+    function contactSummary(lead) {
+      return window.PaintFlowUI?.contactSummary({
+        leadId: lead.id,
+        name: lead.name,
+        address: formatAddress(lead),
+        phone: lead.phone,
+        email: lead.email,
+        size: 'md',
+      }) || `
+        <div class="min-w-0">
+          <a href="/leads/${lead.id}" class="font-semibold text-gray-950 truncate hover:text-blue-700">${escapeHtml(lead.name)}</a>
+          <p class="text-sm text-gray-600 mt-1">${escapeHtml(lead.phone || lead.email || 'No contact')}</p>
+          <p class="text-sm text-gray-800">${escapeHtml(formatAddress(lead) || 'No jobsite address')}</p>
+        </div>
+      `;
     }
 
     async function apiJson(url, options = {}) {
@@ -196,13 +212,11 @@ import Base from '../layouts/Base.astro';
         <article class="lead-card bg-white rounded-lg shadow-sm border p-4 cursor-pointer hover:border-blue-300 hover:shadow-md transition" data-href="/leads/${lead.id}" tabindex="0" role="link" aria-label="Open ${escapeHtml(lead.name)} customer detail">
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div class="min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <a href="/leads/${lead.id}" class="font-semibold text-gray-950 truncate hover:text-blue-700">${escapeHtml(lead.name)}</a>
-                ${lead.qboCustomerId ? '<span class="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">QB</span>' : ''}
+              <div class="flex min-w-0 items-start gap-2">
+                <div class="min-w-0 flex-1">${contactSummary(lead)}</div>
+                ${lead.qboCustomerId ? '<span class="shrink-0 text-xs px-2 py-1 bg-green-100 text-green-800 rounded">QB</span>' : ''}
               </div>
-              <p class="text-sm text-gray-600 mt-1">${escapeHtml(lead.phone ? displayPhone(lead.phone) : lead.email || 'No contact')}</p>
-              <div class="mt-1">${window.PaintFlowFormat?.addressLink(formatAddress(lead), { className: 'block truncate text-sm text-gray-800 hover:text-blue-700 hover:underline' }) || `<p class="text-sm text-gray-800">${escapeHtml(formatAddress(lead) || 'No jobsite address')}</p>`}</div>
-              <p class="text-xs text-gray-500 mt-1">${escapeHtml(lead.source || 'No source')} - ${new Date(lead.createdAt).toLocaleDateString()}</p>
+              <p class="text-xs text-gray-500 mt-2">${escapeHtml(lead.source || 'No source')} - ${new Date(lead.createdAt).toLocaleDateString()}</p>
             </div>
             <select class="status-select w-full sm:w-44 px-3 py-2 border rounded-lg text-sm" data-id="${lead.id}">
               ${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${lead.status === value ? 'selected' : ''}>${label}</option>`).join('')}

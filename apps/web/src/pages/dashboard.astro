@@ -101,20 +101,19 @@ import Base from '../layouts/Base.astro';
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
-    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
 
     function customerProfileLink(item) {
       const name = item.clientName || 'Customer';
       if (!item.leadId) return `<p class="font-medium text-gray-950">${escapeHtml(name)}</p>`;
       const address = formatAddress(item);
-      return `
-        <div class="min-w-0 rounded-lg pr-2">
-          <a href="/leads/${item.leadId}" class="block truncate font-medium text-gray-950 hover:text-blue-700">${escapeHtml(name)}</a>
-          ${window.PaintFlowFormat?.addressLink(address) || `<span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>`}
-          <span class="block truncate text-xs text-gray-500">${escapeHtml(item.leadPhone ? phone(item.leadPhone) : item.leadEmail || 'Open customer profile')}</span>
-        </div>
-      `;
+      return window.PaintFlowUI?.contactSummary({
+        leadId: item.leadId,
+        name,
+        address,
+        phone: item.leadPhone,
+        email: item.leadEmail,
+      }) || `<p class="font-medium text-gray-950">${escapeHtml(name)}</p>`;
     }
 
     function formatAddress(record) {

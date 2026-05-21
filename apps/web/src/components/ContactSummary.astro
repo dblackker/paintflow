@@ -1,0 +1,144 @@
+---
+interface Props {
+  leadId?: string | null;
+  name?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  size?: 'sm' | 'md' | 'lg';
+  defineOnly?: boolean;
+  class?: string;
+}
+
+const {
+  leadId = '',
+  name = 'Customer',
+  address = '',
+  phone = '',
+  email = '',
+  size = 'sm',
+  defineOnly = false,
+  class: className = '',
+} = Astro.props;
+---
+
+{!defineOnly && (
+  <contact-summary
+    data-lead-id={leadId}
+    data-name={name}
+    data-address={address}
+    data-phone={phone}
+    data-email={email}
+    data-size={size}
+    class={className}
+  />
+)}
+
+<script is:inline>
+  (() => {
+    const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char]));
+
+    const escapeAttr = (value = '') => escapeHtml(value).replace(/`/g, '&#96;');
+
+    const phone = (value) => {
+      if (window.PaintFlowFormat?.phone) return window.PaintFlowFormat.phone(value);
+      const raw = String(value || '').trim();
+      const digits = raw.replace(/\D/g, '');
+      const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+      if (ten.length === 10) return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+      return raw;
+    };
+
+    const mapsUrl = (address) => {
+      if (window.PaintFlowFormat?.mapsUrl) return window.PaintFlowFormat.mapsUrl(address);
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address || '')}`;
+    };
+
+    const summaryMarkup = ({
+      leadId = '',
+      name = 'Customer',
+      address = '',
+      phone: phoneValue = '',
+      email = '',
+      size = 'sm',
+      className = '',
+    } = {}) => `
+      <contact-summary
+        data-lead-id="${escapeAttr(leadId)}"
+        data-name="${escapeAttr(name || 'Customer')}"
+        data-address="${escapeAttr(address)}"
+        data-phone="${escapeAttr(phoneValue)}"
+        data-email="${escapeAttr(email)}"
+        data-size="${escapeAttr(size)}"
+        class="${escapeAttr(className)}"
+      ></contact-summary>
+    `;
+
+    class ContactSummaryElement extends HTMLElement {
+      static get observedAttributes() {
+        return ['data-lead-id', 'data-name', 'data-address', 'data-phone', 'data-email', 'data-size'];
+      }
+
+      connectedCallback() {
+        this.render();
+      }
+
+      attributeChangedCallback() {
+        this.render();
+      }
+
+      render() {
+        const leadId = this.dataset.leadId || '';
+        const name = this.dataset.name || 'Customer';
+        const address = this.dataset.address || '';
+        const rawPhone = this.dataset.phone || '';
+        const email = this.dataset.email || '';
+        const size = this.dataset.size || 'sm';
+        const titleClass = size === 'lg'
+          ? 'text-lg font-semibold text-gray-950'
+          : size === 'md'
+            ? 'text-base font-semibold text-gray-950'
+            : 'text-sm font-semibold text-gray-950';
+        const addressClass = size === 'lg' ? 'text-sm text-gray-800' : 'text-sm text-gray-700';
+        const contactClass = 'text-xs text-gray-500';
+        const formattedPhone = rawPhone ? phone(rawPhone) : '';
+        const phoneHref = rawPhone ? `tel:${rawPhone.replace(/[^+\d]/g, '')}` : '';
+
+        const nameMarkup = leadId
+          ? `<a href="/leads/${escapeHtml(leadId)}" class="block truncate ${titleClass} hover:text-blue-700">${escapeHtml(name)}</a>`
+          : `<p class="truncate ${titleClass}">${escapeHtml(name)}</p>`;
+        const addressMarkup = address
+          ? `<a href="${mapsUrl(address)}" target="_blank" rel="noreferrer" class="mt-0.5 block truncate ${addressClass} hover:text-blue-700 hover:underline">${escapeHtml(address)}</a>`
+          : `<p class="mt-0.5 truncate ${addressClass}">No jobsite address</p>`;
+        const contactParts = [
+          formattedPhone ? `<a href="${escapeHtml(phoneHref)}" class="hover:text-blue-700 hover:underline">${escapeHtml(formattedPhone)}</a>` : '',
+          email ? `<a href="mailto:${escapeHtml(email)}" class="hover:text-blue-700 hover:underline">${escapeHtml(email)}</a>` : '',
+        ].filter(Boolean);
+        const contactMarkup = contactParts.length
+          ? `<p class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 ${contactClass}">${contactParts.join('<span class="text-gray-300">|</span>')}</p>`
+          : `<p class="mt-0.5 truncate ${contactClass}">No contact info</p>`;
+
+        this.innerHTML = `
+          <div class="pf-contact-summary min-w-0">
+            ${nameMarkup}
+            ${addressMarkup}
+            ${contactMarkup}
+          </div>
+        `;
+      }
+    }
+
+    if (!customElements.get('contact-summary')) {
+      customElements.define('contact-summary', ContactSummaryElement);
+    }
+
+    window.PaintFlowUI = window.PaintFlowUI || {};
+    window.PaintFlowUI.contactSummary = summaryMarkup;
+  })();
+</script>
