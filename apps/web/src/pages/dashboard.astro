@@ -125,8 +125,13 @@ import Base from '../layouts/Base.astro';
       if (!value) return '';
       const date = new Date(value);
       const diffMs = Date.now() - date.getTime();
+      if (diffMs < 0) return 'Just now';
+      const diffMinutes = Math.floor(diffMs / 60000);
+      if (diffMinutes < 1) return 'Just now';
+      if (diffMinutes < 60) return `${diffMinutes}m ago`;
+      const diffHours = Math.floor(diffMinutes / 60);
+      if (diffHours < 24) return `${diffHours}hr ago`;
       const diffDays = Math.floor(diffMs / 86400000);
-      if (diffDays <= 0) return 'Today';
       if (diffDays === 1) return 'Yesterday';
       if (diffDays < 7) return `${diffDays} days ago`;
       return date.toLocaleDateString();
@@ -205,8 +210,8 @@ import Base from '../layouts/Base.astro';
               </div>
             `;
           } else {
-            activity.innerHTML = data.recentActivity.map(e => `
-              <a href="${escapeHtml(e.href || `/estimates/${e.id}`)}" class="block rounded-lg border-b px-3 py-3 last:border-0 hover:bg-gray-50">
+            activity.innerHTML = `<div class="grid gap-3">${data.recentActivity.map(e => `
+              <a href="${escapeHtml(e.href || `/estimates/${e.id}`)}" class="block rounded-lg border bg-white px-3 py-3 shadow-sm hover:border-blue-200 hover:bg-gray-50 hover:shadow-md">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div class="min-w-0">
                     <p class="font-medium text-gray-950">${escapeHtml(estimateActivityText(e))}</p>
@@ -216,7 +221,7 @@ import Base from '../layouts/Base.astro';
                   <span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">${escapeHtml(label(e.status))}</span>
                 </div>
               </a>
-            `).join('');
+            `).join('')}</div>`;
           }
         }
       } catch (err) {
