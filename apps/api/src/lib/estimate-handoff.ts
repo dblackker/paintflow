@@ -34,6 +34,28 @@ function getPackages(estimate: AcceptedEstimate): EstimatePackage[] {
   return Array.isArray(estimate.packages) ? estimate.packages as EstimatePackage[] : [];
 }
 
+function jobScopeLabel(selectedPackage: EstimatePackage | null): string {
+  const items = Array.isArray((selectedPackage as any)?.items)
+    ? (selectedPackage as any).items
+    : Array.isArray((selectedPackage as any)?.lineItems)
+      ? (selectedPackage as any).lineItems
+      : [];
+  const text = items
+    .map((item: any) => `${item?.desc ?? ''} ${item?.notes ?? ''}`)
+    .join(' ')
+    .toLowerCase();
+
+  if (/(exterior|siding|fascia|soffit|roofline)/.test(text)) return 'Exterior Painting';
+  if (/(cabinet|vanity|built-in)/.test(text)) return 'Cabinet Painting';
+  if (/(commercial|office|workspace|tenant)/.test(text)) return 'Commercial Painting';
+  if (/(interior|bedroom|bathroom|kitchen|living|walls|ceilings|trim|doors)/.test(text)) return 'Interior Painting';
+  return 'Painting Project';
+}
+
+export function buildJobName(lead: typeof leads.$inferSelect, selectedPackage: EstimatePackage | null): string {
+  return `${lead.name} ${jobScopeLabel(selectedPackage)}`;
+}
+
 export function selectEstimatePackage(
   estimate: AcceptedEstimate,
   packageName?: string | null
@@ -87,13 +109,12 @@ export async function createJobFromAcceptedEstimate(
   }
 
   const selectedPackage = selectEstimatePackage(estimate, input.packageName);
-  const packageLabel = selectedPackage?.name ? ` - ${selectedPackage.name}` : '';
   const [job] = await db.insert(jobs)
     .values({
       orgId: estimate.orgId,
       leadId: estimate.leadId,
       estimateId: estimate.id,
-      name: `${lead.name}${packageLabel}`,
+      name: buildJobName(lead, selectedPackage),
       status: 'scheduled',
       budget: contractValue.toFixed(2),
     })

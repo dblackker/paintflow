@@ -8,14 +8,14 @@ import Toast from '../../components/Toast.astro';
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Job Costing - PaintFlow</title>
+  <title>Job Detail - PaintFlow</title>
 </head>
 <body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16 items-center">
         <a href="/jobs" class="text-gray-600 hover:text-gray-900">&larr; Jobs</a>
-        <h1 class="text-xl font-semibold">Job Costing</h1>
+        <h1 class="text-xl font-semibold">Job Detail</h1>
         <button id="complete-btn" class="hidden px-3 py-2 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200">Mark Complete</button>
       </div>
     </div>
@@ -200,6 +200,14 @@ import Toast from '../../components/Toast.astro';
       if (ten.length === 10) return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
       return raw;
     };
+    const displayJobName = (job) => {
+      const name = String(job.name || '').trim();
+      const leadName = String(job.leadName || '').trim();
+      if (leadName && name.toLowerCase() === `${leadName} - proposal`.toLowerCase()) {
+        return `${leadName} Painting Project`;
+      }
+      return name || `${leadName || 'Customer'} Painting Project`;
+    };
 
     function customerProfileLink(job) {
       if (!job.leadId) return '<p class="text-gray-600">No customer linked</p>';
@@ -272,7 +280,7 @@ import Toast from '../../components/Toast.astro';
       document.getElementById('job-header').innerHTML = `
         <div class="flex flex-col md:flex-row md:justify-between gap-4">
           <div>
-            <h2 class="text-2xl font-semibold">${escapeHtml(job.name)}</h2>
+            <h2 class="text-2xl font-semibold">${escapeHtml(displayJobName(job))}</h2>
             ${customerProfileLink(job)}
             <p class="text-sm text-gray-500 mt-1">Status: <span class="font-medium">${escapeHtml(label(job.status))}</span></p>
           </div>
