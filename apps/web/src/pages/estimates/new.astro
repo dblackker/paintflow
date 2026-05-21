@@ -10,8 +10,8 @@ import Base from '../../layouts/Base.astro';
         <p class="text-sm text-gray-600 mt-1">Build one simple proposal from a few priced scope rows.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-2">
-        <a href="/estimates/production" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Use production estimator</a>
-        <a href="/estimates" class="w-full sm:w-auto text-center px-4 py-2 border rounded-lg bg-white hover:bg-gray-50">Back to estimates</a>
+        <a href="/estimates/production" class="btn-secondary btn-sm justify-center">Use production estimator</a>
+        <a href="/estimates" class="btn-secondary btn-sm justify-center">Back to estimates</a>
       </div>
     </div>
 
@@ -30,7 +30,7 @@ import Base from '../../layouts/Base.astro';
               <h3 class="font-semibold text-gray-900">Scope Items</h3>
               <p class="text-sm text-gray-600">Each row calculates: Qty x ((labor hours x labor rate) + materials with markup).</p>
             </div>
-            <button type="button" id="add-item" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">Add Item</button>
+            <button type="button" id="add-item" class="btn-primary btn-sm">Add Item</button>
           </div>
           <div id="items" class="space-y-3"></div>
           <div class="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
@@ -65,7 +65,7 @@ import Base from '../../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <h3 class="font-semibold text-gray-900 mb-3">Proposal Preview</h3>
           <div id="package-preview" class="space-y-3"></div>
-          <button id="create-estimate-btn" type="submit" class="w-full mt-4 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:cursor-not-allowed disabled:opacity-60">Create Estimate</button>
+          <button id="create-estimate-btn" type="submit" class="btn-primary w-full justify-center mt-4">Create Estimate</button>
           <p id="create-estimate-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
         </div>
       </aside>
@@ -148,7 +148,7 @@ import Base from '../../layouts/Base.astro';
           <span class="text-xs text-gray-600">Materials cost</span>
           <input data-field="materialCost" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.materialCost ?? 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
-        <button type="button" class="remove-item px-3 py-2 border rounded-lg text-sm">Remove</button>
+        <button type="button" class="remove-item btn-secondary btn-sm">Remove</button>
       `;
       document.getElementById('items').appendChild(div);
       calculate();

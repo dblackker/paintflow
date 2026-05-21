@@ -335,7 +335,7 @@ import Base from '../../layouts/Base.astro';
               ${statusBadge(co.status)}
             </div>
             <p class="text-xs text-gray-600 mt-1">${co.description}</p>
-            ${co.status === 'pending' ? `<button onclick="approveChangeOrder('${co.id}', '${jobId}')" class="mt-1 text-xs text-blue-600">Approve</button>` : ''}
+            ${co.status === 'pending' ? `<button onclick="approveChangeOrder('${co.id}', '${jobId}')" class="btn-text btn-sm mt-1">Approve</button>` : ''}
           </div>
         `).join('');
       } catch (err) {

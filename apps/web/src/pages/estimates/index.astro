@@ -9,7 +9,7 @@ import Base from '../../layouts/Base.astro';
         <h2 class="text-2xl font-bold text-gray-900">Estimates</h2>
         <p class="text-sm text-gray-600 mt-1">Track sent, accepted, and declined painting proposals.</p>
       </div>
-      <a href="/estimates/production" class="w-full sm:w-auto text-center bg-blue-600 text-white px-4 py-3 sm:py-2 rounded-lg hover:bg-blue-700 font-medium">Start estimate</a>
+      <a href="/estimates/production" class="btn-primary justify-center">Start estimate</a>
     </div>
 
     <section class="grid md:grid-cols-2 gap-3 mb-4">
@@ -107,7 +107,7 @@ import Base from '../../layouts/Base.astro';
           <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-red-800">
             <p class="font-medium">Estimates could not be loaded</p>
             <p class="text-sm mt-1">${escapeHtml(err.message || 'Check that the API server is running and try again.')}</p>
-            <button id="retry-estimates" type="button" class="mt-4 px-4 py-2 bg-red-700 text-white rounded-lg text-sm">Retry</button>
+            <button id="retry-estimates" type="button" class="btn-primary btn-sm mt-4">Retry</button>
           </div>
         `;
         document.getElementById('retry-estimates')?.addEventListener('click', loadEstimates);
@@ -159,7 +159,7 @@ import Base from '../../layouts/Base.astro';
             </div>
             <div class="sm:text-right">
               <p class="text-xl font-bold">${money(estimate.total)}</p>
-              <a href="${estimate.status === 'draft' ? `/estimates/production?draft=${estimate.id}` : `/estimates/${estimate.id}`}" class="inline-block mt-2 px-3 py-2 border rounded-lg text-sm hover:bg-gray-50">${estimate.status === 'draft' ? 'Edit draft' : 'Open'}</a>
+              <a href="${estimate.status === 'draft' ? `/estimates/production?draft=${estimate.id}` : `/estimates/${estimate.id}`}" class="btn-secondary btn-sm mt-2 justify-center">${estimate.status === 'draft' ? 'Edit draft' : 'Open'}</a>
             </div>
           </div>
         </article>

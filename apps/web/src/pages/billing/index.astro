@@ -25,7 +25,7 @@ import Layout from '../../components/Layout.astro';
           <li>✓ E-signatures</li>
           <li>✓ Basic reports</li>
         </ul>
-        <button onclick="subscribe('starter')" class="w-full py-2 bg-blue-600 text-white rounded-lg">Choose Starter</button>
+        <button onclick="subscribe('starter')" class="btn-primary w-full justify-center">Choose Starter</button>
       </div>
       
       <div class="bg-white rounded-lg shadow-sm border-2 border-blue-600 p-6 relative">
@@ -42,7 +42,7 @@ import Layout from '../../components/Layout.astro';
           <li>✓ Advanced reporting</li>
           <li>✓ Priority support</li>
         </ul>
-        <button onclick="subscribe('pro')" class="w-full py-2 bg-blue-600 text-white rounded-lg">Choose Pro</button>
+        <button onclick="subscribe('pro')" class="btn-primary w-full justify-center">Choose Pro</button>
       </div>
       
       <div class="bg-white rounded-lg shadow-sm border p-6">
@@ -57,7 +57,7 @@ import Layout from '../../components/Layout.astro';
           <li>✓ API access</li>
           <li>✓ Dedicated CSM</li>
         </ul>
-        <button onclick="subscribe('enterprise')" class="w-full py-2 bg-blue-600 text-white rounded-lg">Contact Sales</button>
+        <button onclick="subscribe('enterprise')" class="btn-primary w-full justify-center">Contact Sales</button>
       </div>
     </div>
   </main>
@@ -90,7 +90,7 @@ import Layout from '../../components/Layout.astro';
               <p class="text-gray-600">$${data.plan.price}/month • ${data.status}</p>
               <p class="text-sm text-gray-500 mt-1">Renews ${new Date(data.currentPeriodEnd).toLocaleDateString()}</p>
             </div>
-            <button onclick="manageBilling()" class="px-4 py-2 border rounded-lg">Manage Billing</button>
+            <button onclick="manageBilling()" class="btn-secondary">Manage Billing</button>
           </div>
         `;
       } catch (err) {

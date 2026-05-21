@@ -1,4 +1,6 @@
 ---
+import '../styles/design-system.css';
+
 const requestedPlan = Astro.url.searchParams.get('plan') || 'pro';
 
 const plans = {
@@ -46,7 +48,7 @@ const selectedPlan = plans[plan];
         </a>
         <nav class="flex items-center gap-3 text-sm">
           <a href="/login" class="hidden text-slate-600 hover:text-slate-950 sm:inline">Sign in</a>
-          <a href="/#pricing" class="rounded-lg border px-3 py-2 font-medium text-slate-700 hover:bg-slate-50">Plans</a>
+          <a href="/#pricing" class="btn-secondary btn-sm">Plans</a>
         </nav>
       </div>
     </header>
@@ -149,7 +151,7 @@ const selectedPlan = plans[plan];
             <button
               id="submit"
               type="submit"
-              class="w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              class="btn-primary w-full justify-center"
             >
               Send secure sign-in link
             </button>

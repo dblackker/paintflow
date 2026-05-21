@@ -12,7 +12,7 @@ import Layout from '../../components/Layout.astro';
           Create or connect a Stripe account for your painting company so approved estimates can collect deposits and route payouts to your bank.
         </p>
       </div>
-      <a href="/onboarding?welcome=1" class="rounded-lg border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Back to setup</a>
+      <a href="/onboarding?welcome=1" class="btn-secondary btn-sm">Back to setup</a>
     </div>
 
     <div id="notice" class="hidden mb-5 rounded-lg border p-4 text-sm"></div>
@@ -43,10 +43,10 @@ import Layout from '../../components/Layout.astro';
         </div>
 
         <div class="mt-6 flex flex-col gap-3 sm:flex-row">
-          <button id="connect-btn" class="rounded-lg bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+          <button id="connect-btn" class="btn-primary">
             Start Stripe setup
           </button>
-          <button id="dashboard-btn" class="hidden rounded-lg border px-5 py-3 font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60">
+          <button id="dashboard-btn" class="hidden btn-secondary">
             Open Stripe dashboard
           </button>
         </div>

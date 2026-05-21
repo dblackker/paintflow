@@ -6,7 +6,7 @@ const { icon = '📭', title, description, actionText, actionHref } = Astro.prop
   <h3 class="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
   <p class="text-gray-600 mb-6 max-w-sm mx-auto">{description}</p>
   {actionText && actionHref && (
-    <a href={actionHref} class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 touch-feedback">
+    <a href={actionHref} class="btn-primary touch-feedback">
       {actionText}
     </a>
   )}

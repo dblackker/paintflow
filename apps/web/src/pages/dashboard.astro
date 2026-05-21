@@ -128,8 +128,8 @@ const isDev = import.meta.env.DEV;
     <p class="font-medium mb-2">Install PaintFlow</p>
     <p class="text-sm text-gray-600 mb-3">Add to home screen for quick access</p>
     <div class="flex gap-2">
-      <button id="install-btn" class="flex-1 px-3 py-2 bg-blue-600 text-white rounded text-sm">Install</button>
-      <button id="dismiss-install" class="px-3 py-2 border rounded text-sm">Later</button>
+      <button id="install-btn" class="btn-primary btn-sm flex-1 justify-center">Install</button>
+      <button id="dismiss-install" class="btn-secondary btn-sm">Later</button>
     </div>
   </div>
 
@@ -452,7 +452,7 @@ const isDev = import.meta.env.DEV;
               <div class="rounded-lg border border-dashed p-6 text-center">
                 <p class="font-medium text-gray-900">No activity yet</p>
                 <p class="mt-1 text-sm text-gray-600">Add a lead to start tracking calls, estimates, and jobs.</p>
-                <a href="/leads?new=1" class="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Add lead</a>
+                <a href="/leads?new=1" class="btn-primary btn-sm mt-4">Add lead</a>
               </div>
             `;
           } else {

@@ -1,4 +1,5 @@
 ---
+import '../styles/design-system.css';
 ---
 
 <!DOCTYPE html>
@@ -13,7 +14,7 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16 items-center">
         <h1 class="text-xl font-semibold">Material Invoices</h1>
-        <button id="upload-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Upload Invoice</button>
+        <button id="upload-btn" class="btn-primary btn-sm">Upload Invoice</button>
       </div>
     </div>
   </nav>
@@ -44,8 +45,8 @@
         <textarea name="csvData" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste CSV data here..." rows="8" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" required></textarea>
         <p class="text-xs text-gray-600">CSV columns: Description, SKU, Quantity, Unit Cost, Total</p>
         <div class="flex gap-3">
-          <button type="button" onclick="closeModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
-          <button type="submit" class="flex-1 py-2 bg-blue-600 text-white rounded-lg">Upload</button>
+          <button type="button" onclick="closeModal()" class="btn-secondary flex-1 justify-center">Cancel</button>
+          <button type="submit" class="btn-primary flex-1 justify-center">Upload</button>
         </div>
       </form>
       <details class="mt-4">

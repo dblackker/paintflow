@@ -1,3 +1,7 @@
+---
+import '../../styles/design-system.css';
+---
+
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -30,14 +34,14 @@
         <div class="text-sm font-semibold uppercase tracking-wide text-blue-600 mb-4">Thanks</div>
         <h2 class="text-xl font-bold mb-2">Thank you!</h2>
         <p class="text-gray-600 mb-6" id="thankyou-message"></p>
-        <a id="review-link" href="#" target="_blank" class="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Leave Review</a>
+        <a id="review-link" href="#" target="_blank" class="btn-primary justify-center">Leave Review</a>
       </div>
 
       <div id="feedback-step" class="hidden">
         <h2 class="text-xl font-bold mb-4">We're sorry to hear that</h2>
         <p class="text-gray-600 mb-4">Please tell us what went wrong so we can make it right:</p>
         <textarea id="feedback-text" class="w-full px-3 py-2 border rounded-lg mb-4" rows="4" placeholder="Your feedback..."></textarea>
-        <button id="submit-feedback" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Submit Feedback</button>
+        <button id="submit-feedback" class="btn-primary w-full justify-center">Submit Feedback</button>
       </div>
     </div>
 
