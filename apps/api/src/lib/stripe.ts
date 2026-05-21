@@ -5,6 +5,7 @@ export async function createCheckoutSession(env: any, params: {
   cancelUrl: string;
   metadata: Record<string, string>;
   connectedAccountId?: string;
+  productName?: string;
 }) {
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
@@ -18,7 +19,7 @@ export async function createCheckoutSession(env: any, params: {
       'success_url': params.successUrl,
       'cancel_url': params.cancelUrl,
       'line_items[0][price_data][currency]': params.currency || 'usd',
-      'line_items[0][price_data][product_data][name]': 'Painting Services - 50% Deposit',
+      'line_items[0][price_data][product_data][name]': params.productName || 'Painting Services - 50% Deposit',
       'line_items[0][price_data][unit_amount]': Math.round(params.amount * 100).toString(),
       'line_items[0][quantity]': '1',
       ...Object.entries(params.metadata).reduce((acc, [key, value]) => {

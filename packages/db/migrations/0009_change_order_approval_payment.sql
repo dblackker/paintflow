@@ -1,0 +1,10 @@
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP;
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS payment_required BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS deposit_percent NUMERIC(5, 2) NOT NULL DEFAULT 100;
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) NOT NULL DEFAULT 'not_requested';
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS payment_due_amount NUMERIC(10, 2);
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS stripe_checkout_session_id VARCHAR(255);
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255);
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS signed_ip VARCHAR(45);
+ALTER TABLE change_orders ADD COLUMN IF NOT EXISTS signed_user_agent TEXT;

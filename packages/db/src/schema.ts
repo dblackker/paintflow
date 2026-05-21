@@ -269,6 +269,16 @@ export const changeOrders = pgTable('change_orders', {
   description: text('description').notNull(),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
   status: varchar('status', { length: 50 }).notNull().default('pending'), // pending, approved, rejected, completed
+  sentAt: timestamp('sent_at'),
+  paymentRequired: boolean('payment_required').notNull().default(false),
+  depositPercent: decimal('deposit_percent', { precision: 5, scale: 2 }).notNull().default('100'),
+  paymentStatus: varchar('payment_status', { length: 50 }).notNull().default('not_requested'), // not_requested, pending, paid, waived
+  paymentDueAmount: decimal('payment_due_amount', { precision: 10, scale: 2 }),
+  stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }),
+  paidAt: timestamp('paid_at'),
+  approvedBy: varchar('approved_by', { length: 255 }),
+  signedIp: varchar('signed_ip', { length: 45 }),
+  signedUserAgent: text('signed_user_agent'),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
   approvedAt: timestamp('approved_at'),
   createdBy: varchar('created_by', { length: 100 }).notNull(), // contractor or customer

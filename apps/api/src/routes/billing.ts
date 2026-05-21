@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { estimates, leads, quickbooksConnections, stripeConnections } from '@paintflow/db/schema';
-import { eq } from 'drizzle-orm';
+import { auditLogs, changeOrders, estimates, leads, quickbooksConnections, stripeConnections } from '@paintflow/db/schema';
+import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { createCheckoutSession, verifyWebhookSignature } from '../lib/stripe';
 import { createQBInvoice, createQBPayment } from '../lib/quickbooks';
@@ -117,16 +117,54 @@ billing.post('/webhook', async (c) => {
     
     const event = JSON.parse(body) as {
       type?: string;
-      data?: { object?: { metadata?: Record<string, string>; amount_total?: number } };
+      data?: { object?: { id?: string; metadata?: Record<string, string>; amount_total?: number } };
     };
     
     if (event.type === 'checkout.session.completed') {
       const metadata = event.data?.object?.metadata;
+      const changeOrderId = metadata?.changeOrderId;
       const estimateId = metadata?.estimateId;
       const orgId = metadata?.orgId;
       const packageName = metadata?.packageName;
       const selectedOptions = metadata?.selectedOptions ? JSON.parse(metadata.selectedOptions) : [];
       const amountTotal = (event.data?.object?.amount_total ?? 0) / 100;
+
+      if (changeOrderId && orgId && amountTotal > 0) {
+        const db = createDb(c.env.DATABASE_URL);
+        const order = await db.query.changeOrders.findFirst({
+          where: and(eq(changeOrders.id, changeOrderId), eq(changeOrders.orgId, orgId)),
+        });
+        if (!order) {
+          return c.json({ error: 'Change order metadata mismatch' }, 400);
+        }
+
+        const paidAt = new Date();
+        const [updated] = await db.update(changeOrders)
+          .set({
+            status: 'approved',
+            approvedAt: order.approvedAt || paidAt,
+            paymentStatus: 'paid',
+            paidAt,
+            stripeCheckoutSessionId: event.data?.object?.id || order.stripeCheckoutSessionId,
+          })
+          .where(and(eq(changeOrders.id, changeOrderId), eq(changeOrders.orgId, orgId)))
+          .returning();
+
+        await db.insert(auditLogs).values({
+          orgId,
+          action: 'change_order.payment_received',
+          entityType: 'change_order',
+          entityId: changeOrderId,
+          metadata: {
+            jobId: updated.jobId,
+            estimateId: updated.estimateId,
+            amount: amountTotal,
+          },
+        });
+
+        return c.json({ received: true });
+      }
+
       if (!estimateId || !orgId || amountTotal <= 0) {
         return c.json({ error: 'Missing checkout metadata' }, 400);
       }
