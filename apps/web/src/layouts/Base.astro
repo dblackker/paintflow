@@ -102,9 +102,9 @@ const { title = 'PaintFlow' } = Astro.props;
         </div>
         <div class="flex items-center gap-2">
           <div class="relative">
-            <button id="notifications-button" type="button" class="btn-icon relative" aria-label="Open notifications" aria-expanded="false">
+            <button id="notifications-button" type="button" class="btn-icon pf-notification-button relative" aria-label="Open notifications" aria-expanded="false">
               <Icon name="bell" />
-              <span id="notifications-badge" class="hidden absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[11px] font-bold leading-none text-white"></span>
+              <span id="notifications-badge" class="hidden pf-notification-badge"></span>
             </button>
             <div id="notifications-menu" class="hidden absolute right-0 mt-2 w-[min(92vw,380px)] overflow-hidden rounded-lg border bg-white shadow-lg">
               <div class="flex items-center justify-between gap-3 border-b p-3">

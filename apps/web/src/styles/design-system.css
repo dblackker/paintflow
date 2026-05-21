@@ -543,6 +543,35 @@ button[class*="bg-blue"][class*="text-white"]:active {
   width: 2.5rem;
 }
 
+.pf-notification-button {
+  overflow: visible;
+}
+
+.pf-notification-badge {
+  align-items: center;
+  background: var(--pf-danger);
+  border: 2px solid var(--pf-card-surface);
+  border-radius: var(--pf-radius-full);
+  color: var(--md-sys-color-on-error);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 1.25rem;
+  justify-content: center;
+  line-height: 1;
+  min-width: 1.25rem;
+  padding: 0 0.28rem;
+  position: absolute;
+  right: -0.35rem;
+  top: -0.35rem;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.pf-notification-badge.hidden {
+  display: none;
+}
+
 .btn-icon:hover {
   background: var(--pf-state-hover);
 }
