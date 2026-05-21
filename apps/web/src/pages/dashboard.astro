@@ -6,7 +6,80 @@ const isDev = import.meta.env.DEV;
 ---
 
 <Base title="Dashboard - PaintFlow">
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+  <style is:global>
+    .dashboard-shell {
+      max-width: 78rem;
+    }
+
+    .dashboard-panel,
+    .dashboard-metric-card {
+      background: var(--md-sys-color-surface-container-lowest) !important;
+      border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 78%, transparent) !important;
+      box-shadow: 0 1px 2px rgb(25 28 32 / 0.05) !important;
+    }
+
+    .dashboard-metric-card {
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+    }
+
+    .dashboard-metric-card:hover {
+      border-color: color-mix(in srgb, var(--pf-primary) 30%, var(--md-sys-color-outline-variant)) !important;
+      box-shadow: var(--pf-elevation-2) !important;
+      transform: translateY(-1px);
+    }
+
+    .dashboard-activity-list {
+      display: grid;
+      gap: 0.625rem;
+    }
+
+    .dashboard-activity-card {
+      display: block;
+      border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 76%, transparent) !important;
+      border-radius: var(--pf-radius);
+      background: var(--md-sys-color-surface-container-lowest) !important;
+      padding: 0.875rem;
+      box-shadow: none !important;
+      transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+    }
+
+    .dashboard-activity-card:hover {
+      background: color-mix(in srgb, var(--md-sys-color-primary-container) 10%, white) !important;
+      border-color: color-mix(in srgb, var(--pf-primary) 26%, var(--md-sys-color-outline-variant)) !important;
+      box-shadow: 0 1px 2px rgb(25 28 32 / 0.06) !important;
+      transform: translateY(-1px);
+    }
+
+    .dashboard-activity-card .pf-contact-summary {
+      margin-top: 0.45rem;
+    }
+
+    .dashboard-owner-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      border-radius: var(--pf-radius);
+      padding: 0.55rem 0.65rem;
+      color: var(--pf-text) !important;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background-color 160ms ease, color 160ms ease;
+    }
+
+    .dashboard-owner-link:hover {
+      background: var(--md-sys-color-surface-container-low);
+      color: var(--pf-primary) !important;
+      text-decoration: none;
+    }
+
+    .dashboard-owner-link::after {
+      color: var(--pf-text-muted);
+      content: ">";
+      font-weight: 700;
+    }
+  </style>
+  <main class="dashboard-shell mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
       <div>
         <h2 class="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h2>
@@ -23,17 +96,17 @@ const isDev = import.meta.env.DEV;
     <section id="setup-slot"></section>
 
     <section class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
-      <a href="/leads" class="bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:border-blue-200 hover:shadow-md">
+      <a href="/leads" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
         <p class="text-sm text-gray-600">Active Leads</p>
         <p class="text-3xl font-bold mt-2" id="active-leads">-</p>
         <p class="mt-3 text-sm font-medium text-blue-700">Open leads</p>
       </a>
-      <a href="/estimates" class="bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:border-blue-200 hover:shadow-md">
+      <a href="/estimates" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
         <p class="text-sm text-gray-600">Estimates Sent</p>
         <p class="text-3xl font-bold mt-2" id="estimates-sent">-</p>
         <p class="mt-3 text-sm font-medium text-blue-700">Review estimates</p>
       </a>
-      <a href="/jobs" class="bg-white p-5 sm:p-6 rounded-lg shadow-sm border hover:border-blue-200 hover:shadow-md">
+      <a href="/jobs" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
         <p class="text-sm text-gray-600">Jobs This Month</p>
         <p class="text-3xl font-bold mt-2" id="jobs-month">-</p>
         <p class="mt-3 text-sm font-medium text-blue-700">Open schedule</p>
@@ -55,16 +128,16 @@ const isDev = import.meta.env.DEV;
     </section>
 
     <section class="grid gap-6 lg:grid-cols-[1fr_340px]">
-      <div class="bg-white rounded-lg shadow-sm border p-5 sm:p-6">
+      <div class="dashboard-panel rounded-lg p-5 sm:p-6">
         <div class="flex items-center justify-between gap-3 mb-4">
           <h3 class="text-lg font-semibold">Recent Activity</h3>
-          <a href="/activity" class="text-sm font-medium text-blue-700 hover:underline">View all activity</a>
+          <a href="/activity" class="btn-text btn-sm">View all</a>
         </div>
         <div id="recent-activity" class="text-gray-600">Loading...</div>
       </div>
 
       <aside class="space-y-4">
-        <div class="bg-white rounded-lg shadow-sm border p-5">
+        <div class="dashboard-panel rounded-lg p-5">
           <div class="flex items-center justify-between gap-3">
             <div>
               <p class="font-semibold text-gray-900">Quick actions</p>
@@ -81,14 +154,14 @@ const isDev = import.meta.env.DEV;
             <a href="/jobs" class="btn-secondary btn-sm justify-start"><Icon name="briefcase" />Open jobs</a>
           </div>
         </div>
-        <div class="bg-white rounded-lg shadow-sm border p-5">
+        <div class="dashboard-panel rounded-lg p-5">
           <p class="font-semibold text-gray-900">Owner tools</p>
-          <div class="mt-4 grid gap-2 text-sm">
-            <a href="/production-rates" class="text-blue-700 hover:underline">Production rates</a>
-            <a href="/materials" class="text-blue-700 hover:underline">Paint products and material costs</a>
-            <a href="/reporting/lead-sources" class="text-blue-700 hover:underline">Lead source reporting</a>
-            <a href="/team" class="text-blue-700 hover:underline">Team and roles</a>
-            <a href="/payments/stripe" class="text-blue-700 hover:underline">Stripe payment setup</a>
+          <div class="mt-3 grid gap-1 text-sm">
+            <a href="/production-rates" class="dashboard-owner-link">Production rates</a>
+            <a href="/materials" class="dashboard-owner-link">Paint products and costs</a>
+            <a href="/reporting/lead-sources" class="dashboard-owner-link">Lead source reporting</a>
+            <a href="/team" class="dashboard-owner-link">Team and roles</a>
+            <a href="/payments/stripe" class="dashboard-owner-link">Stripe setup</a>
           </div>
         </div>
       </aside>
@@ -259,7 +332,7 @@ const isDev = import.meta.env.DEV;
       if (quickList) {
         quickList.innerHTML = visibleActions.length ? visibleActions.map((entry, index) => {
           const action = entry.action;
-          const buttonClass = index === 0 && action.priority ? 'btn-primary' : 'btn-secondary';
+          const buttonClass = index === 0 && action.priority ? 'btn-primary' : 'btn-outlined';
           return `<a href="${escapeHtml(action.href)}" class="${buttonClass} btn-sm w-full justify-start">${quickActionIcon(action.icon)}${escapeHtml(action.label)}</a>`;
         }).join('') : `
           <div class="rounded-lg border border-dashed p-4 text-center text-sm text-gray-600">
@@ -456,11 +529,11 @@ const isDev = import.meta.env.DEV;
               </div>
             `;
           } else {
-            activity.innerHTML = `<div class="grid gap-3">${recentActivity.map(e => `
-              <a href="${escapeHtml(e.href || `/estimates/${e.id}`)}" class="block rounded-lg border bg-white px-3 py-3 shadow-sm hover:border-blue-200 hover:bg-gray-50 hover:shadow-md">
+            activity.innerHTML = `<div class="dashboard-activity-list">${recentActivity.map(e => `
+              <a href="${escapeHtml(e.href || `/estimates/${e.id}`)}" class="dashboard-activity-card">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div class="min-w-0">
-                    <p class="font-medium text-gray-950">${escapeHtml(activityText(e))}</p>
+                    <p class="text-sm font-semibold leading-5 text-gray-950">${escapeHtml(activityText(e))}</p>
                     <p class="mt-0.5 text-xs text-gray-500">${escapeHtml(relativeDate(e.occurredAt || e.activityAt || e.sentAt || e.createdAt))}</p>
                     <div class="mt-2">${customerProfileLink(e)}</div>
                   </div>
