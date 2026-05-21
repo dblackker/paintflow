@@ -2,37 +2,37 @@
   color-scheme: light;
 
   /* Material Design 3 role tokens, tuned to PaintFlow's contractor/productivity context. */
-  --md-sys-color-primary: #176b5b;
+  --md-sys-color-primary: #1a5694;
   --md-sys-color-on-primary: #ffffff;
-  --md-sys-color-primary-container: #d3f4e9;
-  --md-sys-color-on-primary-container: #002019;
-  --md-sys-color-secondary: #4d635c;
+  --md-sys-color-primary-container: #d7e3ff;
+  --md-sys-color-on-primary-container: #001b3e;
+  --md-sys-color-secondary: #535f70;
   --md-sys-color-on-secondary: #ffffff;
-  --md-sys-color-secondary-container: #d0e8df;
-  --md-sys-color-on-secondary-container: #092019;
-  --md-sys-color-tertiary: #3f5f86;
+  --md-sys-color-secondary-container: #d9e3f8;
+  --md-sys-color-on-secondary-container: #101c2b;
+  --md-sys-color-tertiary: #256475;
   --md-sys-color-on-tertiary: #ffffff;
-  --md-sys-color-tertiary-container: #d4e3ff;
-  --md-sys-color-on-tertiary-container: #001c3a;
+  --md-sys-color-tertiary-container: #caecf9;
+  --md-sys-color-on-tertiary-container: #001f28;
   --md-sys-color-error: #ba1a1a;
   --md-sys-color-on-error: #ffffff;
   --md-sys-color-error-container: #ffdad6;
   --md-sys-color-on-error-container: #410002;
-  --md-sys-color-background: #f8faf6;
-  --md-sys-color-on-background: #191d1a;
-  --md-sys-color-surface: #f8faf6;
-  --md-sys-color-on-surface: #191d1a;
-  --md-sys-color-surface-variant: #dce5df;
-  --md-sys-color-on-surface-variant: #404943;
-  --md-sys-color-outline: #707973;
-  --md-sys-color-outline-variant: #c0c9c2;
+  --md-sys-color-background: #f9fafc;
+  --md-sys-color-on-background: #191c20;
+  --md-sys-color-surface: #f9fafc;
+  --md-sys-color-on-surface: #191c20;
+  --md-sys-color-surface-variant: #e0e2ec;
+  --md-sys-color-on-surface-variant: #43474e;
+  --md-sys-color-outline: #74777f;
+  --md-sys-color-outline-variant: #c4c6cf;
   --md-sys-color-surface-container-lowest: #ffffff;
-  --md-sys-color-surface-container-low: #f2f5ef;
-  --md-sys-color-surface-container: #ecefe9;
-  --md-sys-color-surface-container-high: #e6e9e3;
-  --md-sys-color-surface-container-highest: #e0e4dd;
-  --md-sys-color-inverse-surface: #2e312e;
-  --md-sys-color-inverse-on-surface: #eff1ec;
+  --md-sys-color-surface-container-low: #f1f3f9;
+  --md-sys-color-surface-container: #ebedf4;
+  --md-sys-color-surface-container-high: #e5e8ee;
+  --md-sys-color-surface-container-highest: #dfe2e8;
+  --md-sys-color-inverse-surface: #2e3135;
+  --md-sys-color-inverse-on-surface: #f0f0f4;
   --md-sys-color-scrim: #000000;
   --md-sys-color-shadow: #000000;
   --md-sys-color-surface-tint: var(--md-sys-color-primary);
@@ -46,7 +46,7 @@
   --pf-text: var(--md-sys-color-on-surface);
   --pf-text-muted: var(--md-sys-color-on-surface-variant);
   --pf-primary: var(--md-sys-color-primary);
-  --pf-primary-hover: #0f5447;
+  --pf-primary-hover: #103a6b;
   --pf-primary-soft: var(--md-sys-color-primary-container);
   --pf-accent: var(--md-sys-color-tertiary);
   --pf-accent-soft: var(--md-sys-color-tertiary-container);
@@ -60,9 +60,9 @@
   --pf-elevation-2: 0 1px 2px rgb(0 0 0 / 0.1), 0 2px 6px 2px rgb(0 0 0 / 0.05);
   --pf-elevation-3: 0 4px 8px 3px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.08);
   --pf-shadow: var(--pf-elevation-1);
-  --pf-state-hover: rgb(25 29 26 / 0.08);
-  --pf-state-focus: rgb(23 107 91 / 0.18);
-  --pf-state-pressed: rgb(25 29 26 / 0.12);
+  --pf-state-hover: rgb(25 28 32 / 0.08);
+  --pf-state-focus: rgb(26 86 148 / 0.18);
+  --pf-state-pressed: rgb(25 28 32 / 0.12);
   --pf-type-display: 700 3.25rem/1.08 Inter, ui-sans-serif, system-ui, sans-serif;
   --pf-type-headline: 700 2rem/1.18 Inter, ui-sans-serif, system-ui, sans-serif;
   --pf-type-title: 700 1.25rem/1.28 Inter, ui-sans-serif, system-ui, sans-serif;
@@ -83,12 +83,12 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid rgb(23 107 91 / 0.32);
+  outline: 3px solid rgb(26 86 148 / 0.32);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: rgb(23 107 91 / 0.18);
+  background: rgb(26 86 148 / 0.18);
 }
 
 .bg-gray-50 {
@@ -144,7 +144,7 @@ body {
 .border-blue-200,
 .border-blue-300,
 .border-blue-600 {
-  border-color: rgb(23 107 91 / 0.28) !important;
+  border-color: rgb(26 86 148 / 0.28) !important;
 }
 
 .bg-blue-50,
@@ -154,7 +154,7 @@ body {
 
 .text-blue-900,
 .text-blue-950 {
-  color: #123d35 !important;
+  color: var(--md-sys-color-on-primary-container) !important;
 }
 
 .bg-green-50 {
@@ -209,7 +209,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--pf-primary) !important;
-  box-shadow: 0 0 0 3px rgb(23 107 91 / 0.14);
+  box-shadow: 0 0 0 3px rgb(26 86 148 / 0.14);
   outline: none;
 }
 
@@ -235,7 +235,7 @@ button[class*="border"][class*="px-"][class*="py-"]:not([class*="bg-blue"]):not(
 
 a[class*="bg-blue"][class*="text-white"],
 button[class*="bg-blue"][class*="text-white"] {
-  box-shadow: 0 1px 2px rgb(23 32 27 / 0.1), 0 8px 18px rgb(23 107 91 / 0.18);
+  box-shadow: 0 1px 2px rgb(25 28 32 / 0.1), 0 8px 18px rgb(26 86 148 / 0.18);
 }
 
 a[class*="bg-blue"][class*="text-white"]:active,
@@ -587,7 +587,7 @@ button[class*="bg-blue"][class*="text-white"]:active {
 
 .pf-status-active {
   background: var(--md-sys-color-primary-container);
-  border-color: #a8d9cc;
+  border-color: #adc7f5;
   color: var(--pf-primary);
 }
 

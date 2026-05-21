@@ -1,35 +1,35 @@
 category,name,type,value,usage
-color,Primary,token,--md-sys-color-primary: #176b5b,Primary actions and key brand affordances
+color,Primary,token,--md-sys-color-primary: #1a5694,Primary actions and key brand affordances (Deep Navy Blue)
 color,On primary,token,--md-sys-color-on-primary: #ffffff,Text/icons on primary
-color,Primary container,token,--md-sys-color-primary-container: #d3f4e9,Low-emphasis selected states and active chips
-color,On primary container,token,--md-sys-color-on-primary-container: #002019,Text/icons on primary container
-color,Secondary,token,--md-sys-color-secondary: #4d635c,Secondary role and supporting controls
+color,Primary container,token,--md-sys-color-primary-container: #d7e3ff,Low-emphasis selected states and active chips
+color,On primary container,token,--md-sys-color-on-primary-container: #001b3e,Text/icons on primary container
+color,Secondary,token,--md-sys-color-secondary: #535f70,Secondary role and supporting controls (Slate Gray)
 color,On secondary,token,--md-sys-color-on-secondary: #ffffff,Text/icons on secondary
-color,Secondary container,token,--md-sys-color-secondary-container: #d0e8df,Secondary buttons and chips
-color,On secondary container,token,--md-sys-color-on-secondary-container: #092019,Text/icons on secondary container
-color,Tertiary,token,--md-sys-color-tertiary: #3f5f86,Informational accents and alternate emphasis
+color,Secondary container,token,--md-sys-color-secondary-container: #d9e3f8,Secondary buttons and chips
+color,On secondary container,token,--md-sys-color-on-secondary-container: #101c2b,Text/icons on secondary container
+color,Tertiary,token,--md-sys-color-tertiary: #256475,Informational accents and alternate emphasis (Deep Teal Blue)
 color,On tertiary,token,--md-sys-color-on-tertiary: #ffffff,Text/icons on tertiary
-color,Tertiary container,token,--md-sys-color-tertiary-container: #d4e3ff,Info badges and low-emphasis tertiary surfaces
-color,On tertiary container,token,--md-sys-color-on-tertiary-container: #001c3a,Text/icons on tertiary container
+color,Tertiary container,token,--md-sys-color-tertiary-container: #caecf9,Info badges and low-emphasis tertiary surfaces
+color,On tertiary container,token,--md-sys-color-on-tertiary-container: #001f28,Text/icons on tertiary container
 color,Error,token,--md-sys-color-error: #ba1a1a,Destructive actions and error text
 color,On error,token,--md-sys-color-on-error: #ffffff,Text/icons on error
 color,Error container,token,--md-sys-color-error-container: #ffdad6,Error badges and warning panels
 color,On error container,token,--md-sys-color-on-error-container: #410002,Text/icons on error container
-color,Background,token,--md-sys-color-background: #f8faf6,App body background
-color,On background,token,--md-sys-color-on-background: #191d1a,Primary text on background
-color,Surface,token,--md-sys-color-surface: #f8faf6,Base app surface
-color,On surface,token,--md-sys-color-on-surface: #191d1a,Primary text on surfaces
-color,Surface variant,token,--md-sys-color-surface-variant: #dce5df,Subtle containers and divider-adjacent areas
-color,On surface variant,token,--md-sys-color-on-surface-variant: #404943,Secondary text
-color,Outline,token,--md-sys-color-outline: #707973,Strong borders and input outlines
-color,Outline variant,token,--md-sys-color-outline-variant: #c0c9c2,Subtle borders and card outlines
+color,Background,token,--md-sys-color-background: #f9fafc,App body background (Cool Crisp White)
+color,On background,token,--md-sys-color-on-background: #191c20,Primary text on background (Dark Charcoal)
+color,Surface,token,--md-sys-color-surface: #f9fafc,Base app surface
+color,On surface,token,--md-sys-color-on-surface: #191c20,Primary text on surfaces
+color,Surface variant,token,--md-sys-color-surface-variant: #e0e2ec,Subtle containers and divider-adjacent areas
+color,On surface variant,token,--md-sys-color-on-surface-variant: #43474e,Secondary text
+color,Outline,token,--md-sys-color-outline: #74777f,Strong borders and input outlines
+color,Outline variant,token,--md-sys-color-outline-variant: #c4c6cf,Subtle borders and card outlines
 color,Surface lowest,token,--md-sys-color-surface-container-lowest: #ffffff,White cards and highest-contrast panels
-color,Surface low,token,--md-sys-color-surface-container-low: #f2f5ef,Navigation and low-emphasis panels
-color,Surface container,token,--md-sys-color-surface-container: #ecefe9,Filled cards and grouped content
-color,Surface high,token,--md-sys-color-surface-container-high: #e6e9e3,Higher-emphasis panels
-color,Surface highest,token,--md-sys-color-surface-container-highest: #e0e4dd,Highest tonal surface without elevation
-color,Inverse surface,token,--md-sys-color-inverse-surface: #2e312e,Snackbar/toast dark surfaces
-color,Inverse on surface,token,--md-sys-color-inverse-on-surface: #eff1ec,Text on inverse surface
+color,Surface low,token,--md-sys-color-surface-container-low: #f1f3f9,Navigation and low-emphasis panels
+color,Surface container,token,--md-sys-color-surface-container: #ebedf4,Filled cards and grouped content
+color,Surface high,token,--md-sys-color-surface-container-high: #e5e8ee,Higher-emphasis panels
+color,Surface highest,token,--md-sys-color-surface-container-highest: #dfe2e8,Highest tonal surface without elevation
+color,Inverse surface,token,--md-sys-color-inverse-surface: #2e3135,Snackbar/toast dark surfaces
+color,Inverse on surface,token,--md-sys-color-inverse-on-surface: #f0f0f4,Text on inverse surface
 color,Surface tint,token,--md-sys-color-surface-tint: primary,Elevation tint role
 legacy alias,PaintFlow background,token,--pf-bg: background,Compatibility alias for app background
 legacy alias,PaintFlow surface,token,--pf-surface: surface lowest,Compatibility alias for cards
@@ -40,7 +40,7 @@ legacy alias,PaintFlow strong border,token,--pf-border-strong: outline,Compatibi
 legacy alias,PaintFlow text,token,--pf-text: on surface,Compatibility alias for primary text
 legacy alias,PaintFlow muted text,token,--pf-text-muted: on surface variant,Compatibility alias for secondary text
 legacy alias,PaintFlow primary,token,--pf-primary: primary,Compatibility alias for primary color
-legacy alias,PaintFlow primary hover,token,--pf-primary-hover: #0f5447,Primary hover state
+legacy alias,PaintFlow primary hover,token,--pf-primary-hover: #103a6b,Primary dark blue hover state
 legacy alias,PaintFlow accent,token,--pf-accent: tertiary,Compatibility alias for tertiary color
 semantic,Success,color,#146c43,Accepted/paid/completed statuses
 semantic,Warning,color,#7a5600,Follow-up/changed/unread statuses
@@ -51,9 +51,9 @@ elevation,Elevation 0,token,--pf-elevation-0: none,Flat surfaces
 elevation,Elevation 1,token,"0 1px 2px rgb(0 0 0 / 0.08), 0 1px 3px 1px rgb(0 0 0 / 0.04)",Default cards
 elevation,Elevation 2,token,"0 1px 2px rgb(0 0 0 / 0.1), 0 2px 6px 2px rgb(0 0 0 / 0.05)",Raised hover or emphasis
 elevation,Elevation 3,token,"0 4px 8px 3px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.08)",FABs and modals
-state,Hover state,token,--pf-state-hover: rgb(25 29 26 / 0.08),Material-style state layer hover
-state,Focus state,token,--pf-state-focus: rgb(23 107 91 / 0.18),Focus rings and focused controls
-state,Pressed state,token,--pf-state-pressed: rgb(25 29 26 / 0.12),Pressed state layer
+state,Hover state,token,--pf-state-hover: rgb(25 28 32 / 0.08),Material-style state layer hover (Dark Charcoal tint)
+state,Focus state,token,--pf-state-focus: rgb(26 86 148 / 0.18),Focus rings and focused controls (Primary Blue tint)
+state,Pressed state,token,--pf-state-pressed: rgb(25 28 32 / 0.12),Pressed state layer
 typography,Display,class,.pf-display,Large moments only
 typography,Headline,class,.pf-headline,Page titles
 typography,Title,class,.pf-title,Cards and panels
