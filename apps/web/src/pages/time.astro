@@ -179,6 +179,32 @@ import Icon from '../components/Icon.astro';
     </div>
   </div>
 
+  <div id="forgot-clock-in-modal" class="mobile-sheet hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 class="text-lg font-semibold">Forgot clock-in</h2>
+          <p class="text-sm text-gray-600">Enter the actual start time and a note for lead review.</p>
+        </div>
+        <button type="button" id="close-forgot-clock-in-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
+      </div>
+      <form id="forgot-clock-in-form" class="space-y-4">
+        <label class="block">
+          <span class="form-label">Actual clock-in time</span>
+          <input id="forgot-in-time" name="startedAt" type="datetime-local" class="input" required>
+        </label>
+        <label class="block">
+          <span class="form-label">Reason for lead review</span>
+          <textarea id="forgot-in-reason" name="reason" class="input min-h-24" maxlength="500" placeholder="Forgot to clock in before starting prep." required></textarea>
+        </label>
+        <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+          <button type="button" id="cancel-forgot-clock-in-btn" class="btn-secondary flex-1">Cancel</button>
+          <button type="submit" id="submit-forgot-clock-in-btn" class="btn-primary flex-1">Submit for review</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let currentWeekStart = getWeekStart(new Date());
@@ -374,29 +400,25 @@ import Icon from '../components/Icon.astro';
         copy.textContent = `${memberName} is not punched in. Start a job timer from the field with location permission enabled.`;
         current.innerHTML = '<span class="chip">Not clocked in</span>';
         controls.innerHTML = `
-          <div class="grid punch-actions sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+          <div class="grid punch-actions ${status.canManage ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]' : 'sm:grid-cols-[minmax(0,1fr)_auto]'} gap-3 items-end">
             ${status.canManage ? `<label class="block"><span class="form-label">Crew member</span><select id="punch-member" class="input">${punchMemberOptions()}</select></label>` : ''}
             <label class="block">
               <span class="form-label">Job / location</span>
               <select id="punch-job" class="input">${punchJobOptions()}</select>
-              <span class="mt-1 block text-xs text-gray-500">Street address is shown first when available. Leaving this blank flags the shift for lead review.</span>
-            </label>
-            <label class="block">
-              <span class="form-label">Forgot clock-in time</span>
-              <input id="forgot-in-time" type="datetime-local" class="input" value="${toDateTimeLocal()}">
             </label>
             <div class="flex flex-col sm:flex-row gap-2">
-              <button id="punch-in-btn" class="btn-primary">Clock in</button>
-              <button id="forgot-in-btn" class="btn-text btn-sm">Forgot clock-in</button>
+              <button type="button" id="punch-in-btn" class="btn-primary">Clock in</button>
+              <button type="button" id="forgot-in-btn" class="btn-text btn-sm">Forgot clock-in</button>
             </div>
           </div>
+          <p class="text-xs text-gray-500">Street address is shown first when available. Leaving job blank flags the shift for lead review.</p>
         `;
       }
 
       renderPunchReview();
       document.getElementById('bulk-time-btn').classList.toggle('hidden', !status.canManage);
       document.getElementById('punch-in-btn')?.addEventListener('click', () => punchIn(false));
-      document.getElementById('forgot-in-btn')?.addEventListener('click', () => punchIn(true));
+      document.getElementById('forgot-in-btn')?.addEventListener('click', openForgotClockInModal);
       document.getElementById('punch-out-btn')?.addEventListener('click', punchOut);
     }
 
@@ -563,6 +585,18 @@ import Icon from '../components/Icon.astro';
       document.getElementById('bulk-modal').classList.add('hidden');
     }
 
+    function openForgotClockInModal() {
+      const form = document.getElementById('forgot-clock-in-form');
+      form.reset();
+      document.getElementById('forgot-in-time').value = toDateTimeLocal();
+      document.getElementById('forgot-in-reason').value = 'Forgot to clock in; entered later from the app.';
+      document.getElementById('forgot-clock-in-modal').classList.remove('hidden');
+    }
+
+    function closeForgotClockInModal() {
+      document.getElementById('forgot-clock-in-modal').classList.add('hidden');
+    }
+
     function renderPunchReview() {
       const review = document.getElementById('punch-review');
       const rows = punchStatus?.reviewQueue || [];
@@ -640,7 +674,7 @@ import Icon from '../components/Icon.astro';
       await loadData();
     }
 
-    async function punchIn(forgot) {
+    async function punchIn(forgot, options = {}) {
       if (isPunching) return;
       const jobId = document.getElementById('punch-job')?.value;
       try {
@@ -653,13 +687,14 @@ import Icon from '../components/Icon.astro';
             jobId: jobId || undefined,
             teamMemberId: getSelectedPunchMemberId(),
             forgotPunchIn: forgot,
-            startedAt: forgot ? new Date(document.getElementById('forgot-in-time').value).toISOString() : undefined,
+            startedAt: forgot && options.startedAt ? new Date(options.startedAt).toISOString() : undefined,
             note: forgot
-              ? 'Forgot to clock in; entered later from the app.'
+              ? options.note || 'Forgot to clock in; entered later from the app.'
               : jobId ? undefined : 'Crew clocked in without selecting a job.',
           }),
         });
         window.showToast?.(forgot || !jobId ? 'Clock-in created for review' : 'Clocked in', 'success');
+        if (forgot) closeForgotClockInModal();
         await refreshPunchStatus();
       } catch (err) {
         window.showToast?.(err.message || 'Punch failed', 'error');
@@ -955,6 +990,26 @@ import Icon from '../components/Icon.astro';
     document.getElementById('bulk-time-btn').addEventListener('click', openBulkModal);
     document.getElementById('cancel-bulk-btn').addEventListener('click', closeBulkModal);
     document.getElementById('close-bulk-modal-btn').addEventListener('click', closeBulkModal);
+    document.getElementById('cancel-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
+    document.getElementById('close-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
+    document.getElementById('forgot-clock-in-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const submit = document.getElementById('submit-forgot-clock-in-btn');
+      const startedAt = document.getElementById('forgot-in-time').value;
+      const note = document.getElementById('forgot-in-reason').value.trim();
+      if (!startedAt || !note) {
+        window.showToast?.('Enter the clock-in time and reason', 'error');
+        return;
+      }
+      submit.disabled = true;
+      submit.textContent = 'Submitting...';
+      try {
+        await punchIn(true, { startedAt, note });
+      } finally {
+        submit.disabled = false;
+        submit.textContent = 'Submit for review';
+      }
+    });
     document.getElementById('bulk-default-hours').addEventListener('input', () => {
       const defaultHours = getBulkDefaultHours();
       members.forEach((member) => bulkHours.set(member.id, defaultHours));
