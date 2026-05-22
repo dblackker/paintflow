@@ -392,6 +392,14 @@ button[class*="bg-blue"][class*="text-white"]:active {
   opacity: 0.65;
 }
 
+body.pf-crew-mode [data-owner-nav] {
+  display: none !important;
+}
+
+body.pf-crew-mode .pf-logout-button {
+  display: inline-flex !important;
+}
+
 .pf-mobile-nav {
   background: rgb(255 255 255 / 0.94);
   border-color: var(--pf-border);

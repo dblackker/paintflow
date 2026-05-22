@@ -14,8 +14,9 @@ import {
   messageTemplates,
   roles,
   userRoles,
+  teamMembers,
 } from '@paintflow/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { sendEmail } from '../lib/email';
 
 const auth = new Hono<{ Bindings: Env }>();
@@ -108,6 +109,59 @@ const DEFAULT_ROLES = [
 
 const MAGIC_LINK_WINDOW_SECONDS = 3600;
 const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
+
+function accessRoleForTeamRole(teamRole: string) {
+  return teamRole === 'crew_lead'
+    ? { name: 'Foreman', permissions: ['view_jobs', 'log_time', 'log_time_for_others', 'view_all_time', 'upload_photos', 'create_change_orders'] }
+    : { name: 'Crew', permissions: ['view_assigned_jobs', 'log_time'] };
+}
+
+async function ensureTeamMemberLoginAccess(
+  db: ReturnType<typeof createDb>,
+  user: typeof users.$inferSelect,
+  member: typeof teamMembers.$inferSelect,
+) {
+  const existingMembership = await db.query.memberships.findFirst({
+    where: and(eq(memberships.userId, user.id), eq(memberships.orgId, member.orgId)),
+  });
+  if (!existingMembership) {
+    await db.insert(memberships).values({
+      userId: user.id,
+      orgId: member.orgId,
+      role: 'member',
+    });
+  }
+
+  if (!member.userId) {
+    await db.update(teamMembers)
+      .set({ userId: user.id })
+      .where(and(eq(teamMembers.id, member.id), eq(teamMembers.orgId, member.orgId)));
+  }
+
+  const existingUserRole = await db.query.userRoles.findFirst({
+    where: and(eq(userRoles.userId, user.id), eq(userRoles.orgId, member.orgId)),
+  });
+  if (existingUserRole) return;
+
+  const accessRole = accessRoleForTeamRole(member.role || 'crew');
+  let role = await db.query.roles.findFirst({
+    where: and(eq(roles.orgId, member.orgId), eq(roles.name, accessRole.name)),
+  });
+  if (!role) {
+    [role] = await db.insert(roles).values({
+      orgId: member.orgId,
+      name: accessRole.name,
+      permissions: accessRole.permissions,
+      isSystem: true,
+    }).returning();
+  }
+
+  await db.insert(userRoles).values({
+    orgId: member.orgId,
+    userId: user.id,
+    roleId: role.id,
+  });
+}
 
 function sessionCookie(value: string, env: Env, maxAge: number) {
   const isCrossSiteDemo = env.ENVIRONMENT === 'demo';
@@ -470,6 +524,9 @@ auth.post('/magic-link', async (c) => {
   let user = await db.query.users.findFirst({
     where: eq(users.email, normalizedEmail),
   });
+  const linkedTeamMember = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.email, normalizedEmail), eq(teamMembers.isActive, true)),
+  });
 
   if (canUseGoldenDemoLogin(c.env, normalizedEmail)) {
     const demoSession = await createGoldenDemoSession(c, normalizedEmail);
@@ -489,33 +546,55 @@ auth.post('/magic-link', async (c) => {
   
   let orgId: string;
   let isNewUser = false;
+  let redirectPath = '/dashboard';
   
   if (!user) {
     isNewUser = true;
     const [newUser] = await db.insert(users).values({
       email: normalizedEmail,
-      name: displayName,
+      name: linkedTeamMember?.name || displayName,
     }).returning();
-    
-    const [org] = await db.insert(organizations).values({
-      name: workspaceName,
-      slug: `org-${crypto.randomUUID().slice(0, 8)}`,
-    }).returning();
-    
-    await db.insert(memberships).values({
-      userId: newUser.id,
-      orgId: org.id,
-      role: 'owner',
-    });
 
-    await seedWorkspaceDefaults(db, org.id, newUser.id, normalizedEmail, workspaceName);
-    
-    user = newUser;
-    orgId = org.id;
+    if (linkedTeamMember) {
+      await ensureTeamMemberLoginAccess(db, newUser, linkedTeamMember);
+      user = newUser;
+      orgId = linkedTeamMember.orgId;
+      redirectPath = '/time';
+    } else {
+      const [org] = await db.insert(organizations).values({
+        name: workspaceName,
+        slug: `org-${crypto.randomUUID().slice(0, 8)}`,
+      }).returning();
+
+      await db.insert(memberships).values({
+        userId: newUser.id,
+        orgId: org.id,
+        role: 'owner',
+      });
+
+      await seedWorkspaceDefaults(db, org.id, newUser.id, normalizedEmail, workspaceName);
+
+      user = newUser;
+      orgId = org.id;
+    }
   } else {
-    const membership = await db.query.memberships.findFirst({
-      where: eq(memberships.userId, user.id),
-    });
+    let membership = linkedTeamMember
+      ? await db.query.memberships.findFirst({
+          where: and(eq(memberships.userId, user.id), eq(memberships.orgId, linkedTeamMember.orgId)),
+        })
+      : await db.query.memberships.findFirst({
+          where: eq(memberships.userId, user.id),
+        });
+    if (!membership && linkedTeamMember) {
+      await ensureTeamMemberLoginAccess(db, user, linkedTeamMember);
+      membership = await db.query.memberships.findFirst({
+        where: and(eq(memberships.userId, user.id), eq(memberships.orgId, linkedTeamMember.orgId)),
+      });
+      redirectPath = '/time';
+    } else if (linkedTeamMember && membership?.orgId === linkedTeamMember.orgId) {
+      await ensureTeamMemberLoginAccess(db, user, linkedTeamMember);
+      redirectPath = '/time';
+    }
     orgId = membership?.orgId || '';
   }
   
@@ -524,7 +603,7 @@ auth.post('/magic-link', async (c) => {
   
   await c.env.KV.put(
     `magic:${token}`,
-    JSON.stringify({ email: normalizedEmail, userId: user.id, orgId, isNewUser }),
+    JSON.stringify({ email: normalizedEmail, userId: user.id, orgId, isNewUser, redirectPath }),
     { expirationTtl: 900 }
   );
   
@@ -570,7 +649,7 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
     return c.html(verifyMagicLinkHtml('', c.env.PUBLIC_URL, 'This sign-in link is invalid or expired.'), 400);
   }
 
-  const { email, userId, orgId, isNewUser } = JSON.parse(data);
+  const { email, userId, orgId, isNewUser, redirectPath } = JSON.parse(data);
 
   await c.env.KV.delete(`magic:${token}`);
 
@@ -583,7 +662,10 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
     }).catch((error) => console.error('Failed to send welcome email:', error));
   }
 
-  return redirectWithSession(`${c.env.PUBLIC_URL}${isNewUser ? '/onboarding?welcome=1' : '/dashboard'}`, sessionToken, c.env);
+  const destination = typeof redirectPath === 'string' && redirectPath !== '/dashboard'
+    ? redirectPath
+    : isNewUser ? '/onboarding?welcome=1' : '/dashboard';
+  return redirectWithSession(`${c.env.PUBLIC_URL}${destination}`, sessionToken, c.env);
 }
 
 // GET /v1/auth/verify?token=...

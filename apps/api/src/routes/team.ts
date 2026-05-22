@@ -33,6 +33,15 @@ async function hasPermission(c: Context<{ Bindings: Env; Variables: Variables }>
 teamApp.get('/members', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
+  const canViewTeam = await hasPermission(c, 'manage_team')
+    || await hasPermission(c, 'log_time_for_others')
+    || await hasPermission(c, 'view_all_time');
+
+  if (!canViewTeam) {
+    const resolved = await resolvePunchMember(c);
+    if ('error' in resolved) return c.json({ data: [] });
+    return c.json({ data: [resolved.member] });
+  }
   
   const members = await db.query.teamMembers.findMany({
     where: and(eq(teamMembers.orgId, orgId), eq(teamMembers.isActive, true)),
@@ -721,25 +730,20 @@ teamApp.post('/timecards', async (c) => {
 
 teamApp.get('/time', async (c) => {
   const orgId = c.get('orgId');
-  const userId = c.get('userId');
   const jobId = c.req.query('jobId');
   const db = createDb(c.env.DATABASE_URL);
   
   const canViewAll = await hasPermission(c, 'view_all_time');
   
   let where;
-  if (jobId) {
+  if (!canViewAll) {
+    const resolved = await resolvePunchMember(c);
+    if ('error' in resolved) return c.json({ data: [] });
+    where = jobId
+      ? and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, resolved.member.id), eq(timeEntries.jobId, jobId))
+      : and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, resolved.member.id));
+  } else if (jobId) {
     where = and(eq(timeEntries.orgId, orgId), eq(timeEntries.jobId, jobId));
-  } else if (!canViewAll) {
-    // Only show own time entries
-    const member = await db.query.teamMembers.findFirst({
-      where: and(eq(teamMembers.userId, userId), eq(teamMembers.orgId, orgId)),
-    });
-    if (member) {
-      where = and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, member.id));
-    } else {
-      return c.json({ data: [] });
-    }
   } else {
     where = eq(timeEntries.orgId, orgId);
   }

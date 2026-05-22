@@ -127,7 +127,7 @@ const navSections = [
             <span class="pf-brand-mark">P</span>
             <span class="text-xl font-semibold text-gray-950">PaintFlow</span>
           </a>
-          <div class="hidden lg:flex items-center gap-2">
+          <div class="hidden lg:flex items-center gap-2" data-owner-nav>
             <a href="/dashboard" class="pf-nav-link text-sm">Dashboard</a>
             {navSections.map((section) => (
               <details class="pf-nav-group">
@@ -142,7 +142,7 @@ const navSections = [
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <div class="relative">
+          <div class="relative" data-owner-nav>
             <button id="notifications-button" type="button" class="btn-icon pf-notification-button relative" aria-label="Open notifications" aria-expanded="false">
               <Icon name="bell" />
               <span id="notifications-badge" class="hidden pf-notification-badge"></span>
@@ -164,13 +164,13 @@ const navSections = [
             </div>
           </div>
           <button type="button" data-logout class="pf-logout-button hidden lg:inline-flex">Log out</button>
-          <button id="mobile-menu" type="button" class="pf-mobile-menu-button lg:hidden" aria-label="Open navigation" aria-controls="mobile-nav" aria-expanded="false">
+          <button id="mobile-menu" type="button" class="pf-mobile-menu-button lg:hidden" aria-label="Open navigation" aria-controls="mobile-nav" aria-expanded="false" data-owner-nav>
             <Icon name="menu" />
           </button>
         </div>
       </div>
     </div>
-    <div id="mobile-nav" class="pf-mobile-nav hidden lg:hidden border-t">
+    <div id="mobile-nav" class="pf-mobile-nav hidden lg:hidden border-t" data-owner-nav>
       <div class="px-4 py-3 space-y-4">
         <a href="/dashboard" class="block py-2 text-sm">Dashboard</a>
         {navSections.map((section) => (
@@ -228,6 +228,24 @@ const navSections = [
       items.forEach((item) => notified.add(item.id));
       const recent = Array.from(notified).slice(-250);
       localStorage.setItem(notificationState.notifiedKey, JSON.stringify(recent));
+    }
+
+    async function applyCrewShellScope() {
+      try {
+        const response = await fetch(`${API_URL}/v1/team/punch/status`, { credentials: 'include' });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const isCrewOnly = Boolean(payload?.data?.member && !payload?.data?.canManage);
+        document.body.classList.toggle('pf-crew-mode', isCrewOnly);
+        if (!isCrewOnly) return;
+
+        document.querySelectorAll('a[href="/dashboard"]').forEach((link) => link.setAttribute('href', '/time'));
+        const path = window.location.pathname;
+        const allowed = path === '/time' || path === '/login' || path.startsWith('/assets/');
+        if (!allowed) window.location.replace('/time');
+      } catch {
+        // Navigation scope should never block the page from loading.
+      }
     }
 
     function notificationTime(value) {
@@ -446,8 +464,12 @@ const navSections = [
       });
     });
 
-    loadNotificationsForNav();
-    setInterval(() => loadNotificationsForNav({ notify: true }), 30000);
+    applyCrewShellScope().then(() => {
+      if (!document.body.classList.contains('pf-crew-mode')) {
+        loadNotificationsForNav();
+        setInterval(() => loadNotificationsForNav({ notify: true }), 30000);
+      }
+    });
   </script>
 </body>
 </html>
