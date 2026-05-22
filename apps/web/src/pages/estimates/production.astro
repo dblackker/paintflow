@@ -215,17 +215,14 @@ import Base from '../../layouts/Base.astro';
     const ceilingColorSeparationOptions = {
       same_as_walls: {
         label: 'Same color as walls',
-        helper: 'No added masking or cut-in labor.',
         hours: () => 0,
       },
       separate_color: {
         label: 'Separate ceiling color',
-        helper: 'Adds cut-in and light masking labor for a distinct ceiling color.',
         hours: (quantity) => Math.max(0.25, quantity / 350),
       },
       high_contrast_or_complex: {
         label: 'High contrast / complex separation',
-        helper: 'Adds extra masking and slower cut-in for high-contrast colors, beams, trays, or detailed edges.',
         hours: (quantity) => Math.max(0.5, quantity / 220),
       },
     };
@@ -952,7 +949,6 @@ import Base from '../../layouts/Base.astro';
               ${Object.entries(ceilingColorSeparationOptions).map(([value, option]) => `<option value="${value}" ${(item.ceilingColorSeparation || item.labor?.ceilingColorSeparation || 'same_as_walls') === value ? 'selected' : ''}>${option.label}</option>`).join('')}
             </select>
           </label>
-          <p class="mt-1 text-xs text-gray-500" data-ceiling-color-helper></p>
         </div>
         <div class="grid gap-2 mb-2 sm:grid-cols-[1.2fr_1fr_0.8fr]">
           <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="materialId">
@@ -1032,11 +1028,8 @@ import Base from '../../layouts/Base.astro';
     function syncCeilingColorSeparation(surface) {
       const isCeiling = interiorSurfaceKind(surface) === 'ceilings';
       const control = surface?.querySelector('[data-ceiling-color-separation]');
-      const helper = surface?.querySelector('[data-ceiling-color-helper]');
       if (!control) return;
       control.classList.toggle('hidden', !isCeiling);
-      const option = ceilingColorSeparationOptions[ceilingColorSeparation(surface)] || ceilingColorSeparationOptions.same_as_walls;
-      if (helper) helper.textContent = option.helper;
     }
 
     function derivedInteriorMeasurement(surface) {
