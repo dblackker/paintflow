@@ -286,10 +286,23 @@ button[class*="bg-blue"][class*="text-white"]:active {
 }
 
 .pf-mobile-menu-button {
+  align-items: center;
+  background: transparent;
   border: 1px solid var(--pf-border);
   border-radius: 999px;
   color: var(--pf-text);
-  padding: 0.55rem;
+  display: inline-flex;
+  height: 2.5rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  width: 2.5rem;
+}
+
+.pf-mobile-menu-button:hover {
+  background: var(--pf-state-hover);
+  border-color: var(--pf-border-strong);
 }
 
 .pf-logout-button {
@@ -871,6 +884,10 @@ button[class*="bg-blue"][class*="text-white"]:active {
     line-height: 1.35;
   }
 
+  .pf-app-nav > div {
+    padding-top: 0 !important;
+  }
+
   .pf-app-nav .h-16 {
     height: 3.5rem;
   }
@@ -880,10 +897,14 @@ button[class*="bg-blue"][class*="text-white"]:active {
     width: 1.75rem;
   }
 
-  .pf-mobile-menu-button,
   .btn-icon {
     height: 2.25rem;
     width: 2.25rem;
+  }
+
+  .pf-mobile-menu-button {
+    height: 2.5rem;
+    width: 2.5rem;
   }
 
   .pf-notifications-menu:not(.hidden) {
