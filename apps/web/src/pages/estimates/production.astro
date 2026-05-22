@@ -109,7 +109,14 @@ import Base from '../../layouts/Base.astro';
               <p class="text-sm text-gray-600">Generate a starter scope, then adjust rooms, substrates, prep, methods, and measurements.</p>
             </div>
           </div>
-          <div id="quick-scope-builder" class="hidden bg-white rounded-lg shadow-sm border p-4"></div>
+          <div id="quick-scope-builder" class="hidden space-y-3">
+            <div id="quick-scope-summary" class="hidden rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm text-blue-950">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p id="quick-scope-summary-text" class="font-medium">Starter scope added. Refine the generated substrates below.</p>
+                <button id="edit-quick-scope" type="button" class="btn-text btn-sm justify-center">Review assumptions</button>
+              </div>
+            </div>
+          </div>
           <div id="rooms-container" class="space-y-4"></div>
           <button id="add-room" class="btn-secondary w-full justify-center">
             Add Room or Area
@@ -1090,8 +1097,10 @@ import Base from '../../layouts/Base.astro';
       calculateTotal();
 
       if (added.length) {
+        setQuickScopeCollapsed(true, `Starter scope added: ${added.length} interior line${added.length === 1 ? '' : 's'}. Refine room names, measurements, products, and options below.`);
         window.showToast?.(`Added ${added.length} itemized interior scope line${added.length === 1 ? '' : 's'}`, 'success');
       } else {
+        setQuickScopeCollapsed(true, 'Starter scope is already itemized. Refine room names, measurements, products, and options below.');
         window.showToast?.('Interior room-count scope is already itemized', 'success');
       }
     }
@@ -1136,10 +1145,12 @@ import Base from '../../layouts/Base.astro';
       calculateTotal();
 
       if (added.length) {
+        setQuickScopeCollapsed(true, `Starter scope added: ${added.length} exterior line${added.length === 1 ? '' : 's'}. Refine measurements, products, and options below.`);
         window.showToast?.(`Added ${added.length} exterior scope line${added.length === 1 ? '' : 's'} from assumptions`, 'success');
       } else if (missingRates.length) {
         window.showToast?.(`Add production rates for: ${missingRates.join(', ')}`, 'error');
       } else {
+        setQuickScopeCollapsed(true, 'Starter exterior scope is already itemized. Refine measurements, products, and options below.');
         window.showToast?.('Exterior scope already includes the standard assumption-based lines', 'success');
       }
     }
@@ -1181,6 +1192,18 @@ import Base from '../../layouts/Base.astro';
     function scopeControlRoot(room) {
       const builder = quickScopeBuilder();
       return builder?.dataset.scopeRoomId === room?.id ? builder : room;
+    }
+
+    function setQuickScopeCollapsed(collapsed, summaryText = '') {
+      const builder = quickScopeBuilder();
+      const summary = document.getElementById('quick-scope-summary');
+      const summaryCopy = document.getElementById('quick-scope-summary-text');
+      if (!builder || !summary) return;
+      builder.dataset.collapsed = String(collapsed);
+      summary.classList.toggle('hidden', !collapsed);
+      if (summaryText && summaryCopy) summaryCopy.textContent = summaryText;
+      const room = primaryScopeRoom();
+      if (room) syncAreaType(room);
     }
 
     function syncQuickScopeBuilder() {
@@ -1235,12 +1258,13 @@ import Base from '../../layouts/Base.astro';
 
     function syncAreaType(room) {
       const ownsScopeBuilder = quickScopeBuilder()?.dataset.scopeRoomId === room?.id;
+      const quickScopeCollapsed = quickScopeBuilder()?.dataset.collapsed === 'true';
       const estimateType = document.getElementById('estimate-type')?.value || 'interior';
       room.querySelector('[data-area-type]').value = estimateAreaType();
       const isExterior = estimateAreaType() === 'exterior';
       const root = scopeControlRoot(room);
-      root?.querySelector('[data-interior-assumptions]')?.classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'interior' || isExterior);
-      root?.querySelector('[data-exterior-assumptions]')?.classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'exterior' || !isExterior);
+      root?.querySelector('[data-interior-assumptions]')?.classList.toggle('hidden', quickScopeCollapsed || !ownsScopeBuilder || estimateType !== 'interior' || isExterior);
+      root?.querySelector('[data-exterior-assumptions]')?.classList.toggle('hidden', quickScopeCollapsed || !ownsScopeBuilder || estimateType !== 'exterior' || !isExterior);
       updateInteriorPreview(room);
       updateExteriorPreview(room);
     }
@@ -1767,6 +1791,7 @@ import Base from '../../layouts/Base.astro';
     document.getElementById('add-room').addEventListener('click', () => addRoom());
     document.getElementById('add-line-item').addEventListener('click', () => addLineItem());
     document.getElementById('estimate-type').addEventListener('change', () => {
+      setQuickScopeCollapsed(false);
       applyEstimateType();
       calculateTotal();
     });
@@ -1775,6 +1800,9 @@ import Base from '../../layouts/Base.astro';
         console.error('Failed to load production estimator', err);
         showSetupError(err.message || 'Failed to load estimator setup');
       });
+    });
+    document.getElementById('edit-quick-scope').addEventListener('click', () => {
+      setQuickScopeCollapsed(false);
     });
     document.getElementById('quick-scope-builder').addEventListener('click', (event) => {
       if (event.target.classList.contains('assumption-info')) {
