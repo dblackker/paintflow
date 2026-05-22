@@ -3,9 +3,9 @@ import Base from '../../layouts/Base.astro';
 ---
 
 <Base title="Messages">
-  <div class="min-h-screen bg-gray-50">
-    <main class="mx-auto flex min-h-screen max-w-7xl flex-col px-0 sm:px-4 lg:px-8">
-      <header class="border-b bg-white px-4 py-3 sm:mt-5 sm:rounded-t-lg sm:border sm:border-b-0">
+  <div class="h-[calc(100dvh-4rem)] overflow-hidden bg-gray-50">
+    <main class="mx-auto flex h-full max-w-7xl flex-col px-0 sm:px-4 lg:px-8">
+      <header class="shrink-0 border-b bg-white px-4 py-3 sm:mt-5 sm:rounded-t-lg sm:border sm:border-b-0">
         <div class="flex items-center justify-between gap-3">
           <div>
             <h1 class="text-xl font-semibold text-gray-950">Messages</h1>
@@ -15,7 +15,7 @@ import Base from '../../layouts/Base.astro';
         </div>
       </header>
 
-      <section class="grid min-h-[calc(100vh-5.5rem)] flex-1 grid-cols-1 overflow-hidden bg-white sm:min-h-[calc(100vh-8rem)] sm:rounded-b-lg sm:border lg:grid-cols-[360px_minmax(0,1fr)]">
+      <section class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white sm:rounded-b-lg sm:border lg:grid-cols-[360px_minmax(0,1fr)]">
         <aside id="conversation-pane" class="flex min-h-0 flex-col border-r lg:flex">
           <div class="border-b p-3">
             <label class="block">
@@ -29,7 +29,7 @@ import Base from '../../layouts/Base.astro';
         </aside>
 
         <section id="thread-pane" class="hidden min-h-0 flex-col lg:flex">
-          <div class="flex items-center gap-3 border-b p-3">
+          <div class="shrink-0 flex items-center gap-3 border-b p-3">
             <button id="back-to-inbox" class="btn-secondary btn-sm lg:hidden" type="button">Inbox</button>
             <div class="min-w-0 flex-1">
               <h2 id="thread-name" class="truncate font-semibold text-gray-950">Select a conversation</h2>
@@ -38,13 +38,13 @@ import Base from '../../layouts/Base.astro';
             <a id="customer-link" class="btn-secondary btn-sm hidden" href="#">CRM</a>
           </div>
 
-          <div id="messages" class="min-h-0 flex-1 overflow-y-auto bg-gray-50 p-3 sm:p-5">
+          <div id="messages" class="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-gray-50 p-3 sm:p-5">
             <div class="mx-auto mt-10 max-w-sm rounded-lg border bg-white p-5 text-center text-sm text-gray-600">
               Select a conversation to view the full SMS history.
             </div>
           </div>
 
-          <div id="composer-wrap" class="border-t bg-white p-3 sm:p-4">
+          <div id="composer-wrap" class="sticky bottom-0 z-10 shrink-0 border-t bg-white p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_20px_rgba(15,23,42,0.06)] sm:p-4">
             <div id="quick-replies" class="mb-2 flex gap-2 overflow-x-auto pb-1"></div>
             <form id="send-form" class="grid grid-cols-[1fr_auto] gap-2">
               <label class="min-w-0">
