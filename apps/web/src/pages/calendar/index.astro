@@ -18,6 +18,8 @@ import Icon from '../../components/Icon.astro';
 
     .schedule-day {
       min-height: 10rem;
+      display: flex;
+      flex-direction: column;
       border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 78%, transparent);
       border-radius: var(--pf-radius);
       background: var(--md-sys-color-surface-container-lowest);
@@ -41,9 +43,23 @@ import Icon from '../../components/Icon.astro';
     }
 
     .schedule-day-add {
-      min-height: 1.9rem;
-      padding-inline: 0.55rem;
+      min-height: 1.65rem;
+      padding: 0 0.15rem;
       white-space: nowrap;
+      color: var(--md-sys-color-primary);
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .schedule-day-add:hover {
+      text-decoration: underline;
+    }
+
+    .schedule-day-footer {
+      margin-top: auto;
+      padding-top: 0.6rem;
+      display: flex;
+      justify-content: flex-end;
     }
 
     .schedule-quick-form {
@@ -474,13 +490,9 @@ import Icon from '../../components/Icon.astro';
                 <p class="text-sm font-semibold text-gray-950">${date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
                 <p class="text-xs text-gray-500">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
               </div>
-              <div class="flex shrink-0 flex-col items-end gap-1">
-                ${key === todayKey ? '<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
-                <button type="button" class="schedule-day-add btn-text btn-sm justify-center" data-quick-schedule-day="${key}">Add job</button>
-              </div>
+              ${key === todayKey ? '<span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
             </div>
-            ${quickSchedulePanel(key)}
-            <div class="grid gap-2">
+            <div class="schedule-day-items grid gap-2">
               ${dayJobs.map(jobCard).join('')}
               ${dayEvents.map((event) => `
                 <div class="schedule-google-card text-xs">
@@ -489,6 +501,10 @@ import Icon from '../../components/Icon.astro';
                 </div>
               `).join('')}
               ${empty}
+            </div>
+            ${quickSchedulePanel(key)}
+            <div class="schedule-day-footer">
+              <button type="button" class="schedule-day-add" data-quick-schedule-day="${key}">+ Add job</button>
             </div>
           </div>
         `;
