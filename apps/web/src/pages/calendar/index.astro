@@ -1,39 +1,16 @@
 ---
-import '../../styles/design-system.css';
+import Base from '../../layouts/Base.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Calendar - PaintFlow</title>
-  </head>
-  <body class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/jobs" class="text-gray-600 hover:text-gray-900">Jobs</a>
-              <a href="/calendar" class="text-blue-600 font-medium">Calendar</a>
-            </nav>
-          </div>
-          <button id="sync-btn" class="btn-primary">
-            Connect Google Calendar
-          </button>
-        </div>
-      </div>
-    </nav>
-
+<Base title="Calendar - PaintFlow">
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="mb-6 flex justify-between items-center">
         <div>
           <h2 class="text-2xl font-bold text-gray-900">Schedule</h2>
           <p class="text-gray-600">Manage job scheduling</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          <button id="sync-btn" class="btn-primary btn-sm">Connect Google Calendar</button>
           <button id="prev-btn" class="btn-secondary btn-sm">Prev</button>
           <button id="today-btn" class="btn-secondary btn-sm">Today</button>
           <button id="next-btn" class="btn-secondary btn-sm">Next</button>
@@ -156,5 +133,4 @@ import '../../styles/design-system.css';
         document.getElementById('calendar-grid').innerHTML = '<div class="text-center text-red-600 py-12">Failed to load calendar</div>';
       });
     </script>
-  </body>
-</html>
+</Base>

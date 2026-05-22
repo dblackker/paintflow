@@ -1,27 +1,8 @@
 ---
+import Base from '../layouts/Base.astro';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Reporting - PaintFlow</title>
-  </head>
-  <body class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/reporting" class="text-blue-600 font-medium">Reporting</a>
-            </nav>
-          </div>
-        </div>
-      </div>
-    </nav>
-
+<Base title="Reporting - PaintFlow">
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h2 class="text-2xl font-bold text-gray-900 mb-6">Reporting Dashboard</h2>
 
@@ -91,5 +72,4 @@
         </div>
       </div>
     </main>
-  </body>
-</html>
+</Base>

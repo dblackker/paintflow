@@ -2,6 +2,7 @@
 import '../../../styles/design-system.css';
 import PhotoAnnotator from '../../../components/PhotoAnnotator.astro';
 import DetailBackButton from '../../../components/DetailBackButton.astro';
+import AuthBridge from '../../../components/AuthBridge.astro';
 
 const { id } = Astro.params;
 ---
@@ -12,6 +13,7 @@ const { id } = Astro.params;
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Estimate Photos - PaintFlow</title>
+  <AuthBridge />
 </head>
 <body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b sticky top-0 z-10">

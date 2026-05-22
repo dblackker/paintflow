@@ -1,25 +1,16 @@
 ---
-import '../styles/design-system.css';
+import Base from '../layouts/Base.astro';
 ---
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoices - PaintFlow</title>
-</head>
-<body class="bg-gray-50 min-h-screen">
-  <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <h1 class="text-xl font-semibold">Material Invoices</h1>
-        <button id="upload-btn" class="btn-primary btn-sm">Upload Invoice</button>
+<Base title="Material Invoices - PaintFlow">
+<main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Material Invoices</h1>
+        <p class="text-gray-600">Track supplier invoices and material purchases.</p>
       </div>
+      <button id="upload-btn" class="btn-primary btn-sm">Upload Invoice</button>
     </div>
-  </nav>
-
-  <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
       <p class="text-sm text-blue-800">Upload supplier invoices (CSV) to track material costs and update pricing automatically.</p>
     </div>
@@ -117,5 +108,4 @@ Primer,SW-456,2,25.00,50.00</pre>
 
     loadPurchases();
   </script>
-</body>
-</html>
+</Base>
