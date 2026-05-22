@@ -22,9 +22,6 @@ import Base from '../../layouts/Base.astro';
       .production-room-header {
         gap: 0.65rem;
       }
-      .production-room-header input[data-room-name] {
-        font-size: 1rem;
-      }
       .production-room-actions {
         justify-content: flex-end;
       }
@@ -106,19 +103,19 @@ import Base from '../../layouts/Base.astro';
           <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 class="text-lg font-semibold text-gray-900">Scope Builder</h2>
-              <p class="text-sm text-gray-600">Generate a starter scope, then adjust rooms, substrates, prep, methods, and measurements.</p>
+              <p id="scope-builder-helper" class="text-sm text-gray-600">Use starter scope for a fast first pass, or add rooms and substrates manually.</p>
             </div>
           </div>
           <div id="quick-scope-builder" class="hidden space-y-3">
             <div id="quick-scope-summary" class="hidden rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm text-blue-950">
               <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p id="quick-scope-summary-text" class="font-medium">Starter scope added. Refine the generated substrates below.</p>
-                <button id="edit-quick-scope" type="button" class="btn-text btn-sm justify-center">Review assumptions</button>
+                <p id="quick-scope-summary-text" class="text-gray-700">Starter scope added. Refine the generated substrates below.</p>
+                <button id="edit-quick-scope" type="button" class="btn-text btn-sm justify-center">Review</button>
               </div>
             </div>
             <div id="quick-scope-skip-summary" class="hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
               <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p class="font-medium">Starter scope skipped. Add rooms and substrates manually below.</p>
+                <p class="text-gray-700">Starter scope skipped. Add rooms and substrates manually below.</p>
                 <button id="restore-quick-scope" type="button" class="btn-text btn-sm justify-center">Use starter scope</button>
               </div>
             </div>
@@ -694,8 +691,11 @@ import Base from '../../layouts/Base.astro';
       div.className = 'production-room bg-white rounded-lg shadow-sm border p-4';
       div.id = roomId;
       div.innerHTML = `
-        <div class="production-room-header flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
-          <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room, side, or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
+        <div class="production-room-header flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-3">
+          <label class="min-w-0 flex-1">
+            <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Area</span>
+            <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room, side, or area name" class="input min-w-0 text-base font-semibold" data-room-name>
+          </label>
           <input type="hidden" data-area-type value="${estimateAreaType()}">
           <div class="production-room-actions flex gap-3">
             <button type="button" class="copy-room btn-text btn-sm">Copy</button>
@@ -1207,11 +1207,13 @@ import Base from '../../layouts/Base.astro';
       const summary = document.getElementById('quick-scope-summary');
       const skipSummary = document.getElementById('quick-scope-skip-summary');
       const summaryCopy = document.getElementById('quick-scope-summary-text');
+      const helper = document.getElementById('scope-builder-helper');
       if (!builder || !summary || !skipSummary) return;
       builder.dataset.collapsed = String(collapsed);
       builder.dataset.collapsedMode = collapsed ? mode : '';
       summary.classList.toggle('hidden', !collapsed || mode !== 'generated');
       skipSummary.classList.toggle('hidden', !collapsed || mode !== 'skipped');
+      helper?.classList.toggle('hidden', collapsed);
       if (summaryText && summaryCopy) summaryCopy.textContent = summaryText;
       const room = primaryScopeRoom();
       if (room) syncAreaType(room);
