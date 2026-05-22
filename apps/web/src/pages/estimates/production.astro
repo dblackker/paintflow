@@ -109,6 +109,7 @@ import Base from '../../layouts/Base.astro';
               <p class="text-sm text-gray-600">Generate a starter scope, then adjust rooms, substrates, prep, methods, and measurements.</p>
             </div>
           </div>
+          <div id="quick-scope-builder" class="hidden bg-white rounded-lg shadow-sm border p-4"></div>
           <div id="rooms-container" class="space-y-4"></div>
           <button id="add-room" class="btn-secondary w-full justify-center">
             Add Room or Area
@@ -683,7 +684,6 @@ import Base from '../../layouts/Base.astro';
         <div class="production-room-header flex flex-col sm:flex-row gap-3 sm:items-center mb-3">
           <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room, side, or area name" class="text-lg font-semibold bg-transparent border-b flex-1 min-w-0" data-room-name>
           <input type="hidden" data-area-type value="${estimateAreaType()}">
-          <span class="rounded-full border bg-gray-50 px-3 py-1 text-xs font-medium text-gray-600" data-area-label>${estimateAreaLabel()}</span>
           <div class="production-room-actions flex gap-3">
             <button type="button" class="copy-room btn-text btn-sm">Copy</button>
             <button type="button" class="remove-room btn-text btn-sm text-red-700">Remove</button>
@@ -1169,10 +1169,40 @@ import Base from '../../layouts/Base.astro';
       surface.querySelector('[data-measure-helper]').textContent = config.helper;
     }
 
+    function quickScopeBuilder() {
+      return document.getElementById('quick-scope-builder');
+    }
+
+    function primaryScopeRoom() {
+      const builder = quickScopeBuilder();
+      return document.getElementById(builder?.dataset.scopeRoomId || '') || document.querySelector('#rooms-container > div');
+    }
+
+    function scopeControlRoot(room) {
+      const builder = quickScopeBuilder();
+      return builder?.dataset.scopeRoomId === room?.id ? builder : room;
+    }
+
+    function syncQuickScopeBuilder() {
+      const builder = quickScopeBuilder();
+      if (!builder) return;
+      const firstRoom = document.querySelector('#rooms-container > div');
+      builder.classList.toggle('hidden', !firstRoom);
+      builder.dataset.scopeRoomId = firstRoom?.id || '';
+      const interiorPanel = builder.querySelector('[data-interior-assumptions]')
+        || document.querySelector('#rooms-container [data-interior-assumptions]');
+      const exteriorPanel = builder.querySelector('[data-exterior-assumptions]')
+        || document.querySelector('#rooms-container [data-exterior-assumptions]');
+      if (interiorPanel && interiorPanel.parentElement !== builder) builder.appendChild(interiorPanel);
+      if (exteriorPanel && exteriorPanel.parentElement !== builder) builder.appendChild(exteriorPanel);
+      document.querySelectorAll('#rooms-container [data-interior-assumptions], #rooms-container [data-exterior-assumptions]')
+        .forEach(panel => panel.remove());
+    }
+
     function syncScopeBuilderVisibility() {
       const rooms = Array.from(document.querySelectorAll('#rooms-container > div'));
-      rooms.forEach((room, index) => {
-        room.dataset.scopeOwner = index === 0 ? 'true' : 'false';
+      syncQuickScopeBuilder();
+      rooms.forEach((room) => {
         syncAreaType(room);
       });
     }
@@ -1180,7 +1210,6 @@ import Base from '../../layouts/Base.astro';
     function applyEstimateType() {
       document.querySelectorAll('#rooms-container > div').forEach((room) => {
         room.querySelector('[data-area-type]').value = estimateAreaType();
-        room.querySelector('[data-area-label]').textContent = estimateAreaLabel();
         const nameInput = room.querySelector('[data-room-name]');
         const currentName = nameInput.value.trim();
         if (['', 'Interior', 'Exterior', 'Cabinets', 'Custom area'].includes(currentName)) {
@@ -1194,16 +1223,6 @@ import Base from '../../layouts/Base.astro';
       return document.getElementById('estimate-type')?.value === 'exterior' ? 'exterior' : 'interior';
     }
 
-    function estimateAreaLabel() {
-      const type = document.getElementById('estimate-type')?.value || 'interior';
-      return ({
-        interior: 'Interior scope',
-        exterior: 'Exterior scope',
-        cabinet: 'Specialty scope',
-        custom: 'Custom scope',
-      })[type] || 'Scope';
-    }
-
     function estimateDefaultAreaName() {
       const type = document.getElementById('estimate-type')?.value || 'interior';
       return ({
@@ -1215,20 +1234,21 @@ import Base from '../../layouts/Base.astro';
     }
 
     function syncAreaType(room) {
-      const ownsScopeBuilder = room.dataset.scopeOwner === 'true';
+      const ownsScopeBuilder = quickScopeBuilder()?.dataset.scopeRoomId === room?.id;
       const estimateType = document.getElementById('estimate-type')?.value || 'interior';
       room.querySelector('[data-area-type]').value = estimateAreaType();
-      room.querySelector('[data-area-label]').textContent = estimateAreaLabel();
       const isExterior = estimateAreaType() === 'exterior';
-      room.querySelector('[data-interior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'interior' || isExterior);
-      room.querySelector('[data-exterior-assumptions]').classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'exterior' || !isExterior);
+      const root = scopeControlRoot(room);
+      root?.querySelector('[data-interior-assumptions]')?.classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'interior' || isExterior);
+      root?.querySelector('[data-exterior-assumptions]')?.classList.toggle('hidden', !ownsScopeBuilder || estimateType !== 'exterior' || !isExterior);
       updateInteriorPreview(room);
       updateExteriorPreview(room);
     }
 
     function interiorAssumptions(room) {
-      const numberValue = (key, fallback = 0) => Number(room?.querySelector(`[data-interior="${key}"]`)?.value || fallback);
-      const checked = (key) => Boolean(room?.querySelector(`[data-interior="${key}"]`)?.checked);
+      const root = scopeControlRoot(room);
+      const numberValue = (key, fallback = 0) => Number(root?.querySelector(`[data-interior="${key}"]`)?.value || fallback);
+      const checked = (key) => Boolean(root?.querySelector(`[data-interior="${key}"]`)?.checked);
       return {
         bedrooms: numberValue('bedrooms'),
         bathrooms: numberValue('bathrooms'),
@@ -1238,14 +1258,14 @@ import Base from '../../layouts/Base.astro';
         hallways: numberValue('hallways'),
         closets: numberValue('closets'),
         ceilingHeight: numberValue('ceilingHeight', 9),
-        trimScope: room?.querySelector('[data-interior="trimScope"]')?.value || 'base-casing',
+        trimScope: root?.querySelector('[data-interior="trimScope"]')?.value || 'base-casing',
         includeCeilings: checked('includeCeilings'),
         includeDoors: checked('includeDoors'),
       };
     }
 
     function interiorRoomDimension(room, roomType, dimension, fallback) {
-      const input = room?.querySelector(`[data-interior-size="${roomType}"][data-dimension="${dimension}"]`);
+      const input = scopeControlRoot(room)?.querySelector(`[data-interior-size="${roomType}"][data-dimension="${dimension}"]`);
       const value = Number(input?.value || fallback);
       return Number.isFinite(value) && value > 0 ? value : fallback;
     }
@@ -1324,11 +1344,12 @@ import Base from '../../layouts/Base.astro';
     }
 
     function updateInteriorPreview(room) {
-      const preview = room?.querySelector('[data-interior-preview]');
+      const targetRoom = primaryScopeRoom() || room;
+      const preview = scopeControlRoot(targetRoom)?.querySelector('[data-interior-preview]');
       if (!preview) return;
-      const quantities = interiorAssumptionQuantities(room);
-      const hasInteriorSurface = Array.from(room.querySelectorAll('[data-surface-item]')).some((surface) => interiorSurfaceKind(surface));
-      const roomSchedule = interiorRoomTypes(room)
+      const quantities = interiorAssumptionQuantities(targetRoom);
+      const hasInteriorSurface = Array.from(targetRoom.querySelectorAll('[data-surface-item]')).some((surface) => interiorSurfaceKind(surface));
+      const roomSchedule = interiorRoomTypes(targetRoom)
         .map(type => `${type.count} ${type.name.toLowerCase()} @ ${type.length} x ${type.width}`)
         .join(', ');
 
@@ -1351,7 +1372,8 @@ import Base from '../../layouts/Base.astro';
     }
 
     function exteriorAssumptions(room) {
-      const read = (key, fallback = 0) => Number(room?.querySelector(`[data-exterior="${key}"]`)?.value || fallback);
+      const root = scopeControlRoot(room);
+      const read = (key, fallback = 0) => Number(root?.querySelector(`[data-exterior="${key}"]`)?.value || fallback);
       return {
         perimeter: read('perimeter'),
         stories: read('stories', 1),
@@ -1378,12 +1400,13 @@ import Base from '../../layouts/Base.astro';
     }
 
     function updateExteriorPreview(room) {
-      const preview = room?.querySelector('[data-assumption-preview]');
+      const targetRoom = primaryScopeRoom() || room;
+      const preview = scopeControlRoot(targetRoom)?.querySelector('[data-assumption-preview]');
       if (!preview) return;
 
-      const assumptions = exteriorAssumptions(room);
-      const quantities = exteriorAssumptionQuantities(room);
-      const hasExteriorSurface = Array.from(room.querySelectorAll('[data-surface-item]')).some((surface) => {
+      const assumptions = exteriorAssumptions(targetRoom);
+      const quantities = exteriorAssumptionQuantities(targetRoom);
+      const hasExteriorSurface = Array.from(targetRoom.querySelectorAll('[data-surface-item]')).some((surface) => {
         const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
         return rate && isExteriorRate(rate);
       });
@@ -1753,6 +1776,28 @@ import Base from '../../layouts/Base.astro';
         showSetupError(err.message || 'Failed to load estimator setup');
       });
     });
+    document.getElementById('quick-scope-builder').addEventListener('click', (event) => {
+      if (event.target.classList.contains('assumption-info')) {
+        const button = event.target;
+        const panel = button.closest('.relative').querySelector('[data-assumption-info]');
+        const willOpen = panel.classList.contains('hidden');
+        document.querySelectorAll('[data-assumption-info]').forEach(info => info.classList.add('hidden'));
+        document.querySelectorAll('.assumption-info').forEach(infoButton => infoButton.setAttribute('aria-expanded', 'false'));
+        panel.classList.toggle('hidden', !willOpen);
+        button.setAttribute('aria-expanded', String(willOpen));
+        event.stopPropagation();
+        return;
+      }
+      const room = primaryScopeRoom();
+      if (!room) return;
+      if (event.target.classList.contains('generate-exterior-scope')) {
+        generateExteriorScope(room);
+        return;
+      }
+      if (event.target.classList.contains('generate-interior-scope')) {
+        generateInteriorScope(room);
+      }
+    });
     document.getElementById('rooms-container').addEventListener('click', (event) => {
       if (event.target.classList.contains('assumption-info')) {
         const button = event.target;
@@ -1813,16 +1858,16 @@ import Base from '../../layouts/Base.astro';
     });
     document.addEventListener('input', (event) => {
       if (event.target.matches('[data-interior], [data-interior-size]')) {
-        updateInteriorPreview(event.target.closest('#rooms-container > div'));
+        updateInteriorPreview(primaryScopeRoom());
       }
       if (event.target.matches('[data-exterior]')) {
-        updateExteriorPreview(event.target.closest('#rooms-container > div'));
+        updateExteriorPreview(primaryScopeRoom());
       }
       if (event.target.closest('main')) calculateTotal();
     });
     document.addEventListener('change', (event) => {
       if (event.target.matches('[data-interior], [data-interior-size]')) {
-        updateInteriorPreview(event.target.closest('#rooms-container > div'));
+        updateInteriorPreview(primaryScopeRoom());
       }
       if (event.target.matches('[data-field="rateId"]')) {
         const surface = event.target.closest('[data-surface-item]');
