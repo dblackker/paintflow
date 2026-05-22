@@ -1,0 +1,23 @@
+---
+import Icon from './Icon.astro';
+
+interface Props {
+  href: string;
+  label: string;
+  class?: string;
+}
+
+const { href, label, class: className = '' } = Astro.props;
+---
+
+<a href={href} class={`detail-back-button btn-icon btn-icon-tonal ${className}`} aria-label={label} title={label}>
+  <Icon name="chevron-left" />
+</a>
+
+<style>
+  .detail-back-button {
+    height: 2.5rem;
+    width: 2.5rem;
+    flex: 0 0 auto;
+  }
+</style>

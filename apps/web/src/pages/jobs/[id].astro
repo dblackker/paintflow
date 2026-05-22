@@ -4,6 +4,7 @@ import Toast from '../../components/Toast.astro';
 import ContactSummary from '../../components/ContactSummary.astro';
 import StatusBadge from '../../components/StatusBadge.astro';
 import Icon from '../../components/Icon.astro';
+import DetailBackButton from '../../components/DetailBackButton.astro';
 ---
 
 <!DOCTYPE html>
@@ -15,39 +16,18 @@ import Icon from '../../components/Icon.astro';
   <style>
     .job-detail-nav-row {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
       gap: 0.75rem;
       min-height: 4rem;
     }
 
-    .job-detail-title {
-      justify-self: center;
-      min-width: 0;
-      text-align: center;
-    }
-
-    .job-detail-title h1 {
-      font-size: 1.25rem;
-      font-weight: 650;
-      line-height: 1.2;
-      margin: 0;
-    }
-
-    .job-detail-title p {
-      display: none;
-      font-size: 0.75rem;
-      line-height: 1.2;
-      margin-top: 0.15rem;
-    }
-
-    .job-detail-back {
-      height: 2.5rem;
-      width: 2.5rem;
-    }
-
     .job-photo-mobile-copy {
       display: none;
+    }
+
+    .job-detail-nav-action {
+      justify-self: end;
     }
 
     .job-photo-form {
@@ -62,7 +42,7 @@ import Icon from '../../components/Icon.astro';
         font-size: 1rem;
       }
       .job-detail-nav-row {
-        grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+        grid-template-columns: 2.5rem minmax(0, 1fr);
         min-height: 3.5rem;
       }
       .job-detail-nav-action {
@@ -132,12 +112,7 @@ import Icon from '../../components/Icon.astro';
   <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="job-detail-nav-row h-16">
-        <a href="/jobs" class="job-detail-back btn-icon btn-icon-tonal" aria-label="Back to jobs" title="Back to jobs">
-          <Icon name="chevron-left" />
-        </a>
-        <div class="job-detail-title" aria-live="polite">
-          <h1>Job Detail</h1>
-        </div>
+        <DetailBackButton href="/jobs" label="Back to jobs" />
         <button id="complete-btn" class="job-detail-nav-action hidden btn-tonal btn-sm">Mark Complete</button>
       </div>
     </div>

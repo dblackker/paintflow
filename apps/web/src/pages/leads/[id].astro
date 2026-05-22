@@ -1,11 +1,14 @@
 ---
 import Base from '../../layouts/Base.astro';
+import DetailBackButton from '../../components/DetailBackButton.astro';
 ---
 
 <Base title="Customer Detail">
   <div class="min-h-screen bg-gray-50">
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-      <a href="/leads" class="inline-flex items-center text-sm text-gray-600 hover:text-gray-950 mb-4">&larr; Leads</a>
+      <div class="mb-4">
+        <DetailBackButton href="/leads" label="Back to leads" />
+      </div>
       <div id="customer-root" class="space-y-5">
         <div class="bg-white border rounded-lg p-8 text-center text-gray-500">Loading customer...</div>
       </div>
