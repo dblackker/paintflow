@@ -4,6 +4,7 @@ import { tenantMiddleware } from './middleware/tenant';
 import { requestLogging } from './middleware/request-logging';
 import { processDrips } from './cron/drips';
 import { processReviewRequests } from './cron/reviewRequests';
+import { processMissedPunches } from './cron/missedPunches';
 import type { Env, Variables } from './types';
 import authRoutes from './routes/auth';
 import leadsRoutes from './routes/leads';
@@ -159,15 +160,26 @@ app.get('/api/cron/reviews', async (c) => {
   return c.json(result);
 });
 
+app.get('/api/cron/missed-punches', async (c) => {
+  const authHeader = c.req.header('authorization');
+  if (!authHeader || authHeader !== `Bearer ${c.env.CRON_SECRET}`) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  const result = await processMissedPunches(c.env);
+  return c.json(result);
+});
+
 async function runScheduledJobs(env: Env) {
-  const [drips, reviews] = await Promise.allSettled([
+  const [drips, reviews, missedPunches] = await Promise.allSettled([
     processDrips(env),
     processReviewRequests(env),
+    processMissedPunches(env),
   ]);
 
   return {
     drips: drips.status === 'fulfilled' ? drips.value : { error: drips.reason?.message || 'Drip processing failed' },
     reviews: reviews.status === 'fulfilled' ? reviews.value : { error: reviews.reason?.message || 'Review processing failed' },
+    missedPunches: missedPunches.status === 'fulfilled' ? missedPunches.value : { error: missedPunches.reason?.message || 'Missed punch processing failed' },
   };
 }
 

@@ -55,6 +55,15 @@ const dashboardActionsSchema = z.object({
   })).max(20),
 }).strict();
 
+const timeClockSettingsSchema = z.object({
+  roundingIncrementMinutes: z.coerce.number().int().refine((value) => [1, 5, 6, 15].includes(value), {
+    message: 'Rounding must be exact, 5, 6, or 15 minutes',
+  }).optional(),
+  maxShiftHours: z.coerce.number().min(4).max(24).optional(),
+  reminderWindowStartHour: z.coerce.number().int().min(0).max(23).optional(),
+  reminderWindowEndHour: z.coerce.number().int().min(1).max(24).optional(),
+}).strict();
+
 const brandingPatchSchema = z.object({
   companyName: optionalText(255),
   logoUrl: optionalText(2000),
@@ -112,6 +121,22 @@ function onboardingState(settings: typeof orgSettings.$inferSelect | null, servi
 function readBusinessHours(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function timeClockSettingsFromPreferences(preferences: Record<string, unknown>) {
+  const raw = preferences.timeClock && typeof preferences.timeClock === 'object' && !Array.isArray(preferences.timeClock)
+    ? preferences.timeClock as Record<string, unknown>
+    : {};
+  const rounding = Number(raw.roundingIncrementMinutes);
+  const maxShift = Number(raw.maxShiftHours);
+  const start = Number(raw.reminderWindowStartHour);
+  const end = Number(raw.reminderWindowEndHour);
+  return {
+    roundingIncrementMinutes: [1, 5, 6, 15].includes(rounding) ? rounding : 15,
+    maxShiftHours: maxShift >= 4 && maxShift <= 24 ? maxShift : 12,
+    reminderWindowStartHour: start >= 0 && start <= 23 ? start : 18,
+    reminderWindowEndHour: end >= 1 && end <= 24 ? end : 22,
+  };
 }
 
 // GET /v1/settings/org
@@ -232,6 +257,48 @@ settings.put('/dashboard-actions', async (c) => {
     .returning();
 
   return c.json({ data: { actions: readBusinessHours(settings.businessHours).dashboardQuickActions ?? [] } });
+});
+
+settings.get('/time-clock', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  let settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  if (!settings) {
+    [settings] = await db.insert(orgSettings).values({ orgId }).returning();
+  }
+
+  return c.json({ data: timeClockSettingsFromPreferences(readBusinessHours(settings.businessHours)) });
+});
+
+settings.put('/time-clock', async (c) => {
+  const orgId = c.get('orgId');
+  const parsed = timeClockSettingsSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  const preferences = readBusinessHours(existing?.businessHours);
+  const current = timeClockSettingsFromPreferences(preferences);
+  const timeClock = {
+    ...current,
+    ...Object.fromEntries(Object.entries(parsed.data).filter(([, value]) => value !== undefined)),
+  };
+  const businessHours = { ...preferences, timeClock };
+
+  const [settings] = await db.insert(orgSettings)
+    .values({ orgId, businessHours })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { businessHours, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({ data: timeClockSettingsFromPreferences(readBusinessHours(settings.businessHours)) });
 });
 
 settings.get('/branding', async (c) => {

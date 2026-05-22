@@ -24,7 +24,7 @@ bucket_name = "paintflow-uploads"
 preview_bucket_name = "paintflow-uploads-preview"
 
 [triggers]
-crons = ["0 9 * * *"]
+crons = ["*/30 1-6 * * *"]
 
 [env.production]
 vars = { APP_URL = "https://api.paintflow.app", PUBLIC_URL = "https://app.paintflow.app", CORS_ORIGINS = "https://app.paintflow.app,https://paintflow.app", ENVIRONMENT = "production", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter", STRIPE_PRO_PRICE_ID = "price_replace_pro", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise", VAPID_PUBLIC_KEY = "", VAPID_SUBJECT = "mailto:admin@paintflow.app", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "PaintFlow" }

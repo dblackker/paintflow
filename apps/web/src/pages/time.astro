@@ -21,6 +21,9 @@ import Icon from '../components/Icon.astro';
       #timesheet {
         gap: 0.65rem;
       }
+      .punch-actions {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
@@ -32,6 +35,19 @@ import Icon from '../components/Icon.astro';
       </div>
       <button id="add-time" class="btn-primary w-full sm:w-auto">Log time</button>
     </div>
+
+    <section id="punch-clock" class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6">
+      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Mobile time clock</p>
+          <h2 class="text-lg font-semibold mt-1">Punch in / out</h2>
+          <p id="punch-status-copy" class="text-sm text-gray-600 mt-1">Loading punch status...</p>
+        </div>
+        <div id="punch-current" class="text-sm lg:text-right"></div>
+      </div>
+      <div id="punch-controls" class="mt-4 grid gap-3"></div>
+      <div id="punch-review" class="mt-4 hidden"></div>
+    </section>
 
     <section class="time-toolbar surface-panel p-4 mb-4 sm:mb-6">
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
@@ -114,7 +130,9 @@ import Icon from '../components/Icon.astro';
     let allEntries = [];
     let members = [];
     let jobs = [];
+    let punchStatus = null;
     let isSavingTime = false;
+    let isPunching = false;
     const supportedViewModes = new Set(['day', 'job', 'employee']);
     let viewMode = supportedViewModes.has(localStorage.getItem('paintflow.time.viewMode'))
       ? localStorage.getItem('paintflow.time.viewMode')
@@ -152,6 +170,11 @@ import Icon from '../components/Icon.astro';
       return formatDate(new Date(value));
     }
 
+    function toDateTimeLocal(date = new Date()) {
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    }
+
     async function api(path, options = {}) {
       const res = await fetch(`${API_URL}${path}`, {
         credentials: 'include',
@@ -178,11 +201,14 @@ import Icon from '../components/Icon.astro';
           api('/v1/jobs'),
           api('/v1/team/time'),
         ]);
+        const punchPayload = await api('/v1/team/punch/status').catch((err) => ({ data: { memberResolutionError: err.message } }));
 
         members = membersPayload.data || [];
         jobs = jobsPayload.data || [];
         allEntries = timePayload.data || [];
+        punchStatus = punchPayload.data;
         populateSelects();
+        renderPunchClock();
         renderTimesheet();
       } catch (e) {
         document.getElementById('loading').innerHTML = `<p class="text-red-600">${escapeHtml(e.message || 'Failed to load')}</p>`;
@@ -194,6 +220,233 @@ import Icon from '../components/Icon.astro';
         members.map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
       document.getElementById('job-select').innerHTML = '<option value="">Select job...</option>' +
         jobs.map((job) => `<option value="${job.id}">${escapeHtml(job.name)}</option>`).join('');
+    }
+
+    function punchJobOptions() {
+      const options = (punchStatus?.jobs?.length ? punchStatus.jobs : jobs)
+        .map((job) => `<option value="${job.id}">${escapeHtml(job.name)}</option>`)
+        .join('');
+      return `<option value="">Select job...</option>${options}`;
+    }
+
+    function punchMemberOptions() {
+      return (punchStatus?.members || [])
+        .map((member) => `<option value="${member.id}" ${member.id === punchStatus?.member?.id ? 'selected' : ''}>${escapeHtml(member.name)}</option>`)
+        .join('');
+    }
+
+    function activePunchHours(session) {
+      return ((Date.now() - new Date(session.startedAtActual).getTime()) / 36e5).toFixed(2);
+    }
+
+    function mapLink(latitude, longitude, label) {
+      if (!latitude || !longitude) return '';
+      const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
+      return `<a class="text-xs font-medium text-brand-700" href="${href}" target="_blank" rel="noreferrer">${label}</a>`;
+    }
+
+    function renderPunchClock() {
+      const controls = document.getElementById('punch-controls');
+      const current = document.getElementById('punch-current');
+      const copy = document.getElementById('punch-status-copy');
+      const review = document.getElementById('punch-review');
+      const status = punchStatus || {};
+      const active = status.activeSession;
+      const memberName = status.member?.name || 'Crew member';
+
+      if (status.memberResolutionError && !status.canManage) {
+        copy.textContent = status.memberResolutionError;
+        current.innerHTML = '';
+        controls.innerHTML = '<p class="text-sm text-gray-600">Ask an owner to link your login email to an active crew member on the Team page.</p>';
+        review.classList.add('hidden');
+        return;
+      }
+
+      if (active) {
+        copy.textContent = `${memberName} is punched in. GPS is captured again when clocking out.`;
+        current.innerHTML = `
+          <span class="chip">Clocked in</span>
+          <p class="font-semibold mt-1">${escapeHtml(active.jobName || 'Job')}</p>
+          <p class="text-gray-600">Started ${new Date(active.startedAtActual).toLocaleString()} • ${activePunchHours(active)} hrs</p>
+          ${active.status === 'missed_clock_out' ? '<p class="text-red-700 font-medium mt-1">Past the max shift window. Clock out with the actual end time.</p>' : ''}
+        `;
+        controls.innerHTML = `
+          <div class="grid punch-actions sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+            <label class="block">
+              <span class="form-label">Actual clock-out time if different</span>
+              <input id="punch-out-time" type="datetime-local" class="input" value="${toDateTimeLocal()}">
+            </label>
+            <label class="block">
+              <span class="form-label">Note for lead review</span>
+              <input id="punch-out-note" class="input" placeholder="Finished at 4:30, forgot to clock out">
+            </label>
+            <button id="punch-out-btn" class="btn-primary">Clock out</button>
+          </div>
+          <p class="text-xs text-gray-500">If you need to clock into a new job but forgot to clock out, close this previous shift first. It will be flagged for review.</p>
+        `;
+      } else {
+        copy.textContent = `${memberName} is not punched in. Start a job timer from the field with location permission enabled.`;
+        current.innerHTML = '<span class="chip">Not clocked in</span>';
+        controls.innerHTML = `
+          <div class="grid punch-actions sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+            ${status.canManage ? `<label class="block"><span class="form-label">Crew member</span><select id="punch-member" class="input">${punchMemberOptions()}</select></label>` : ''}
+            <label class="block">
+              <span class="form-label">Job</span>
+              <select id="punch-job" class="input">${punchJobOptions()}</select>
+            </label>
+            <label class="block">
+              <span class="form-label">Forgot clock-in time</span>
+              <input id="forgot-in-time" type="datetime-local" class="input" value="${toDateTimeLocal()}">
+            </label>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <button id="punch-in-btn" class="btn-primary">Clock in</button>
+              <button id="forgot-in-btn" class="btn-secondary">Forgot clock-in</button>
+            </div>
+          </div>
+        `;
+      }
+
+      renderPunchReview();
+      document.getElementById('punch-in-btn')?.addEventListener('click', () => punchIn(false));
+      document.getElementById('forgot-in-btn')?.addEventListener('click', () => punchIn(true));
+      document.getElementById('punch-out-btn')?.addEventListener('click', punchOut);
+    }
+
+    function renderPunchReview() {
+      const review = document.getElementById('punch-review');
+      const rows = punchStatus?.reviewQueue || [];
+      if (!punchStatus?.canManage || !rows.length) {
+        review.classList.add('hidden');
+        review.innerHTML = '';
+        return;
+      }
+      review.classList.remove('hidden');
+      review.innerHTML = `
+        <div class="border-t border-[var(--pf-border)] pt-4">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 class="font-semibold">Needs lead review</h3>
+              <p class="text-sm text-gray-600">Missed punches and long shifts stay visible until approved.</p>
+            </div>
+            <span class="chip">${rows.length}</span>
+          </div>
+          <div class="space-y-2">
+            ${rows.map((row) => `
+              <article class="rounded-lg border border-[var(--pf-border)] p-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div>
+                  <p class="font-semibold">${escapeHtml(row.teamMemberName)} • ${escapeHtml(row.jobName)}</p>
+                  <p class="text-sm text-gray-600">${escapeHtml(row.reviewLabel)} • Started ${new Date(row.startedAtActual).toLocaleString()}</p>
+                  ${row.endedAtActual ? `<p class="text-xs text-gray-500">Ended ${new Date(row.endedAtActual).toLocaleString()}</p>` : '<p class="text-xs text-red-700">Still needs clock-out</p>'}
+                  <p class="mt-1 flex flex-wrap gap-3">
+                    ${mapLink(row.startLatitude, row.startLongitude, 'Start GPS')}
+                    ${mapLink(row.endLatitude, row.endLongitude, 'End GPS')}
+                  </p>
+                </div>
+                <div class="flex gap-2 justify-end">
+                  <button class="btn-secondary btn-sm" data-review-punch="${row.id}" data-review-status="approved">Approve</button>
+                  <button class="btn-secondary btn-sm" data-review-punch="${row.id}" data-review-status="rejected">Reject</button>
+                </div>
+              </article>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      review.querySelectorAll('[data-review-punch]').forEach((button) => {
+        button.addEventListener('click', () => reviewPunch(button.dataset.reviewPunch, button.dataset.reviewStatus));
+      });
+    }
+
+    function getSelectedPunchMemberId() {
+      return document.getElementById('punch-member')?.value || undefined;
+    }
+
+    function requireLocation() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('Location is required, but this browser does not support geolocation.'));
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (position) => resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracyMeters: position.coords.accuracy,
+          }),
+          () => reject(new Error('Location permission is required to punch time.')),
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+        );
+      });
+    }
+
+    async function refreshPunchStatus() {
+      punchStatus = (await api('/v1/team/punch/status')).data;
+      renderPunchClock();
+      await loadData();
+    }
+
+    async function punchIn(forgot) {
+      if (isPunching) return;
+      const jobId = document.getElementById('punch-job')?.value;
+      if (!jobId) {
+        window.showToast?.('Select a job first', 'error');
+        return;
+      }
+      try {
+        isPunching = true;
+        const location = await requireLocation();
+        await api('/v1/team/punch/in', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...location,
+            jobId,
+            teamMemberId: getSelectedPunchMemberId(),
+            forgotPunchIn: forgot,
+            startedAt: forgot ? new Date(document.getElementById('forgot-in-time').value).toISOString() : undefined,
+            note: forgot ? 'Forgot to clock in; entered later from the app.' : undefined,
+          }),
+        });
+        window.showToast?.(forgot ? 'Clock-in created for review' : 'Clocked in', 'success');
+        await refreshPunchStatus();
+      } catch (err) {
+        window.showToast?.(err.message || 'Punch failed', 'error');
+      } finally {
+        isPunching = false;
+      }
+    }
+
+    async function punchOut() {
+      if (isPunching) return;
+      try {
+        isPunching = true;
+        const location = await requireLocation();
+        const note = document.getElementById('punch-out-note')?.value || '';
+        const endedAtValue = document.getElementById('punch-out-time')?.value;
+        await api('/v1/team/punch/out', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...location,
+            teamMemberId: getSelectedPunchMemberId(),
+            endedAt: endedAtValue ? new Date(endedAtValue).toISOString() : undefined,
+            note,
+            overrideReason: note || undefined,
+          }),
+        });
+        window.showToast?.('Clocked out', 'success');
+        await refreshPunchStatus();
+      } catch (err) {
+        window.showToast?.(err.message || 'Punch failed', 'error');
+      } finally {
+        isPunching = false;
+      }
+    }
+
+    async function reviewPunch(id, reviewStatus) {
+      await api(`/v1/team/punch/review/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reviewStatus }),
+      });
+      window.showToast?.(reviewStatus === 'approved' ? 'Punch approved' : 'Punch rejected', 'success');
+      await refreshPunchStatus();
     }
 
     function getWeekEntries() {
@@ -343,11 +596,18 @@ import Icon from '../components/Icon.astro';
 
     function renderEntry(entry, mode) {
       const hasDescription = Boolean(entry.description);
+      const flagged = entry.reviewStatus === 'flagged' || entry.reviewStatus === 'rejected';
+      const sourceLabel = entry.source === 'punch_clock' ? 'Punch clock' : null;
       const date = new Date(entry.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       const gridClass = 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]';
+      const detailLine = [
+        hasDescription ? entry.description : null,
+        sourceLabel,
+        flagged ? (entry.reviewReason || 'Needs review') : null,
+      ].filter(Boolean).join(' • ');
       const desktopCells = {
         date: `<p class="hidden lg:block text-gray-700 truncate">${date}</p>`,
-        job: `<div class="hidden lg:block min-w-0"><p class="text-gray-700 truncate">${escapeHtml(entry.jobName || 'Job')}</p>${hasDescription ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(entry.description)}</p>` : ''}</div>`,
+        job: `<div class="hidden lg:block min-w-0"><p class="text-gray-700 truncate">${escapeHtml(entry.jobName || 'Job')} ${flagged ? '<span class="chip pf-status-danger ml-1">Review</span>' : ''}</p>${detailLine ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(detailLine)}</p>` : ''}</div>`,
         employee: `<p class="hidden lg:block text-gray-700 truncate">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>`,
         hours: `<p class="hidden lg:block text-right font-medium">${Number(entry.hours).toFixed(2)}</p>`,
         cost: `<p class="hidden lg:block text-right font-medium">${currency(entry.totalCost)}</p>`,
@@ -360,9 +620,9 @@ import Icon from '../components/Icon.astro';
       };
       const mobileTitle = mode === 'job' ? entry.teamMemberName || 'Crew member' : entry.jobName || 'Job';
       const mobileParts = {
-        day: [entry.teamMemberName, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
-        job: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
-        employee: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), hasDescription ? entry.description : null],
+        day: [entry.teamMemberName, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), detailLine || null],
+        job: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), detailLine || null],
+        employee: [date, `${Number(entry.hours).toFixed(2)} hrs`, currency(entry.totalCost), detailLine || null],
       }[mode];
       const mobileContext = mobileParts.filter(Boolean).join(' - ');
 

@@ -112,6 +112,32 @@ import Icon from '../components/Icon.astro';
       </div>
     </section>
 
+    <section class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6">
+      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div>
+          <h2 class="font-semibold">Time Clock Policy</h2>
+          <p class="text-sm text-gray-600">Crew punch times are rounded for job costing while actual GPS punch events are kept for review.</p>
+        </div>
+        <form id="time-clock-form" class="grid grid-cols-1 sm:grid-cols-[8rem_8rem_auto] gap-3 w-full lg:w-auto">
+          <label>
+            <span class="form-label">Rounding</span>
+            <select name="roundingIncrementMinutes" class="input">
+              <option value="1">Exact</option>
+              <option value="5">5 min</option>
+              <option value="6">6 min</option>
+              <option value="15">15 min</option>
+            </select>
+          </label>
+          <label>
+            <span class="form-label">Max shift</span>
+            <input name="maxShiftHours" type="number" min="4" max="24" step="0.5" inputmode="decimal" class="input">
+          </label>
+          <button class="btn-secondary sm:self-end" type="submit">Save policy</button>
+        </form>
+      </div>
+      <p class="text-xs text-gray-500 mt-3">Missed clock-out reminders are checked every 30 minutes during the evening review window, 6pm-10pm Pacific.</p>
+    </section>
+
     <section class="surface-panel overflow-hidden">
       <div class="p-4 sm:p-5 border-b border-[var(--pf-border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -203,6 +229,7 @@ import Icon from '../components/Icon.astro';
       prep: 'Prep crew',
     };
     let members = [];
+    let timeClockSettings = null;
 
     function escapeHtml(value = '') {
       return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -242,11 +269,23 @@ import Icon from '../components/Icon.astro';
     }
 
     async function loadMembers() {
-      const payload = await request('/v1/settings/team');
+      const [payload, timeClockPayload] = await Promise.all([
+        request('/v1/settings/team'),
+        request('/v1/settings/time-clock'),
+      ]);
       if (!payload) return;
       members = payload.data || [];
+      timeClockSettings = timeClockPayload?.data || null;
       renderSummary();
       renderMembers();
+      renderTimeClockSettings();
+    }
+
+    function renderTimeClockSettings() {
+      const form = document.getElementById('time-clock-form');
+      if (!form || !timeClockSettings) return;
+      form.elements.roundingIncrementMinutes.value = String(timeClockSettings.roundingIncrementMinutes || 15);
+      form.elements.maxShiftHours.value = String(timeClockSettings.maxShiftHours || 12);
     }
 
     function renderSummary() {
@@ -383,6 +422,20 @@ import Icon from '../components/Icon.astro';
       closeModal();
       window.showToast(id ? 'Team member updated' : 'Team member added', 'success');
       loadMembers();
+    });
+
+    document.getElementById('time-clock-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      data.roundingIncrementMinutes = Number(data.roundingIncrementMinutes);
+      data.maxShiftHours = Number(data.maxShiftHours);
+      await request('/v1/settings/time-clock', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      window.showToast('Time clock policy saved', 'success');
+      await loadMembers();
     });
 
     loadMembers().catch((err) => {
