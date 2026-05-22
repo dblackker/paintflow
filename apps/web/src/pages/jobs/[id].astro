@@ -50,6 +50,10 @@ import Icon from '../../components/Icon.astro';
       display: none;
     }
 
+    .job-photo-form {
+      grid-template-columns: minmax(8rem, 10rem) minmax(0, 1fr) minmax(0, 1.2fr) auto;
+    }
+
     @media (max-width: 640px) {
       nav .h-16 {
         height: 3.5rem;
@@ -102,6 +106,10 @@ import Icon from '../../components/Icon.astro';
       }
       .job-photo-mobile-copy {
         display: inline;
+      }
+      .job-photo-form {
+        display: grid;
+        grid-template-columns: 1fr;
       }
       #cost-modal,
       #change-order-modal,
@@ -211,11 +219,11 @@ import Icon from '../../components/Icon.astro';
               <h2 class="font-semibold">Job Photos</h2>
               <p class="text-xs text-gray-500">
                 <span class="job-photo-desktop-copy">Before, progress, and after photos for production proof and future marketing.</span>
-                <span class="job-photo-mobile-copy">Add photos from your gallery or take a new photo on site.</span>
+                <span class="job-photo-mobile-copy">Track before, progress, and after photos.</span>
               </p>
             </div>
           </div>
-          <form id="job-photo-form" class="p-4 grid grid-cols-1 md:grid-cols-[150px_1fr_1fr_auto] gap-3 items-end">
+          <form id="job-photo-form" class="job-photo-form p-4 grid gap-3 items-end">
             <label>
               <span class="form-label">Type</span>
               <select name="type" class="input">
@@ -231,7 +239,6 @@ import Icon from '../../components/Icon.astro';
             <label>
               <span class="form-label">Photo</span>
               <input name="file" type="file" accept="image/*" class="input" required>
-              <span class="mt-1 block text-xs text-gray-500">Choose from gallery or camera.</span>
             </label>
             <button id="job-photo-submit" class="btn-primary">Add photo</button>
           </form>
