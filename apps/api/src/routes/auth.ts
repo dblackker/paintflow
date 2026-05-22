@@ -165,6 +165,16 @@ function safeRedirectUrl(env: Env, value: string | null | undefined, fallback = 
   return `${env.PUBLIC_URL}${fallback}`;
 }
 
+function redirectWithLocation(location: string, headers: HeadersInit = {}, status = 302) {
+  return new Response(null, {
+    status,
+    headers: {
+      ...headers,
+      Location: location,
+    },
+  });
+}
+
 function clientIp(c: Context<{ Bindings: Env }>) {
   return c.req.header('cf-connecting-ip')
     || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
@@ -384,10 +394,12 @@ auth.get('/demo-login', async (c) => {
   if ('error' in result) {
     const loginUrl = new URL('/login', redirectUrl);
     loginUrl.searchParams.set('error', result.code || result.error);
-    return c.redirect(loginUrl.toString(), 302);
+    return redirectWithLocation(loginUrl.toString());
   }
 
-  return c.redirect(redirectUrl, 302);
+  return redirectWithLocation(redirectUrl, {
+    'Set-Cookie': sessionCookie(result.sessionToken, c.env, 604800),
+  });
 });
 
 // POST /v1/auth/magic-link
@@ -550,8 +562,6 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
 
   const sessionToken = await createSession(c.env, userId, orgId, email);
 
-  c.header('Set-Cookie', sessionCookie(sessionToken, c.env, 604800));
-
   // Send welcome email for new users (fire and forget)
   if (isNewUser) {
     sendEmail(c.env, email, 'Welcome to PaintFlow', welcomeEmailHtml(c.env.PUBLIC_URL), undefined, {
@@ -559,7 +569,9 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
     }).catch((error) => console.error('Failed to send welcome email:', error));
   }
 
-  return c.redirect(`${c.env.PUBLIC_URL}${isNewUser ? '/onboarding?welcome=1' : '/dashboard'}`);
+  return redirectWithLocation(`${c.env.PUBLIC_URL}${isNewUser ? '/onboarding?welcome=1' : '/dashboard'}`, {
+    'Set-Cookie': sessionCookie(sessionToken, c.env, 604800),
+  });
 }
 
 // GET /v1/auth/verify?token=...
