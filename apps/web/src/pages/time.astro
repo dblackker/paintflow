@@ -189,6 +189,7 @@ import Icon from '../components/Icon.astro';
     let isSavingBulkTime = false;
     let isPunching = false;
     let bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
+    const bulkSelection = new Map();
     const supportedViewModes = new Set(['day', 'job', 'employee']);
     let viewMode = supportedViewModes.has(localStorage.getItem('paintflow.time.viewMode'))
       ? localStorage.getItem('paintflow.time.viewMode')
@@ -393,8 +394,19 @@ import Icon from '../components/Icon.astro';
     function renderBulkEntry() {
       const button = document.getElementById('bulk-time-btn');
       button.classList.toggle('hidden', !punchStatus?.canManage);
+      syncBulkSelection();
       renderBulkRoleFilters();
       renderBulkMemberRows();
+    }
+
+    function syncBulkSelection() {
+      const memberIds = new Set(members.map((member) => member.id));
+      members.forEach((member) => {
+        if (!bulkSelection.has(member.id)) bulkSelection.set(member.id, true);
+      });
+      Array.from(bulkSelection.keys()).forEach((id) => {
+        if (!memberIds.has(id)) bulkSelection.delete(id);
+      });
     }
 
     function renderBulkRoleFilters() {
@@ -431,7 +443,7 @@ import Icon from '../components/Icon.astro';
       container.innerHTML = visibleMembers.map((member) => `
         <label class="bulk-member-row grid sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
           <span class="flex items-center gap-3 min-w-0">
-            <input type="checkbox" data-bulk-member="${member.id}" class="h-5 w-5" checked>
+            <input type="checkbox" data-bulk-member="${member.id}" class="h-5 w-5" ${bulkSelection.get(member.id) ? 'checked' : ''}>
             <span class="min-w-0">
               <span class="block font-medium truncate">${escapeHtml(member.name)}</span>
               <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
@@ -441,7 +453,10 @@ import Icon from '../components/Icon.astro';
         </label>
       `).join('');
       container.querySelectorAll('[data-bulk-member]').forEach((checkbox) => {
-        checkbox.addEventListener('change', updateBulkSelectionAction);
+        checkbox.addEventListener('change', () => {
+          bulkSelection.set(checkbox.dataset.bulkMember, checkbox.checked);
+          updateBulkSelectionAction();
+        });
       });
       updateBulkSelectionAction();
     }
@@ -466,6 +481,7 @@ import Icon from '../components/Icon.astro';
       form.elements.date.value = formatDate(new Date());
       document.getElementById('bulk-default-hours').value = '8';
       if (!bulkRoleFilters.size) bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
+      members.forEach((member) => bulkSelection.set(member.id, true));
       renderBulkEntry();
       document.getElementById('bulk-modal').classList.remove('hidden');
     }
@@ -877,6 +893,7 @@ import Icon from '../components/Icon.astro';
       const shouldSelect = visible.some((checkbox) => !checkbox.checked);
       visible.forEach((checkbox) => {
         checkbox.checked = shouldSelect;
+        bulkSelection.set(checkbox.dataset.bulkMember, shouldSelect);
       });
       updateBulkSelectionAction();
     });
