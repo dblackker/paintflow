@@ -3,6 +3,7 @@ import Toast from '../components/Toast.astro';
 import ContactSummary from '../components/ContactSummary.astro';
 import StatusBadge from '../components/StatusBadge.astro';
 import Icon from '../components/Icon.astro';
+import AuthBridge from '../components/AuthBridge.astro';
 import '../styles/design-system.css';
 
 interface Props {
@@ -10,8 +11,6 @@ interface Props {
 }
 
 const { title = 'PaintFlow' } = Astro.props;
-const configuredApiUrl = import.meta.env.PUBLIC_API_URL || '';
-const isDevBuild = import.meta.env.DEV;
 ---
 
 <!DOCTYPE html>
@@ -27,62 +26,7 @@ const isDevBuild = import.meta.env.DEV;
       window.location.replace(url.toString());
     }
   </script>
-  <script is:inline define:vars={{ configuredApiUrl, isDevBuild }}>
-    (function () {
-      const allowSessionFallback = Boolean(isDevBuild)
-        || ['localhost', '127.0.0.1'].includes(window.location.hostname)
-        || window.location.hostname === 'paintflow-demo.pages.dev'
-        || configuredApiUrl.includes('paintflow-api-demo');
-      if (!allowSessionFallback) return;
-
-      const storageKey = 'paintflow.sessionToken';
-      const configuredApiOrigin = configuredApiUrl ? new URL(configuredApiUrl, window.location.origin).origin : '';
-      const fallbackApiOrigin = `${window.location.protocol}//${window.location.hostname}:8787`;
-      const apiOrigins = new Set([configuredApiOrigin, fallbackApiOrigin].filter(Boolean));
-      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-      const search = new URLSearchParams(window.location.search);
-      const sessionToken = hash.get('paintflow_session') || search.get('paintflow_session');
-
-      if (sessionToken) {
-        localStorage.setItem(storageKey, sessionToken);
-        hash.delete('paintflow_session');
-        search.delete('paintflow_session');
-        const cleanUrl = `${window.location.pathname}${search.toString() ? `?${search}` : ''}${hash.toString() ? `#${hash}` : ''}`;
-        window.history.replaceState(null, '', cleanUrl || window.location.pathname);
-      }
-
-      const originalFetch = window.fetch.bind(window);
-      window.fetch = (input, init = {}) => {
-        const token = localStorage.getItem(storageKey);
-        if (!token) return originalFetch(input, init);
-
-        const requestUrl = typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input?.url;
-        let shouldAttach = false;
-        try {
-          const url = new URL(requestUrl, window.location.origin);
-          shouldAttach = apiOrigins.has(url.origin);
-        } catch {
-          shouldAttach = false;
-        }
-
-        if (!shouldAttach) return originalFetch(input, init);
-
-        const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-        if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
-        return originalFetch(input, { ...init, headers });
-      };
-
-      window.PaintFlowAuth = {
-        clearSessionFallback() {
-          localStorage.removeItem(storageKey);
-        },
-      };
-    })();
-  </script>
+  <AuthBridge />
   <script is:inline>
     window.PaintFlowFormat = {
       money(value, options = {}) {

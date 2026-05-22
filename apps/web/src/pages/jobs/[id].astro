@@ -5,6 +5,7 @@ import ContactSummary from '../../components/ContactSummary.astro';
 import StatusBadge from '../../components/StatusBadge.astro';
 import Icon from '../../components/Icon.astro';
 import DetailBackButton from '../../components/DetailBackButton.astro';
+import AuthBridge from '../../components/AuthBridge.astro';
 ---
 
 <!DOCTYPE html>
@@ -13,6 +14,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Detail - PaintFlow</title>
+  <AuthBridge />
   <style>
     .job-detail-nav-row {
       display: grid;
