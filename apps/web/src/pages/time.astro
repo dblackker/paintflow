@@ -55,8 +55,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         <p class="text-gray-600 max-w-2xl">Review daily timecards, drill into individual entries, and correct job hours without touching pay rates.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-        <button id="bulk-time-btn" class="btn-tonal w-full sm:w-auto hidden">Crew timecard</button>
-        <button id="add-time" class="btn-primary w-full sm:w-auto">Log time</button>
+        <button id="bulk-time-btn" class="btn-primary w-full sm:w-auto hidden">Log crew time</button>
       </div>
     </div>
 
@@ -99,7 +98,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
     <div id="empty" class="hidden surface-panel p-12 text-center">
       <p class="text-gray-500">No time entries this week</p>
-      <button onclick="document.getElementById('add-time').click()" class="btn-primary btn-sm mt-4">Log your first entry</button>
+      <button onclick="document.getElementById('bulk-time-btn')?.click()" class="btn-primary btn-sm mt-4">Log crew time</button>
     </div>
   </main>
 
@@ -955,7 +954,6 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       await loadData();
     };
 
-    document.getElementById('add-time').addEventListener('click', () => openModal());
     document.getElementById('cancel-btn').addEventListener('click', closeModal);
     document.getElementById('close-modal-btn').addEventListener('click', closeModal);
     document.getElementById('bulk-time-btn').addEventListener('click', openBulkModal);
