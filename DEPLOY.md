@@ -107,9 +107,11 @@ Set in Cloudflare dashboard or wrangler.toml:
 - `STRIPE_*` - Stripe keys
 - `GOOGLE_*` - Google OAuth client credentials
 - `QB_*` - QuickBooks OAuth client credentials
+- `EMAIL_PROVIDER` - Email provider, usually `mailchannels`
 - `EMAIL_FROM` - Verified sender email address
 - `EMAIL_FROM_NAME` - Sender display name
 - `MAILCHANNELS_API_KEY` - MailChannels Email API key
+- `RESEND_API_KEY` - Optional fallback email API key when using `EMAIL_PROVIDER=resend`
 - `CF_ACCOUNT_ID` - Cloudflare account ID
 - `CF_API_TOKEN` - Cloudflare API token
 

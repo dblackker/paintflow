@@ -37,6 +37,7 @@ For the demo, using a working domain such as `blacklinepainting.com` is fine. Fo
 Set public configuration as Worker vars:
 
 ```toml
+EMAIL_PROVIDER = "mailchannels"
 EMAIL_FROM = "estimates@blacklinepainting.com"
 EMAIL_FROM_NAME = "Blackline Painting"
 ```
@@ -49,7 +50,7 @@ wrangler secret put MAILCHANNELS_API_KEY --env demo
 wrangler secret put MAILCHANNELS_API_KEY --env production
 ```
 
-The app only sends `MAILCHANNELS_API_KEY` to MailChannels. SPF, DKIM, DMARC, and Domain Lockdown belong in DNS/provider setup, not in the application payload.
+The app only sends `MAILCHANNELS_API_KEY` to MailChannels. SPF, DKIM, DMARC, and Domain Lockdown belong in DNS/provider setup, not in the application payload. Keep `EMAIL_PROVIDER=mailchannels` for the Cloudflare demo unless you intentionally switch to another provider.
 
 ## Product Behavior
 
