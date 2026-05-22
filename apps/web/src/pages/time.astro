@@ -165,7 +165,7 @@ import Icon from '../components/Icon.astro';
         <div>
           <div class="flex items-center justify-between gap-3">
             <span class="form-label mb-0">Role filter</span>
-            <button type="button" id="bulk-select-visible" class="btn-text btn-sm">Select visible</button>
+            <button type="button" id="bulk-select-visible" class="btn-text btn-sm">Clear visible</button>
           </div>
           <div id="bulk-role-filters" class="flex flex-wrap gap-2 mt-2"></div>
         </div>
@@ -440,6 +440,24 @@ import Icon from '../components/Icon.astro';
           <input type="number" data-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${Number.isFinite(defaultHours) ? defaultHours : 8}">
         </label>
       `).join('');
+      container.querySelectorAll('[data-bulk-member]').forEach((checkbox) => {
+        checkbox.addEventListener('change', updateBulkSelectionAction);
+      });
+      updateBulkSelectionAction();
+    }
+
+    function updateBulkSelectionAction() {
+      const button = document.getElementById('bulk-select-visible');
+      if (!button) return;
+      const visible = Array.from(document.querySelectorAll('[data-bulk-member]'));
+      if (!visible.length) {
+        button.textContent = 'Select visible';
+        button.disabled = true;
+        return;
+      }
+      button.disabled = false;
+      const checked = visible.filter((checkbox) => checkbox.checked).length;
+      button.textContent = checked === visible.length ? 'Clear visible' : 'Select visible';
     }
 
     function openBulkModal() {
@@ -855,9 +873,12 @@ import Icon from '../components/Icon.astro';
       });
     });
     document.getElementById('bulk-select-visible').addEventListener('click', () => {
-      document.querySelectorAll('[data-bulk-member]').forEach((checkbox) => {
-        checkbox.checked = true;
+      const visible = Array.from(document.querySelectorAll('[data-bulk-member]'));
+      const shouldSelect = visible.some((checkbox) => !checkbox.checked);
+      visible.forEach((checkbox) => {
+        checkbox.checked = shouldSelect;
       });
+      updateBulkSelectionAction();
     });
 
     document.getElementById('time-form').addEventListener('submit', async (event) => {
