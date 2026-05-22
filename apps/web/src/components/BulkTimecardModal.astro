@@ -1,0 +1,104 @@
+---
+import Icon from './Icon.astro';
+
+interface Props {
+  idPrefix?: string;
+  title?: string;
+  description?: string;
+  showJob?: boolean;
+}
+
+const {
+  idPrefix = 'bulk',
+  title = 'Crew Timecard',
+  description = 'Fast end-of-day entry for a whole crew. Default roles are crew lead, painter, and prep.',
+  showJob = true,
+} = Astro.props;
+
+const ids = idPrefix === 'bulk'
+  ? {
+      modal: 'bulk-modal',
+      close: 'close-bulk-modal-btn',
+      form: 'bulk-time-form',
+      jobSelect: 'bulk-job-select',
+      defaultHours: 'bulk-default-hours',
+      selectVisible: 'bulk-select-visible',
+      roleFilters: 'bulk-role-filters',
+      summary: 'bulk-selection-summary',
+      members: 'bulk-members',
+      cancel: 'cancel-bulk-btn',
+      submit: 'submit-bulk-btn',
+    }
+  : {
+      modal: `${idPrefix}-modal`,
+      close: `close-${idPrefix}-modal-btn`,
+      form: `${idPrefix}-time-form`,
+      jobSelect: `${idPrefix}-job-select`,
+      defaultHours: `${idPrefix}-default-hours`,
+      selectVisible: `${idPrefix}-select-visible`,
+      roleFilters: `${idPrefix}-role-filters`,
+      summary: `${idPrefix}-selection-summary`,
+      members: `${idPrefix}-members`,
+      cancel: `cancel-${idPrefix}-btn`,
+      submit: `submit-${idPrefix}-btn`,
+    };
+---
+
+<div id={ids.modal} class="mobile-sheet hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl max-w-3xl w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h2 class="text-lg font-semibold">{title}</h2>
+        <p class="text-sm text-gray-600">{description}</p>
+      </div>
+      <button type="button" id={ids.close} class="btn-icon" aria-label="Close"><Icon name="close" /></button>
+    </div>
+    <form id={ids.form} class="space-y-4">
+      <div class={`grid grid-cols-1 ${showJob ? 'sm:grid-cols-3' : 'sm:grid-cols-[minmax(0,1fr)_10rem]'} gap-3`}>
+        {showJob && (
+          <label class="block sm:col-span-2">
+            <span class="form-label">Job</span>
+            <select name="jobId" id={ids.jobSelect} class="input" required>
+              <option value="">Select job...</option>
+            </select>
+          </label>
+        )}
+        {!showJob && (
+          <label class="block">
+            <span class="form-label">Work performed</span>
+            <input name="description" class="input" autocomplete="off" placeholder="Production painting, prep, cleanup">
+          </label>
+        )}
+        <label class="block">
+          <span class="form-label">Work date</span>
+          <input type="date" name="date" autocomplete="off" class="input" required>
+        </label>
+      </div>
+      <div class={`grid grid-cols-1 ${showJob ? 'sm:grid-cols-[10rem_1fr]' : 'sm:grid-cols-[10rem_1fr]'} gap-3 items-end`}>
+        <label class="block">
+          <span class="form-label">Default hours</span>
+          <input id={ids.defaultHours} type="number" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" class="input" value="8">
+        </label>
+        {showJob && (
+          <label class="block">
+            <span class="form-label">Work performed</span>
+            <input name="description" class="input" autocomplete="off" placeholder="Production painting, prep, cleanup">
+          </label>
+        )}
+      </div>
+      <div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="form-label mb-0">Role filter</span>
+          <button type="button" id={ids.selectVisible} class="btn-text btn-sm">Clear visible</button>
+        </div>
+        <div id={ids.roleFilters} class="flex flex-wrap gap-2 mt-2"></div>
+        <p id={ids.summary} class="mt-2 text-sm font-medium text-gray-700"></p>
+      </div>
+      <div id={ids.members} class="border border-[var(--pf-border)] rounded-xl overflow-hidden divide-y divide-[var(--pf-border)]"></div>
+      <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+        <button type="button" id={ids.cancel} class="btn-secondary flex-1">Cancel</button>
+        <button type="submit" id={ids.submit} class="btn-primary flex-1">Log crew time</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -6,6 +6,7 @@ import StatusBadge from '../../components/StatusBadge.astro';
 import Icon from '../../components/Icon.astro';
 import DetailBackButton from '../../components/DetailBackButton.astro';
 import AuthBridge from '../../components/AuthBridge.astro';
+import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
 ---
 
 <!DOCTYPE html>
@@ -147,23 +148,14 @@ import AuthBridge from '../../components/AuthBridge.astro';
           <div class="p-4 border-b flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
               <h2 class="font-semibold">Crew Timecard</h2>
-              <p class="text-xs text-gray-500">Log daily crew hours for this job. Pay and burdened rates are managed in Team.</p>
+              <p class="text-xs text-gray-500">Fast end-of-day crew hours for this job. Pay and burdened rates are managed in Team.</p>
             </div>
+            <button id="open-job-bulk-timecard-btn" type="button" class="btn-tonal btn-sm">
+              <Icon name="plus" />
+              Crew timecard
+            </button>
           </div>
-          <form id="timecard-form" class="p-4 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-3">
-              <label>
-                <span class="form-label">Work date</span>
-                <input name="date" type="date" autocomplete="off" class="input" required>
-              </label>
-              <label>
-                <span class="form-label">Crew note</span>
-                <input name="notes" type="text" autocomplete="off" class="input" placeholder="Prep, spray, trim, punch list">
-              </label>
-              <button id="timecard-submit" class="btn-primary md:self-end">Submit timecard</button>
-            </div>
-            <div id="crew-timecard-rows" class="divide-y border rounded-lg overflow-hidden"></div>
-          </form>
+          <div id="crew-timecard-summary" class="p-4"></div>
         </section>
 
         <section class="job-section bg-white rounded-lg shadow-sm border">
@@ -330,6 +322,12 @@ import AuthBridge from '../../components/AuthBridge.astro';
       </div>
     </div>
   </div>
+  <BulkTimecardModal
+    idPrefix="job-bulk"
+    showJob={false}
+    title="Crew Timecard"
+    description="Log this job for multiple crew members from one compact end-of-day entry."
+  />
   <ContactSummary defineOnly />
   <StatusBadge defineOnly />
   <Toast />
@@ -341,11 +339,24 @@ import AuthBridge from '../../components/AuthBridge.astro';
     let teamMembers = [];
     let timeEntries = [];
     let jobPhotos = [];
+    let isSavingBulkTime = false;
+    let jobBulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
+    const jobBulkSelection = new Map();
+    const jobBulkHours = new Map();
 
     const currency = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     const percent = (value) => `${Number(value || 0).toFixed(1)}%`;
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : '';
+    const formatDate = (date) => date.toISOString().split('T')[0];
     const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const roleLabels = {
+      admin: 'Admin',
+      crew: 'Crew member',
+      crew_lead: 'Crew lead',
+      estimator: 'Estimator',
+      painter: 'Painter',
+      prep: 'Prep crew',
+    };
     const iconSvg = (name) => {
       const icons = {
         edit: '<path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />',
@@ -463,7 +474,8 @@ import AuthBridge from '../../components/AuthBridge.astro';
       renderHeader();
       renderKpis();
       renderCosts();
-      renderTimecardRows();
+      renderTimecardSummary();
+      renderJobBulkTimecard();
       renderTimeEntries();
       renderChangeOrders();
       renderPurchases();
@@ -535,36 +547,196 @@ import AuthBridge from '../../components/AuthBridge.astro';
       `).join('');
     }
 
-    function renderTimecardRows() {
-      const container = document.getElementById('crew-timecard-rows');
+    function renderTimecardSummary() {
+      const container = document.getElementById('crew-timecard-summary');
       if (!teamMembers.length) {
         container.innerHTML = `
-          <div class="p-5 text-sm text-gray-600">
+          <div class="text-sm text-gray-600">
             Add active crew members on the <a href="/team" class="text-blue-700 font-medium">Team page</a> before logging job timecards.
           </div>
         `;
         return;
       }
 
-      container.innerHTML = teamMembers.map((member) => `
-        <div class="time-entry-row p-3 sm:p-4 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] gap-3 items-center bg-white">
-          <label class="flex items-center gap-3 min-w-0">
-            <input type="checkbox" data-member-enabled="${member.id}" class="h-5 w-5 rounded">
+      const totalHours = timeEntries.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+      const lastEntry = timeEntries
+        .slice()
+        .sort((a, b) => new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime())[0];
+      container.innerHTML = `
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div class="rounded-lg border border-[var(--pf-border)] bg-gray-50 p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">Active crew</p>
+            <p class="mt-1 text-lg font-semibold">${teamMembers.length}</p>
+          </div>
+          <div class="rounded-lg border border-[var(--pf-border)] bg-gray-50 p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">Logged hours</p>
+            <p class="mt-1 text-lg font-semibold">${Number(totalHours).toFixed(2)}</p>
+          </div>
+          <div class="rounded-lg border border-[var(--pf-border)] bg-gray-50 p-3">
+            <p class="text-xs font-semibold uppercase text-gray-500">Last entry</p>
+            <p class="mt-1 text-sm font-medium text-gray-900">${lastEntry ? dateLabel(lastEntry.date || lastEntry.createdAt) : 'None yet'}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function availableJobBulkRoles() {
+      return Array.from(new Set(teamMembers.map((member) => member.role || 'crew'))).sort((a, b) => {
+        const order = ['crew_lead', 'painter', 'prep'];
+        const aIndex = order.indexOf(a);
+        const bIndex = order.indexOf(b);
+        if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+        return (roleLabels[a] || a).localeCompare(roleLabels[b] || b);
+      });
+    }
+
+    function syncJobBulkSelection() {
+      const memberIds = new Set(teamMembers.map((member) => member.id));
+      teamMembers.forEach((member) => {
+        if (!jobBulkSelection.has(member.id)) jobBulkSelection.set(member.id, true);
+        if (!jobBulkHours.has(member.id)) jobBulkHours.set(member.id, getJobBulkDefaultHours());
+      });
+      Array.from(jobBulkSelection.keys()).forEach((id) => {
+        if (!memberIds.has(id)) jobBulkSelection.delete(id);
+      });
+      Array.from(jobBulkHours.keys()).forEach((id) => {
+        if (!memberIds.has(id)) jobBulkHours.delete(id);
+      });
+    }
+
+    function getJobBulkDefaultHours() {
+      const value = Number(document.getElementById('job-bulk-default-hours')?.value || 8);
+      return Number.isFinite(value) && value >= 0 ? value : 8;
+    }
+
+    function getJobBulkSelectedEntries() {
+      return teamMembers
+        .filter((member) => jobBulkSelection.get(member.id))
+        .map((member) => ({
+          member,
+          hours: Number(jobBulkHours.get(member.id) ?? getJobBulkDefaultHours()),
+        }))
+        .filter((entry) => Number.isFinite(entry.hours) && entry.hours > 0);
+    }
+
+    function updateJobBulkSummary() {
+      const summary = document.getElementById('job-bulk-selection-summary');
+      if (!summary) return;
+      const selected = getJobBulkSelectedEntries();
+      const visibleIds = new Set(
+        teamMembers
+          .filter((member) => jobBulkRoleFilters.has(member.role || 'crew'))
+          .map((member) => member.id)
+      );
+      const hiddenSelected = selected.filter(({ member }) => !visibleIds.has(member.id)).length;
+      const totalHours = selected.reduce((sum, entry) => sum + entry.hours, 0);
+      const averageHours = selected.length ? totalHours / selected.length : 0;
+      const parts = [
+        `${selected.length} employee${selected.length === 1 ? '' : 's'} selected`,
+        `${averageHours.toFixed(2).replace(/\.00$/, '')} hr avg`,
+        `${totalHours.toFixed(2).replace(/\.00$/, '')} total hrs`,
+      ];
+      if (hiddenSelected) parts.push(`${hiddenSelected} hidden by filters`);
+      summary.textContent = parts.join(' - ');
+    }
+
+    function renderJobBulkRoleFilters() {
+      const container = document.getElementById('job-bulk-role-filters');
+      if (!container) return;
+      const roles = availableJobBulkRoles();
+      container.innerHTML = roles.length
+        ? roles.map((role) => `
+          <button type="button" class="pf-filter-chip ${jobBulkRoleFilters.has(role) ? 'pf-filter-chip-active' : ''}" data-job-bulk-role="${escapeHtml(role)}" aria-pressed="${jobBulkRoleFilters.has(role) ? 'true' : 'false'}">
+            ${escapeHtml(roleLabels[role] || role)}
+          </button>
+        `).join('')
+        : '<p class="text-sm text-gray-500">No active crew members available.</p>';
+      container.querySelectorAll('[data-job-bulk-role]').forEach((filter) => {
+        filter.addEventListener('click', () => {
+          const role = filter.dataset.jobBulkRole;
+          if (jobBulkRoleFilters.has(role)) jobBulkRoleFilters.delete(role);
+          else jobBulkRoleFilters.add(role);
+          renderJobBulkRoleFilters();
+          renderJobBulkMemberRows();
+        });
+      });
+    }
+
+    function renderJobBulkMemberRows() {
+      const container = document.getElementById('job-bulk-members');
+      if (!container) return;
+      const visibleMembers = teamMembers.filter((member) => jobBulkRoleFilters.has(member.role || 'crew'));
+      if (!visibleMembers.length) {
+        container.innerHTML = '<div class="p-4 text-sm text-gray-500">No crew match the selected roles. Add another role filter to include more people.</div>';
+        updateJobBulkSelectionAction();
+        updateJobBulkSummary();
+        return;
+      }
+      container.innerHTML = visibleMembers.map((member) => `
+        <label class="bulk-member-row grid sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
+          <span class="flex items-center gap-3 min-w-0">
+            <input type="checkbox" data-job-bulk-member="${member.id}" class="h-5 w-5" ${jobBulkSelection.get(member.id) ? 'checked' : ''}>
             <span class="min-w-0">
               <span class="block font-medium truncate">${escapeHtml(member.name || 'Crew member')}</span>
-              <span class="block text-xs text-gray-500">${escapeHtml(member.role || 'crew')}</span>
+              <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
             </span>
-          </label>
-          <label>
-            <span class="form-label">Hours</span>
-            <input data-member-hours="${member.id}" type="number" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" class="input" placeholder="0.00">
-          </label>
-          <label>
-            <span class="form-label">Work performed</span>
-            <input data-member-note="${member.id}" type="text" autocomplete="off" class="input" placeholder="Cut, roll, prep">
-          </label>
-        </div>
+          </span>
+          <input type="number" data-job-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${jobBulkHours.get(member.id) ?? getJobBulkDefaultHours()}">
+        </label>
       `).join('');
+      container.querySelectorAll('[data-job-bulk-member]').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+          jobBulkSelection.set(checkbox.dataset.jobBulkMember, checkbox.checked);
+          updateJobBulkSelectionAction();
+          updateJobBulkSummary();
+        });
+      });
+      container.querySelectorAll('[data-job-bulk-hours]').forEach((input) => {
+        input.addEventListener('input', () => {
+          jobBulkHours.set(input.dataset.jobBulkHours, Number(input.value || 0));
+          updateJobBulkSummary();
+        });
+      });
+      updateJobBulkSelectionAction();
+      updateJobBulkSummary();
+    }
+
+    function updateJobBulkSelectionAction() {
+      const button = document.getElementById('job-bulk-select-visible');
+      if (!button) return;
+      const visible = Array.from(document.querySelectorAll('[data-job-bulk-member]'));
+      if (!visible.length) {
+        button.textContent = 'Select visible';
+        button.disabled = true;
+        updateJobBulkSummary();
+        return;
+      }
+      button.disabled = false;
+      const checked = visible.filter((checkbox) => checkbox.checked).length;
+      button.textContent = checked === visible.length ? 'Clear visible' : 'Select visible';
+      updateJobBulkSummary();
+    }
+
+    function renderJobBulkTimecard() {
+      syncJobBulkSelection();
+      renderJobBulkRoleFilters();
+      renderJobBulkMemberRows();
+    }
+
+    function openJobBulkModal() {
+      const form = document.getElementById('job-bulk-time-form');
+      form.reset();
+      form.elements.date.value = formatDate(new Date());
+      document.getElementById('job-bulk-default-hours').value = '8';
+      if (!jobBulkRoleFilters.size) jobBulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
+      teamMembers.forEach((member) => jobBulkSelection.set(member.id, true));
+      teamMembers.forEach((member) => jobBulkHours.set(member.id, 8));
+      renderJobBulkTimecard();
+      document.getElementById('job-bulk-modal').classList.remove('hidden');
+    }
+
+    function closeJobBulkModal() {
+      document.getElementById('job-bulk-modal').classList.add('hidden');
     }
 
     function renderTimeEntries() {
@@ -815,39 +987,67 @@ import AuthBridge from '../../components/AuthBridge.astro';
       }
     });
 
-    document.getElementById('timecard-form').addEventListener('submit', async (event) => {
+    document.getElementById('open-job-bulk-timecard-btn').addEventListener('click', openJobBulkModal);
+    document.getElementById('cancel-job-bulk-btn').addEventListener('click', closeJobBulkModal);
+    document.getElementById('close-job-bulk-modal-btn').addEventListener('click', closeJobBulkModal);
+    document.getElementById('job-bulk-default-hours').addEventListener('input', () => {
+      const defaultHours = getJobBulkDefaultHours();
+      teamMembers.forEach((member) => jobBulkHours.set(member.id, defaultHours));
+      document.querySelectorAll('[data-job-bulk-hours]').forEach((input) => {
+        input.value = defaultHours;
+      });
+      updateJobBulkSummary();
+    });
+    document.getElementById('job-bulk-select-visible').addEventListener('click', () => {
+      const visible = Array.from(document.querySelectorAll('[data-job-bulk-member]'));
+      const shouldSelect = visible.some((checkbox) => !checkbox.checked);
+      visible.forEach((checkbox) => {
+        checkbox.checked = shouldSelect;
+        jobBulkSelection.set(checkbox.dataset.jobBulkMember, shouldSelect);
+      });
+      updateJobBulkSelectionAction();
+      updateJobBulkSummary();
+    });
+    document.getElementById('job-bulk-time-form').addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (isSavingBulkTime) return;
       const form = event.currentTarget;
-      const submit = document.getElementById('timecard-submit');
+      const submit = document.getElementById('submit-job-bulk-btn');
       const data = Object.fromEntries(new FormData(form));
-      const entries = teamMembers.map((member) => {
-        const enabled = document.querySelector(`[data-member-enabled="${member.id}"]`)?.checked;
-        const hours = Number(document.querySelector(`[data-member-hours="${member.id}"]`)?.value || 0);
-        const description = document.querySelector(`[data-member-note="${member.id}"]`)?.value || data.notes || '';
-        return enabled && hours > 0 ? { teamMemberId: member.id, hours, description } : null;
-      }).filter(Boolean);
+      const selected = getJobBulkSelectedEntries().map(({ member, hours }) => ({
+        teamMemberId: member.id,
+        hours,
+        description: data.description || 'Crew labor',
+      }));
 
-      if (!entries.length) {
+      if (!selected.length) {
         window.showToast?.('Select at least one crew member and enter hours.', 'error');
         return;
       }
 
+      isSavingBulkTime = true;
       submit.disabled = true;
-      submit.textContent = 'Submitting...';
+      submit.textContent = 'Logging...';
       try {
         await api('/v1/team/timecards', {
           method: 'POST',
-          body: JSON.stringify({ jobId, date: data.date, notes: data.notes, entries }),
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({
+            jobId,
+            date: data.date,
+            notes: data.description || undefined,
+            entries: selected,
+          }),
         });
-        form.reset();
-        form.querySelector('input[name="date"]').valueAsDate = new Date();
+        closeJobBulkModal();
         await loadCosting();
-        window.showToast?.('Timecard submitted', 'success');
+        window.showToast?.(`Logged time for ${selected.length} crew members`, 'success');
       } catch (err) {
         window.showToast?.(err.message || 'Failed to submit timecard', 'error');
       } finally {
+        isSavingBulkTime = false;
         submit.disabled = false;
-        submit.textContent = 'Submit timecard';
+        submit.textContent = 'Log crew time';
       }
     });
 
@@ -1001,7 +1201,6 @@ import AuthBridge from '../../components/AuthBridge.astro';
       }
     });
 
-    document.querySelector('#timecard-form input[name="date"]').valueAsDate = new Date();
     loadCosting().catch((err) => {
       document.getElementById('job-header').innerHTML = `<div class="p-6 text-red-600">${escapeHtml(err.message)}</div>`;
     });
