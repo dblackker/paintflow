@@ -888,6 +888,10 @@ button[class*="bg-blue"][class*="text-white"]:active {
     padding-top: 0 !important;
   }
 
+  nav > div.max-w-7xl {
+    padding-top: 0 !important;
+  }
+
   .pf-app-nav .h-16 {
     height: 3.5rem;
   }

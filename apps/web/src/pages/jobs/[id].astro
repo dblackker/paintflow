@@ -13,6 +13,39 @@ import Icon from '../../components/Icon.astro';
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Job Detail - PaintFlow</title>
   <style>
+    .job-detail-nav-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 4rem;
+    }
+
+    .job-detail-title {
+      justify-self: center;
+      min-width: 0;
+      text-align: center;
+    }
+
+    .job-detail-title h1 {
+      font-size: 1.25rem;
+      font-weight: 650;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    .job-detail-title p {
+      display: none;
+      font-size: 0.75rem;
+      line-height: 1.2;
+      margin-top: 0.15rem;
+    }
+
+    .job-detail-back {
+      height: 2.5rem;
+      width: 2.5rem;
+    }
+
     .job-photo-mobile-copy {
       display: none;
     }
@@ -23,6 +56,13 @@ import Icon from '../../components/Icon.astro';
       }
       nav h1 {
         font-size: 1rem;
+      }
+      .job-detail-nav-row {
+        grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+        min-height: 3.5rem;
+      }
+      .job-detail-nav-action {
+        display: none !important;
       }
       .job-detail-main {
         padding-top: 1rem;
@@ -83,10 +123,14 @@ import Icon from '../../components/Icon.astro';
 <body class="bg-gray-50 min-h-screen">
   <nav class="bg-white shadow-sm border-b sticky top-0 z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <a href="/jobs" class="text-gray-600 hover:text-gray-900">&larr; Jobs</a>
-        <h1 class="text-xl font-semibold">Job Detail</h1>
-        <button id="complete-btn" class="hidden btn-tonal btn-sm">Mark Complete</button>
+      <div class="job-detail-nav-row h-16">
+        <a href="/jobs" class="job-detail-back btn-icon btn-icon-tonal" aria-label="Back to jobs" title="Back to jobs">
+          <Icon name="chevron-left" />
+        </a>
+        <div class="job-detail-title" aria-live="polite">
+          <h1>Job Detail</h1>
+        </div>
+        <button id="complete-btn" class="job-detail-nav-action hidden btn-tonal btn-sm">Mark Complete</button>
       </div>
     </div>
   </nav>
