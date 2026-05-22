@@ -19,6 +19,13 @@ const { title = 'PaintFlow' } = Astro.props;
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
   <script is:inline>
+    if (window.location.hostname === '127.0.0.1' && Number(window.location.port || 0) >= 4321 && Number(window.location.port || 0) <= 4399) {
+      const url = new URL(window.location.href);
+      url.hostname = 'localhost';
+      window.location.replace(url.toString());
+    }
+  </script>
+  <script is:inline>
     window.PaintFlowFormat = {
       money(value, options = {}) {
         const amount = Number(value || 0);
