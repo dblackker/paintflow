@@ -954,8 +954,6 @@ import Base from '../../layouts/Base.astro';
           </div>
           <div class="production-surface-actions flex items-center gap-3">
             <span class="text-gray-600" data-line-total>$0.00</span>
-            <button type="button" class="copy-surface btn-text btn-sm">Copy</button>
-            <button type="button" class="remove-surface btn-text btn-sm text-red-700">Remove</button>
           </div>
         </div>
       `;
@@ -2077,15 +2075,6 @@ import Base from '../../layouts/Base.astro';
         syncScopeBuilderVisibility();
       }
       if (event.target.classList.contains('add-surface')) addSurface(event.target.closest('#rooms-container > div').id);
-      if (event.target.classList.contains('remove-surface')) {
-        const container = event.target.closest('[data-items]');
-        event.target.closest('[data-surface-item]').remove();
-        cleanupSurfaceGroups(container);
-      }
-      if (event.target.classList.contains('copy-surface')) {
-        const room = event.target.closest('#rooms-container > div');
-        addSurface(room.id, collectSurfaceData(event.target.closest('[data-surface-item]')));
-      }
       if (event.target.classList.contains('populate-derived-measure')) {
         applyDerivedInteriorMeasurement(event.target.closest('[data-surface-item]'));
         return;
