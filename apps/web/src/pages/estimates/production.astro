@@ -121,6 +121,11 @@ import Base from '../../layouts/Base.astro';
             </div>
           </div>
           <div id="rooms-container" class="space-y-4"></div>
+          <div id="empty-scope-state" class="rounded-lg border border-dashed border-gray-300 bg-white p-4 text-center">
+            <p class="text-sm text-gray-700">Start with a room, exterior side, or work area.</p>
+            <p class="mt-1 text-xs text-gray-500">The starter scope tool appears after an area exists, or you can add substrates manually.</p>
+            <button id="start-with-starter-scope" type="button" class="btn-text btn-sm mt-2 justify-center">Use starter scope</button>
+          </div>
           <button id="add-room" class="btn-secondary w-full justify-center">
             Add Room or Area
           </button>
@@ -286,8 +291,6 @@ import Base from '../../layouts/Base.astro';
         if (templateRooms.length) {
           templateRooms.forEach(room => addRoom(room.name || 'Template room', room.items || []));
           window.showToast('Template loaded into the production estimator.');
-        } else {
-          addRoom('Interior', [], { seedSurface: false });
         }
       }
       applyEstimateType();
@@ -592,7 +595,7 @@ import Base from '../../layouts/Base.astro';
       const pkg = Array.isArray(estimate.packages) ? estimate.packages[0] : null;
       const items = packageItems(pkg);
       if (!items.length) {
-        addRoom('Interior', [], { seedSurface: false });
+        syncScopeBuilderVisibility();
         return;
       }
 
@@ -637,7 +640,7 @@ import Base from '../../layouts/Base.astro';
         optional: item.optional,
       }));
 
-      if (!roomsByName.size) addRoom('Interior', [], { seedSurface: false });
+      if (!roomsByName.size) syncScopeBuilderVisibility();
       document.getElementById('discount').value = Number(pkg?.discount || 0);
     }
 
@@ -1294,6 +1297,7 @@ import Base from '../../layouts/Base.astro';
       const builder = quickScopeBuilder();
       if (!builder) return;
       const firstRoom = document.querySelector('#rooms-container > div');
+      document.getElementById('empty-scope-state')?.classList.toggle('hidden', Boolean(firstRoom));
       builder.classList.toggle('hidden', !firstRoom);
       builder.dataset.scopeRoomId = firstRoom?.id || '';
       const interiorPanel = builder.querySelector('[data-interior-assumptions]')
@@ -1873,6 +1877,11 @@ import Base from '../../layouts/Base.astro';
     }
 
     document.getElementById('add-room').addEventListener('click', () => addRoom());
+    document.getElementById('start-with-starter-scope').addEventListener('click', () => {
+      const room = addRoom(estimateDefaultAreaName(), [], { seedSurface: false });
+      setQuickScopeCollapsed(false);
+      room.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     document.getElementById('add-line-item').addEventListener('click', () => addLineItem());
     document.getElementById('estimate-type').addEventListener('change', () => {
       setQuickScopeCollapsed(false);
