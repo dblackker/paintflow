@@ -34,6 +34,25 @@ import Icon from '../../components/Icon.astro';
       background: color-mix(in srgb, var(--md-sys-color-primary-container) 18%, white);
     }
 
+    .schedule-day.is-drop-target {
+      border-color: color-mix(in srgb, var(--pf-primary) 58%, var(--md-sys-color-outline-variant));
+      background: color-mix(in srgb, var(--md-sys-color-primary-container) 28%, white);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pf-primary) 30%, transparent);
+    }
+
+    .schedule-day-add {
+      min-height: 1.9rem;
+      padding-inline: 0.55rem;
+      white-space: nowrap;
+    }
+
+    .schedule-quick-form {
+      border-radius: 0.75rem;
+      border: 1px solid color-mix(in srgb, var(--pf-primary) 22%, transparent);
+      background: color-mix(in srgb, var(--md-sys-color-primary-container) 12%, white);
+      padding: 0.65rem;
+    }
+
     .schedule-job-card {
       display: block;
       border-radius: 0.75rem;
@@ -63,6 +82,15 @@ import Icon from '../../components/Icon.astro';
       border-radius: var(--pf-radius);
       padding: 0.8rem;
       background: var(--md-sys-color-surface-container-lowest);
+    }
+
+    .schedule-backlog-card[draggable="true"] {
+      cursor: grab;
+    }
+
+    .schedule-backlog-card.is-dragging {
+      cursor: grabbing;
+      opacity: 0.68;
     }
 
     .schedule-date-summary {
@@ -188,6 +216,7 @@ import Icon from '../../components/Icon.astro';
     let currentWeekStart = getWeekStart(new Date());
     let allJobs = [];
     let allGoogleEvents = [];
+    let activeQuickScheduleDay = null;
 
     function escapeHtml(value = '') {
       return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -310,6 +339,50 @@ import Icon from '../../components/Icon.astro';
       return result;
     }
 
+    function unscheduledJobs() {
+      return allJobs
+        .filter((job) => activeJob(job) && !jobHasSchedule(job))
+        .sort((a, b) => String(a.updatedAt || a.createdAt).localeCompare(String(b.updatedAt || b.createdAt)));
+    }
+
+    function jobOptionLabel(job) {
+      const jobAddress = address(job);
+      return jobAddress ? `${job.name || 'Job'} - ${jobAddress}` : job.name || 'Job';
+    }
+
+    function scheduleDatesFromDuration(startDateValue, durationDays) {
+      const [year, month, day] = String(startDateValue).split('-').map(Number);
+      const safeDuration = Math.max(1, Math.min(30, Number.parseInt(durationDays, 10) || 1));
+      const startDate = new Date(year, month - 1, day);
+      const endDate = addWorkDays(startDate, safeDuration - 1);
+      return {
+        scheduledStartAt: fromScheduleDate(dateKey(startDate)),
+        scheduledEndAt: fromScheduleDate(dateKey(endDate), true),
+      };
+    }
+
+    async function scheduleJob(jobId, scheduledStartAt, scheduledEndAt, successMessage = 'Job scheduled.') {
+      if (!jobId || !scheduledStartAt || !scheduledEndAt) return;
+      if (new Date(scheduledEndAt) < new Date(scheduledStartAt)) {
+        notify('Last work day must be on or after the first work day.', 'error');
+        return;
+      }
+
+      await api(`/v1/jobs/${jobId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ scheduledStartAt, scheduledEndAt, status: 'scheduled' }),
+      });
+      activeQuickScheduleDay = null;
+      notify(successMessage);
+      await loadCalendar();
+    }
+
+    async function scheduleJobFromDuration(jobId, startDateValue, durationDays) {
+      const { scheduledStartAt, scheduledEndAt } = scheduleDatesFromDuration(startDateValue, durationDays);
+      const job = allJobs.find((item) => item.id === jobId);
+      await scheduleJob(jobId, scheduledStartAt, scheduledEndAt, `${job?.name || 'Job'} added to the calendar.`);
+    }
+
     function autoPopulateEndDate(form) {
       const startInput = form.querySelector('input[name="scheduledStartDate"]');
       const endInput = form.querySelector('input[name="scheduledEndDate"]');
@@ -395,14 +468,18 @@ import Icon from '../../components/Icon.astro';
           : '';
 
         return `
-          <div class="schedule-day ${key === todayKey ? 'is-today' : ''} p-3">
+          <div class="schedule-day ${key === todayKey ? 'is-today' : ''} p-3" data-calendar-day="${key}">
             <div class="mb-3 flex items-start justify-between gap-2">
               <div>
                 <p class="text-sm font-semibold text-gray-950">${date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
                 <p class="text-xs text-gray-500">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
               </div>
-              ${key === todayKey ? '<span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
+              <div class="flex shrink-0 flex-col items-end gap-1">
+                ${key === todayKey ? '<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
+                <button type="button" class="schedule-day-add btn-text btn-sm justify-center" data-quick-schedule-day="${key}">Add job</button>
+              </div>
             </div>
+            ${quickSchedulePanel(key)}
             <div class="grid gap-2">
               ${dayJobs.map(jobCard).join('')}
               ${dayEvents.map((event) => `
@@ -419,6 +496,7 @@ import Icon from '../../components/Icon.astro';
 
       grid.innerHTML = `<div class="schedule-week-grid">${days}</div>`;
       renderNeedsScheduling();
+      wireCalendarInteractions();
     }
 
     function jobCard(job) {
@@ -436,11 +514,43 @@ import Icon from '../../components/Icon.astro';
       `;
     }
 
+    function quickSchedulePanel(dayKey) {
+      if (activeQuickScheduleDay !== dayKey) return '';
+      const jobs = unscheduledJobs();
+      const firstJob = jobs[0];
+      const duration = firstJob ? estimatedWorkDays(firstJob) : 1;
+
+      if (!jobs.length) {
+        return `
+          <div class="schedule-quick-form mb-3 text-xs text-gray-600">
+            <p class="font-medium text-gray-800">No jobs need scheduling.</p>
+            <p class="mt-1">Accepted jobs without dates will appear in this list.</p>
+          </div>
+        `;
+      }
+
+      return `
+        <form class="schedule-quick-form mb-3 grid gap-2" data-quick-day="${escapeHtml(dayKey)}">
+          <label class="grid gap-1 text-xs font-medium text-gray-700">
+            Job
+            <select name="quickJobId" class="form-input text-sm" required>
+              ${jobs.map((job) => `<option value="${escapeHtml(job.id)}" data-days="${estimatedWorkDays(job)}">${escapeHtml(jobOptionLabel(job))}</option>`).join('')}
+            </select>
+          </label>
+          <div class="grid grid-cols-[1fr_auto] items-end gap-2">
+            <label class="grid gap-1 text-xs font-medium text-gray-700">
+              Work days
+              <input type="number" name="durationDays" class="form-input text-sm" min="1" max="30" step="1" value="${duration}" required>
+            </label>
+            <button type="submit" class="btn-primary btn-sm justify-center">Add</button>
+          </div>
+        </form>
+      `;
+    }
+
     function renderNeedsScheduling() {
       const container = document.getElementById('unscheduled-jobs');
-      const needsDate = allJobs
-        .filter((job) => activeJob(job) && !jobHasSchedule(job))
-        .sort((a, b) => String(a.updatedAt || a.createdAt).localeCompare(String(b.updatedAt || b.createdAt)));
+      const needsDate = unscheduledJobs();
 
       container.innerHTML = needsDate.length
         ? needsDate.map(scheduleForm).join('')
@@ -457,7 +567,7 @@ import Icon from '../../components/Icon.astro';
         : 'No labor-hour estimate found. Defaults to 1 work day.';
 
       return `
-        <div class="schedule-backlog-card">
+        <div class="schedule-backlog-card" draggable="true" data-unscheduled-job-id="${escapeHtml(job.id)}">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <a href="/jobs/${escapeHtml(job.id)}" class="font-semibold text-gray-950 hover:underline">${escapeHtml(job.name || 'Job')}</a>
@@ -484,6 +594,53 @@ import Icon from '../../components/Icon.astro';
       `;
     }
 
+    function wireCalendarInteractions() {
+      document.querySelectorAll('[data-quick-schedule-day]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const day = button.dataset.quickScheduleDay;
+          activeQuickScheduleDay = activeQuickScheduleDay === day ? null : day;
+          renderWeek();
+        });
+      });
+
+      document.querySelectorAll('[data-unscheduled-job-id]').forEach((card) => {
+        card.addEventListener('dragstart', (event) => {
+          event.dataTransfer?.setData('text/plain', card.dataset.unscheduledJobId || '');
+          event.dataTransfer?.setData('application/x-paintflow-job-id', card.dataset.unscheduledJobId || '');
+          card.classList.add('is-dragging');
+        });
+        card.addEventListener('dragend', () => {
+          card.classList.remove('is-dragging');
+          document.querySelectorAll('.schedule-day.is-drop-target').forEach((day) => day.classList.remove('is-drop-target'));
+        });
+      });
+
+      document.querySelectorAll('[data-calendar-day]').forEach((day) => {
+        day.addEventListener('dragover', (event) => {
+          if (!Array.from(event.dataTransfer?.types || []).includes('text/plain')) return;
+          event.preventDefault();
+          day.classList.add('is-drop-target');
+        });
+        day.addEventListener('dragleave', () => {
+          day.classList.remove('is-drop-target');
+        });
+        day.addEventListener('drop', async (event) => {
+          event.preventDefault();
+          day.classList.remove('is-drop-target');
+          const jobId = event.dataTransfer?.getData('application/x-paintflow-job-id') || event.dataTransfer?.getData('text/plain');
+          const job = allJobs.find((item) => item.id === jobId);
+          if (!job || !day.dataset.calendarDay) return;
+
+          try {
+            await scheduleJobFromDuration(job.id, day.dataset.calendarDay, estimatedWorkDays(job));
+          } catch (error) {
+            console.error(error);
+            notify('Failed to schedule job.', 'error');
+          }
+        });
+      });
+    }
+
     document.getElementById('sync-btn')?.addEventListener('click', () => {
       window.location.href = `${API_URL}/v1/calendar/connect`;
     });
@@ -505,14 +662,44 @@ import Icon from '../../components/Icon.astro';
 
     document.addEventListener('change', (event) => {
       const input = event.target;
-      if (!(input instanceof HTMLInputElement) || input.name !== 'scheduledStartDate') return;
-      const form = input.closest('.schedule-job-form');
-      if (form) autoPopulateEndDate(form);
+      if (input instanceof HTMLInputElement && input.name === 'scheduledStartDate') {
+        const form = input.closest('.schedule-job-form');
+        if (form) autoPopulateEndDate(form);
+      }
+
+      if (input instanceof HTMLSelectElement && input.name === 'quickJobId') {
+        const durationInput = input.closest('.schedule-quick-form')?.querySelector('input[name="durationDays"]');
+        const selected = input.selectedOptions[0];
+        if (durationInput && selected?.dataset.days) durationInput.value = selected.dataset.days;
+      }
     });
 
     document.addEventListener('submit', async (event) => {
       const form = event.target;
-      if (!(form instanceof HTMLFormElement) || !form.classList.contains('schedule-job-form')) return;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (form.classList.contains('schedule-quick-form')) {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        const data = new FormData(form);
+        const jobId = data.get('quickJobId');
+        const durationDays = data.get('durationDays') || 1;
+        const day = form.dataset.quickDay;
+
+        if (!jobId || !day) return;
+        button.disabled = true;
+        button.textContent = 'Adding...';
+        try {
+          await scheduleJobFromDuration(String(jobId), day, durationDays);
+        } catch (error) {
+          console.error(error);
+          notify('Failed to schedule job.', 'error');
+          button.disabled = false;
+          button.textContent = 'Add';
+        }
+        return;
+      }
+
+      if (!form.classList.contains('schedule-job-form')) return;
       event.preventDefault();
       autoPopulateEndDate(form);
 
@@ -533,12 +720,7 @@ import Icon from '../../components/Icon.astro';
       button.disabled = true;
       button.textContent = 'Scheduling...';
       try {
-        await api(`/v1/jobs/${jobId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ scheduledStartAt, scheduledEndAt, status: 'scheduled' }),
-        });
-        notify('Job scheduled.');
-        await loadCalendar();
+        await scheduleJob(jobId, scheduledStartAt, scheduledEndAt);
       } catch (error) {
         console.error(error);
         notify('Failed to schedule job.', 'error');
