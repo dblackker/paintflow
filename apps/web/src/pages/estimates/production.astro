@@ -765,7 +765,7 @@ import Base from '../../layouts/Base.astro';
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 bg-white/80 text-[11px] font-medium leading-none text-emerald-700 hover:bg-white" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
             <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
               <p class="font-semibold text-gray-900">Interior assumptions</p>
-              <p class="mt-1">Creates itemized editable lines for each generated room, such as Bedroom 1 walls, Bedroom 1 ceiling, Bedroom 1 trim, and Bedroom 1 doors.</p>
+              <p class="mt-1">Creates a room card for each generated room, then adds editable substrate lines such as walls, ceiling, trim, and doors inside that room.</p>
               <p class="mt-2">Uses standard room allowances for length, width, windows, doors, and wall height, then applies opening deductions and the selected trim scope. Override any generated line as measurements improve.</p>
             </div>
           </div>
@@ -1000,14 +1000,15 @@ import Base from '../../layouts/Base.astro';
       const kind = interiorSurfaceKind(surface);
       if (!room || !['ceilings', 'trim'].includes(kind)) return null;
 
-      const roomItems = interiorRoomItems(room);
+      const storedRoomItem = generatedRoomItem(room);
+      const roomItems = storedRoomItem ? [storedRoomItem] : interiorRoomItems(room);
       if (!roomItems.length) return null;
-      const matchedRoom = surface.dataset.group
+      const matchedRoom = storedRoomItem || (surface.dataset.group
         ? roomItems.find(item => item.label.toLowerCase() === surface.dataset.group.toLowerCase())
-        : roomItems.length === 1 ? roomItems[0] : null;
+        : roomItems.length === 1 ? roomItems[0] : null);
       if (!matchedRoom) return null;
 
-      const assumptions = interiorAssumptions(room);
+      const assumptions = generatedRoomAssumptions(room) || interiorAssumptions(room);
       const quantities = interiorQuantitiesForRoom(matchedRoom, assumptions);
       const unit = String(rate?.unit || '').toLowerCase();
 
@@ -1107,6 +1108,86 @@ import Base from '../../layouts/Base.astro';
       return `${groupName} ${surfaceName}`.trim();
     }
 
+    function roomName(room) {
+      return room?.querySelector('[data-room-name]')?.value.trim() || '';
+    }
+
+    function findRoomByName(name) {
+      const normalized = String(name || '').trim().toLowerCase();
+      if (!normalized) return null;
+      return Array.from(document.querySelectorAll('#rooms-container > div'))
+        .find(room => roomName(room).toLowerCase() === normalized) || null;
+    }
+
+    function isStarterPlaceholderRoom(room) {
+      if (!room) return false;
+      const name = roomName(room);
+      return /^Room \d+$/i.test(name) && !room.querySelector('[data-surface-item]');
+    }
+
+    function tagGeneratedInteriorRoom(room, roomItem, assumptions) {
+      room.dataset.generatedInteriorRoom = 'true';
+      room.dataset.interiorRoomLabel = roomItem.label;
+      room.dataset.interiorLength = String(roomItem.length);
+      room.dataset.interiorWidth = String(roomItem.width);
+      room.dataset.interiorWindows = String(roomItem.windows);
+      room.dataset.interiorDoors = String(roomItem.doors);
+      room.dataset.interiorCeilingHeight = String(assumptions.ceilingHeight);
+      room.dataset.interiorTrimScope = assumptions.trimScope;
+      room.dataset.interiorIncludeCeilings = String(assumptions.includeCeilings);
+      room.dataset.interiorIncludeDoors = String(assumptions.includeDoors);
+    }
+
+    function generatedRoomAssumptions(room) {
+      if (room?.dataset.generatedInteriorRoom !== 'true') return null;
+      return {
+        ceilingHeight: Number(room.dataset.interiorCeilingHeight || 9),
+        trimScope: room.dataset.interiorTrimScope || 'base-casing',
+        includeCeilings: room.dataset.interiorIncludeCeilings !== 'false',
+        includeDoors: room.dataset.interiorIncludeDoors !== 'false',
+      };
+    }
+
+    function generatedRoomItem(room) {
+      if (room?.dataset.generatedInteriorRoom !== 'true') return null;
+      return {
+        label: room.dataset.interiorRoomLabel || roomName(room),
+        length: Number(room.dataset.interiorLength || 0),
+        width: Number(room.dataset.interiorWidth || 0),
+        windows: Number(room.dataset.interiorWindows || 0),
+        doors: Number(room.dataset.interiorDoors || 0),
+      };
+    }
+
+    function displaySurfaceNameFromLegacy(surface) {
+      const raw = surface.dataset.surfaceName || surface.querySelector('[data-field="label"]')?.value || 'Substrate';
+      return String(raw).replace(/^\w/, char => char.toUpperCase());
+    }
+
+    function migrateLegacyGroupedInteriorScope(room, roomItems, assumptions) {
+      if (!/^Room \d+$/i.test(roomName(room))) return;
+      const legacySurfaces = Array.from(room.querySelectorAll('[data-surface-item]'))
+        .filter(surface => surface.dataset.group);
+      if (!legacySurfaces.length) return;
+
+      legacySurfaces.forEach((surface) => {
+        const matchingRoom = roomItems.find(item => item.label.toLowerCase() === surface.dataset.group.toLowerCase());
+        if (!matchingRoom) return;
+        const targetRoom = findRoomByName(matchingRoom.label) || addRoom(matchingRoom.label, [], { seedSurface: false });
+        targetRoom.querySelector('[data-area-type]').value = 'interior';
+        tagGeneratedInteriorRoom(targetRoom, matchingRoom, assumptions);
+        const data = collectSurfaceData(surface);
+        data.group = '';
+        data.label = displaySurfaceNameFromLegacy(surface);
+        data.surfaceName = data.label;
+        const duplicate = Array.from(targetRoom.querySelectorAll('[data-surface-item] [data-field="label"]'))
+          .some(input => input.value.trim().toLowerCase() === data.label.toLowerCase());
+        if (!duplicate) addSurface(targetRoom.id, data);
+      });
+
+      room.remove();
+    }
+
     function generateInteriorScope(room) {
       room.querySelector('[data-area-type]').value = 'interior';
       syncAreaType(room);
@@ -1142,27 +1223,36 @@ import Base from '../../layouts/Base.astro';
         .filter(isEmptyGeneratedPlaceholder)
         .forEach(surface => surface.remove());
 
-      const existingLabels = new Set(Array.from(room.querySelectorAll('[data-surface-item] [data-field="label"]'))
-        .map(input => input.value.trim().toLowerCase())
-        .filter(Boolean));
       const added = [];
+      if (isStarterPlaceholderRoom(room)) {
+        room.remove();
+      } else {
+        migrateLegacyGroupedInteriorScope(room, roomItems, assumptions);
+      }
 
       roomItems.forEach((roomItem) => {
-        ensureSurfaceGroup(room.querySelector('[data-items]'), roomItem.label);
+        const targetRoom = findRoomByName(roomItem.label) || addRoom(roomItem.label, [], { seedSurface: false });
+        targetRoom.querySelector('[data-area-type]').value = 'interior';
+        tagGeneratedInteriorRoom(targetRoom, roomItem, assumptions);
+        Array.from(targetRoom.querySelectorAll('[data-surface-item]'))
+          .filter(isEmptyGeneratedPlaceholder)
+          .forEach(surface => surface.remove());
+        const existingLabels = new Set(Array.from(targetRoom.querySelectorAll('[data-surface-item] [data-field="label"]'))
+          .map(input => input.value.trim().toLowerCase())
+          .filter(Boolean));
         const quantities = interiorQuantitiesForRoom(roomItem, assumptions);
         [
-          { kind: 'walls', surfaceName: 'walls', quantity: quantities.walls },
-          { kind: 'ceilings', surfaceName: 'ceiling', quantity: quantities.ceilings },
-          { kind: 'trim', surfaceName: 'trim', quantity: quantities.trim },
-          { kind: 'doors', surfaceName: 'doors', quantity: quantities.doors },
+          { kind: 'walls', surfaceName: 'Walls', quantity: quantities.walls },
+          { kind: 'ceilings', surfaceName: 'Ceiling', quantity: quantities.ceilings },
+          { kind: 'trim', surfaceName: 'Trim', quantity: quantities.trim },
+          { kind: 'doors', surfaceName: 'Doors', quantity: quantities.doors },
         ].filter(item => item.quantity > 0).forEach((item) => {
-          const label = `${roomItem.label} ${item.surfaceName}`;
+          const label = item.surfaceName;
           if (existingLabels.has(label.toLowerCase())) return;
           const rate = rateByKind[item.kind];
-          addSurface(room.id, {
+          addSurface(targetRoom.id, {
             productionRateId: rate.id,
             label,
-            group: roomItem.label,
             surfaceName: item.surfaceName,
             prepLevel: 'standard',
             quantity: Number(item.quantity.toFixed(1)),
@@ -1174,7 +1264,8 @@ import Base from '../../layouts/Base.astro';
         });
       });
 
-      updateInteriorPreview(room);
+      syncScopeBuilderVisibility();
+      updateInteriorPreview(primaryScopeRoom() || document.querySelector('#rooms-container > div'));
       calculateTotal();
 
       if (added.length) {
