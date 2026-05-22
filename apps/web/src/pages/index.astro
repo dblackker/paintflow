@@ -1,4 +1,5 @@
 ---
+import Icon from '../components/Icon.astro';
 import '../styles/design-system.css';
 ---
 
@@ -8,139 +9,586 @@ import '../styles/design-system.css';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PaintFlow - CRM Built for Painting Contractors</title>
-  <meta name="description" content="All-in-one CRM for painting contractors. Manage leads, estimates, jobs, and payments. Good/Better/Best pricing, e-signatures, QuickBooks sync.">
+  <meta name="description" content="PaintFlow helps painting contractors capture leads, create production-ready estimates, schedule jobs, track labor, and collect payments.">
+  <style>
+    body {
+      background: var(--pf-page-bg);
+      color: var(--pf-on-surface);
+    }
+
+    .landing-shell {
+      width: min(100%, 1120px);
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    .landing-nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid var(--pf-outline-variant);
+      background: color-mix(in srgb, var(--pf-page-bg) 92%, white);
+      backdrop-filter: blur(12px);
+    }
+
+    .landing-nav-inner {
+      display: flex;
+      min-height: 64px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .landing-brand {
+      display: inline-flex;
+      min-width: 0;
+      align-items: center;
+      gap: 10px;
+      color: var(--pf-on-surface);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .landing-brand-mark {
+      display: inline-grid;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--pf-primary);
+      color: var(--pf-on-primary);
+      font-weight: 800;
+    }
+
+    .landing-nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .landing-desktop-link {
+      display: none;
+      color: var(--pf-muted);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .landing-hero {
+      display: grid;
+      gap: 28px;
+      padding: 34px 0 24px;
+    }
+
+    .landing-eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--pf-outline-variant);
+      border-radius: 999px;
+      background: var(--pf-surface);
+      color: var(--pf-muted);
+      font-size: 13px;
+      font-weight: 650;
+      padding: 7px 11px;
+    }
+
+    .landing-title {
+      max-width: 760px;
+      margin: 14px 0 0;
+      font-size: 40px;
+      line-height: 1.02;
+      letter-spacing: 0;
+      color: var(--pf-on-surface);
+    }
+
+    .landing-copy {
+      max-width: 620px;
+      margin: 16px 0 0;
+      color: var(--pf-muted);
+      font-size: 17px;
+      line-height: 1.55;
+    }
+
+    .landing-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .landing-trust {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      color: var(--pf-muted);
+      font-size: 13px;
+    }
+
+    .landing-trust span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .landing-trust span::before {
+      content: "";
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--pf-primary);
+    }
+
+    .product-preview {
+      border: 1px solid var(--pf-outline-variant);
+      border-radius: 18px;
+      overflow: hidden;
+      background: var(--pf-surface);
+      box-shadow: var(--pf-shadow-2);
+    }
+
+    .preview-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--pf-outline-variant);
+      padding: 12px;
+    }
+
+    .preview-chip {
+      border-radius: 999px;
+      background: var(--pf-primary-container);
+      color: var(--pf-on-primary-container);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 9px;
+    }
+
+    .preview-body {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .preview-metric-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .preview-metric,
+    .preview-panel {
+      border: 1px solid var(--pf-outline-variant);
+      border-radius: 12px;
+      background: var(--pf-panel-surface);
+      padding: 12px;
+    }
+
+    .preview-label {
+      color: var(--pf-muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .preview-value {
+      margin-top: 4px;
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--pf-on-surface);
+    }
+
+    .preview-pipeline {
+      display: grid;
+      gap: 8px;
+    }
+
+    .preview-card {
+      display: grid;
+      gap: 4px;
+      border: 1px solid var(--pf-outline-variant);
+      border-radius: 10px;
+      background: var(--pf-surface);
+      padding: 10px;
+    }
+
+    .preview-card strong {
+      font-size: 14px;
+    }
+
+    .preview-card span {
+      color: var(--pf-muted);
+      font-size: 12px;
+    }
+
+    .landing-section {
+      padding: 34px 0;
+    }
+
+    .section-heading {
+      max-width: 720px;
+      margin: 0 auto 18px;
+      text-align: center;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      color: var(--pf-on-surface);
+      font-size: 28px;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .section-heading p {
+      margin: 10px 0 0;
+      color: var(--pf-muted);
+      line-height: 1.55;
+    }
+
+    .workflow-grid,
+    .pricing-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .workflow-card,
+    .pricing-card {
+      border: 1px solid var(--pf-outline-variant);
+      border-radius: 16px;
+      background: var(--pf-surface);
+      padding: 16px;
+    }
+
+    .workflow-icon {
+      display: inline-grid;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--pf-secondary-container);
+      color: var(--pf-on-secondary-container);
+    }
+
+    .workflow-card h3,
+    .pricing-card h3 {
+      margin: 12px 0 6px;
+      color: var(--pf-on-surface);
+      font-size: 18px;
+    }
+
+    .workflow-card p,
+    .pricing-card p,
+    .pricing-card li {
+      color: var(--pf-muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .pricing-card {
+      position: relative;
+      display: grid;
+      gap: 14px;
+    }
+
+    .pricing-card.featured {
+      border-color: var(--pf-primary);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--pf-primary) 22%, transparent);
+    }
+
+    .pricing-badge {
+      width: fit-content;
+      border-radius: 999px;
+      background: var(--pf-primary-container);
+      color: var(--pf-on-primary-container);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 5px 9px;
+    }
+
+    .pricing-price {
+      color: var(--pf-on-surface);
+      font-size: 32px;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .pricing-price span {
+      color: var(--pf-muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .pricing-card ul {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .pricing-card li {
+      display: flex;
+      gap: 8px;
+    }
+
+    .pricing-card li::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      flex: 0 0 auto;
+      margin-top: 8px;
+      border-radius: 999px;
+      background: var(--pf-primary);
+    }
+
+    .landing-footer {
+      border-top: 1px solid var(--pf-outline-variant);
+      padding: 28px 0;
+    }
+
+    .landing-footer-inner {
+      display: grid;
+      gap: 18px;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .footer-links a,
+    .footer-copy {
+      color: var(--pf-muted);
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    @media (max-width: 420px) {
+      .landing-shell {
+        padding: 0 14px;
+      }
+
+      .landing-brand span:last-child {
+        max-width: 112px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .landing-title {
+        font-size: 34px;
+      }
+
+      .landing-nav-actions .btn-secondary {
+        display: none;
+      }
+    }
+
+    @media (min-width: 640px) {
+      .landing-actions {
+        grid-template-columns: repeat(2, minmax(0, 190px));
+      }
+
+      .workflow-grid,
+      .pricing-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .landing-footer-inner {
+        grid-template-columns: 1fr auto;
+        align-items: center;
+      }
+    }
+
+    @media (min-width: 900px) {
+      .landing-desktop-link {
+        display: inline-flex;
+      }
+
+      .landing-hero {
+        grid-template-columns: minmax(0, 1fr) 440px;
+        align-items: center;
+        padding: 60px 0 40px;
+      }
+
+      .landing-title {
+        font-size: 58px;
+      }
+
+      .landing-copy {
+        font-size: 18px;
+      }
+
+      .landing-section {
+        padding: 52px 0;
+      }
+    }
+  </style>
 </head>
-<body class="bg-white">
-  <!-- Nav -->
-  <nav class="border-b">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold">P</div>
-          <span class="text-xl font-semibold">PaintFlow</span>
-        </div>
-        <div class="flex items-center gap-4">
-          <a href="#pricing" class="text-gray-600 hover:text-gray-900">Pricing</a>
-          <a href="/login" class="btn-secondary btn-sm">Sign In</a>
-          <a href="/signup" class="btn-primary btn-sm">Start Free Trial</a>
-        </div>
+<body>
+  <nav class="landing-nav">
+    <div class="landing-shell landing-nav-inner">
+      <a href="/" class="landing-brand" aria-label="PaintFlow home">
+        <span class="landing-brand-mark">P</span>
+        <span>PaintFlow</span>
+      </a>
+      <div class="landing-nav-actions">
+        <a href="#pricing" class="landing-desktop-link">Pricing</a>
+        <a href="/login" class="btn-secondary btn-sm">Sign in</a>
+        <a href="/signup" class="btn-primary btn-sm">Start trial</a>
       </div>
     </div>
   </nav>
 
-  <!-- Hero -->
-  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-    <div class="text-center max-w-3xl mx-auto">
-      <h1 class="text-5xl font-bold text-gray-900 mb-6">
-        The CRM Built for Painting Contractors
-      </h1>
-      <p class="text-xl text-gray-600 mb-8">
-        Stop losing jobs to slow follow-up. PaintFlow handles leads, estimates, scheduling, and payments — all in one place.
-      </p>
-      <div class="flex gap-4 justify-center">
-        <a href="/signup" class="btn-primary justify-center">
-          Start Free Trial →
+  <main>
+    <section class="landing-shell landing-hero">
+      <div>
+        <span class="landing-eyebrow">Built for painting contractors</span>
+        <h1 class="landing-title">Turn leads into scheduled painting jobs without losing the details.</h1>
+        <p class="landing-copy">
+          PaintFlow keeps the customer, estimate, jobsite, crew time, paint products, photos, change orders, and payments in one simple workflow.
+        </p>
+        <div class="landing-actions">
+          <a href="/signup" class="btn-primary justify-center">Start free trial</a>
+          <a href="/login" class="btn-secondary justify-center">Sign in</a>
+        </div>
+        <div class="landing-trust" aria-label="Trial details">
+          <span>14-day trial</span>
+          <span>No credit card required</span>
+          <span>Mobile crew workflows</span>
+        </div>
+      </div>
+
+      <div class="product-preview" aria-label="PaintFlow product preview">
+        <div class="preview-topbar">
+          <div class="landing-brand">
+            <span class="landing-brand-mark">P</span>
+            <span>Today</span>
+          </div>
+          <span class="preview-chip">In production</span>
+        </div>
+        <div class="preview-body">
+          <div class="preview-metric-row">
+            <div class="preview-metric">
+              <div class="preview-label">Leads</div>
+              <div class="preview-value">18</div>
+            </div>
+            <div class="preview-metric">
+              <div class="preview-label">Sent</div>
+              <div class="preview-value">$42k</div>
+            </div>
+            <div class="preview-metric">
+              <div class="preview-label">Jobs</div>
+              <div class="preview-value">7</div>
+            </div>
+          </div>
+          <div class="preview-panel">
+            <div class="preview-label">Pipeline</div>
+            <div class="preview-pipeline mt-3">
+              <div class="preview-card">
+                <strong>Exterior repaint</strong>
+                <span>Oak Street - estimate accepted</span>
+              </div>
+              <div class="preview-card">
+                <strong>Kitchen cabinets</strong>
+                <span>Color selections due today</span>
+              </div>
+              <div class="preview-card">
+                <strong>Interior walls</strong>
+                <span>Crew time logged - 28.5 hours</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section">
+      <div class="landing-shell">
+        <div class="section-heading">
+          <h2>One workflow from first call to final payment.</h2>
+          <p>Owners get the controls they need. Crews and customers get a simpler experience.</p>
+        </div>
+        <div class="workflow-grid">
+          <article class="workflow-card">
+            <span class="workflow-icon"><Icon name="message" /></span>
+            <h3>Capture and follow up</h3>
+            <p>Track contact details, jobsite address, source, messages, follow-ups, and pipeline status from the first inquiry.</p>
+          </article>
+          <article class="workflow-card">
+            <span class="workflow-icon"><Icon name="paint-bucket" /></span>
+            <h3>Estimate with production detail</h3>
+            <p>Build itemized interior or exterior scopes with substrates, prep, paint products, optional add-ons, and clear customer proposals.</p>
+          </article>
+          <article class="workflow-card">
+            <span class="workflow-icon"><Icon name="clock" /></span>
+            <h3>Run the job</h3>
+            <p>Manage photos, readiness items, change orders, crew timecards, job costs, deposits, and progress updates from the field.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing" class="landing-section">
+      <div class="landing-shell">
+        <div class="section-heading">
+          <h2>Simple pricing that can scale with the shop.</h2>
+          <p>Start lean, then add team controls, reporting, and integrations as operations mature.</p>
+        </div>
+        <div class="pricing-grid">
+          <article class="pricing-card">
+            <h3>Starter</h3>
+            <div class="pricing-price">$49 <span>/mo</span></div>
+            <ul>
+              <li>3 team members</li>
+              <li>Leads, estimates, and e-signatures</li>
+              <li>Basic job tracking</li>
+            </ul>
+            <a href="/signup?plan=starter" class="btn-secondary justify-center">Start trial</a>
+          </article>
+          <article class="pricing-card featured">
+            <span class="pricing-badge">Most common</span>
+            <h3>Pro</h3>
+            <div class="pricing-price">$149 <span>/mo</span></div>
+            <ul>
+              <li>Unlimited leads and team members</li>
+              <li>Production estimates and job costing</li>
+              <li>Stripe, QuickBooks, photos, and timecards</li>
+            </ul>
+            <a href="/signup?plan=pro" class="btn-primary justify-center">Start trial</a>
+          </article>
+          <article class="pricing-card">
+            <h3>Enterprise</h3>
+            <div class="pricing-price">$399 <span>/mo</span></div>
+            <ul>
+              <li>White labeling and advanced roles</li>
+              <li>Multi-crew operations and reporting</li>
+              <li>Priority implementation support</li>
+            </ul>
+            <a href="mailto:sales@paintflow.app" class="btn-secondary justify-center">Contact sales</a>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="landing-footer">
+    <div class="landing-shell landing-footer-inner">
+      <div>
+        <a href="/" class="landing-brand" aria-label="PaintFlow home">
+          <span class="landing-brand-mark">P</span>
+          <span>PaintFlow</span>
         </a>
-        <a href="#demo" class="btn-secondary justify-center">
-          Watch Demo
-        </a>
+        <p class="footer-copy mt-2">CRM and operations software for painting contractors.</p>
       </div>
-      <p class="text-sm text-gray-500 mt-4">14-day free trial • No credit card required</p>
-    </div>
-  </section>
-
-  <!-- Features -->
-  <section class="bg-gray-50 py-20">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <h2 class="text-3xl font-bold text-center mb-12">Everything you need to run your painting business</h2>
-      <div class="grid md:grid-cols-3 gap-8">
-        <div class="bg-white p-6 rounded-lg border">
-          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">📊</div>
-          <h3 class="font-semibold mb-2">Win More Jobs</h3>
-          <p class="text-gray-600 text-sm">Good/Better/Best estimates with e-signatures. Close 30% more deals.</p>
-        </div>
-        <div class="bg-white p-6 rounded-lg border">
-          <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">📅</div>
-          <h3 class="font-semibold mb-2">Schedule Jobs</h3>
-          <p class="text-gray-600 text-sm">Drag-drop calendar with Google sync. Never double-book again.</p>
-        </div>
-        <div class="bg-white p-6 rounded-lg border">
-          <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">💰</div>
-          <h3 class="font-semibold mb-2">Get Paid Faster</h3>
-          <p class="text-gray-600 text-sm">50% deposits via Stripe. QuickBooks sync for accounting.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Pricing -->
-  <section id="pricing" class="py-20">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <h2 class="text-3xl font-bold text-center mb-12">Simple, transparent pricing</h2>
-      <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-        <div class="border rounded-lg p-6">
-          <h3 class="text-xl font-bold mb-2">Starter</h3>
-          <div class="mb-4"><span class="text-4xl font-bold">$49</span><span class="text-gray-600">/mo</span></div>
-          <ul class="space-y-2 text-sm mb-6">
-            <li>✓ Up to 3 team members</li>
-            <li>✓ 100 leads/month</li>
-            <li>✓ E-signatures</li>
-          </ul>
-          <a href="/signup?plan=starter" class="btn-secondary w-full justify-center">Start Trial</a>
-        </div>
-        <div class="border-2 border-blue-600 rounded-lg p-6 relative">
-          <span class="absolute top-0 right-0 bg-blue-600 text-white text-xs px-3 py-1 rounded-bl-lg">POPULAR</span>
-          <h3 class="text-xl font-bold mb-2">Pro</h3>
-          <div class="mb-4"><span class="text-4xl font-bold">$149</span><span class="text-gray-600">/mo</span></div>
-          <ul class="space-y-2 text-sm mb-6">
-            <li>✓ Unlimited team</li>
-            <li>✓ Unlimited leads</li>
-            <li>✓ QuickBooks sync</li>
-            <li>✓ Priority support</li>
-          </ul>
-          <a href="/signup?plan=pro" class="btn-primary w-full justify-center">Start Trial</a>
-        </div>
-        <div class="border rounded-lg p-6">
-          <h3 class="text-xl font-bold mb-2">Enterprise</h3>
-          <div class="mb-4"><span class="text-4xl font-bold">$399</span><span class="text-gray-600">/mo</span></div>
-          <ul class="space-y-2 text-sm mb-6">
-            <li>✓ Everything in Pro</li>
-            <li>✓ White-label</li>
-            <li>✓ API access</li>
-            <li>✓ Dedicated CSM</li>
-          </ul>
-          <a href="mailto:sales@paintflow.app" class="btn-secondary w-full justify-center">Contact Sales</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="border-t py-12">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between">
-        <div>
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white text-sm font-bold">P</div>
-            <span class="font-semibold">PaintFlow</span>
-          </div>
-          <p class="text-sm text-gray-600">CRM for painting contractors</p>
-        </div>
-        <div class="flex gap-8 text-sm">
-          <div>
-            <p class="font-medium mb-2">Product</p>
-            <a href="#pricing" class="block text-gray-600 hover:text-gray-900">Pricing</a>
-            <a href="/help" class="block text-gray-600 hover:text-gray-900">Help</a>
-          </div>
-          <div>
-            <p class="font-medium mb-2">Company</p>
-            <a href="/about" class="block text-gray-600 hover:text-gray-900">About</a>
-            <a href="mailto:support@paintflow.app" class="block text-gray-600 hover:text-gray-900">Contact</a>
-          </div>
-        </div>
-      </div>
-      <div class="mt-8 pt-8 border-t text-sm text-gray-600">
-        © 2026 PaintFlow. All rights reserved.
+      <div class="footer-links">
+        <a href="#pricing">Pricing</a>
+        <a href="/help">Help</a>
+        <a href="mailto:support@paintflow.app">Contact</a>
       </div>
     </div>
   </footer>
