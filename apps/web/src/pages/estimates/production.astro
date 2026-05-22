@@ -917,7 +917,10 @@ import Base from '../../layouts/Base.astro';
             </select>
           </label>
         </div>
-        <p class="mb-2 text-xs text-gray-500" data-measure-helper></p>
+        <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <p class="text-xs text-gray-500" data-measure-helper></p>
+          <button type="button" class="populate-derived-measure btn-text btn-sm hidden shrink-0">Use room metrics</button>
+        </div>
         <div class="grid grid-cols-2 gap-2 mb-2">
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Prep hrs +/-" value="${escapeHtml(item.prepAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="prepAdjustmentHours">
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Paint hrs +/-" value="${escapeHtml(item.paintAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="paintAdjustmentHours">
@@ -986,6 +989,73 @@ import Base from '../../layouts/Base.astro';
 
     function findInteriorRate(kind) {
       return rates.find(rate => interiorRateKind(rate) === kind) || null;
+    }
+
+    function derivedInteriorMeasurement(surface) {
+      const room = surface.closest('#rooms-container > div');
+      const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
+      const kind = interiorSurfaceKind(surface);
+      if (!room || !['ceilings', 'trim'].includes(kind)) return null;
+
+      const roomItems = interiorRoomItems(room);
+      if (!roomItems.length) return null;
+      const matchedRoom = surface.dataset.group
+        ? roomItems.find(item => item.label.toLowerCase() === surface.dataset.group.toLowerCase())
+        : roomItems.length === 1 ? roomItems[0] : null;
+      if (!matchedRoom) return null;
+
+      const assumptions = interiorAssumptions(room);
+      const quantities = interiorQuantitiesForRoom(matchedRoom, assumptions);
+      const unit = String(rate?.unit || '').toLowerCase();
+
+      if (kind === 'ceilings' && quantities.ceilings > 0) {
+        return {
+          kind,
+          width: matchedRoom.length,
+          height: matchedRoom.width,
+          quantity: quantities.ceilings,
+          target: unit === 'linear_ft' ? 'width' : 'area',
+        };
+      }
+      if (kind === 'trim' && quantities.trim > 0) {
+        return {
+          kind,
+          width: quantities.trim,
+          height: 0,
+          quantity: quantities.trim,
+          target: unit === 'linear_ft' ? 'width' : 'quantity',
+        };
+      }
+      return null;
+    }
+
+    function applyDerivedInteriorMeasurement(surface) {
+      const derived = derivedInteriorMeasurement(surface);
+      if (!derived) {
+        window.showToast?.('Room metrics are not available for this substrate yet', 'error');
+        return;
+      }
+
+      const widthInput = surface.querySelector('[data-field="width"]');
+      const heightInput = surface.querySelector('[data-field="height"]');
+      const quantityInput = surface.querySelector('[data-field="quantity"]');
+
+      if (derived.kind === 'ceilings') {
+        widthInput.value = Number(derived.width).toFixed(1);
+        heightInput.value = Number(derived.height).toFixed(1);
+        quantityInput.value = Number(derived.quantity).toFixed(1);
+      } else if (derived.target === 'width') {
+        widthInput.value = Number(derived.width).toFixed(1);
+        heightInput.value = '';
+        quantityInput.value = '';
+      } else {
+        widthInput.value = '';
+        heightInput.value = '';
+        quantityInput.value = Number(derived.quantity).toFixed(1);
+      }
+
+      calculateTotal();
+      window.showToast?.('Measurement populated from room metrics', 'success');
     }
 
     function isEmptyGeneratedPlaceholder(surface) {
@@ -1179,6 +1249,7 @@ import Base from '../../layouts/Base.astro';
       widthWrap.classList.toggle('hidden', !config.showWidth);
       heightWrap.classList.toggle('hidden', !config.showHeight);
       qtyWrap.classList.toggle('hidden', !config.showQty);
+      surface.querySelector('.populate-derived-measure')?.classList.toggle('hidden', !derivedInteriorMeasurement(surface));
       surface.querySelector('[data-label="width"]').textContent = config.widthLabel;
       surface.querySelector('[data-label="height"]').textContent = config.heightLabel;
       surface.querySelector('[data-label="quantity"]').textContent = config.qtyLabel;
@@ -1879,6 +1950,10 @@ import Base from '../../layouts/Base.astro';
       if (event.target.classList.contains('copy-surface')) {
         const room = event.target.closest('#rooms-container > div');
         addSurface(room.id, collectSurfaceData(event.target.closest('[data-surface-item]')));
+      }
+      if (event.target.classList.contains('populate-derived-measure')) {
+        applyDerivedInteriorMeasurement(event.target.closest('[data-surface-item]'));
+        return;
       }
       if (event.target.classList.contains('copy-room')) {
         const source = event.target.closest('#rooms-container > div');
