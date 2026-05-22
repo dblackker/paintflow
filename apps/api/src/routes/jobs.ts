@@ -28,6 +28,17 @@ function estimatedMaterialsFromPackage(estimate: typeof estimates.$inferSelect |
   return items.reduce((total: number, item: any) => total + money(item?.material?.price), 0);
 }
 
+function estimatedLaborHoursFromPackage(estimate: typeof estimates.$inferSelect | undefined) {
+  const pkg = selectedEstimatePackage(estimate);
+  const items = Array.isArray(pkg?.items) ? pkg.items : Array.isArray(pkg?.lineItems) ? pkg.lineItems : [];
+  const hours = items.reduce((total: number, item: any) => {
+    const lineHours = money(item?.labor?.hours);
+    if (lineHours > 0) return total + lineHours;
+    return total + money(item?.laborHours) * Math.max(money(item?.qty) || 1, 1);
+  }, 0);
+  return Number(hours.toFixed(2));
+}
+
 async function getJobForOrg(db: ReturnType<typeof createDb>, orgId: string, jobId: string) {
   return db.query.jobs.findFirst({
     where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)),
@@ -59,14 +70,21 @@ jobsApp.get('/', async (c) => {
       leadCity: leads.city,
       leadState: leads.state,
       leadPostalCode: leads.postalCode,
+      estimatePackages: estimates.packages,
     })
     .from(jobs)
     .leftJoin(leads, and(eq(jobs.leadId, leads.id), eq(leads.orgId, orgId)))
+    .leftJoin(estimates, and(eq(jobs.estimateId, estimates.id), eq(estimates.orgId, orgId)))
     .where(eq(jobs.orgId, orgId))
     .orderBy(desc(jobs.createdAt))
     .limit(50);
   
-  return c.json({ data: allJobs });
+  return c.json({
+    data: allJobs.map(({ estimatePackages, ...job }) => ({
+      ...job,
+      estimatedLaborHours: estimatedLaborHoursFromPackage(estimatePackages ? { packages: estimatePackages } as typeof estimates.$inferSelect : undefined),
+    })),
+  });
 });
 
 jobsApp.get('/:id', async (c) => {

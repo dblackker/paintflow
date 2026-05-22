@@ -147,6 +147,8 @@ import Icon from '../../components/Icon.astro';
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     const DAY_MS = 86400000;
+    const AVERAGE_CREW_SIZE = 3;
+    const CREW_HOURS_PER_PERSON_DAY = 8;
     let currentWeekStart = getWeekStart(new Date());
     let allJobs = [];
     let allGoogleEvents = [];
@@ -253,6 +255,33 @@ import Icon from '../../components/Icon.astro';
       const startText = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       if (!end || dateKey(start) === dateKey(end)) return startText;
       return `${startText} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+    }
+
+    function estimatedWorkDays(job) {
+      const estimatedHours = Number(job.estimatedLaborHours || 0);
+      if (!Number.isFinite(estimatedHours) || estimatedHours <= 0) return 1;
+      return Math.max(1, Math.ceil(estimatedHours / (AVERAGE_CREW_SIZE * CREW_HOURS_PER_PERSON_DAY)));
+    }
+
+    function addWorkDays(date, daysToAdd) {
+      const result = new Date(date);
+      let added = 0;
+      while (added < daysToAdd) {
+        result.setDate(result.getDate() + 1);
+        const day = result.getDay();
+        if (day !== 0 && day !== 6) added += 1;
+      }
+      return result;
+    }
+
+    function autoPopulateEndDate(form) {
+      const startInput = form.querySelector('input[name="scheduledStartDate"]');
+      const endInput = form.querySelector('input[name="scheduledEndDate"]');
+      if (!startInput?.value || !endInput || endInput.value) return;
+      const job = allJobs.find((item) => item.id === form.dataset.jobId);
+      const [year, month, day] = startInput.value.split('-').map(Number);
+      const startDate = new Date(year, month - 1, day);
+      endInput.value = dateKey(addWorkDays(startDate, estimatedWorkDays(job || {}) - 1));
     }
 
     function notify(message, type = 'success') {
@@ -385,6 +414,11 @@ import Icon from '../../components/Icon.astro';
     function scheduleForm(job) {
       const jobAddress = address(job);
       const statusCopy = job.status === 'scheduled' ? 'Ready to schedule' : label(job.status);
+      const estimateHours = Number(job.estimatedLaborHours || 0);
+      const workDays = estimatedWorkDays(job);
+      const durationCopy = estimateHours > 0
+        ? `${estimateHours.toFixed(1).replace(/\.0$/, '')} estimated crew-hours. Defaults to ${workDays} work day${workDays === 1 ? '' : 's'} at a ${AVERAGE_CREW_SIZE}-person crew.`
+        : 'No labor-hour estimate found. Defaults to 1 work day.';
 
       return `
         <div class="schedule-backlog-card">
@@ -398,6 +432,7 @@ import Icon from '../../components/Icon.astro';
           <details class="mt-3">
             <summary class="btn-tonal btn-sm justify-center cursor-pointer select-none">Set dates</summary>
             <form class="schedule-job-form mt-3 grid gap-2" data-job-id="${escapeHtml(job.id)}">
+              <p class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">${escapeHtml(durationCopy)}</p>
               <label class="grid gap-1 text-xs font-medium text-gray-700">
                 First work day
                 <input type="date" name="scheduledStartDate" class="form-input text-sm" required>
@@ -432,10 +467,18 @@ import Icon from '../../components/Icon.astro';
       loadCalendar();
     });
 
+    document.addEventListener('change', (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.name !== 'scheduledStartDate') return;
+      const form = input.closest('.schedule-job-form');
+      if (form) autoPopulateEndDate(form);
+    });
+
     document.addEventListener('submit', async (event) => {
       const form = event.target;
       if (!(form instanceof HTMLFormElement) || !form.classList.contains('schedule-job-form')) return;
       event.preventDefault();
+      autoPopulateEndDate(form);
 
       const button = form.querySelector('button[type="submit"]');
       const data = new FormData(form);
