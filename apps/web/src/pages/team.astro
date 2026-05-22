@@ -5,6 +5,20 @@ import Icon from '../components/Icon.astro';
 
 <Base title="Team - PaintFlow">
   <style>
+    .team-member-row.is-inactive {
+      background: var(--pf-surface-muted);
+      opacity: 0.82;
+    }
+    .team-member-row.is-inactive .chip {
+      background: var(--pf-surface);
+    }
+    .team-status-active {
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+    }
+    .team-archived-section {
+      margin-top: 1rem;
+    }
     @media (max-width: 640px) {
       .team-policy {
         padding: 0.85rem;
@@ -41,7 +55,7 @@ import Icon from '../components/Icon.astro';
       <button id="add-member-btn" class="btn-primary w-full sm:w-auto">Add crew member</button>
     </div>
 
-    <div id="team-summary" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6"></div>
+    <div id="team-summary" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6"></div>
 
     <section class="team-policy surface-panel p-4 sm:p-5 mb-4 sm:mb-6">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -71,6 +85,16 @@ import Icon from '../components/Icon.astro';
         <a href="/time" class="btn-secondary w-full sm:w-auto text-center">Review timesheets</a>
       </div>
       <div id="members-list" class="divide-y divide-[var(--pf-border)]">
+        <div class="p-8 text-center text-gray-500">Loading...</div>
+      </div>
+    </section>
+
+    <section class="team-archived-section surface-panel overflow-hidden">
+      <div class="p-4 sm:p-5 border-b border-[var(--pf-border)]">
+        <h2 class="font-semibold">Deactivated Crew</h2>
+        <p class="text-sm text-gray-600">Hidden from new timecards and time entry forms, but preserved for historical job costing.</p>
+      </div>
+      <div id="inactive-members-list" class="divide-y divide-[var(--pf-border)]">
         <div class="p-8 text-center text-gray-500">Loading...</div>
       </div>
     </section>
@@ -155,6 +179,10 @@ import Icon from '../components/Icon.astro';
       return base * (1 + burden / 100);
     }
 
+    function isActiveMember(member) {
+      return member.isActive !== false;
+    }
+
     async function request(path, options = {}) {
       const res = await fetch(`${API_URL}${path}`, {
         credentials: 'include',
@@ -179,14 +207,17 @@ import Icon from '../components/Icon.astro';
     }
 
     function renderSummary() {
-      const activeCount = members.length;
-      const leadCount = members.filter((member) => member.role === 'crew_lead').length;
-      const avgBurdened = members.length
-        ? members.reduce((sum, member) => sum + burdenedRate(member), 0) / members.length
+      const active = members.filter(isActiveMember);
+      const inactive = members.filter((member) => !isActiveMember(member));
+      const activeCount = active.length;
+      const leadCount = active.filter((member) => member.role === 'crew_lead').length;
+      const avgBurdened = active.length
+        ? active.reduce((sum, member) => sum + burdenedRate(member), 0) / active.length
         : 0;
       document.getElementById('team-summary').innerHTML = [
         ['Active crew', activeCount, 'People available for scheduling and timecards'],
         ['Crew leads', leadCount, 'Can log daily crew time'],
+        ['Deactivated', inactive.length, 'Hidden from new time entries'],
         ['Avg burdened rate', currency(avgBurdened), 'Used for job labor costing'],
       ].map(([label, value, help]) => `
         <div class="surface-panel p-4">
@@ -198,18 +229,28 @@ import Icon from '../components/Icon.astro';
     }
 
     function renderMembers() {
-      const container = document.getElementById('members-list');
-      if (!members.length) {
-        container.innerHTML = '<div class="p-8 text-center text-gray-500">No active team members yet. Add crew members before logging job timecards.</div>';
+      const active = members.filter(isActiveMember);
+      const inactive = members.filter((member) => !isActiveMember(member));
+      renderMemberList('members-list', active, false);
+      renderMemberList('inactive-members-list', inactive, true);
+    }
+
+    function renderMemberList(containerId, list, inactive = false) {
+      const container = document.getElementById(containerId);
+      if (!list.length) {
+        container.innerHTML = inactive
+          ? '<div class="p-6 text-center text-gray-500">No deactivated crew members.</div>'
+          : '<div class="p-8 text-center text-gray-500">No active team members yet. Add crew members before logging job timecards.</div>';
         return;
       }
 
-      container.innerHTML = members.map((member) => `
-        <article class="team-member-row p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+      container.innerHTML = list.map((member) => `
+        <article class="team-member-row ${inactive ? 'is-inactive' : ''} p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <h3 class="font-semibold truncate">${escapeHtml(member.name || 'Unnamed')}</h3>
               <span class="chip">${roleLabels[member.role] || escapeHtml(member.role)}</span>
+              <span class="chip ${inactive ? '' : 'team-status-active'}">${inactive ? 'Deactivated' : 'Active'}</span>
             </div>
             <p class="text-sm text-gray-600 mt-1">${escapeHtml(member.email || 'No email on file')}</p>
           </div>
@@ -228,7 +269,10 @@ import Icon from '../components/Icon.astro';
             </div>
             <div class="team-member-actions flex justify-end gap-1.5 col-span-2 sm:col-span-1">
               <button type="button" onclick="editMember('${member.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit ${escapeHtml(member.name || 'crew member')}">${iconSvg('edit')}</button>
-              <button type="button" onclick="removeMember('${member.id}')" class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Remove ${escapeHtml(member.name || 'crew member')}">${iconSvg('trash')}</button>
+              ${inactive
+                ? `<button type="button" onclick="setMemberActive('${member.id}', true)" class="btn-primary btn-sm" aria-label="Reactivate ${escapeHtml(member.name || 'crew member')}">Reactivate</button>`
+                : `<button type="button" onclick="setMemberActive('${member.id}', false)" class="btn-secondary btn-sm" aria-label="Deactivate ${escapeHtml(member.name || 'crew member')}">Deactivate</button>`
+              }
             </div>
           </div>
         </article>
@@ -272,10 +316,13 @@ import Icon from '../components/Icon.astro';
       if (member) openModal(member);
     };
 
-    window.removeMember = async (id) => {
-      if (!confirm('Remove this team member from active crew? Historical time entries stay on jobs.')) return;
-      await request(`/v1/settings/team/${id}`, { method: 'DELETE' });
-      window.showToast('Team member removed', 'success');
+    window.setMemberActive = async (id, isActive) => {
+      if (!isActive && !confirm('Deactivate this crew member? They will be hidden from new timecards, but historical time stays on jobs.')) return;
+      await request(`/v1/settings/team/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive }),
+      });
+      window.showToast(isActive ? 'Crew member reactivated' : 'Crew member deactivated', 'success');
       loadMembers();
     };
 
@@ -302,6 +349,7 @@ import Icon from '../components/Icon.astro';
 
     loadMembers().catch((err) => {
       document.getElementById('members-list').innerHTML = `<div class="p-8 text-center text-red-600">${escapeHtml(err.message)}</div>`;
+      document.getElementById('inactive-members-list').innerHTML = '';
     });
   </script>
 </Base>

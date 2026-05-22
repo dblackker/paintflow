@@ -25,6 +25,7 @@ const teamMemberSchema = z.object({
   role: z.string().trim().min(1),
   hourlyRate: z.coerce.number().min(0).default(0),
   burdenRate: z.coerce.number().min(0).max(100).default(30),
+  isActive: z.boolean().optional(),
 });
 
 const orgSettingsPatchSchema = z.object({
@@ -323,9 +324,12 @@ settings.get('/team', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   
-  const members = await db.select().from(teamMembers).where(
-    and(eq(teamMembers.orgId, orgId), eq(teamMembers.isActive, true))
-  );
+  const members = await db.select().from(teamMembers).where(eq(teamMembers.orgId, orgId));
+  members.sort((a, b) => {
+    const activeDelta = Number(b.isActive !== false) - Number(a.isActive !== false);
+    if (activeDelta !== 0) return activeDelta;
+    return (a.name || '').localeCompare(b.name || '');
+  });
   
   return c.json({ data: members });
 });
@@ -348,6 +352,7 @@ settings.post('/team', async (c) => {
     role: parsed.data.role,
     hourlyRate: parsed.data.hourlyRate.toString(),
     burdenRate: parsed.data.burdenRate.toString(),
+    isActive: parsed.data.isActive ?? true,
   }).returning();
   
   return c.json({ data: member }, 201);

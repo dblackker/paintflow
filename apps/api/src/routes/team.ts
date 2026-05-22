@@ -152,6 +152,9 @@ teamApp.post('/time', async (c) => {
   if (!member || member.orgId !== orgId) {
     return c.json({ error: 'Team member not found' }, 404);
   }
+  if (member.isActive === false) {
+    return c.json({ error: 'Team member is deactivated and cannot receive new time entries' }, 409);
+  }
 
   const job = await db.query.jobs.findFirst({
     where: and(eq(jobs.id, data.jobId), eq(jobs.orgId, orgId)),
@@ -345,6 +348,9 @@ teamApp.patch('/time/:id', async (c) => {
   ]);
   if (!job) return c.json({ error: 'Job not found' }, 404);
   if (!member) return c.json({ error: 'Team member not found' }, 404);
+  if (data.teamMemberId && data.teamMemberId !== existing.teamMemberId && member.isActive === false) {
+    return c.json({ error: 'Team member is deactivated and cannot receive new time entries' }, 409);
+  }
 
   const baseRate = parseFloat(member.hourlyRate);
   const burdenRate = parseFloat(member.burdenRate || '30');
