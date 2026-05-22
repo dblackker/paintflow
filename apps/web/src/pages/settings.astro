@@ -84,6 +84,66 @@ import Base from '../layouts/Base.astro';
         font-weight: 650;
       }
 
+      .settings-link-grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: 1fr;
+      }
+
+      .settings-action-card {
+        align-items: center;
+        background: var(--md-sys-color-surface-container-lowest);
+        border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 82%, transparent);
+        border-radius: var(--pf-radius);
+        color: var(--md-sys-color-on-surface);
+        display: flex;
+        gap: 1rem;
+        justify-content: space-between;
+        min-height: 4.25rem;
+        padding: 0.9rem 1rem;
+        transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+      }
+
+      .settings-action-card:hover {
+        background: color-mix(in srgb, var(--md-sys-color-primary-container) 22%, var(--md-sys-color-surface-container-lowest));
+        border-color: color-mix(in srgb, var(--md-sys-color-primary) 32%, var(--md-sys-color-outline-variant));
+        box-shadow: 0 1px 4px rgb(25 28 32 / 0.08);
+        text-decoration: none;
+      }
+
+      .settings-action-card:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--md-sys-color-primary) 34%, transparent);
+        outline-offset: 2px;
+      }
+
+      .settings-action-card-title {
+        color: var(--md-sys-color-on-surface);
+        display: block;
+        font-weight: 700;
+      }
+
+      .settings-action-card-copy {
+        color: var(--pf-text-muted);
+        display: block;
+        font-size: 0.875rem;
+        line-height: 1.35;
+        margin-top: 0.2rem;
+      }
+
+      .settings-action-card::after {
+        align-items: center;
+        background: var(--md-sys-color-secondary-container);
+        border-radius: 999px;
+        color: var(--md-sys-color-on-secondary-container);
+        content: "Open";
+        display: inline-flex;
+        flex: 0 0 auto;
+        font-size: 0.75rem;
+        font-weight: 750;
+        min-height: 2rem;
+        padding: 0 0.75rem;
+      }
+
       @media (max-width: 640px) {
         .settings-stack {
           gap: 0.85rem;
@@ -98,10 +158,10 @@ import Base from '../layouts/Base.astro';
           justify-content: center;
           width: 100%;
         }
-        .settings-link-grid a {
+        .settings-action-card {
           padding: 0.75rem;
         }
-        .settings-link-grid span:last-child {
+        .settings-action-card-copy {
           display: none;
         }
         .settings-connectors > div {
@@ -296,14 +356,18 @@ import Base from '../layouts/Base.astro';
         <div class="settings-card bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-2">Estimator Setup</h3>
           <p class="text-sm text-gray-600">Keep labor production and paint product costs current before sending live estimates.</p>
-          <div class="settings-link-grid mt-4 grid gap-3 sm:grid-cols-2">
-            <a href="/materials" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Paint products and costs</span>
-              <span class="mt-1 block text-sm text-gray-600">Enter cost per gallon/unit, coverage, supplier, SKU, and markup.</span>
+          <div class="settings-link-grid mt-4">
+            <a href="/materials" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Paint products and costs</span>
+                <span class="settings-action-card-copy">Enter cost per gallon/unit, coverage, supplier, SKU, and markup.</span>
+              </span>
             </a>
-            <a href="/production-rates" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Production rates</span>
-              <span class="mt-1 block text-sm text-gray-600">Tune sqft/hr, linear ft/hr, labor rate, coats, and prep defaults.</span>
+            <a href="/production-rates" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Production rates</span>
+                <span class="settings-action-card-copy">Tune sqft/hr, linear ft/hr, labor rate, coats, and prep defaults.</span>
+              </span>
             </a>
           </div>
         </div>
@@ -311,22 +375,30 @@ import Base from '../layouts/Base.astro';
         <div id="operations-settings" class="settings-card settings-anchor-card bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-2">Operations Setup</h3>
           <p class="text-sm text-gray-600">Configure the workflows that crew leads and office admins use every day.</p>
-          <div class="settings-link-grid mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <a href="/team" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Team and roles</span>
-              <span class="mt-1 block text-sm text-gray-600">Manage active crew members, roles, rates, and time clock policies.</span>
+          <div class="settings-link-grid mt-4">
+            <a href="/team" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Team and roles</span>
+                <span class="settings-action-card-copy">Manage active crew members, roles, rates, and time clock policies.</span>
+              </span>
             </a>
-            <a href="/calendar" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Calendar scheduling</span>
-              <span class="mt-1 block text-sm text-gray-600">Schedule jobs by day and connect Google Calendar when ready.</span>
+            <a href="/calendar" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Calendar scheduling</span>
+                <span class="settings-action-card-copy">Schedule jobs by day and connect Google Calendar when ready.</span>
+              </span>
             </a>
-            <a href="/templates" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Templates</span>
-              <span class="mt-1 block text-sm text-gray-600">Reusable estimate, message, and follow-up language.</span>
+            <a href="/templates" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Templates</span>
+                <span class="settings-action-card-copy">Reusable estimate, message, and follow-up language.</span>
+              </span>
             </a>
-            <a href="/notifications" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Notifications</span>
-              <span class="mt-1 block text-sm text-gray-600">Review messages, accepted estimates, and browser alert readiness.</span>
+            <a href="/notifications" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Notifications</span>
+                <span class="settings-action-card-copy">Review messages, accepted estimates, and browser alert readiness.</span>
+              </span>
             </a>
           </div>
         </div>
@@ -348,18 +420,24 @@ import Base from '../layouts/Base.astro';
               <span class="text-sm text-gray-600" id="calendar-status">Checking...</span>
             </div>
           </div>
-          <div class="settings-link-grid mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <a href="/payments/stripe" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Stripe payments</span>
-              <span class="mt-1 block text-sm text-gray-600">Collect deposits and customer payments.</span>
+          <div class="settings-link-grid mt-4">
+            <a href="/payments/stripe" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Stripe payments</span>
+                <span class="settings-action-card-copy">Collect deposits and customer payments.</span>
+              </span>
             </a>
-            <a href="/billing" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Billing</span>
-              <span class="mt-1 block text-sm text-gray-600">Manage the PaintFlow subscription and account status.</span>
+            <a href="/billing" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Billing</span>
+                <span class="settings-action-card-copy">Manage the PaintFlow subscription and account status.</span>
+              </span>
             </a>
-            <a href="/notifications" class="rounded-lg border px-4 py-3 hover:bg-gray-50">
-              <span class="block font-medium text-gray-950">Browser notifications</span>
-              <span class="mt-1 block text-sm text-gray-600">Enable alerts for new messages and accepted estimates.</span>
+            <a href="/notifications" class="settings-action-card">
+              <span>
+                <span class="settings-action-card-title">Browser notifications</span>
+                <span class="settings-action-card-copy">Enable alerts for new messages and accepted estimates.</span>
+              </span>
             </a>
           </div>
         </div>
