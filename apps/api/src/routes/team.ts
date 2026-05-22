@@ -107,7 +107,7 @@ teamApp.get('/punch/status', async (c) => {
     : [];
 
   const reviewMemberIds = Array.from(new Set(reviewRows.map((row) => row.teamMemberId)));
-  const reviewJobIds = Array.from(new Set(reviewRows.map((row) => row.jobId)));
+  const reviewJobIds = Array.from(new Set(reviewRows.map((row) => row.jobId).filter(Boolean)));
   const [reviewMembers, reviewJobs] = await Promise.all([
     reviewMemberIds.length ? db.query.teamMembers.findMany({ where: and(eq(teamMembers.orgId, orgId), inArray(teamMembers.id, reviewMemberIds)) }) : Promise.resolve([]),
     reviewJobIds.length ? db.query.jobs.findMany({ where: and(eq(jobs.orgId, orgId), inArray(jobs.id, reviewJobIds)) }) : Promise.resolve([]),
@@ -124,13 +124,13 @@ teamApp.get('/punch/status', async (c) => {
       jobs: jobList,
       activeSession: activeSession ? {
         ...activeSession,
-        jobName: jobsById.get(activeSession.jobId)?.name || 'Job',
+        jobName: activeSession.jobId ? jobsById.get(activeSession.jobId)?.name || 'Job' : 'Unassigned job',
         teamMemberName: membersById.get(activeSession.teamMemberId)?.name || member?.name || 'Crew member',
       } : null,
       reviewQueue: reviewRows.map((row) => ({
         ...row,
         teamMemberName: membersById.get(row.teamMemberId)?.name || 'Crew member',
-        jobName: jobsById.get(row.jobId)?.name || 'Job',
+        jobName: row.jobId ? jobsById.get(row.jobId)?.name || 'Job' : 'Unassigned job',
         reviewLabel: reviewLabel(row.reviewReason),
       })),
       memberResolutionError: 'error' in resolved ? resolved.error : null,
@@ -150,8 +150,10 @@ teamApp.post('/punch/in', async (c) => {
   if ('error' in resolved) return c.json({ error: resolved.error }, resolved.status);
 
   const db = createDb(c.env.DATABASE_URL);
-  const job = await db.query.jobs.findFirst({ where: and(eq(jobs.id, data.jobId), eq(jobs.orgId, orgId)) });
-  if (!job) return c.json({ error: 'Job not found' }, 404);
+  const job = data.jobId
+    ? await db.query.jobs.findFirst({ where: and(eq(jobs.id, data.jobId), eq(jobs.orgId, orgId)) })
+    : null;
+  if (data.jobId && !job) return c.json({ error: 'Job not found' }, 404);
 
   const existing = await db.query.timePunchSessions.findFirst({
     where: and(
@@ -167,15 +169,16 @@ teamApp.post('/punch/in', async (c) => {
   const settings = await getTimeClockSettings(c);
   const startedAtActual = data.startedAt ? new Date(data.startedAt) : new Date();
   const now = new Date();
-  const reviewRequired = Boolean(data.forgotPunchIn || data.startedAt);
-  const reviewReason = reviewRequired ? 'forgot_clock_in' : null;
+  const missingJob = !data.jobId;
+  const reviewRequired = Boolean(data.forgotPunchIn || data.startedAt || missingJob);
+  const reviewReason = missingJob ? 'missing_job_assignment' : reviewRequired ? 'forgot_clock_in' : null;
   if (startedAtActual.getTime() > now.getTime() + 60_000) {
     return c.json({ error: 'Clock-in time cannot be in the future' }, 400);
   }
 
   const [session] = await db.insert(timePunchSessions).values({
     orgId,
-    jobId: data.jobId,
+    jobId: data.jobId || null,
     teamMemberId: resolved.member.id,
     status: 'active',
     startedAtActual,
@@ -193,7 +196,7 @@ teamApp.post('/punch/in', async (c) => {
   await insertPunchEvent(c, session.id, reviewRequired ? 'forgot_clock_in' : 'clock_in', data, {
     jobId: data.jobId,
     teamMemberId: resolved.member.id,
-    note: data.note,
+    note: data.note || (missingJob ? 'Crew did not select a job at clock-in; lead must assign the job.' : undefined),
   });
 
   return c.json({ data: session }, 201);
@@ -307,6 +310,9 @@ teamApp.patch('/punch/review/:id', async (c) => {
     where: and(eq(timePunchSessions.id, id), eq(timePunchSessions.orgId, orgId)),
   });
   if (!session) return c.json({ error: 'Punch session not found' }, 404);
+  if (parsed.data.reviewStatus === 'approved' && !session.jobId) {
+    return c.json({ error: 'Assign a job before approving this punch' }, 400);
+  }
 
   const [updated] = await db.update(timePunchSessions)
     .set({
@@ -368,7 +374,7 @@ const locationSchema = z.object({
 });
 
 const punchInSchema = locationSchema.extend({
-  jobId: z.string().uuid(),
+  jobId: z.string().uuid().optional().nullable(),
   teamMemberId: z.string().uuid().optional(),
   startedAt: z.string().datetime().optional(),
   note: z.string().trim().max(500).optional(),
@@ -456,6 +462,7 @@ function reviewLabel(reason?: string | null) {
     forgot_clock_in: 'Forgot clock-in',
     late_clock_out: 'Late clock-out',
     long_shift: 'Long shift',
+    missing_job_assignment: 'Missing job assignment',
   };
   return (reason && labels[reason]) || 'Review required';
 }
@@ -525,13 +532,14 @@ async function insertPunchEvent(
 async function createLaborCostForEntry(
   db: ReturnType<typeof createDb>,
   orgId: string,
-  jobId: string,
+  jobId: string | null,
   memberName: string,
   description: string,
   hours: number,
   burdenedRate: number,
   totalCost: number,
 ) {
+  if (!jobId) return;
   await db.insert(jobCosts).values({
     jobId,
     orgId,
@@ -617,7 +625,7 @@ teamApp.post('/time', async (c) => {
   
   const [entry] = await db.insert(timeEntries).values({
     orgId,
-    jobId: data.jobId,
+    jobId: data.jobId || null,
     teamMemberId: data.teamMemberId,
     hours: data.hours.toString(),
     description: data.description,
@@ -753,7 +761,7 @@ teamApp.get('/time', async (c) => {
     data: entries.map((entry) => ({
       ...entry,
       teamMemberName: membersById.get(entry.teamMemberId)?.name ?? 'Crew member',
-      jobName: jobsById.get(entry.jobId)?.name ?? 'Job',
+      jobName: entry.jobId ? jobsById.get(entry.jobId)?.name ?? 'Job' : 'Unassigned job',
     })),
   });
 });
@@ -778,9 +786,13 @@ teamApp.patch('/time/:id', async (c) => {
   }
 
   const data = parsed.data;
-  const jobId = data.jobId || existing.jobId;
+  const jobId = data.jobId ?? existing.jobId;
   const teamMemberId = data.teamMemberId || existing.teamMemberId;
   const hours = data.hours ?? Number(existing.hours);
+
+  if (!jobId) {
+    return c.json({ error: 'Assign a job before approving this time entry' }, 400);
+  }
 
   const [job, member] = await Promise.all([
     db.query.jobs.findFirst({ where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)) }),
@@ -814,10 +826,11 @@ teamApp.patch('/time/:id', async (c) => {
     .returning();
 
   if (existing.jobId !== jobId) {
-    await db.insert(jobCosts).values([
-      laborCostAdjustmentRow(orgId, existing.jobId, 'Time entry moved out', -oldHours, oldHourlyRate, -oldTotalCost),
+    const adjustments = [
+      existing.jobId ? laborCostAdjustmentRow(orgId, existing.jobId, 'Time entry moved out', -oldHours, oldHourlyRate, -oldTotalCost) : null,
       laborCostAdjustmentRow(orgId, jobId, `Time entry moved in - ${member.name}`, hours, burdenedRate, totalCost),
-    ]);
+    ].filter(Boolean);
+    if (adjustments.length) await db.insert(jobCosts).values(adjustments);
   } else {
     const delta = totalCost - oldTotalCost;
     if (Math.abs(delta) >= 0.01) {
@@ -850,16 +863,18 @@ teamApp.delete('/time/:id', async (c) => {
   });
 
   await db.delete(timeEntries).where(and(eq(timeEntries.id, id), eq(timeEntries.orgId, orgId)));
-  await db.insert(jobCosts).values(
-    laborCostAdjustmentRow(
-      orgId,
-      existing.jobId,
-      `Time entry removed - ${member?.name || 'Crew member'}`,
-      -Number(existing.hours),
-      Number(existing.hourlyRate),
-      -Number(existing.totalCost),
-    ),
-  );
+  if (existing.jobId) {
+    await db.insert(jobCosts).values(
+      laborCostAdjustmentRow(
+        orgId,
+        existing.jobId,
+        `Time entry removed - ${member?.name || 'Crew member'}`,
+        -Number(existing.hours),
+        Number(existing.hourlyRate),
+        -Number(existing.totalCost),
+      ),
+    );
+  }
 
   return c.json({ success: true });
 });

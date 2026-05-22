@@ -1,0 +1,2 @@
+ALTER TABLE time_punch_sessions ALTER COLUMN job_id DROP NOT NULL;
+ALTER TABLE time_entries ALTER COLUMN job_id DROP NOT NULL;

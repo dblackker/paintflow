@@ -474,7 +474,7 @@ export const teamMembers = pgTable('team_members', {
 
 export const timeEntries = pgTable('time_entries', {
   id: uuid('id').defaultRandom().primaryKey(),
-  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id),
   teamMemberId: uuid('team_member_id').references(() => teamMembers.id).notNull(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
   hours: decimal('hours', { precision: 10, scale: 2 }).notNull(),
@@ -501,7 +501,7 @@ export const timeEntries = pgTable('time_entries', {
 export const timePunchSessions = pgTable('time_punch_sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
-  jobId: uuid('job_id').references(() => jobs.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id),
   teamMemberId: uuid('team_member_id').references(() => teamMembers.id).notNull(),
   timeEntryId: uuid('time_entry_id').references(() => timeEntries.id),
   status: varchar('status', { length: 50 }).notNull().default('active'),
