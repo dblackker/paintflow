@@ -325,6 +325,46 @@ function welcomeEmailHtml(publicUrl: string) {
 </body></html>`;
 }
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char] || char));
+}
+
+function verifyMagicLinkHtml(token: string, error?: string) {
+  const escapedToken = escapeHtml(token);
+  const errorHtml = error
+    ? `<p style="padding: 12px 14px; border-radius: 8px; background: #fef2f2; color: #991b1b;">${escapeHtml(error)}</p>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in to PaintFlow</title>
+</head>
+<body style="margin: 0; background: #f8fafc; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+  <main style="min-height: 100vh; display: grid; place-items: center; padding: 24px;">
+    <section style="width: min(100%, 420px); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 28px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);">
+      <h1 style="margin: 0 0 8px; font-size: 24px; line-height: 1.2;">Sign in to PaintFlow</h1>
+      <p style="margin: 0 0 20px; color: #4b5563; line-height: 1.5;">Confirm this sign-in request to open your workspace.</p>
+      ${errorHtml}
+      <form method="post" action="/v1/auth/verify">
+        <input type="hidden" name="token" value="${escapedToken}">
+        <button type="submit" style="width: 100%; min-height: 44px; border: 0; border-radius: 999px; background: #0b57d0; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;">Continue</button>
+      </form>
+      <p style="margin: 18px 0 0; color: #6b7280; font-size: 13px; line-height: 1.45;">This extra confirmation keeps email security scanners from using your sign-in link before you do.</p>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
 // GET /v1/auth/demo-login
 auth.get('/demo-login', async (c) => {
   const email = c.req.query('email') || GOLDEN_DEMO_EMAIL;
@@ -480,36 +520,63 @@ auth.post('/magic-link', async (c) => {
   });
 });
 
-// GET /v1/auth/verify?token=...
-auth.get('/verify', async (c) => {
-  const token = c.req.query('token');
-  
+async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
+  c.header('Cache-Control', 'no-store');
+  c.header('Pragma', 'no-cache');
+
   if (!token) {
-    return c.json({ error: 'Token required' }, 400);
+    return c.html(verifyMagicLinkHtml('', 'Token required'), 400);
   }
-  
+
   const data = await c.env.KV.get(`magic:${token}`);
-  
+
   if (!data) {
-    return c.json({ error: 'Invalid or expired token' }, 400);
+    return c.html(verifyMagicLinkHtml('', 'This sign-in link is invalid or expired. Please request a new one.'), 400);
   }
-  
+
   const { email, userId, orgId, isNewUser } = JSON.parse(data);
-  
+
   await c.env.KV.delete(`magic:${token}`);
-  
+
   const sessionToken = await createSession(c.env, userId, orgId, email);
-  
+
   c.header('Set-Cookie', sessionCookie(sessionToken, c.env, 604800));
-  
+
   // Send welcome email for new users (fire and forget)
   if (isNewUser) {
     sendEmail(c.env, email, 'Welcome to PaintFlow', welcomeEmailHtml(c.env.PUBLIC_URL), undefined, {
       text: `Welcome to PaintFlow!\n\nYou're all set. Start onboarding: ${c.env.PUBLIC_URL}/onboarding`,
     }).catch((error) => console.error('Failed to send welcome email:', error));
   }
-  
+
   return c.redirect(`${c.env.PUBLIC_URL}${isNewUser ? '/onboarding?welcome=1' : '/dashboard'}`);
+}
+
+// GET /v1/auth/verify?token=...
+auth.get('/verify', async (c) => {
+  const token = c.req.query('token');
+
+  c.header('Cache-Control', 'no-store');
+  c.header('Pragma', 'no-cache');
+
+  if (!token) {
+    return c.html(verifyMagicLinkHtml('', 'Token required'), 400);
+  }
+
+  const data = await c.env.KV.get(`magic:${token}`);
+
+  if (!data) {
+    return c.html(verifyMagicLinkHtml('', 'This sign-in link is invalid or expired. Please request a new one.'), 400);
+  }
+
+  return c.html(verifyMagicLinkHtml(token));
+});
+
+// POST /v1/auth/verify
+auth.post('/verify', async (c) => {
+  const body = await c.req.parseBody();
+  const token = typeof body.token === 'string' ? body.token : c.req.query('token') || '';
+  return consumeMagicLink(c, token);
 });
 
 // POST /v1/auth/logout
