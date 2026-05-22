@@ -12,13 +12,13 @@ export interface Session {
 const SESSION_TTL = 60 * 60 * 24 * 7; // 7 days
 
 export function getRequestSessionInfo(c: Context<{ Bindings: Env; Variables: Variables }>) {
-  const cookieToken = getCookie(c, 'session');
-  if (cookieToken) return { token: cookieToken, source: 'cookie' as const };
-
   const authHeader = c.req.header('authorization') || '';
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   const bearerToken = match?.[1]?.trim();
   if (bearerToken) return { token: bearerToken, source: 'bearer' as const };
+
+  const cookieToken = getCookie(c, 'session');
+  if (cookieToken) return { token: cookieToken, source: 'cookie' as const };
   return { token: '', source: 'none' as const };
 }
 

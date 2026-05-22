@@ -109,6 +109,8 @@ const DEFAULT_ROLES = [
 
 const MAGIC_LINK_WINDOW_SECONDS = 3600;
 const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
+const GOLDEN_DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
+const GOLDEN_DEMO_LOGIN_EMAILS = new Set([GOLDEN_DEMO_EMAIL, GOLDEN_DEMO_CREW_EMAIL]);
 
 function accessRoleForTeamRole(teamRole: string) {
   return teamRole === 'crew_lead'
@@ -199,7 +201,7 @@ function magicLinkLimits(env: Env) {
 }
 
 function canUseGoldenDemoLogin(env: Env, email: string) {
-  return email === GOLDEN_DEMO_EMAIL && ['development', 'demo'].includes(env.ENVIRONMENT);
+  return GOLDEN_DEMO_LOGIN_EMAILS.has(email) && ['development', 'demo'].includes(env.ENVIRONMENT);
 }
 
 function safeRedirectUrl(env: Env, value: string | null | undefined, fallback = '/dashboard') {
@@ -293,11 +295,19 @@ async function createGoldenDemoSession(c: Context<{ Bindings: Env }>, email: str
   }
 
   const db = createDb(c.env.DATABASE_URL);
-  const user = await db.query.users.findFirst({
+  let user = await db.query.users.findFirst({
     where: eq(users.email, normalizedEmail),
   });
+  const linkedTeamMember = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.email, normalizedEmail), eq(teamMembers.isActive, true)),
+  });
 
-  if (!user) {
+  if (!user && linkedTeamMember) {
+    [user] = await db.insert(users).values({
+      email: normalizedEmail,
+      name: linkedTeamMember.name,
+    }).returning();
+  } else if (!user) {
     return {
       error: 'Golden demo user has not been seeded in this database yet.',
       code: 'DEMO_USER_NOT_SEEDED',
@@ -305,9 +315,17 @@ async function createGoldenDemoSession(c: Context<{ Bindings: Env }>, email: str
     };
   }
 
-  const membership = await db.query.memberships.findFirst({
-    where: eq(memberships.userId, user.id),
-  });
+  if (linkedTeamMember) {
+    await ensureTeamMemberLoginAccess(db, user, linkedTeamMember);
+  }
+
+  const membership = linkedTeamMember
+    ? await db.query.memberships.findFirst({
+        where: and(eq(memberships.userId, user.id), eq(memberships.orgId, linkedTeamMember.orgId)),
+      })
+    : await db.query.memberships.findFirst({
+        where: eq(memberships.userId, user.id),
+      });
 
   if (!membership?.orgId) {
     return {
@@ -324,6 +342,7 @@ async function createGoldenDemoSession(c: Context<{ Bindings: Env }>, email: str
     sessionToken,
     user,
     membership,
+    redirectPath: linkedTeamMember ? '/time' : '/dashboard',
     status: 200 as const,
   };
 }
@@ -459,14 +478,15 @@ function verifyMagicLinkHtml(token: string, publicUrl: string, error?: string) {
 auth.get('/demo-login', async (c) => {
   const email = c.req.query('email') || GOLDEN_DEMO_EMAIL;
   const result = await createGoldenDemoSession(c, email);
-  const redirectUrl = safeRedirectUrl(c.env, c.req.query('redirectTo'), '/dashboard');
 
   if ('error' in result) {
+    const redirectUrl = safeRedirectUrl(c.env, c.req.query('redirectTo'), '/dashboard');
     const loginUrl = new URL('/login', redirectUrl);
     loginUrl.searchParams.set('error', result.code || result.error);
     return redirectWithLocation(loginUrl.toString());
   }
 
+  const redirectUrl = safeRedirectUrl(c.env, c.req.query('redirectTo'), result.redirectPath);
   return redirectWithSession(redirectUrl, result.sessionToken, c.env);
 });
 
@@ -540,7 +560,7 @@ auth.post('/magic-link', async (c) => {
     return c.json({
       success: true,
       autoLogin: true,
-      redirectUrl: sessionRedirectUrl(`${c.env.PUBLIC_URL}/dashboard`, demoSession.sessionToken, c.env),
+      redirectUrl: sessionRedirectUrl(`${c.env.PUBLIC_URL}${demoSession.redirectPath}`, demoSession.sessionToken, c.env),
     });
   }
   

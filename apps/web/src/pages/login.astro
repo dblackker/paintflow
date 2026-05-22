@@ -53,6 +53,8 @@ import '../styles/design-system.css';
       const message = document.getElementById('message') as HTMLDivElement;
       const demoShortcutTrigger = document.getElementById('demo-shortcut-trigger') as HTMLSpanElement | null;
       const DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
+      const DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
+      const DEMO_LOGIN_EMAILS = new Set([DEMO_EMAIL, DEMO_CREW_EMAIL]);
       const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
       const IS_DEMO_OR_DEV = Boolean(import.meta.env.DEV)
         || ['localhost', '127.0.0.1'].includes(window.location.hostname)
@@ -61,7 +63,7 @@ import '../styles/design-system.css';
       const params = new URLSearchParams(window.location.search);
       let demoShortcutClicks = 0;
 
-      function signInToDemo() {
+      function signInToDemo(email = DEMO_EMAIL) {
         message.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-800';
         message.textContent = 'Signing you in to the demo workspace...';
         message.classList.remove('hidden');
@@ -71,8 +73,8 @@ import '../styles/design-system.css';
         const demoApiUrl = window.location.hostname === '127.0.0.1' && API_URL.includes('127.0.0.1')
           ? API_URL.replace('127.0.0.1', 'localhost')
           : API_URL;
-        const redirectTo = `${appOrigin}/dashboard`;
-        window.location.href = `${demoApiUrl}/v1/auth/demo-login?email=${encodeURIComponent(DEMO_EMAIL)}&redirectTo=${encodeURIComponent(redirectTo)}`;
+        const redirectTo = `${appOrigin}${email === DEMO_CREW_EMAIL ? '/time' : '/dashboard'}`;
+        window.location.href = `${demoApiUrl}/v1/auth/demo-login?email=${encodeURIComponent(email)}&redirectTo=${encodeURIComponent(redirectTo)}`;
       }
 
       if (params.get('error')) {
@@ -101,8 +103,8 @@ import '../styles/design-system.css';
         button.textContent = 'Sending...';
         
         try {
-          if (email === DEMO_EMAIL && IS_DEMO_OR_DEV) {
-            signInToDemo();
+          if (DEMO_LOGIN_EMAILS.has(email) && IS_DEMO_OR_DEV) {
+            signInToDemo(email);
             return;
           }
 
