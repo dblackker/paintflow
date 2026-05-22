@@ -54,7 +54,13 @@ import '../styles/design-system.css';
       const demoShortcutTrigger = document.getElementById('demo-shortcut-trigger') as HTMLSpanElement | null;
       const DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
       const DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
-      const DEMO_LOGIN_EMAILS = new Set([DEMO_EMAIL, DEMO_CREW_EMAIL]);
+      const DEMO_LOGIN_EMAILS = new Set([
+        DEMO_EMAIL,
+        'nick@goldenbrush.example',
+        'maria@goldenbrush.example',
+        DEMO_CREW_EMAIL,
+        'sam@goldenbrush.example',
+      ]);
       const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
       const IS_DEMO_OR_DEV = Boolean(import.meta.env.DEV)
         || ['localhost', '127.0.0.1'].includes(window.location.hostname)
@@ -73,7 +79,7 @@ import '../styles/design-system.css';
         const demoApiUrl = window.location.hostname === '127.0.0.1' && API_URL.includes('127.0.0.1')
           ? API_URL.replace('127.0.0.1', 'localhost')
           : API_URL;
-        const redirectTo = `${appOrigin}${email === DEMO_CREW_EMAIL ? '/time' : '/dashboard'}`;
+        const redirectTo = `${appOrigin}${email.endsWith('@goldenbrush.example') ? '/time' : '/dashboard'}`;
         window.location.href = `${demoApiUrl}/v1/auth/demo-login?email=${encodeURIComponent(email)}&redirectTo=${encodeURIComponent(redirectTo)}`;
       }
 

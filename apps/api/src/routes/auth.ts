@@ -110,6 +110,7 @@ const DEFAULT_ROLES = [
 const MAGIC_LINK_WINDOW_SECONDS = 3600;
 const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
 const GOLDEN_DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
+const GOLDEN_DEMO_CREW_DOMAIN = '@goldenbrush.example';
 const GOLDEN_DEMO_LOGIN_EMAILS = new Set([GOLDEN_DEMO_EMAIL, GOLDEN_DEMO_CREW_EMAIL]);
 
 function accessRoleForTeamRole(teamRole: string) {
@@ -200,8 +201,18 @@ function magicLinkLimits(env: Env) {
   };
 }
 
-function canUseGoldenDemoLogin(env: Env, email: string) {
-  return GOLDEN_DEMO_LOGIN_EMAILS.has(email) && ['development', 'demo'].includes(env.ENVIRONMENT);
+function canUseGoldenDemoEnvironment(env: Env) {
+  return ['development', 'demo'].includes(env.ENVIRONMENT);
+}
+
+function isGoldenDemoCrewEmail(email: string) {
+  return email.endsWith(GOLDEN_DEMO_CREW_DOMAIN);
+}
+
+function canUseGoldenDemoLogin(env: Env, email: string, linkedTeamMember?: typeof teamMembers.$inferSelect | null) {
+  if (!canUseGoldenDemoEnvironment(env)) return false;
+  if (GOLDEN_DEMO_LOGIN_EMAILS.has(email)) return true;
+  return Boolean(linkedTeamMember && isGoldenDemoCrewEmail(email));
 }
 
 function safeRedirectUrl(env: Env, value: string | null | undefined, fallback = '/dashboard') {
@@ -290,7 +301,7 @@ async function checkMagicLinkBucket(env: Env, key: string, limit: number) {
 
 async function createGoldenDemoSession(c: Context<{ Bindings: Env }>, email: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  if (!canUseGoldenDemoLogin(c.env, normalizedEmail)) {
+  if (!canUseGoldenDemoEnvironment(c.env)) {
     return { error: 'Demo login is not available in this environment.', status: 404 as const };
   }
 
@@ -301,6 +312,10 @@ async function createGoldenDemoSession(c: Context<{ Bindings: Env }>, email: str
   const linkedTeamMember = await db.query.teamMembers.findFirst({
     where: and(eq(teamMembers.email, normalizedEmail), eq(teamMembers.isActive, true)),
   });
+
+  if (!canUseGoldenDemoLogin(c.env, normalizedEmail, linkedTeamMember)) {
+    return { error: 'Demo login is not available for this email.', status: 404 as const };
+  }
 
   if (!user && linkedTeamMember) {
     [user] = await db.insert(users).values({
@@ -548,7 +563,7 @@ auth.post('/magic-link', async (c) => {
     where: and(eq(teamMembers.email, normalizedEmail), eq(teamMembers.isActive, true)),
   });
 
-  if (canUseGoldenDemoLogin(c.env, normalizedEmail)) {
+  if (canUseGoldenDemoLogin(c.env, normalizedEmail, linkedTeamMember)) {
     const demoSession = await createGoldenDemoSession(c, normalizedEmail);
     if ('error' in demoSession) {
       return c.json({
