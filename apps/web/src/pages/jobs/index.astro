@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
 ---
 
 <Base title="Jobs">
@@ -41,6 +42,9 @@ import Base from '../../layouts/Base.astro';
       .jobs-time-panel {
         padding: 0.75rem;
       }
+      .bulk-member-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
   </style>
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
@@ -54,9 +58,28 @@ import Base from '../../layouts/Base.astro';
       </div>
   </main>
 
+  <BulkTimecardModal
+    idPrefix="jobs-bulk"
+    title="Crew Timecard"
+    description="Fast end-of-day crew entry. The selected job is prefilled from the job card you opened."
+  />
+
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let teamMembers = [];
+    let jobs = [];
+    let isSavingBulkTime = false;
+    let bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
+    const bulkSelection = new Map();
+    const bulkHours = new Map();
+    const roleLabels = {
+      admin: 'Admin',
+      crew: 'Crew member',
+      crew_lead: 'Crew lead',
+      estimator: 'Estimator',
+      painter: 'Painter',
+      prep: 'Prep crew',
+    };
 
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: options.cents === false ? 0 : 2, maximumFractionDigits: options.cents === false ? 0 : 2 })}`;
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
@@ -85,6 +108,19 @@ import Base from '../../layouts/Base.astro';
 
     function streetAddress(job) {
       return String(job.leadStreetAddress || '').trim();
+    }
+
+    function jobAddress(job = {}) {
+      return [
+        job.leadStreetAddress || job.streetAddress,
+        [job.leadCity || job.city, job.leadState || job.state].filter(Boolean).join(', '),
+        job.leadPostalCode || job.postalCode,
+      ].filter(Boolean).join(' ');
+    }
+
+    function jobOptionLabel(job = {}) {
+      const address = jobAddress(job);
+      return address ? `${address} - ${job.name}` : job.name;
     }
 
     function jobScope(job) {
@@ -141,6 +177,7 @@ import Base from '../../layouts/Base.astro';
           apiJson(`${API_URL}/v1/team/members`),
         ]);
         teamMembers = membersRes.data || [];
+        jobs = data || [];
         const container = document.getElementById('jobs-list');
         
         if (data.length === 0) {
@@ -193,31 +230,13 @@ import Base from '../../layouts/Base.astro';
               
               <div class="pt-4 border-t">
                 <div class="flex justify-between items-center mb-3">
-                  <h4 class="font-medium">Time Entries</h4>
-                  <button onclick="document.getElementById('time-${job.id}').classList.toggle('hidden')" class="btn-text btn-sm">
+                  <h4 class="font-medium">Crew time</h4>
+                  <button onclick="openJobsBulkTimecard('${job.id}')" class="btn-tonal btn-sm">
                     <span aria-hidden="true">+</span>
                     Log Time
                   </button>
                 </div>
-                
-                <div id="time-${job.id}" class="jobs-time-panel hidden mb-4 p-4 bg-gray-50 rounded-lg">
-                  <form class="time-form space-y-3" data-job-id="${job.id}">
-                    ${teamMembers.length ? `
-                      <select name="teamMemberId" autocomplete="off" required class="w-full px-3 py-2 border rounded text-sm">
-                        <option value="">Select team member...</option>
-                        ${teamOptions()}
-                      </select>
-                    ` : `
-                      <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-                        Add crew members in <a href="/team" class="font-medium underline">Team</a> before logging labor.
-                      </div>
-                    `}
-                    <input type="number" min="0" step="0.25" inputmode="decimal" autocomplete="off" name="hours" placeholder="Hours worked" required class="w-full px-3 py-2 border rounded text-sm" />
-                    <input type="date" name="date" autocomplete="off" required class="w-full px-3 py-2 border rounded text-sm" />
-                    <input type="text" name="description" autocomplete="off" placeholder="Work performed" class="w-full px-3 py-2 border rounded text-sm" />
-                    <button type="submit" ${teamMembers.length ? '' : 'disabled'} class="btn-primary w-full">Log Team Hours</button>
-                  </form>
-                </div>
+                <p class="mb-4 text-sm text-gray-600">Open a crew timecard with this job preselected, then adjust crew and hours as needed.</p>
                 <div class="mobile-action-row flex flex-col sm:flex-row gap-2 pt-4 border-t">
                   <a href="/jobs/${job.id}" class="btn-primary btn-sm justify-center">
                     Open Job
@@ -230,45 +249,244 @@ import Base from '../../layouts/Base.astro';
             </div>
           `;
         }).join('');
-        
-        document.querySelectorAll('.time-form').forEach(form => {
-          form.querySelector('input[name="date"]').valueAsDate = new Date();
-          
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const jobId = e.target.dataset.jobId;
-            
-            try {
-              const button = e.target.querySelector('button[type="submit"]');
-              button.disabled = true;
-              button.textContent = 'Logging time...';
-              await apiJson(`${API_URL}/v1/team/time`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jobId,
-                  teamMemberId: formData.get('teamMemberId'),
-                  hours: parseFloat(formData.get('hours')),
-                  description: formData.get('description'),
-                  date: new Date(`${formData.get('date')}T12:00:00`).toISOString(),
-                }),
-              });
-              window.showToast('Time logged', 'success');
-              loadJobs();
-            } catch (err) {
-              console.error(err);
-              window.showToast(err.message || 'Failed to log time', 'error');
-              const button = e.target.querySelector('button[type="submit"]');
-              button.disabled = false;
-              button.textContent = 'Log Team Hours';
-            }
-          });
-        });
+        populateBulkJobSelect();
+        renderBulkTimecard();
       } catch (err) {
         console.error(err);
       }
     }
+
+    function activeMembers() {
+      return teamMembers.filter((member) => member.isActive !== false);
+    }
+
+    function populateBulkJobSelect(selectedJobId = '') {
+      const select = document.getElementById('jobs-bulk-job-select');
+      if (!select) return;
+      select.innerHTML = '<option value="">Select job...</option>' +
+        jobs.map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`).join('');
+      if (selectedJobId) select.value = selectedJobId;
+    }
+
+    function availableBulkRoles() {
+      return Array.from(new Set(activeMembers().map((member) => member.role || 'crew'))).sort((a, b) => {
+        const order = ['crew_lead', 'painter', 'prep'];
+        const aIndex = order.indexOf(a);
+        const bIndex = order.indexOf(b);
+        if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+        return (roleLabels[a] || a).localeCompare(roleLabels[b] || b);
+      });
+    }
+
+    function syncBulkSelection() {
+      const members = activeMembers();
+      const memberIds = new Set(members.map((member) => member.id));
+      members.forEach((member) => {
+        if (!bulkSelection.has(member.id)) bulkSelection.set(member.id, true);
+        if (!bulkHours.has(member.id)) bulkHours.set(member.id, getBulkDefaultHours());
+      });
+      Array.from(bulkSelection.keys()).forEach((id) => {
+        if (!memberIds.has(id)) bulkSelection.delete(id);
+      });
+      Array.from(bulkHours.keys()).forEach((id) => {
+        if (!memberIds.has(id)) bulkHours.delete(id);
+      });
+    }
+
+    function getBulkDefaultHours() {
+      const value = Number(document.getElementById('jobs-bulk-default-hours')?.value || 8);
+      return Number.isFinite(value) && value >= 0 ? value : 8;
+    }
+
+    function getBulkSelectedEntries() {
+      return activeMembers()
+        .filter((member) => bulkSelection.get(member.id))
+        .map((member) => ({
+          member,
+          hours: Number(bulkHours.get(member.id) ?? getBulkDefaultHours()),
+        }))
+        .filter((entry) => Number.isFinite(entry.hours) && entry.hours > 0);
+    }
+
+    function updateBulkSummary() {
+      const summary = document.getElementById('jobs-bulk-selection-summary');
+      if (!summary) return;
+      const selected = getBulkSelectedEntries();
+      const visibleIds = new Set(
+        activeMembers()
+          .filter((member) => bulkRoleFilters.has(member.role || 'crew'))
+          .map((member) => member.id)
+      );
+      const hiddenSelected = selected.filter(({ member }) => !visibleIds.has(member.id)).length;
+      const totalHours = selected.reduce((sum, entry) => sum + entry.hours, 0);
+      const averageHours = selected.length ? totalHours / selected.length : 0;
+      const parts = [
+        `${selected.length} employee${selected.length === 1 ? '' : 's'} selected`,
+        `${averageHours.toFixed(2).replace(/\.00$/, '')} hr avg`,
+        `${totalHours.toFixed(2).replace(/\.00$/, '')} total hrs`,
+      ];
+      if (hiddenSelected) parts.push(`${hiddenSelected} hidden by filters`);
+      summary.textContent = parts.join(' - ');
+    }
+
+    function renderBulkRoleFilters() {
+      const container = document.getElementById('jobs-bulk-role-filters');
+      if (!container) return;
+      const roles = availableBulkRoles();
+      container.innerHTML = roles.length
+        ? roles.map((role) => `
+          <button type="button" class="pf-filter-chip ${bulkRoleFilters.has(role) ? 'pf-filter-chip-active' : ''}" data-jobs-bulk-role="${escapeHtml(role)}" aria-pressed="${bulkRoleFilters.has(role) ? 'true' : 'false'}">
+            ${escapeHtml(roleLabels[role] || role)}
+          </button>
+        `).join('')
+        : '<p class="text-sm text-gray-500">No active crew members available.</p>';
+      container.querySelectorAll('[data-jobs-bulk-role]').forEach((filter) => {
+        filter.addEventListener('click', () => {
+          const role = filter.dataset.jobsBulkRole;
+          if (bulkRoleFilters.has(role)) bulkRoleFilters.delete(role);
+          else bulkRoleFilters.add(role);
+          renderBulkRoleFilters();
+          renderBulkMemberRows();
+        });
+      });
+    }
+
+    function renderBulkMemberRows() {
+      const container = document.getElementById('jobs-bulk-members');
+      if (!container) return;
+      const visibleMembers = activeMembers().filter((member) => bulkRoleFilters.has(member.role || 'crew'));
+      if (!visibleMembers.length) {
+        container.innerHTML = '<div class="p-4 text-sm text-gray-500">No crew match the selected roles. Add another role filter to include more people.</div>';
+        updateBulkSelectionAction();
+        updateBulkSummary();
+        return;
+      }
+      container.innerHTML = visibleMembers.map((member) => `
+        <label class="bulk-member-row grid sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
+          <span class="flex items-center gap-3 min-w-0">
+            <input type="checkbox" data-jobs-bulk-member="${member.id}" class="h-5 w-5" ${bulkSelection.get(member.id) ? 'checked' : ''}>
+            <span class="min-w-0">
+              <span class="block font-medium truncate">${escapeHtml(member.name)}</span>
+              <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
+            </span>
+          </span>
+          <input type="number" data-jobs-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${bulkHours.get(member.id) ?? getBulkDefaultHours()}">
+        </label>
+      `).join('');
+      container.querySelectorAll('[data-jobs-bulk-member]').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+          bulkSelection.set(checkbox.dataset.jobsBulkMember, checkbox.checked);
+          updateBulkSelectionAction();
+          updateBulkSummary();
+        });
+      });
+      container.querySelectorAll('[data-jobs-bulk-hours]').forEach((input) => {
+        input.addEventListener('input', () => {
+          bulkHours.set(input.dataset.jobsBulkHours, Number(input.value || 0));
+          updateBulkSummary();
+        });
+      });
+      updateBulkSelectionAction();
+      updateBulkSummary();
+    }
+
+    function updateBulkSelectionAction() {
+      const button = document.getElementById('jobs-bulk-select-visible');
+      if (!button) return;
+      const visible = Array.from(document.querySelectorAll('[data-jobs-bulk-member]'));
+      const allSelected = visible.length > 0 && visible.every((checkbox) => checkbox.checked);
+      button.textContent = allSelected ? 'Clear visible' : 'Select visible';
+    }
+
+    function renderBulkTimecard() {
+      syncBulkSelection();
+      renderBulkRoleFilters();
+      renderBulkMemberRows();
+    }
+
+    window.openJobsBulkTimecard = (jobId) => {
+      const form = document.getElementById('jobs-bulk-time-form');
+      form.reset();
+      document.getElementById('jobs-bulk-default-hours').value = '8';
+      form.querySelector('input[name="date"]').valueAsDate = new Date();
+      populateBulkJobSelect(jobId);
+      if (!bulkRoleFilters.size) bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
+      activeMembers().forEach((member) => bulkSelection.set(member.id, true));
+      activeMembers().forEach((member) => bulkHours.set(member.id, 8));
+      renderBulkTimecard();
+      document.getElementById('jobs-bulk-modal').classList.remove('hidden');
+    };
+
+    function closeBulkModal() {
+      document.getElementById('jobs-bulk-modal').classList.add('hidden');
+    }
+
+    document.getElementById('cancel-jobs-bulk-btn').addEventListener('click', closeBulkModal);
+    document.getElementById('close-jobs-bulk-modal-btn').addEventListener('click', closeBulkModal);
+    document.getElementById('jobs-bulk-default-hours').addEventListener('input', () => {
+      const defaultHours = getBulkDefaultHours();
+      activeMembers().forEach((member) => bulkHours.set(member.id, defaultHours));
+      document.querySelectorAll('[data-jobs-bulk-hours]').forEach((input) => {
+        input.value = defaultHours;
+      });
+      updateBulkSummary();
+    });
+    document.getElementById('jobs-bulk-select-visible').addEventListener('click', () => {
+      const visible = Array.from(document.querySelectorAll('[data-jobs-bulk-member]'));
+      const allSelected = visible.length > 0 && visible.every((checkbox) => checkbox.checked);
+      const shouldSelect = !allSelected;
+      visible.forEach((checkbox) => {
+        checkbox.checked = shouldSelect;
+        bulkSelection.set(checkbox.dataset.jobsBulkMember, shouldSelect);
+      });
+      updateBulkSelectionAction();
+      updateBulkSummary();
+    });
+    document.getElementById('jobs-bulk-time-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (isSavingBulkTime) return;
+
+      const submit = document.getElementById('submit-jobs-bulk-btn');
+      const form = event.currentTarget;
+      const formData = new FormData(form);
+      const selected = getBulkSelectedEntries().map(({ member, hours }) => ({
+        teamMemberId: member.id,
+        hours,
+        description: formData.get('description') || undefined,
+      }));
+
+      if (!selected.length) {
+        window.showToast?.('Select at least one crew member', 'error');
+        return;
+      }
+
+      isSavingBulkTime = true;
+      submit.disabled = true;
+      submit.textContent = 'Logging crew time...';
+
+      try {
+        await apiJson(`${API_URL}/v1/team/timecards`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jobId: formData.get('jobId'),
+            date: new Date(`${formData.get('date')}T12:00:00`).toISOString(),
+            notes: formData.get('description') || undefined,
+            entries: selected,
+          }),
+        });
+        window.showToast?.('Crew time logged', 'success');
+        closeBulkModal();
+        loadJobs();
+      } catch (err) {
+        console.error(err);
+        window.showToast?.(err.message || 'Failed to submit timecard', 'error');
+      } finally {
+        isSavingBulkTime = false;
+        submit.disabled = false;
+        submit.textContent = 'Log crew time';
+      }
+    });
     
     window.markComplete = async (jobId) => {
       if (!confirm('Mark this job as completed?')) return;
