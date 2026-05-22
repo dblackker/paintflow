@@ -192,8 +192,10 @@ import Icon from '../../components/Icon.astro';
 
     function dateKey(date) {
       const d = new Date(date);
-      d.setHours(0, 0, 0, 0);
-      return d.toISOString().slice(0, 10);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
 
     function formatDate(date) {
@@ -205,14 +207,12 @@ import Icon from '../../components/Icon.astro';
       return new Date(value).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     }
 
-    function toDateTimeLocal(value) {
-      const date = value ? new Date(value) : new Date();
-      const offsetMs = date.getTimezoneOffset() * 60000;
-      return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-    }
-
-    function fromDateTimeLocal(value) {
-      return value ? new Date(value).toISOString() : null;
+    function fromScheduleDate(value, endOfDay = false) {
+      if (!value) return null;
+      const [year, month, day] = String(value).split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return date.toISOString();
     }
 
     function jobStart(job) {
@@ -244,6 +244,15 @@ import Icon from '../../components/Icon.astro';
     function jobIsInWeek(job) {
       return Array.from({ length: 7 }, (_, index) => new Date(currentWeekStart.getTime() + index * DAY_MS))
         .some((date) => jobIntersectsDay(job, date));
+    }
+
+    function formatScheduleRange(job) {
+      const start = jobStart(job);
+      if (!start) return 'Date scheduled';
+      const end = jobEnd(job);
+      const startText = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      if (!end || dateKey(start) === dateKey(end)) return startText;
+      return `${startText} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
     }
 
     function notify(message, type = 'success') {
@@ -349,14 +358,14 @@ import Icon from '../../components/Icon.astro';
 
     function jobCard(job) {
       const jobAddress = address(job);
-      const time = [formatTime(job.scheduledStartAt), formatTime(job.scheduledEndAt)].filter(Boolean).join(' - ');
+      const scheduleRange = formatScheduleRange(job);
       return `
         <a href="/jobs/${escapeHtml(job.id)}" class="schedule-job-card">
           <div class="flex items-start justify-between gap-2">
             <p class="min-w-0 truncate text-xs font-semibold text-gray-950">${escapeHtml(job.name || 'Job')}</p>
             ${window.PaintFlowUI?.statusBadge({ value: job.status }) || `<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">${escapeHtml(label(job.status))}</span>`}
           </div>
-          <p class="mt-1 text-[0.72rem] font-medium text-gray-700">${escapeHtml(time || 'All day')}</p>
+          <p class="mt-1 text-[0.72rem] font-medium text-gray-700">${escapeHtml(scheduleRange)}</p>
           ${jobAddress ? `<p class="mt-1 line-clamp-2 text-[0.72rem] text-gray-600">${escapeHtml(jobAddress)}</p>` : ''}
         </a>
       `;
@@ -374,16 +383,11 @@ import Icon from '../../components/Icon.astro';
     }
 
     function scheduleForm(job) {
-      const start = new Date();
-      start.setDate(start.getDate() + 1);
-      start.setHours(8, 0, 0, 0);
-      const end = new Date(start);
-      end.setHours(16, 0, 0, 0);
       const jobAddress = address(job);
       const statusCopy = job.status === 'scheduled' ? 'Ready to schedule' : label(job.status);
 
       return `
-        <form class="schedule-backlog-card schedule-job-form" data-job-id="${escapeHtml(job.id)}">
+        <div class="schedule-backlog-card">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <a href="/jobs/${escapeHtml(job.id)}" class="font-semibold text-gray-950 hover:underline">${escapeHtml(job.name || 'Job')}</a>
@@ -391,18 +395,21 @@ import Icon from '../../components/Icon.astro';
               ${jobAddress ? `<p class="mt-1 text-xs text-gray-600">${escapeHtml(jobAddress)}</p>` : ''}
             </div>
           </div>
-          <div class="mt-3 grid gap-2">
-            <label class="grid gap-1 text-xs font-medium text-gray-700">
-              Start
-              <input type="datetime-local" name="scheduledStartAt" value="${escapeHtml(toDateTimeLocal(start))}" class="form-input text-sm" required>
-            </label>
-            <label class="grid gap-1 text-xs font-medium text-gray-700">
-              End
-              <input type="datetime-local" name="scheduledEndAt" value="${escapeHtml(toDateTimeLocal(end))}" class="form-input text-sm" required>
-            </label>
-            <button type="submit" class="btn-primary btn-sm justify-center">Add to calendar</button>
-          </div>
-        </form>
+          <details class="mt-3">
+            <summary class="btn-tonal btn-sm justify-center cursor-pointer select-none">Set dates</summary>
+            <form class="schedule-job-form mt-3 grid gap-2" data-job-id="${escapeHtml(job.id)}">
+              <label class="grid gap-1 text-xs font-medium text-gray-700">
+                First work day
+                <input type="date" name="scheduledStartDate" class="form-input text-sm" required>
+              </label>
+              <label class="grid gap-1 text-xs font-medium text-gray-700">
+                Last work day <span class="font-normal text-gray-500">(optional)</span>
+                <input type="date" name="scheduledEndDate" class="form-input text-sm">
+              </label>
+              <button type="submit" class="btn-primary btn-sm justify-center">Schedule job</button>
+            </form>
+          </details>
+        </div>
       `;
     }
 
@@ -432,13 +439,15 @@ import Icon from '../../components/Icon.astro';
 
       const button = form.querySelector('button[type="submit"]');
       const data = new FormData(form);
-      const scheduledStartAt = fromDateTimeLocal(data.get('scheduledStartAt'));
-      const scheduledEndAt = fromDateTimeLocal(data.get('scheduledEndAt'));
+      const startDate = data.get('scheduledStartDate');
+      const endDate = data.get('scheduledEndDate') || startDate;
+      const scheduledStartAt = fromScheduleDate(startDate);
+      const scheduledEndAt = fromScheduleDate(endDate, true);
       const jobId = form.dataset.jobId;
 
       if (!jobId || !scheduledStartAt || !scheduledEndAt) return;
-      if (new Date(scheduledEndAt) <= new Date(scheduledStartAt)) {
-        notify('End time must be after start time.', 'error');
+      if (new Date(scheduledEndAt) < new Date(scheduledStartAt)) {
+        notify('Last work day must be on or after the first work day.', 'error');
         return;
       }
 
@@ -455,7 +464,7 @@ import Icon from '../../components/Icon.astro';
         console.error(error);
         notify('Failed to schedule job.', 'error');
         button.disabled = false;
-        button.textContent = 'Add to calendar';
+        button.textContent = 'Schedule job';
       }
     });
 
