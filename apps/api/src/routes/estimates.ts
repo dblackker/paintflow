@@ -54,6 +54,8 @@ const estimateLineItemSchema = z.object({
     productionRatePerHour: z.coerce.number().nonnegative().optional(),
     prepAdjustmentHours: z.coerce.number().optional(),
     paintAdjustmentHours: z.coerce.number().optional(),
+    ceilingColorSeparation: z.string().trim().max(80).optional(),
+    ceilingColorSeparationHours: z.coerce.number().nonnegative().optional(),
   }).optional(),
   material: z.object({
     id: z.string().uuid().optional(),

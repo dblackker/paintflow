@@ -212,6 +212,23 @@ import Base from '../../layouts/Base.astro';
       spray_backroll: { label: 'Spray & back-roll', productivity: 1.35 },
       spray_only: { label: 'Spray only', productivity: 1.6 },
     };
+    const ceilingColorSeparationOptions = {
+      same_as_walls: {
+        label: 'Same color as walls',
+        helper: 'No added masking or cut-in labor.',
+        hours: () => 0,
+      },
+      separate_color: {
+        label: 'Separate ceiling color',
+        helper: 'Adds cut-in and light masking labor for a distinct ceiling color.',
+        hours: (quantity) => Math.max(0.25, quantity / 350),
+      },
+      high_contrast_or_complex: {
+        label: 'High contrast / complex separation',
+        helper: 'Adds extra masking and slower cut-in for high-contrast colors, beams, trays, or detailed edges.',
+        hours: (quantity) => Math.max(0.5, quantity / 220),
+      },
+    };
     let rates = [];
     let materialsCatalog = [];
     let settings = {};
@@ -928,6 +945,15 @@ import Base from '../../layouts/Base.astro';
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Prep hrs +/-" value="${escapeHtml(item.prepAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="prepAdjustmentHours">
           <input type="number" step="0.25" inputmode="decimal" autocomplete="off" placeholder="Paint hrs +/-" value="${escapeHtml(item.paintAdjustmentHours || '')}" class="px-2 py-2 border rounded text-sm" data-field="paintAdjustmentHours">
         </div>
+        <div class="hidden mb-2 rounded-md border border-blue-100 bg-white p-2" data-ceiling-color-separation>
+          <label class="block">
+            <span class="text-xs font-medium text-gray-700">Ceiling color separation</span>
+            <select class="mt-1 min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="ceilingColorSeparation">
+              ${Object.entries(ceilingColorSeparationOptions).map(([value, option]) => `<option value="${value}" ${(item.ceilingColorSeparation || item.labor?.ceilingColorSeparation || 'same_as_walls') === value ? 'selected' : ''}>${option.label}</option>`).join('')}
+            </select>
+          </label>
+          <p class="mt-1 text-xs text-gray-500" data-ceiling-color-helper></p>
+        </div>
         <div class="grid gap-2 mb-2 sm:grid-cols-[1.2fr_1fr_0.8fr]">
           <select class="min-w-0 w-full px-2 py-2 border rounded text-sm" data-field="materialId">
             ${surfaceMaterialOptions(item.materialId || '')}
@@ -990,6 +1016,27 @@ import Base from '../../layouts/Base.astro';
 
     function findInteriorRate(kind) {
       return rates.find(rate => interiorRateKind(rate) === kind) || null;
+    }
+
+    function ceilingColorSeparation(surface) {
+      const value = surface?.querySelector('[data-field="ceilingColorSeparation"]')?.value || 'same_as_walls';
+      return ceilingColorSeparationOptions[value] ? value : 'same_as_walls';
+    }
+
+    function ceilingColorSeparationHours(surface, quantity) {
+      if (interiorSurfaceKind(surface) !== 'ceilings') return 0;
+      const option = ceilingColorSeparationOptions[ceilingColorSeparation(surface)] || ceilingColorSeparationOptions.same_as_walls;
+      return Number(option.hours(Number(quantity || 0)) || 0);
+    }
+
+    function syncCeilingColorSeparation(surface) {
+      const isCeiling = interiorSurfaceKind(surface) === 'ceilings';
+      const control = surface?.querySelector('[data-ceiling-color-separation]');
+      const helper = surface?.querySelector('[data-ceiling-color-helper]');
+      if (!control) return;
+      control.classList.toggle('hidden', !isCeiling);
+      const option = ceilingColorSeparationOptions[ceilingColorSeparation(surface)] || ceilingColorSeparationOptions.same_as_walls;
+      if (helper) helper.textContent = option.helper;
     }
 
     function derivedInteriorMeasurement(surface) {
@@ -1346,6 +1393,7 @@ import Base from '../../layouts/Base.astro';
       heightWrap.classList.toggle('hidden', !config.showHeight);
       qtyWrap.classList.toggle('hidden', !config.showQty);
       surface.querySelector('.populate-derived-measure')?.classList.toggle('hidden', !derivedInteriorMeasurement(surface));
+      syncCeilingColorSeparation(surface);
       surface.querySelector('[data-label="width"]').textContent = config.widthLabel;
       surface.querySelector('[data-label="height"]').textContent = config.heightLabel;
       surface.querySelector('[data-label="quantity"]').textContent = config.qtyLabel;
@@ -1708,6 +1756,7 @@ import Base from '../../layouts/Base.astro';
         coats: surface.querySelector('[data-field="coats"]').value,
         prepAdjustmentHours: surface.querySelector('[data-field="prepAdjustmentHours"]').value,
         paintAdjustmentHours: surface.querySelector('[data-field="paintAdjustmentHours"]').value,
+        ceilingColorSeparation: surface.querySelector('[data-field="ceilingColorSeparation"]')?.value || 'same_as_walls',
         materialId: surface.querySelector('[data-field="materialId"]').value,
         colorName: surface.querySelector('[data-field="colorName"]').value,
         colorCode: surface.querySelector('[data-field="colorCode"]').value,
@@ -1810,6 +1859,9 @@ import Base from '../../layouts/Base.astro';
           const coats = Math.max(1, Number(surface.querySelector('[data-field="coats"]').value || rate.coats || 2));
           const prepAdjustmentHours = Number(surface.querySelector('[data-field="prepAdjustmentHours"]').value || 0);
           const paintAdjustmentHours = Number(surface.querySelector('[data-field="paintAdjustmentHours"]').value || 0);
+          const ceilingSeparation = ceilingColorSeparation(surface);
+          const ceilingSeparationOption = ceilingColorSeparationOptions[ceilingSeparation] || ceilingColorSeparationOptions.same_as_walls;
+          const ceilingSeparationHours = ceilingColorSeparationHours(surface, quantity);
           const surfaceMaterial = selectedMaterial(surface.querySelector('[data-field="materialId"]').value);
           const colorName = surface.querySelector('[data-field="colorName"]').value.trim();
           const colorCode = surface.querySelector('[data-field="colorCode"]').value.trim();
@@ -1817,7 +1869,7 @@ import Base from '../../layouts/Base.astro';
           const crewNote = surface.querySelector('[data-field="crewNote"]').value.trim();
           const adjustedRatePerHour = Number(rate.ratePerHour || 1) * Number(application.productivity || 1);
           const baseHours = (quantity / adjustedRatePerHour) * coats * (prepMultipliers[prep] || 1.2);
-          const itemHours = Math.max(0, baseHours + prepAdjustmentHours + paintAdjustmentHours);
+          const itemHours = Math.max(0, baseHours + prepAdjustmentHours + paintAdjustmentHours + ceilingSeparationHours);
           const itemLabor = itemHours * Number(rate.hourlyRate || settings.defaultLaborRate || 65);
           const isPrimerHeavy = prep === 'heavy' || /primer|prep|cabinet/i.test(`${rate.category} ${rate.description}`);
           const material = surfaceMaterial || (isPrimerHeavy && primer ? primer : paint);
@@ -1847,7 +1899,7 @@ import Base from '../../layouts/Base.astro';
             group: surface.dataset.group || '',
             surfaceName: surface.dataset.surfaceName || '',
             dimensions: { width, height, quantity, unit: rate.unit },
-            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${material ? `, ${material.brand || ''} ${material.name}` : ''}${colorName ? `, ${colorName}` : ''}${colorCode ? ` (${colorCode})` : ''}${crewNote ? `, crew: ${crewNote}` : ''}`,
+            notes: `${quantity.toFixed(1)} ${rate.unit}, ${coats} coat${coats === 1 ? '' : 's'}, ${application.label}, ${itemHours.toFixed(1)} labor hours, ${prep} prep${ceilingSeparationHours ? `, ${ceilingSeparationOption.label} (+${ceilingSeparationHours.toFixed(1)} hrs)` : ''}${material ? `, ${material.brand || ''} ${material.name}` : ''}${colorName ? `, ${colorName}` : ''}${colorCode ? ` (${colorCode})` : ''}${crewNote ? `, crew: ${crewNote}` : ''}`,
             labor: {
               hours: Number(itemHours.toFixed(2)),
               rate: Number(rate.hourlyRate || settings.defaultLaborRate || 65),
@@ -1858,6 +1910,8 @@ import Base from '../../layouts/Base.astro';
               productionRatePerHour: Number(adjustedRatePerHour.toFixed(2)),
               prepAdjustmentHours,
               paintAdjustmentHours,
+              ceilingColorSeparation: ceilingSeparation,
+              ceilingColorSeparationHours: Number(ceilingSeparationHours.toFixed(2)),
             },
             material: material ? {
               id: material.id,
