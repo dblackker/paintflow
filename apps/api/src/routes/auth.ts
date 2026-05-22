@@ -175,6 +175,22 @@ function redirectWithLocation(location: string, headers: HeadersInit = {}, statu
   });
 }
 
+function sessionRedirectUrl(location: string, sessionToken: string, env: Env) {
+  const redirectUrl = new URL(location);
+  if (env.ENVIRONMENT === 'demo' || env.ENVIRONMENT === 'development') {
+    const params = new URLSearchParams(redirectUrl.hash.replace(/^#/, ''));
+    params.set('paintflow_session', sessionToken);
+    redirectUrl.hash = params.toString();
+  }
+  return redirectUrl.toString();
+}
+
+function redirectWithSession(location: string, sessionToken: string, env: Env) {
+  return redirectWithLocation(sessionRedirectUrl(location, sessionToken, env), {
+    'Set-Cookie': sessionCookie(sessionToken, env, 604800),
+  });
+}
+
 function clientIp(c: Context<{ Bindings: Env }>) {
   return c.req.header('cf-connecting-ip')
     || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
@@ -397,9 +413,7 @@ auth.get('/demo-login', async (c) => {
     return redirectWithLocation(loginUrl.toString());
   }
 
-  return redirectWithLocation(redirectUrl, {
-    'Set-Cookie': sessionCookie(result.sessionToken, c.env, 604800),
-  });
+  return redirectWithSession(redirectUrl, result.sessionToken, c.env);
 });
 
 // POST /v1/auth/magic-link
@@ -469,7 +483,7 @@ auth.post('/magic-link', async (c) => {
     return c.json({
       success: true,
       autoLogin: true,
-      redirectUrl: `${c.env.PUBLIC_URL}/dashboard`,
+      redirectUrl: sessionRedirectUrl(`${c.env.PUBLIC_URL}/dashboard`, demoSession.sessionToken, c.env),
     });
   }
   
@@ -569,9 +583,7 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
     }).catch((error) => console.error('Failed to send welcome email:', error));
   }
 
-  return redirectWithLocation(`${c.env.PUBLIC_URL}${isNewUser ? '/onboarding?welcome=1' : '/dashboard'}`, {
-    'Set-Cookie': sessionCookie(sessionToken, c.env, 604800),
-  });
+  return redirectWithSession(`${c.env.PUBLIC_URL}${isNewUser ? '/onboarding?welcome=1' : '/dashboard'}`, sessionToken, c.env);
 }
 
 // GET /v1/auth/verify?token=...
@@ -603,7 +615,9 @@ auth.post('/verify', async (c) => {
 
 // POST /v1/auth/logout
 auth.post('/logout', async (c) => {
-  const token = getCookie(c, 'session');
+  const authHeader = c.req.header('authorization') || '';
+  const bearerToken = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const token = getCookie(c, 'session') || bearerToken;
   
   if (token) {
     await c.env.KV.delete(`session:${token}`);

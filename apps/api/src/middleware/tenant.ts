@@ -1,17 +1,18 @@
 import type { Context, Next } from 'hono';
-import { getCookie } from 'hono/cookie';
 import type { Env, Variables } from '../types';
-import { getSession } from '../auth';
+import { getRequestSessionInfo, getSession } from '../auth';
 
 // Middleware to set org_id for RLS and tenant isolation
 export async function tenantMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
-  const token = getCookie(c, 'session');
+  const { token, source } = getRequestSessionInfo(c);
+  c.set('authSource', source);
   
   if (token) {
     const session = await getSession(c.env, token);
     if (session) {
       c.set('userId', session.userId);
       c.set('orgId', session.orgId);
+      c.set('session', session);
       
       // Neon HTTP does not keep a per-request Postgres session. Routes must keep
       // explicit org filters on tenant-owned data.
@@ -31,7 +32,8 @@ export async function tenantMiddleware(c: Context<{ Bindings: Env; Variables: Va
 
 // Middleware to require authentication
 export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
-  const token = getCookie(c, 'session');
+  const { token, source } = getRequestSessionInfo(c);
+  c.set('authSource', source);
   
   if (!token) {
     return c.json({ error: 'Unauthorized', code: 'NO_SESSION' }, 401);
@@ -45,6 +47,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Vari
   
   c.set('userId', session.userId);
   c.set('orgId', session.orgId);
+  c.set('session', session);
   
   await next();
 }

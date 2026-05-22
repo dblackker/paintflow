@@ -42,4 +42,5 @@ export type Variables = {
   session?: unknown;
   userRole?: string;
   permissions?: string[];
+  authSource?: 'cookie' | 'bearer' | 'none';
 };
