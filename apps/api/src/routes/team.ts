@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { teamMembers, timeEntries, jobCosts, userRoles, memberships, jobs, users, orgSettings, timePunchSessions, timePunchEvents } from '@paintflow/db/schema';
+import { teamMembers, timeEntries, jobCosts, userRoles, memberships, jobs, users, orgSettings, timePunchSessions, timePunchEvents, leads } from '@paintflow/db/schema';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -89,10 +89,31 @@ teamApp.get('/punch/status', async (c) => {
   const resolved = await resolvePunchMember(c, c.req.query('teamMemberId') || undefined);
 
   const [jobList, memberList] = await Promise.all([
-    db.query.jobs.findMany({
-      where: and(eq(jobs.orgId, orgId), inArray(jobs.status, ['scheduled', 'in_progress'])),
-      orderBy: (jobs, { desc }) => [desc(jobs.createdAt)],
-    }),
+    db.select({
+      id: jobs.id,
+      orgId: jobs.orgId,
+      leadId: jobs.leadId,
+      estimateId: jobs.estimateId,
+      name: jobs.name,
+      status: jobs.status,
+      budget: jobs.budget,
+      scheduledStartAt: jobs.scheduledStartAt,
+      scheduledEndAt: jobs.scheduledEndAt,
+      completedAt: jobs.completedAt,
+      createdAt: jobs.createdAt,
+      updatedAt: jobs.updatedAt,
+      leadName: leads.name,
+      leadPhone: leads.phone,
+      leadEmail: leads.email,
+      leadStreetAddress: leads.streetAddress,
+      leadCity: leads.city,
+      leadState: leads.state,
+      leadPostalCode: leads.postalCode,
+    })
+      .from(jobs)
+      .leftJoin(leads, and(eq(jobs.leadId, leads.id), eq(leads.orgId, orgId)))
+      .where(and(eq(jobs.orgId, orgId), inArray(jobs.status, ['scheduled', 'in_progress'])))
+      .orderBy(desc(jobs.createdAt)),
     canManage
       ? db.query.teamMembers.findMany({ where: and(eq(teamMembers.orgId, orgId), eq(teamMembers.isActive, true)) })
       : Promise.resolve([]),

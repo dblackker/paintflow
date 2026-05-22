@@ -299,12 +299,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     }
 
     function populateSelects() {
+      const sortedJobs = sortJobsByRecentTime(jobs);
       document.getElementById('member-select').innerHTML = '<option value="">Select crew member...</option>' +
         members.map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
       document.getElementById('job-select').innerHTML = '<option value="">Select job...</option>' +
-        jobs.map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`).join('');
+        sortedJobs.map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`).join('');
       document.getElementById('bulk-job-select').innerHTML = '<option value="">Select job...</option>' +
-        jobs.map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`).join('');
+        sortedJobs.map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`).join('');
     }
 
     function jobAddress(job = {}) {
@@ -317,13 +318,55 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
     function jobOptionLabel(job = {}) {
       const address = jobAddress(job);
-      return address ? `${address} - ${job.name}` : job.name;
+      const customer = job.leadName ? ` - ${job.leadName}` : '';
+      return address ? `${address}${customer} - ${job.name}` : `${job.name}${customer}`;
+    }
+
+    function timeSortValue(value) {
+      if (!value) return 0;
+      const date = new Date(value);
+      const time = date.getTime();
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function latestLoggedTimeByJob() {
+      return allEntries.reduce((latest, entry) => {
+        if (!entry.jobId) return latest;
+        const value = Math.max(
+          timeSortValue(entry.actualEndAt),
+          timeSortValue(entry.roundedEndAt),
+          timeSortValue(entry.date),
+          timeSortValue(entry.createdAt),
+        );
+        latest.set(entry.jobId, Math.max(latest.get(entry.jobId) || 0, value));
+        return latest;
+      }, new Map());
+    }
+
+    function fallbackJobSortValue(job = {}) {
+      return Math.max(
+        timeSortValue(job.scheduledStartAt),
+        timeSortValue(job.updatedAt),
+        timeSortValue(job.createdAt),
+      );
+    }
+
+    function sortJobsByRecentTime(sourceJobs = []) {
+      const latestByJob = latestLoggedTimeByJob();
+      return [...sourceJobs].sort((a, b) => {
+        const aLatest = latestByJob.get(a.id) || 0;
+        const bLatest = latestByJob.get(b.id) || 0;
+        if (aLatest !== bLatest) return bLatest - aLatest;
+        return fallbackJobSortValue(b) - fallbackJobSortValue(a);
+      });
     }
 
     function punchJobOptions() {
       const jobsById = new Map(jobs.map((job) => [job.id, job]));
-      const sourceJobs = (punchStatus?.jobs?.length ? punchStatus.jobs : jobs)
-        .map((job) => ({ ...jobsById.get(job.id), ...job }));
+      const sourceJobs = sortJobsByRecentTime(
+        (punchStatus?.jobs?.length ? punchStatus.jobs : jobs)
+          .map((job) => ({ ...jobsById.get(job.id), ...job }))
+      );
       const options = sourceJobs
         .map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`)
         .join('');
