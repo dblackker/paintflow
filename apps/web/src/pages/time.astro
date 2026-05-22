@@ -29,6 +29,23 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         grid-template-columns: minmax(0, 1fr);
       }
     }
+    :global(.time-desktop-cell) {
+      display: none;
+    }
+    :global(.time-entry-actions) {
+      align-items: center;
+      display: flex;
+      gap: 0.375rem;
+      justify-content: flex-end;
+    }
+    @media (min-width: 1024px) {
+      :global(.time-mobile-summary) {
+        display: none;
+      }
+      :global(.time-desktop-cell) {
+        display: block;
+      }
+    }
   </style>
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
@@ -797,8 +814,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       const collapsed = collapsedGroups.has(groupKey);
       const columns = getColumns(mode);
       const gridClass = mode === 'flat'
-        ? 'lg:grid-cols-[minmax(8rem,0.7fr)_minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]'
-        : 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]';
+        ? 'lg:grid-cols-[minmax(8rem,0.7fr)_minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_5.5rem]'
+        : 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_5.5rem]';
 
       return `
         <section class="surface-panel overflow-hidden">
@@ -866,15 +883,15 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       ].filter(Boolean).join(' • ');
       const displayDetailLine = detailLine.replace(/[^\x00-\x7F]+/g, '-');
       const desktopCells = {
-        date: `<p class="hidden lg:block text-gray-700 truncate">${date}</p>`,
-        job: `<div class="hidden lg:block min-w-0"><p class="text-gray-700 truncate">${escapeHtml(entry.jobName || 'Job')} ${flagged ? '<span class="chip pf-status-danger ml-1">Review</span>' : ''}${approvedOverride ? '<span class="chip ml-1">Override approved</span>' : ''}</p>${displayDetailLine ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(displayDetailLine)}</p>` : ''}</div>`,
-        employee: `<p class="hidden lg:block text-gray-700 truncate">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>`,
-        hours: `<p class="hidden lg:block text-right font-medium">${Number(entry.hours).toFixed(2)}</p>`,
-        cost: `<p class="hidden lg:block text-right font-medium">${currency(entry.totalCost)}</p>`,
+        date: `<p class="time-desktop-cell text-gray-700 truncate">${date}</p>`,
+        job: `<div class="time-desktop-cell min-w-0"><p class="text-gray-700 truncate">${escapeHtml(entry.jobName || 'Job')} ${flagged ? '<span class="chip pf-status-danger ml-1">Review</span>' : ''}${approvedOverride ? '<span class="chip ml-1">Override approved</span>' : ''}</p>${displayDetailLine ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(displayDetailLine)}</p>` : ''}</div>`,
+        employee: `<p class="time-desktop-cell text-gray-700 truncate">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>`,
+        hours: `<p class="time-desktop-cell text-right font-medium">${Number(entry.hours).toFixed(2)}</p>`,
+        cost: `<p class="time-desktop-cell text-right font-medium">${currency(entry.totalCost)}</p>`,
         actions: `
-          <div class="flex justify-end gap-1.5">
-            <button type="button" onclick="editEntry('${entry.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit time entry">${iconSvg('edit')}</button>
-            <button type="button" onclick="removeEntry('${entry.id}')" class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Remove time entry">${iconSvg('trash')}</button>
+          <div class="time-entry-actions">
+            <button type="button" onclick="editEntry('${entry.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit time entry" title="Edit time entry">${iconSvg('edit')}</button>
+            <button type="button" onclick="removeEntry('${entry.id}')" class="btn-icon btn-icon-outlined btn-icon-danger" aria-label="Remove time entry" title="Remove time entry">${iconSvg('trash')}</button>
           </div>
         `,
       };
@@ -888,7 +905,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
       return `
         <article class="mobile-card-row px-3 py-2 grid grid-cols-[minmax(0,1fr)_auto] ${gridClass} gap-2 lg:gap-3 lg:items-center text-sm hover:bg-gray-50">
-          <div class="min-w-0 lg:hidden">
+          <div class="time-mobile-summary min-w-0">
             <p class="font-medium truncate">${escapeHtml(mobileTitle)}</p>
             <p class="lg:hidden text-xs text-gray-500 truncate">${escapeHtml(mobileContext)}</p>
           </div>
