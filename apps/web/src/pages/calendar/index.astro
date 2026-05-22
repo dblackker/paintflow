@@ -4,7 +4,7 @@ import Icon from '../../components/Icon.astro';
 ---
 
 <Base title="Calendar - PaintFlow">
-  <style>
+  <style is:global>
     .schedule-shell {
       max-width: 78rem;
     }
@@ -17,10 +17,16 @@ import Icon from '../../components/Icon.astro';
     }
 
     .schedule-day {
-      min-height: 13rem;
+      min-height: 10rem;
       border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 78%, transparent);
       border-radius: var(--pf-radius);
       background: var(--md-sys-color-surface-container-lowest);
+    }
+
+    .schedule-week-grid {
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
     }
 
     .schedule-day.is-today {
@@ -59,6 +65,16 @@ import Icon from '../../components/Icon.astro';
       background: var(--md-sys-color-surface-container-lowest);
     }
 
+    .schedule-date-summary {
+      width: fit-content;
+    }
+
+    .schedule-date-summary::marker,
+    .schedule-date-summary::-webkit-details-marker {
+      display: none;
+      content: "";
+    }
+
     .schedule-stat {
       border-radius: var(--pf-radius);
       background: var(--md-sys-color-surface-container-low);
@@ -82,6 +98,10 @@ import Icon from '../../components/Icon.astro';
 
       .schedule-day {
         min-height: auto;
+      }
+
+      .schedule-week-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -365,7 +385,7 @@ import Icon from '../../components/Icon.astro';
                 <p class="text-sm font-semibold text-gray-950">${date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
                 <p class="text-xs text-gray-500">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
               </div>
-              ${key === todayKey ? '<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
+              ${key === todayKey ? '<span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
             </div>
             <div class="grid gap-2">
               ${dayJobs.map(jobCard).join('')}
@@ -381,7 +401,7 @@ import Icon from '../../components/Icon.astro';
         `;
       }).join('');
 
-      grid.innerHTML = `<div class="grid grid-cols-1 gap-2 md:grid-cols-7">${days}</div>`;
+      grid.innerHTML = `<div class="schedule-week-grid">${days}</div>`;
       renderNeedsScheduling();
     }
 
@@ -430,7 +450,7 @@ import Icon from '../../components/Icon.astro';
             </div>
           </div>
           <details class="mt-3">
-            <summary class="btn-tonal btn-sm justify-center cursor-pointer select-none">Set dates</summary>
+            <summary class="schedule-date-summary btn-tonal btn-sm justify-center cursor-pointer select-none">Set dates</summary>
             <form class="schedule-job-form mt-3 grid gap-2" data-job-id="${escapeHtml(job.id)}">
               <p class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">${escapeHtml(durationCopy)}</p>
               <label class="grid gap-1 text-xs font-medium text-gray-700">
