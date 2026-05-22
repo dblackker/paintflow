@@ -42,7 +42,7 @@ import '../styles/design-system.css';
       </form>
 
       <p class="text-center text-sm text-gray-500">
-        No password to remember. Each link expires after 15 minutes.
+        No password to remember. Each link <span id="demo-shortcut-trigger">expires</span> after 15 minutes.
       </p>
 
       <div id="message" class="hidden mt-4 p-4 rounded-lg"></div>
@@ -51,13 +51,44 @@ import '../styles/design-system.css';
     <script>
       const form = document.getElementById('login-form') as HTMLFormElement;
       const message = document.getElementById('message') as HTMLDivElement;
+      const demoShortcutTrigger = document.getElementById('demo-shortcut-trigger') as HTMLSpanElement | null;
       const DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
+      const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+      const IS_DEMO_OR_DEV = Boolean(import.meta.env.DEV)
+        || ['localhost', '127.0.0.1'].includes(window.location.hostname)
+        || window.location.hostname === 'paintflow-demo.pages.dev'
+        || API_URL.includes('paintflow-api-demo');
       const params = new URLSearchParams(window.location.search);
+      let demoShortcutClicks = 0;
+
+      function signInToDemo() {
+        message.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-800';
+        message.textContent = 'Signing you in to the demo workspace...';
+        message.classList.remove('hidden');
+        const appOrigin = window.location.hostname === '127.0.0.1'
+          ? `${window.location.protocol}//localhost:${window.location.port}`
+          : window.location.origin;
+        const demoApiUrl = window.location.hostname === '127.0.0.1' && API_URL.includes('127.0.0.1')
+          ? API_URL.replace('127.0.0.1', 'localhost')
+          : API_URL;
+        const redirectTo = `${appOrigin}/dashboard`;
+        window.location.href = `${demoApiUrl}/v1/auth/demo-login?email=${encodeURIComponent(DEMO_EMAIL)}&redirectTo=${encodeURIComponent(redirectTo)}`;
+      }
 
       if (params.get('error')) {
         message.className = 'mt-4 p-4 rounded-lg bg-red-50 text-red-800';
         message.textContent = params.get('error') || 'Sign-in failed';
         message.classList.remove('hidden');
+      }
+
+      if (IS_DEMO_OR_DEV) {
+        demoShortcutTrigger?.addEventListener('click', () => {
+          demoShortcutClicks += 1;
+          if (demoShortcutClicks >= 12) {
+            demoShortcutClicks = 0;
+            signInToDemo();
+          }
+        });
       }
       
       form.addEventListener('submit', async (e) => {
@@ -70,19 +101,8 @@ import '../styles/design-system.css';
         button.textContent = 'Sending...';
         
         try {
-          const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
-          if (email === DEMO_EMAIL) {
-            message.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-800';
-            message.textContent = 'Signing you in to the demo workspace...';
-            message.classList.remove('hidden');
-            const appOrigin = window.location.hostname === '127.0.0.1'
-              ? `${window.location.protocol}//localhost:${window.location.port}`
-              : window.location.origin;
-            const demoApiUrl = window.location.hostname === '127.0.0.1' && API_URL.includes('127.0.0.1')
-              ? API_URL.replace('127.0.0.1', 'localhost')
-              : API_URL;
-            const redirectTo = `${appOrigin}/dashboard`;
-            window.location.href = `${demoApiUrl}/v1/auth/demo-login?email=${encodeURIComponent(email)}&redirectTo=${encodeURIComponent(redirectTo)}`;
+          if (email === DEMO_EMAIL && IS_DEMO_OR_DEV) {
+            signInToDemo();
             return;
           }
 
