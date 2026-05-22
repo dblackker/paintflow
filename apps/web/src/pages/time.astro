@@ -168,6 +168,7 @@ import Icon from '../components/Icon.astro';
             <button type="button" id="bulk-select-visible" class="btn-text btn-sm">Clear visible</button>
           </div>
           <div id="bulk-role-filters" class="flex flex-wrap gap-2 mt-2"></div>
+          <p id="bulk-selection-summary" class="mt-2 text-sm font-medium text-gray-700"></p>
         </div>
         <div id="bulk-members" class="border border-[var(--pf-border)] rounded-xl overflow-hidden divide-y divide-[var(--pf-border)]"></div>
         <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
@@ -190,6 +191,7 @@ import Icon from '../components/Icon.astro';
     let isPunching = false;
     let bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
     const bulkSelection = new Map();
+    const bulkHours = new Map();
     const supportedViewModes = new Set(['day', 'job', 'employee']);
     let viewMode = supportedViewModes.has(localStorage.getItem('paintflow.time.viewMode'))
       ? localStorage.getItem('paintflow.time.viewMode')
@@ -403,10 +405,52 @@ import Icon from '../components/Icon.astro';
       const memberIds = new Set(members.map((member) => member.id));
       members.forEach((member) => {
         if (!bulkSelection.has(member.id)) bulkSelection.set(member.id, true);
+        if (!bulkHours.has(member.id)) bulkHours.set(member.id, getBulkDefaultHours());
       });
       Array.from(bulkSelection.keys()).forEach((id) => {
         if (!memberIds.has(id)) bulkSelection.delete(id);
       });
+      Array.from(bulkHours.keys()).forEach((id) => {
+        if (!memberIds.has(id)) bulkHours.delete(id);
+      });
+    }
+
+    function getBulkDefaultHours() {
+      const value = Number(document.getElementById('bulk-default-hours')?.value || 8);
+      return Number.isFinite(value) && value >= 0 ? value : 8;
+    }
+
+    function getBulkSelectedEntries() {
+      return members
+        .filter((member) => bulkSelection.get(member.id))
+        .map((member) => ({
+          member,
+          hours: Number(bulkHours.get(member.id) ?? getBulkDefaultHours()),
+        }))
+        .filter((entry) => Number.isFinite(entry.hours) && entry.hours > 0);
+    }
+
+    function updateBulkSummary() {
+      const summary = document.getElementById('bulk-selection-summary');
+      if (!summary) return;
+      const selected = getBulkSelectedEntries();
+      const visibleIds = new Set(
+        members
+          .filter((member) => bulkRoleFilters.has(member.role || 'crew'))
+          .map((member) => member.id)
+      );
+      const hiddenSelected = selected.filter(({ member }) => !visibleIds.has(member.id)).length;
+      const totalHours = selected.reduce((sum, entry) => sum + entry.hours, 0);
+      const averageHours = selected.length ? totalHours / selected.length : 0;
+      const parts = [
+        `${selected.length} employee${selected.length === 1 ? '' : 's'} selected`,
+        `${averageHours.toFixed(2).replace(/\.00$/, '')} hr avg`,
+        `${totalHours.toFixed(2).replace(/\.00$/, '')} total hrs`,
+      ];
+      if (hiddenSelected) {
+        parts.push(`${hiddenSelected} hidden by filters`);
+      }
+      summary.textContent = parts.join(' • ');
     }
 
     function renderBulkRoleFilters() {
@@ -435,9 +479,10 @@ import Icon from '../components/Icon.astro';
       const container = document.getElementById('bulk-members');
       if (!container) return;
       const visibleMembers = members.filter((member) => bulkRoleFilters.has(member.role || 'crew'));
-      const defaultHours = Number(document.getElementById('bulk-default-hours')?.value || 8);
       if (!visibleMembers.length) {
         container.innerHTML = '<div class="p-4 text-sm text-gray-500">No crew match the selected roles. Add another role filter to include more people.</div>';
+        updateBulkSelectionAction();
+        updateBulkSummary();
         return;
       }
       container.innerHTML = visibleMembers.map((member) => `
@@ -449,16 +494,24 @@ import Icon from '../components/Icon.astro';
               <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
             </span>
           </span>
-          <input type="number" data-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${Number.isFinite(defaultHours) ? defaultHours : 8}">
+          <input type="number" data-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${bulkHours.get(member.id) ?? getBulkDefaultHours()}">
         </label>
       `).join('');
       container.querySelectorAll('[data-bulk-member]').forEach((checkbox) => {
         checkbox.addEventListener('change', () => {
           bulkSelection.set(checkbox.dataset.bulkMember, checkbox.checked);
           updateBulkSelectionAction();
+          updateBulkSummary();
+        });
+      });
+      container.querySelectorAll('[data-bulk-hours]').forEach((input) => {
+        input.addEventListener('input', () => {
+          bulkHours.set(input.dataset.bulkHours, Number(input.value || 0));
+          updateBulkSummary();
         });
       });
       updateBulkSelectionAction();
+      updateBulkSummary();
     }
 
     function updateBulkSelectionAction() {
@@ -468,11 +521,13 @@ import Icon from '../components/Icon.astro';
       if (!visible.length) {
         button.textContent = 'Select visible';
         button.disabled = true;
+        updateBulkSummary();
         return;
       }
       button.disabled = false;
       const checked = visible.filter((checkbox) => checkbox.checked).length;
       button.textContent = checked === visible.length ? 'Clear visible' : 'Select visible';
+      updateBulkSummary();
     }
 
     function openBulkModal() {
@@ -482,6 +537,7 @@ import Icon from '../components/Icon.astro';
       document.getElementById('bulk-default-hours').value = '8';
       if (!bulkRoleFilters.size) bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
       members.forEach((member) => bulkSelection.set(member.id, true));
+      members.forEach((member) => bulkHours.set(member.id, 8));
       renderBulkEntry();
       document.getElementById('bulk-modal').classList.remove('hidden');
     }
@@ -883,10 +939,12 @@ import Icon from '../components/Icon.astro';
     document.getElementById('cancel-bulk-btn').addEventListener('click', closeBulkModal);
     document.getElementById('close-bulk-modal-btn').addEventListener('click', closeBulkModal);
     document.getElementById('bulk-default-hours').addEventListener('input', () => {
-      const defaultHours = document.getElementById('bulk-default-hours').value;
+      const defaultHours = getBulkDefaultHours();
+      members.forEach((member) => bulkHours.set(member.id, defaultHours));
       document.querySelectorAll('[data-bulk-hours]').forEach((input) => {
         input.value = defaultHours;
       });
+      updateBulkSummary();
     });
     document.getElementById('bulk-select-visible').addEventListener('click', () => {
       const visible = Array.from(document.querySelectorAll('[data-bulk-member]'));
@@ -896,6 +954,7 @@ import Icon from '../components/Icon.astro';
         bulkSelection.set(checkbox.dataset.bulkMember, shouldSelect);
       });
       updateBulkSelectionAction();
+      updateBulkSummary();
     });
 
     document.getElementById('time-form').addEventListener('submit', async (event) => {
@@ -935,17 +994,11 @@ import Icon from '../components/Icon.astro';
       const form = event.currentTarget;
       const submit = document.getElementById('submit-bulk-btn');
       const data = Object.fromEntries(new FormData(form));
-      const selected = Array.from(document.querySelectorAll('[data-bulk-member]'))
-        .filter((checkbox) => checkbox.checked)
-        .map((checkbox) => {
-          const hoursInput = document.querySelector(`[data-bulk-hours="${checkbox.dataset.bulkMember}"]`);
-          return {
-            teamMemberId: checkbox.dataset.bulkMember,
-            hours: Number(hoursInput?.value || 0),
-            description: data.description || 'Crew labor',
-          };
-        })
-        .filter((entry) => entry.teamMemberId && entry.hours > 0);
+      const selected = getBulkSelectedEntries().map(({ member, hours }) => ({
+        teamMemberId: member.id,
+        hours,
+        description: data.description || 'Crew labor',
+      }));
 
       if (!data.jobId) {
         window.showToast?.('Select a job first', 'error');
