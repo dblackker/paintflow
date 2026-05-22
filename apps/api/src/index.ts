@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { securityHeaders } from './middleware/security';
 import { tenantMiddleware } from './middleware/tenant';
+import { requestLogging } from './middleware/request-logging';
 import { processDrips } from './cron/drips';
 import { processReviewRequests } from './cron/reviewRequests';
 import type { Env, Variables } from './types';
@@ -62,19 +62,41 @@ function isAllowedOrigin(origin: string | undefined, configuredOrigins: string[]
   return null;
 }
 
-app.use('*', cors({
-  origin: (origin, c) => {
-    const configuredOrigins = c.env.CORS_ORIGINS
-      ? c.env.CORS_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
-      : defaultOrigins;
+app.use('*', async (c, next) => {
+  const origin = c.req.raw.headers.get('Origin') || undefined;
+  const configuredOrigins = c.env.CORS_ORIGINS
+    ? c.env.CORS_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
+    : defaultOrigins;
+  const allowedOrigin = isAllowedOrigin(origin, configuredOrigins, c.env.ENVIRONMENT);
 
-    return isAllowedOrigin(origin, configuredOrigins, c.env.ENVIRONMENT);
-  },
-  credentials: true,
-}));
+  if (allowedOrigin) {
+    c.header('Access-Control-Allow-Origin', allowedOrigin);
+    c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Vary', 'Origin', { append: true });
+  }
+
+  if (c.req.method === 'OPTIONS') {
+    const requestHeaders = c.req.raw.headers.get('Access-Control-Request-Headers');
+    c.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,POST,DELETE,PATCH');
+    if (requestHeaders) {
+      c.header('Access-Control-Allow-Headers', requestHeaders);
+      c.header('Vary', 'Access-Control-Request-Headers', { append: true });
+    }
+    return c.body(null, 204);
+  }
+
+  await next();
+
+  if (allowedOrigin) {
+    c.header('Access-Control-Allow-Origin', allowedOrigin);
+    c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Vary', 'Origin', { append: true });
+  }
+});
 
 app.use('*', securityHeaders);
 app.use('*', tenantMiddleware);
+app.use('*', requestLogging);
 
 app.route('/v1/auth', authRoutes);
 app.route('/v1/sms', smsRoutes);

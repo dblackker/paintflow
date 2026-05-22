@@ -51,11 +51,19 @@ import '../styles/design-system.css';
     <script>
       const form = document.getElementById('login-form') as HTMLFormElement;
       const message = document.getElementById('message') as HTMLDivElement;
+      const DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
+      const params = new URLSearchParams(window.location.search);
+
+      if (params.get('error')) {
+        message.className = 'mt-4 p-4 rounded-lg bg-red-50 text-red-800';
+        message.textContent = params.get('error') || 'Sign-in failed';
+        message.classList.remove('hidden');
+      }
       
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData(form);
-        const email = formData.get('email') as string;
+        const email = String(formData.get('email') || '').trim().toLowerCase();
         
         const button = form.querySelector('button') as HTMLButtonElement;
         button.disabled = true;
@@ -63,6 +71,21 @@ import '../styles/design-system.css';
         
         try {
           const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+          if (email === DEMO_EMAIL) {
+            message.className = 'mt-4 p-4 rounded-lg bg-green-50 text-green-800';
+            message.textContent = 'Signing you in to the demo workspace...';
+            message.classList.remove('hidden');
+            const appOrigin = window.location.hostname === '127.0.0.1'
+              ? `${window.location.protocol}//localhost:${window.location.port}`
+              : window.location.origin;
+            const demoApiUrl = window.location.hostname === '127.0.0.1' && API_URL.includes('127.0.0.1')
+              ? API_URL.replace('127.0.0.1', 'localhost')
+              : API_URL;
+            const redirectTo = `${appOrigin}/dashboard`;
+            window.location.href = `${demoApiUrl}/v1/auth/demo-login?email=${encodeURIComponent(email)}&redirectTo=${encodeURIComponent(redirectTo)}`;
+            return;
+          }
+
           const res = await fetch(`${API_URL}/v1/auth/magic-link`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

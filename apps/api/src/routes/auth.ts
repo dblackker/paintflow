@@ -147,6 +147,23 @@ function canUseGoldenDemoLogin(env: Env, email: string) {
   return email === GOLDEN_DEMO_EMAIL && ['development', 'demo'].includes(env.ENVIRONMENT);
 }
 
+function safeRedirectUrl(env: Env, value: string | null | undefined, fallback = '/dashboard') {
+  if (!value) return `${env.PUBLIC_URL}${fallback}`;
+  try {
+    const url = new URL(value, env.PUBLIC_URL);
+    const publicUrl = new URL(env.PUBLIC_URL);
+    const isPublicOrigin = url.origin === publicUrl.origin;
+    const isLocalDev = env.ENVIRONMENT !== 'production'
+      && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+      && Number(url.port || 0) >= 4321
+      && Number(url.port || 0) <= 4399;
+    if (isPublicOrigin || isLocalDev) return url.toString();
+  } catch {
+    // Fall through to the configured app URL.
+  }
+  return `${env.PUBLIC_URL}${fallback}`;
+}
+
 function clientIp(c: Context<{ Bindings: Env }>) {
   return c.req.header('cf-connecting-ip')
     || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
@@ -186,6 +203,48 @@ async function checkMagicLinkBucket(env: Env, key: string, limit: number) {
   });
 
   return { allowed: true, resetAt: state.resetAt, retryAfterMinutes: 0 };
+}
+
+async function createGoldenDemoSession(c: Context<{ Bindings: Env }>, email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!canUseGoldenDemoLogin(c.env, normalizedEmail)) {
+    return { error: 'Demo login is not available in this environment.', status: 404 as const };
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, normalizedEmail),
+  });
+
+  if (!user) {
+    return {
+      error: 'Golden demo user has not been seeded in this database yet.',
+      code: 'DEMO_USER_NOT_SEEDED',
+      status: 404 as const,
+    };
+  }
+
+  const membership = await db.query.memberships.findFirst({
+    where: eq(memberships.userId, user.id),
+  });
+
+  if (!membership?.orgId) {
+    return {
+      error: 'Golden demo user is missing an organization membership.',
+      code: 'DEMO_USER_MISSING_MEMBERSHIP',
+      status: 409 as const,
+    };
+  }
+
+  const sessionToken = await createSession(c.env, user.id, membership.orgId, normalizedEmail);
+  c.header('Set-Cookie', sessionCookie(sessionToken, c.env, 604800));
+
+  return {
+    sessionToken,
+    user,
+    membership,
+    status: 200 as const,
+  };
 }
 
 async function seedWorkspaceDefaults(
@@ -271,6 +330,21 @@ const magicLinkEmail = (magicLink: string) => ({
   ]
 });
 
+// GET /v1/auth/demo-login
+auth.get('/demo-login', async (c) => {
+  const email = c.req.query('email') || GOLDEN_DEMO_EMAIL;
+  const result = await createGoldenDemoSession(c, email);
+  const redirectUrl = safeRedirectUrl(c.env, c.req.query('redirectTo'), '/dashboard');
+
+  if ('error' in result) {
+    const loginUrl = new URL('/login', redirectUrl);
+    loginUrl.searchParams.set('error', result.code || result.error);
+    return c.redirect(loginUrl.toString(), 302);
+  }
+
+  return c.redirect(redirectUrl, 302);
+});
+
 // POST /v1/auth/magic-link
 auth.post('/magic-link', async (c) => {
   const { email, name, companyName } = await c.req.json();
@@ -327,26 +401,13 @@ auth.post('/magic-link', async (c) => {
   });
 
   if (canUseGoldenDemoLogin(c.env, normalizedEmail)) {
-    if (!user) {
+    const demoSession = await createGoldenDemoSession(c, normalizedEmail);
+    if ('error' in demoSession) {
       return c.json({
-        error: 'Golden demo user has not been seeded in this database yet.',
-        code: 'DEMO_USER_NOT_SEEDED',
-      }, 404);
+        error: demoSession.error,
+        code: demoSession.code,
+      }, demoSession.status);
     }
-
-    const membership = await db.query.memberships.findFirst({
-      where: eq(memberships.userId, user.id),
-    });
-
-    if (!membership?.orgId) {
-      return c.json({
-        error: 'Golden demo user is missing an organization membership.',
-        code: 'DEMO_USER_MISSING_MEMBERSHIP',
-      }, 409);
-    }
-
-    const sessionToken = await createSession(c.env, user.id, membership.orgId, normalizedEmail);
-    c.header('Set-Cookie', sessionCookie(sessionToken, c.env, 604800));
 
     return c.json({
       success: true,
