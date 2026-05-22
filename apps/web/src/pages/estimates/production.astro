@@ -116,6 +116,12 @@ import Base from '../../layouts/Base.astro';
                 <button id="edit-quick-scope" type="button" class="btn-text btn-sm justify-center">Review assumptions</button>
               </div>
             </div>
+            <div id="quick-scope-skip-summary" class="hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p class="font-medium">Starter scope skipped. Add rooms and substrates manually below.</p>
+                <button id="restore-quick-scope" type="button" class="btn-text btn-sm justify-center">Use starter scope</button>
+              </div>
+            </div>
           </div>
           <div id="rooms-container" class="space-y-4"></div>
           <button id="add-room" class="btn-secondary w-full justify-center">
@@ -751,7 +757,8 @@ import Base from '../../layouts/Base.astro';
             </div>
           </div>
           <div class="production-scope-action relative mt-3 inline-flex items-center gap-1.5">
-            <button type="button" class="generate-interior-scope btn-primary btn-sm justify-center">Add interior scope from room schedule</button>
+            <button type="button" class="generate-interior-scope btn-primary btn-sm justify-center">Build starter scope</button>
+            <button type="button" class="skip-quick-scope btn-text btn-sm justify-center">Skip starter</button>
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 bg-white/80 text-[11px] font-medium leading-none text-emerald-700 hover:bg-white" aria-label="Explain interior assumptions" aria-expanded="false">?</button>
             <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-emerald-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Interior assumptions explanation">
               <p class="font-semibold text-gray-900">Interior assumptions</p>
@@ -810,7 +817,8 @@ import Base from '../../layouts/Base.astro';
             </div>
           </div>
           <div class="production-scope-action relative mt-3 inline-flex items-center gap-1.5">
-            <button type="button" class="generate-exterior-scope btn-primary btn-sm justify-center">Add exterior scope from assumptions</button>
+            <button type="button" class="generate-exterior-scope btn-primary btn-sm justify-center">Build starter scope</button>
+            <button type="button" class="skip-quick-scope btn-text btn-sm justify-center">Skip starter</button>
             <button type="button" class="assumption-info inline-flex h-5 w-5 items-center justify-center rounded-full border border-blue-300 bg-white/80 text-[11px] font-medium leading-none text-blue-700 hover:bg-white" aria-label="Explain exterior assumptions" aria-expanded="false">?</button>
             <div class="hidden absolute left-0 top-10 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-blue-200 bg-white p-3 text-xs text-gray-700 shadow-lg" data-assumption-info role="dialog" aria-label="Exterior assumptions explanation">
               <p class="font-semibold text-gray-900">Exterior assumptions</p>
@@ -1194,13 +1202,16 @@ import Base from '../../layouts/Base.astro';
       return builder?.dataset.scopeRoomId === room?.id ? builder : room;
     }
 
-    function setQuickScopeCollapsed(collapsed, summaryText = '') {
+    function setQuickScopeCollapsed(collapsed, summaryText = '', mode = 'generated') {
       const builder = quickScopeBuilder();
       const summary = document.getElementById('quick-scope-summary');
+      const skipSummary = document.getElementById('quick-scope-skip-summary');
       const summaryCopy = document.getElementById('quick-scope-summary-text');
-      if (!builder || !summary) return;
+      if (!builder || !summary || !skipSummary) return;
       builder.dataset.collapsed = String(collapsed);
-      summary.classList.toggle('hidden', !collapsed);
+      builder.dataset.collapsedMode = collapsed ? mode : '';
+      summary.classList.toggle('hidden', !collapsed || mode !== 'generated');
+      skipSummary.classList.toggle('hidden', !collapsed || mode !== 'skipped');
       if (summaryText && summaryCopy) summaryCopy.textContent = summaryText;
       const room = primaryScopeRoom();
       if (room) syncAreaType(room);
@@ -1804,6 +1815,9 @@ import Base from '../../layouts/Base.astro';
     document.getElementById('edit-quick-scope').addEventListener('click', () => {
       setQuickScopeCollapsed(false);
     });
+    document.getElementById('restore-quick-scope').addEventListener('click', () => {
+      setQuickScopeCollapsed(false);
+    });
     document.getElementById('quick-scope-builder').addEventListener('click', (event) => {
       if (event.target.classList.contains('assumption-info')) {
         const button = event.target;
@@ -1818,6 +1832,10 @@ import Base from '../../layouts/Base.astro';
       }
       const room = primaryScopeRoom();
       if (!room) return;
+      if (event.target.classList.contains('skip-quick-scope')) {
+        setQuickScopeCollapsed(true, '', 'skipped');
+        return;
+      }
       if (event.target.classList.contains('generate-exterior-scope')) {
         generateExteriorScope(room);
         return;
