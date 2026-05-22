@@ -285,6 +285,69 @@ button[class*="bg-blue"][class*="text-white"]:active {
   color: var(--pf-text);
 }
 
+.pf-nav-group {
+  position: relative;
+}
+
+.pf-nav-group summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.pf-nav-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.pf-nav-group summary::after {
+  content: "";
+  display: inline-block;
+  height: 0.42rem;
+  width: 0.42rem;
+  margin-left: 0.42rem;
+  border-bottom: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  transform: translateY(-0.12rem) rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.pf-nav-group[open] summary {
+  background-color: var(--pf-surface-tint);
+  color: var(--pf-text);
+}
+
+.pf-nav-group[open] summary::after {
+  transform: translateY(0.08rem) rotate(225deg);
+}
+
+.pf-nav-menu {
+  background: var(--md-sys-color-surface-container-lowest);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  box-shadow: 0 16px 36px rgb(25 28 32 / 0.14);
+  display: grid;
+  gap: 0.15rem;
+  left: 0;
+  min-width: 12rem;
+  padding: 0.45rem;
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  z-index: 30;
+}
+
+.pf-nav-menu a {
+  border-radius: 0.65rem;
+  color: var(--pf-text-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.65rem 0.75rem;
+}
+
+.pf-nav-menu a:hover {
+  background: var(--pf-surface-tint);
+  color: var(--pf-text);
+  text-decoration: none;
+}
+
 .pf-mobile-menu-button {
   align-items: center;
   background: transparent;
@@ -348,6 +411,15 @@ button[class*="bg-blue"][class*="text-white"]:active {
 .pf-mobile-nav a:hover {
   background: var(--pf-surface-tint);
   color: var(--pf-text);
+}
+
+.pf-mobile-nav-section > p {
+  color: var(--pf-text-muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.35rem 0.25rem;
+  text-transform: uppercase;
 }
 
 .pf-mobile-logout-button {
