@@ -27,6 +27,17 @@ import Base from '../layouts/Base.astro';
     </div>
 
     <div id="content" class="hidden">
+      <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-blue-700">Reporting suite</p>
+          <h1 class="mt-1 text-2xl font-bold text-gray-950 sm:text-3xl">Business performance</h1>
+          <p class="mt-2 max-w-2xl text-sm text-gray-600">
+            One reporting surface for sales, crew performance, and job profitability. Lead source ROI and revenue by city should build into this page instead of separate reporting routes.
+          </p>
+        </div>
+        <a href="/dashboard" class="btn-secondary btn-sm justify-center">Dashboard</a>
+      </div>
+
       <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
 
       <div class="reports-grid grid grid-cols-1 lg:grid-cols-2 gap-6">
