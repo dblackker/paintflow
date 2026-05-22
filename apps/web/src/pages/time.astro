@@ -24,6 +24,9 @@ import Icon from '../components/Icon.astro';
       .punch-actions {
         grid-template-columns: 1fr;
       }
+      .bulk-member-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
   </style>
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
@@ -33,7 +36,10 @@ import Icon from '../components/Icon.astro';
         <h1 class="text-2xl sm:text-3xl font-bold">Time Tracking</h1>
         <p class="text-gray-600 max-w-2xl">Review daily timecards, drill into individual entries, and correct job hours without touching pay rates.</p>
       </div>
-      <button id="add-time" class="btn-primary w-full sm:w-auto">Log time</button>
+      <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <button id="bulk-time-btn" class="btn-tonal w-full sm:w-auto hidden">Crew timecard</button>
+        <button id="add-time" class="btn-primary w-full sm:w-auto">Log time</button>
+      </div>
     </div>
 
     <section id="punch-clock" class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6">
@@ -124,6 +130,54 @@ import Icon from '../components/Icon.astro';
     </div>
   </div>
 
+  <div id="bulk-modal" class="mobile-sheet hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-3xl w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 class="text-lg font-semibold">Crew Timecard</h2>
+          <p class="text-sm text-gray-600">Fast end-of-day entry for a whole crew. Default roles are crew lead, painter, and prep.</p>
+        </div>
+        <button type="button" id="close-bulk-modal-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
+      </div>
+      <form id="bulk-time-form" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label class="block sm:col-span-2">
+            <span class="form-label">Job</span>
+            <select name="jobId" id="bulk-job-select" class="input" required>
+              <option value="">Select job...</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="form-label">Work date</span>
+            <input type="date" name="date" autocomplete="off" class="input" required>
+          </label>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-3 items-end">
+          <label class="block">
+            <span class="form-label">Default hours</span>
+            <input id="bulk-default-hours" type="number" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" class="input" value="8">
+          </label>
+          <label class="block">
+            <span class="form-label">Work performed</span>
+            <input name="description" class="input" autocomplete="off" placeholder="Production painting, prep, cleanup">
+          </label>
+        </div>
+        <div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="form-label mb-0">Role filter</span>
+            <button type="button" id="bulk-select-visible" class="btn-text btn-sm">Select visible</button>
+          </div>
+          <div id="bulk-role-filters" class="flex flex-wrap gap-2 mt-2"></div>
+        </div>
+        <div id="bulk-members" class="border border-[var(--pf-border)] rounded-xl overflow-hidden divide-y divide-[var(--pf-border)]"></div>
+        <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+          <button type="button" id="cancel-bulk-btn" class="btn-secondary flex-1">Cancel</button>
+          <button type="submit" id="submit-bulk-btn" class="btn-primary flex-1">Log crew time</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let currentWeekStart = getWeekStart(new Date());
@@ -132,7 +186,9 @@ import Icon from '../components/Icon.astro';
     let jobs = [];
     let punchStatus = null;
     let isSavingTime = false;
+    let isSavingBulkTime = false;
     let isPunching = false;
+    let bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
     const supportedViewModes = new Set(['day', 'job', 'employee']);
     let viewMode = supportedViewModes.has(localStorage.getItem('paintflow.time.viewMode'))
       ? localStorage.getItem('paintflow.time.viewMode')
@@ -140,6 +196,14 @@ import Icon from '../components/Icon.astro';
     const collapsedGroups = new Set();
 
     const currency = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const roleLabels = {
+      admin: 'Admin',
+      crew: 'Crew member',
+      crew_lead: 'Crew lead',
+      estimator: 'Estimator',
+      painter: 'Painter',
+      prep: 'Prep crew',
+    };
 
     function escapeHtml(value = '') {
       return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -209,6 +273,7 @@ import Icon from '../components/Icon.astro';
         punchStatus = punchPayload.data;
         populateSelects();
         renderPunchClock();
+        renderBulkEntry();
         renderTimesheet();
       } catch (e) {
         document.getElementById('loading').innerHTML = `<p class="text-red-600">${escapeHtml(e.message || 'Failed to load')}</p>`;
@@ -219,6 +284,8 @@ import Icon from '../components/Icon.astro';
       document.getElementById('member-select').innerHTML = '<option value="">Select crew member...</option>' +
         members.map((member) => `<option value="${member.id}">${escapeHtml(member.name)}</option>`).join('');
       document.getElementById('job-select').innerHTML = '<option value="">Select job...</option>' +
+        jobs.map((job) => `<option value="${job.id}">${escapeHtml(job.name)}</option>`).join('');
+      document.getElementById('bulk-job-select').innerHTML = '<option value="">Select job...</option>' +
         jobs.map((job) => `<option value="${job.id}">${escapeHtml(job.name)}</option>`).join('');
     }
 
@@ -307,9 +374,86 @@ import Icon from '../components/Icon.astro';
       }
 
       renderPunchReview();
+      document.getElementById('bulk-time-btn').classList.toggle('hidden', !status.canManage);
       document.getElementById('punch-in-btn')?.addEventListener('click', () => punchIn(false));
       document.getElementById('forgot-in-btn')?.addEventListener('click', () => punchIn(true));
       document.getElementById('punch-out-btn')?.addEventListener('click', punchOut);
+    }
+
+    function availableRoles() {
+      return Array.from(new Set(members.map((member) => member.role || 'crew'))).sort((a, b) => {
+        const order = ['crew_lead', 'painter', 'prep'];
+        const aIndex = order.indexOf(a);
+        const bIndex = order.indexOf(b);
+        if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+        return (roleLabels[a] || a).localeCompare(roleLabels[b] || b);
+      });
+    }
+
+    function renderBulkEntry() {
+      const button = document.getElementById('bulk-time-btn');
+      button.classList.toggle('hidden', !punchStatus?.canManage);
+      renderBulkRoleFilters();
+      renderBulkMemberRows();
+    }
+
+    function renderBulkRoleFilters() {
+      const container = document.getElementById('bulk-role-filters');
+      if (!container) return;
+      const roles = availableRoles();
+      container.innerHTML = roles.length
+        ? roles.map((role) => `
+          <button type="button" class="pf-filter-chip ${bulkRoleFilters.has(role) ? 'pf-filter-chip-active' : ''}" data-bulk-role="${escapeHtml(role)}" aria-pressed="${bulkRoleFilters.has(role) ? 'true' : 'false'}">
+            ${escapeHtml(roleLabels[role] || role)}
+          </button>
+        `).join('')
+        : '<p class="text-sm text-gray-500">No active crew members available.</p>';
+      container.querySelectorAll('[data-bulk-role]').forEach((filter) => {
+        filter.addEventListener('click', () => {
+          const role = filter.dataset.bulkRole;
+          if (bulkRoleFilters.has(role)) bulkRoleFilters.delete(role);
+          else bulkRoleFilters.add(role);
+          renderBulkRoleFilters();
+          renderBulkMemberRows();
+        });
+      });
+    }
+
+    function renderBulkMemberRows() {
+      const container = document.getElementById('bulk-members');
+      if (!container) return;
+      const visibleMembers = members.filter((member) => bulkRoleFilters.has(member.role || 'crew'));
+      const defaultHours = Number(document.getElementById('bulk-default-hours')?.value || 8);
+      if (!visibleMembers.length) {
+        container.innerHTML = '<div class="p-4 text-sm text-gray-500">No crew match the selected roles. Add another role filter to include more people.</div>';
+        return;
+      }
+      container.innerHTML = visibleMembers.map((member) => `
+        <label class="bulk-member-row grid sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
+          <span class="flex items-center gap-3 min-w-0">
+            <input type="checkbox" data-bulk-member="${member.id}" class="h-5 w-5" checked>
+            <span class="min-w-0">
+              <span class="block font-medium truncate">${escapeHtml(member.name)}</span>
+              <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
+            </span>
+          </span>
+          <input type="number" data-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${Number.isFinite(defaultHours) ? defaultHours : 8}">
+        </label>
+      `).join('');
+    }
+
+    function openBulkModal() {
+      const form = document.getElementById('bulk-time-form');
+      form.reset();
+      form.elements.date.value = formatDate(new Date());
+      document.getElementById('bulk-default-hours').value = '8';
+      if (!bulkRoleFilters.size) bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
+      renderBulkEntry();
+      document.getElementById('bulk-modal').classList.remove('hidden');
+    }
+
+    function closeBulkModal() {
+      document.getElementById('bulk-modal').classList.add('hidden');
     }
 
     function renderPunchReview() {
@@ -701,6 +845,20 @@ import Icon from '../components/Icon.astro';
     document.getElementById('add-time').addEventListener('click', () => openModal());
     document.getElementById('cancel-btn').addEventListener('click', closeModal);
     document.getElementById('close-modal-btn').addEventListener('click', closeModal);
+    document.getElementById('bulk-time-btn').addEventListener('click', openBulkModal);
+    document.getElementById('cancel-bulk-btn').addEventListener('click', closeBulkModal);
+    document.getElementById('close-bulk-modal-btn').addEventListener('click', closeBulkModal);
+    document.getElementById('bulk-default-hours').addEventListener('input', () => {
+      const defaultHours = document.getElementById('bulk-default-hours').value;
+      document.querySelectorAll('[data-bulk-hours]').forEach((input) => {
+        input.value = defaultHours;
+      });
+    });
+    document.getElementById('bulk-select-visible').addEventListener('click', () => {
+      document.querySelectorAll('[data-bulk-member]').forEach((checkbox) => {
+        checkbox.checked = true;
+      });
+    });
 
     document.getElementById('time-form').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -730,6 +888,58 @@ import Icon from '../components/Icon.astro';
         isSavingTime = false;
         saveButton.disabled = false;
         saveButton.textContent = 'Save time';
+      }
+    });
+
+    document.getElementById('bulk-time-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (isSavingBulkTime) return;
+      const form = event.currentTarget;
+      const submit = document.getElementById('submit-bulk-btn');
+      const data = Object.fromEntries(new FormData(form));
+      const selected = Array.from(document.querySelectorAll('[data-bulk-member]'))
+        .filter((checkbox) => checkbox.checked)
+        .map((checkbox) => {
+          const hoursInput = document.querySelector(`[data-bulk-hours="${checkbox.dataset.bulkMember}"]`);
+          return {
+            teamMemberId: checkbox.dataset.bulkMember,
+            hours: Number(hoursInput?.value || 0),
+            description: data.description || 'Crew labor',
+          };
+        })
+        .filter((entry) => entry.teamMemberId && entry.hours > 0);
+
+      if (!data.jobId) {
+        window.showToast?.('Select a job first', 'error');
+        return;
+      }
+      if (!selected.length) {
+        window.showToast?.('Select at least one crew member with hours', 'error');
+        return;
+      }
+
+      try {
+        isSavingBulkTime = true;
+        submit.disabled = true;
+        submit.textContent = 'Logging...';
+        await api('/v1/team/timecards', {
+          method: 'POST',
+          body: JSON.stringify({
+            jobId: data.jobId,
+            date: data.date,
+            notes: data.description || undefined,
+            entries: selected,
+          }),
+        });
+        closeBulkModal();
+        window.showToast(`Logged time for ${selected.length} crew members`, 'success');
+        await loadData();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to log crew time', 'error');
+      } finally {
+        isSavingBulkTime = false;
+        submit.disabled = false;
+        submit.textContent = 'Log crew time';
       }
     });
 
