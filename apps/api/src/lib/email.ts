@@ -1,36 +1,184 @@
-export async function sendEmail(env: any, to: string, subject: string, html: string, attachment?: { filename: string; content: string }) {
-  const payload: any = {
-    from: 'PaintFlow <estimates@paintflow.app>',
+import type { Env } from '../types';
+
+type EmailAttachment = {
+  filename: string;
+  content: string;
+  type?: string;
+};
+
+type SendEmailOptions = {
+  fromEmail?: string;
+  fromName?: string;
+  replyTo?: string;
+  text?: string;
+};
+
+function emailProvider(env: Env) {
+  if (env.EMAIL_PROVIDER) return env.EMAIL_PROVIDER;
+  if (env.MAILCHANNELS_API_KEY) return 'mailchannels';
+  if (env.RESEND_API_KEY) return 'resend';
+  return 'mailchannels';
+}
+
+function fromEmail(env: Env, override?: string) {
+  return override || env.EMAIL_FROM || 'estimates@paintflow.app';
+}
+
+function fromName(env: Env, override?: string) {
+  return override || env.EMAIL_FROM_NAME || 'PaintFlow';
+}
+
+function plainTextFromHtml(html: string) {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function attachmentType(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    csv: 'text/csv',
+    gif: 'image/gif',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    json: 'application/json',
+    pdf: 'application/pdf',
+    png: 'image/png',
+    txt: 'text/plain',
+  };
+  return (ext && types[ext]) || 'application/octet-stream';
+}
+
+async function sendViaMailChannels(
+  env: Env,
+  to: string,
+  subject: string,
+  html: string,
+  attachment?: EmailAttachment,
+  options: SendEmailOptions = {}
+) {
+  if (!env.MAILCHANNELS_API_KEY) {
+    throw new Error('MAILCHANNELS_API_KEY is not configured');
+  }
+
+  const personalization: Record<string, unknown> = {
+    to: [{ email: to }],
+  };
+
+  if (env.MAILCHANNELS_DKIM_DOMAIN) personalization.dkim_domain = env.MAILCHANNELS_DKIM_DOMAIN;
+  if (env.MAILCHANNELS_DKIM_SELECTOR) personalization.dkim_selector = env.MAILCHANNELS_DKIM_SELECTOR;
+  if (env.MAILCHANNELS_DKIM_PRIVATE_KEY) personalization.dkim_private_key = env.MAILCHANNELS_DKIM_PRIVATE_KEY;
+
+  const payload: Record<string, unknown> = {
+    personalizations: [personalization],
+    from: {
+      email: fromEmail(env, options.fromEmail),
+      name: fromName(env, options.fromName),
+    },
+    subject,
+    content: [
+      { type: 'text/plain', value: options.text || plainTextFromHtml(html) },
+      { type: 'text/html', value: html },
+    ],
+  };
+
+  if (options.replyTo) {
+    payload.reply_to = { email: options.replyTo };
+  }
+
+  if (attachment) {
+    payload.attachments = [{
+      filename: attachment.filename,
+      type: attachment.type || attachmentType(attachment.filename),
+      content: attachment.content,
+    }];
+  }
+
+  const response = await fetch('https://api.mailchannels.net/tx/v1/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Api-Key': env.MAILCHANNELS_API_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('MailChannels error:', error);
+    throw new Error('Failed to send email');
+  }
+
+  return response.status === 202 ? { success: true } : await response.json().catch(() => ({ success: true }));
+}
+
+async function sendViaResend(
+  env: Env,
+  to: string,
+  subject: string,
+  html: string,
+  attachment?: EmailAttachment,
+  options: SendEmailOptions = {}
+) {
+  if (!env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not configured');
+  }
+
+  const payload: Record<string, unknown> = {
+    from: `${fromName(env, options.fromName)} <${fromEmail(env, options.fromEmail)}>`,
     to: [to],
     subject,
     html,
   };
-  
+
+  if (options.replyTo) payload.reply_to = options.replyTo;
   if (attachment) {
-    payload.attachments = [
-      {
-        filename: attachment.filename,
-        content: attachment.content,
-      },
-    ];
+    payload.attachments = [{
+      filename: attachment.filename,
+      content: attachment.content,
+    }];
   }
-  
-  const res = await fetch('https://api.resend.com/emails', {
+
+  const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
   });
-  
-  if (!res.ok) {
-    const error = await res.text();
+
+  if (!response.ok) {
+    const error = await response.text();
     console.error('Resend error:', error);
     throw new Error('Failed to send email');
   }
-  
-  return await res.json();
+
+  return await response.json();
+}
+
+export async function sendEmail(
+  env: Env,
+  to: string,
+  subject: string,
+  html: string,
+  attachment?: EmailAttachment,
+  options: SendEmailOptions = {}
+) {
+  return emailProvider(env) === 'resend'
+    ? sendViaResend(env, to, subject, html, attachment, options)
+    : sendViaMailChannels(env, to, subject, html, attachment, options);
 }
 
 type EstimateEmailInput = {
@@ -57,7 +205,7 @@ export function estimateEmailTemplate(input: EstimateEmailInput) {
   const companyName = escapeHtml(input.companyName || 'your painting contractor');
   const leadName = escapeHtml(input.leadName);
   const total = escapeHtml(input.total);
-  
+
   return `
 <!DOCTYPE html>
 <html>

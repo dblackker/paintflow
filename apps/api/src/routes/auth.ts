@@ -16,6 +16,7 @@ import {
   userRoles,
 } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
+import { sendEmail } from '../lib/email';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -308,27 +309,21 @@ async function seedWorkspaceDefaults(
   }
 }
 
-// Email template for magic link
-const magicLinkEmail = (magicLink: string) => ({
-  personalizations: [{ to: [{ email: '' }] }],
-  from: { email: 'noreply@paintflow.app', name: 'PaintFlow' },
-  subject: 'Sign in to PaintFlow',
-  content: [
-    {
-      type: 'text/plain',
-      value: `Sign in to PaintFlow\n\nClick: ${magicLink}\n\nExpires in 15 min.`
-    },
-    {
-      type: 'text/html',
-      value: `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+function magicLinkEmailHtml(magicLink: string) {
+  return `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
 <h1 style="color: #1a1a1a;">PaintFlow</h1>
 <p>Click below to sign in:</p>
 <p><a href="${magicLink}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Sign in</a></p>
 <p style="color: #999; font-size: 13px;">Link expires in 15 minutes.</p>
-</body></html>`
-    }
-  ]
-});
+</body></html>`;
+}
+
+function welcomeEmailHtml(publicUrl: string) {
+  return `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+<h1>Welcome to PaintFlow!</h1>
+<p>You're all set. <a href="${publicUrl}/onboarding">Start onboarding</a></p>
+</body></html>`;
+}
 
 // GET /v1/auth/demo-login
 auth.get('/demo-login', async (c) => {
@@ -457,19 +452,25 @@ auth.post('/magic-link', async (c) => {
     { expirationTtl: 900 }
   );
   
-  // Send email via MailChannels
+  // Send sign-in email.
   const magicLink = `${c.env.APP_URL}/v1/auth/verify?token=${token}`;
-  const emailPayload = magicLinkEmail(magicLink);
-  emailPayload.personalizations[0].to[0].email = normalizedEmail;
-  
+
   try {
-    await fetch('https://api.mailchannels.net/tx/v1/send', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(emailPayload),
-    });
+    await sendEmail(
+      c.env,
+      normalizedEmail,
+      'Sign in to PaintFlow',
+      magicLinkEmailHtml(magicLink),
+      undefined,
+      {
+        text: `Sign in to PaintFlow\n\nClick: ${magicLink}\n\nExpires in 15 min.`,
+      }
+    );
   } catch (err) {
     console.error('Failed to send email:', err);
+    if (c.env.ENVIRONMENT !== 'development') {
+      return c.json({ error: 'Email is not configured. Please contact support.' }, 502);
+    }
   }
   
   return c.json({ 
@@ -503,24 +504,9 @@ auth.get('/verify', async (c) => {
   
   // Send welcome email for new users (fire and forget)
   if (isNewUser) {
-    const welcomePayload = {
-      personalizations: [{ to: [{ email }] }],
-      from: { email: 'welcome@paintflow.app', name: 'PaintFlow' },
-      subject: 'Welcome to PaintFlow',
-      content: [{
-        type: 'text/html',
-        value: `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-<h1>Welcome to PaintFlow!</h1>
-<p>You're all set. <a href="${c.env.PUBLIC_URL}/onboarding">Start onboarding</a></p>
-</body></html>`
-      }]
-    };
-    
-    fetch('https://api.mailchannels.net/tx/v1/send', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(welcomePayload),
-    }).catch(() => {});
+    sendEmail(c.env, email, 'Welcome to PaintFlow', welcomeEmailHtml(c.env.PUBLIC_URL), undefined, {
+      text: `Welcome to PaintFlow!\n\nYou're all set. Start onboarding: ${c.env.PUBLIC_URL}/onboarding`,
+    }).catch((error) => console.error('Failed to send welcome email:', error));
   }
   
   return c.redirect(`${c.env.PUBLIC_URL}${isNewUser ? '/onboarding?welcome=1' : '/dashboard'}`);

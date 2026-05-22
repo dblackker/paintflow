@@ -9,7 +9,14 @@ export interface Env {
   COOKIE_DOMAIN?: string;
   MAGIC_LINK_EMAIL_LIMIT?: string;
   MAGIC_LINK_IP_LIMIT?: string;
-  RESEND_API_KEY: string;
+  EMAIL_PROVIDER?: 'mailchannels' | 'resend';
+  EMAIL_FROM?: string;
+  EMAIL_FROM_NAME?: string;
+  MAILCHANNELS_API_KEY?: string;
+  MAILCHANNELS_DKIM_DOMAIN?: string;
+  MAILCHANNELS_DKIM_SELECTOR?: string;
+  MAILCHANNELS_DKIM_PRIVATE_KEY?: string;
+  RESEND_API_KEY?: string;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_STARTER_PRICE_ID: string;

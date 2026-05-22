@@ -39,8 +39,9 @@ wrangler secret put STRIPE_STARTER_PRICE_ID
 wrangler secret put STRIPE_PRO_PRICE_ID
 wrangler secret put STRIPE_ENTERPRISE_PRICE_ID
 
-# Resend
-wrangler secret put RESEND_API_KEY
+# Email
+wrangler secret put MAILCHANNELS_API_KEY
+wrangler secret put MAILCHANNELS_DKIM_PRIVATE_KEY
 
 # Auth and cron
 wrangler secret put SESSION_SECRET
@@ -107,9 +108,18 @@ Set in Cloudflare dashboard or wrangler.toml:
 - `STRIPE_*` - Stripe keys
 - `GOOGLE_*` - Google OAuth client credentials
 - `QB_*` - QuickBooks OAuth client credentials
-- `RESEND_API_KEY` - Email API key
+- `EMAIL_PROVIDER` - Email provider, usually `mailchannels`
+- `EMAIL_FROM` - Verified sender email address
+- `EMAIL_FROM_NAME` - Sender display name
+- `MAILCHANNELS_API_KEY` - MailChannels Email API key
+- `MAILCHANNELS_DKIM_DOMAIN` - DKIM signing domain
+- `MAILCHANNELS_DKIM_SELECTOR` - DKIM selector
+- `MAILCHANNELS_DKIM_PRIVATE_KEY` - DKIM private key, stored as a secret
+- `RESEND_API_KEY` - Optional fallback email API key when using Resend
 - `CF_ACCOUNT_ID` - Cloudflare account ID
 - `CF_API_TOKEN` - Cloudflare API token
+
+See `docs/EMAIL.md` for MailChannels DNS and sender-domain setup.
 
 ## Cron Jobs
 
