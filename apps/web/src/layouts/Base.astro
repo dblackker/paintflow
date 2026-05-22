@@ -176,7 +176,7 @@ const navSections = [
         {navSections.map((section) => (
           <section class="pf-mobile-nav-section">
             <p>{section.label}</p>
-            <div class="grid grid-cols-2 gap-1">
+            <div class="grid grid-cols-1 gap-1">
               {section.links.map((link) => (
                 <a href={link.href} class="block py-2 text-sm">{link.label}</a>
               ))}
@@ -185,7 +185,7 @@ const navSections = [
         ))}
         <section class="pf-mobile-nav-section">
           <p>Account</p>
-          <div class="grid grid-cols-2 gap-1">
+          <div class="grid grid-cols-1 gap-1">
             <a href="/notifications" class="block py-2 text-sm">Notifications</a>
           </div>
         </section>
