@@ -25,10 +25,7 @@ For each sender domain:
 3. Update the domain SPF record to include MailChannels:
    - Add `include:relay.mailchannels.net` to the existing SPF record.
    - Keep only one SPF TXT record on the root domain.
-4. Add DKIM for deliverability:
-   - Either use MailChannels DKIM APIs or generate your own DKIM key pair.
-   - Publish the DKIM public key at `<selector>._domainkey.<domain>`.
-   - Store the DKIM private key as a Worker secret if signing in the API.
+4. Add DKIM for deliverability if MailChannels provides DKIM records for the domain.
 5. Add a DMARC record if the domain does not already have one:
    - Host: `_dmarc`
    - Starter value: `v=DMARC1; p=none; rua=mailto:dmarc@<domain>`
@@ -40,11 +37,8 @@ For the demo, using a working domain such as `blacklinepainting.com` is fine. Fo
 Set public configuration as Worker vars:
 
 ```toml
-EMAIL_PROVIDER = "mailchannels"
 EMAIL_FROM = "estimates@blacklinepainting.com"
 EMAIL_FROM_NAME = "Blackline Painting"
-MAILCHANNELS_DKIM_DOMAIN = "blacklinepainting.com"
-MAILCHANNELS_DKIM_SELECTOR = "mcdkim"
 ```
 
 Set secrets through Wrangler or the Cloudflare dashboard:
@@ -52,12 +46,10 @@ Set secrets through Wrangler or the Cloudflare dashboard:
 ```powershell
 cd apps/api
 wrangler secret put MAILCHANNELS_API_KEY --env demo
-wrangler secret put MAILCHANNELS_DKIM_PRIVATE_KEY --env demo
 wrangler secret put MAILCHANNELS_API_KEY --env production
-wrangler secret put MAILCHANNELS_DKIM_PRIVATE_KEY --env production
 ```
 
-If MailChannels generated and manages the DKIM key, only the selector/domain may be needed in app configuration. If the app signs with your own DKIM key, `MAILCHANNELS_DKIM_PRIVATE_KEY` must be the base64-encoded private key expected by MailChannels.
+The app only sends `MAILCHANNELS_API_KEY` to MailChannels. SPF, DKIM, DMARC, and Domain Lockdown belong in DNS/provider setup, not in the application payload.
 
 ## Product Behavior
 

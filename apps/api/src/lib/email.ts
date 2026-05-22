@@ -13,13 +13,6 @@ type SendEmailOptions = {
   text?: string;
 };
 
-function emailProvider(env: Env) {
-  if (env.EMAIL_PROVIDER) return env.EMAIL_PROVIDER;
-  if (env.MAILCHANNELS_API_KEY) return 'mailchannels';
-  if (env.RESEND_API_KEY) return 'resend';
-  return 'mailchannels';
-}
-
 function fromEmail(env: Env, override?: string) {
   return override || env.EMAIL_FROM || 'estimates@paintflow.app';
 }
@@ -76,10 +69,6 @@ async function sendViaMailChannels(
     to: [{ email: to }],
   };
 
-  if (env.MAILCHANNELS_DKIM_DOMAIN) personalization.dkim_domain = env.MAILCHANNELS_DKIM_DOMAIN;
-  if (env.MAILCHANNELS_DKIM_SELECTOR) personalization.dkim_selector = env.MAILCHANNELS_DKIM_SELECTOR;
-  if (env.MAILCHANNELS_DKIM_PRIVATE_KEY) personalization.dkim_private_key = env.MAILCHANNELS_DKIM_PRIVATE_KEY;
-
   const payload: Record<string, unknown> = {
     personalizations: [personalization],
     from: {
@@ -123,51 +112,6 @@ async function sendViaMailChannels(
   return response.status === 202 ? { success: true } : await response.json().catch(() => ({ success: true }));
 }
 
-async function sendViaResend(
-  env: Env,
-  to: string,
-  subject: string,
-  html: string,
-  attachment?: EmailAttachment,
-  options: SendEmailOptions = {}
-) {
-  if (!env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY is not configured');
-  }
-
-  const payload: Record<string, unknown> = {
-    from: `${fromName(env, options.fromName)} <${fromEmail(env, options.fromEmail)}>`,
-    to: [to],
-    subject,
-    html,
-  };
-
-  if (options.replyTo) payload.reply_to = options.replyTo;
-  if (attachment) {
-    payload.attachments = [{
-      filename: attachment.filename,
-      content: attachment.content,
-    }];
-  }
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('Resend error:', error);
-    throw new Error('Failed to send email');
-  }
-
-  return await response.json();
-}
-
 export async function sendEmail(
   env: Env,
   to: string,
@@ -176,9 +120,7 @@ export async function sendEmail(
   attachment?: EmailAttachment,
   options: SendEmailOptions = {}
 ) {
-  return emailProvider(env) === 'resend'
-    ? sendViaResend(env, to, subject, html, attachment, options)
-    : sendViaMailChannels(env, to, subject, html, attachment, options);
+  return sendViaMailChannels(env, to, subject, html, attachment, options);
 }
 
 type EstimateEmailInput = {
