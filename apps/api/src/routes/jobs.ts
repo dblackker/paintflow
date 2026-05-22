@@ -47,6 +47,8 @@ jobsApp.get('/', async (c) => {
       name: jobs.name,
       status: jobs.status,
       budget: jobs.budget,
+      scheduledStartAt: jobs.scheduledStartAt,
+      scheduledEndAt: jobs.scheduledEndAt,
       completedAt: jobs.completedAt,
       createdAt: jobs.createdAt,
       updatedAt: jobs.updatedAt,
@@ -82,6 +84,8 @@ const updateJobSchema = z.object({
   name: z.string().min(1).optional(),
   status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']).optional(),
   budget: z.coerce.number().min(0).optional(),
+  scheduledStartAt: z.string().datetime().nullable().optional(),
+  scheduledEndAt: z.string().datetime().nullable().optional(),
   completedAt: z.string().datetime().nullable().optional(),
 });
 
@@ -102,6 +106,8 @@ jobsApp.patch('/:id', async (c) => {
       ...('name' in parsed.data ? { name: parsed.data.name } : {}),
       ...('status' in parsed.data ? { status: parsed.data.status } : {}),
       ...('budget' in parsed.data ? { budget: parsed.data.budget?.toString() } : {}),
+      ...('scheduledStartAt' in parsed.data ? { scheduledStartAt: parsed.data.scheduledStartAt ? new Date(parsed.data.scheduledStartAt) : null } : {}),
+      ...('scheduledEndAt' in parsed.data ? { scheduledEndAt: parsed.data.scheduledEndAt ? new Date(parsed.data.scheduledEndAt) : null } : {}),
       ...('completedAt' in parsed.data ? { completedAt: parsed.data.completedAt ? new Date(parsed.data.completedAt) : null } : {}),
       updatedAt: new Date(),
     })

@@ -64,6 +64,13 @@ function daysAgo(days: number) {
   return date;
 }
 
+function daysFromNow(days: number, hour = 8, minute = 0) {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
 function burdenedRate(member: { hourlyRate: string; burdenRate: string }) {
   return Number(member.hourlyRate) * (1 + Number(member.burdenRate) / 100);
 }
@@ -262,6 +269,8 @@ async function seed(db: Db) {
     name: 'Robert Chen Exterior Repaint',
     status: 'in_progress',
     budget: dollars(robertPackage.total),
+    scheduledStartAt: daysAgo(3),
+    scheduledEndAt: daysFromNow(1, 16),
     createdAt: daysAgo(14),
   }).returning();
 
@@ -271,6 +280,8 @@ async function seed(db: Db) {
     name: 'Harper & Co Office Refresh',
     status: 'scheduled',
     budget: '18400.00',
+    scheduledStartAt: daysFromNow(2, 8),
+    scheduledEndAt: daysFromNow(4, 16),
     createdAt: daysAgo(6),
   }).returning();
 

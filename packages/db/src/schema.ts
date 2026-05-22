@@ -73,6 +73,8 @@ export const jobs = pgTable('jobs', {
   name: varchar('name', { length: 255 }).notNull(),
   status: varchar('status', { length: 50 }).notNull().default('scheduled'),
   budget: decimal('budget', { precision: 10, scale: 2 }),
+  scheduledStartAt: timestamp('scheduled_start_at'),
+  scheduledEndAt: timestamp('scheduled_end_at'),
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

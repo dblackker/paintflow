@@ -1,136 +1,464 @@
 ---
 import Base from '../../layouts/Base.astro';
+import Icon from '../../components/Icon.astro';
 ---
 
 <Base title="Calendar - PaintFlow">
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="mb-6 flex justify-between items-center">
-        <div>
-          <h2 class="text-2xl font-bold text-gray-900">Schedule</h2>
-          <p class="text-gray-600">Manage job scheduling</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button id="sync-btn" class="btn-primary btn-sm">Connect Google Calendar</button>
-          <button id="prev-btn" class="btn-secondary btn-sm">Prev</button>
-          <button id="today-btn" class="btn-secondary btn-sm">Today</button>
-          <button id="next-btn" class="btn-secondary btn-sm">Next</button>
-        </div>
-      </div>
+  <style>
+    .schedule-shell {
+      max-width: 78rem;
+    }
 
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <section class="lg:col-span-8 bg-white rounded-lg shadow-sm border">
-          <div class="p-4 border-b">
-            <h3 class="font-semibold" id="week-title">Week View</h3>
-          </div>
-          <div id="calendar-grid" class="p-4">
-            <div class="text-center text-gray-500 py-12">Loading calendar...</div>
-          </div>
-        </section>
+    .schedule-panel {
+      background: var(--md-sys-color-surface-container-lowest);
+      border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 78%, transparent);
+      border-radius: var(--pf-radius);
+      box-shadow: 0 1px 2px rgb(25 28 32 / 0.05);
+    }
 
-        <aside class="lg:col-span-4 bg-white rounded-lg shadow-sm border">
-          <div class="p-4 border-b">
-            <h3 class="font-semibold">Unscheduled Jobs</h3>
-          </div>
-          <div id="unscheduled-jobs" class="p-4 space-y-3">
-            <div class="text-center text-gray-500 py-8">Loading jobs...</div>
-          </div>
-        </aside>
-      </div>
-    </main>
+    .schedule-day {
+      min-height: 13rem;
+      border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 78%, transparent);
+      border-radius: var(--pf-radius);
+      background: var(--md-sys-color-surface-container-lowest);
+    }
 
-    <script>
-      const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
-      let currentWeekStart = getWeekStart(new Date());
-      const label = (value) => String(value || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+    .schedule-day.is-today {
+      border-color: color-mix(in srgb, var(--pf-primary) 45%, var(--md-sys-color-outline-variant));
+      background: color-mix(in srgb, var(--md-sys-color-primary-container) 18%, white);
+    }
 
-      function getWeekStart(date) {
-        const d = new Date(date);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        d.setHours(0, 0, 0, 0);
-        return new Date(d.setDate(diff));
+    .schedule-job-card {
+      display: block;
+      border-radius: 0.75rem;
+      border: 1px solid color-mix(in srgb, var(--pf-primary) 18%, transparent);
+      background: color-mix(in srgb, var(--md-sys-color-primary-container) 18%, white);
+      padding: 0.65rem;
+      text-decoration: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+    }
+
+    .schedule-job-card:hover {
+      border-color: color-mix(in srgb, var(--pf-primary) 42%, transparent);
+      box-shadow: 0 1px 4px rgb(25 28 32 / 0.08);
+      transform: translateY(-1px);
+      text-decoration: none;
+    }
+
+    .schedule-google-card {
+      border-radius: 0.75rem;
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+      padding: 0.55rem 0.65rem;
+    }
+
+    .schedule-backlog-card {
+      border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 78%, transparent);
+      border-radius: var(--pf-radius);
+      padding: 0.8rem;
+      background: var(--md-sys-color-surface-container-lowest);
+    }
+
+    .schedule-stat {
+      border-radius: var(--pf-radius);
+      background: var(--md-sys-color-surface-container-low);
+      padding: 0.75rem;
+    }
+
+    @media (max-width: 640px) {
+      .schedule-shell {
+        padding-top: 1rem;
       }
 
-      function formatDate(date) {
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      .schedule-toolbar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: 100%;
       }
 
-      async function loadCalendar() {
-        const timeMin = currentWeekStart.toISOString();
-        const timeMax = new Date(currentWeekStart.getTime() + 7 * 86400000).toISOString();
+      .schedule-toolbar .connect-calendar {
+        grid-column: 1 / -1;
+      }
 
-        const [eventsRes, jobsRes] = await Promise.all([
-          fetch(`${API_URL}/v1/calendar/events?timeMin=${timeMin}&timeMax=${timeMax}`, { credentials: 'include' }),
-          fetch(`${API_URL}/v1/jobs`, { credentials: 'include' }),
+      .schedule-day {
+        min-height: auto;
+      }
+    }
+  </style>
+
+  <main class="schedule-shell mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-blue-700">Operations calendar</p>
+        <h1 class="mt-1 text-2xl font-bold text-gray-950 sm:text-3xl">Schedule</h1>
+        <p class="mt-2 max-w-2xl text-sm text-gray-600">
+          Put accepted jobs on the production calendar, spot jobs missing dates, and keep Google Calendar as an optional external sync.
+        </p>
+      </div>
+      <div class="schedule-toolbar flex flex-wrap gap-2">
+        <button id="sync-btn" class="connect-calendar btn-tonal btn-sm justify-center" type="button"><Icon name="calendar" />Connect Google</button>
+        <button id="prev-btn" class="btn-secondary btn-sm justify-center" type="button"><Icon name="chevron-left" />Prev</button>
+        <button id="today-btn" class="btn-secondary btn-sm justify-center" type="button">Today</button>
+        <button id="next-btn" class="btn-secondary btn-sm justify-center" type="button">Next<Icon name="chevron-right" /></button>
+      </div>
+    </div>
+
+    <section id="schedule-stats" class="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
+      <div class="schedule-stat">
+        <p class="text-xs font-medium text-gray-600">This week</p>
+        <p id="stat-week" class="mt-1 text-xl font-bold text-gray-950">-</p>
+      </div>
+      <div class="schedule-stat">
+        <p class="text-xs font-medium text-gray-600">Needs date</p>
+        <p id="stat-needs-date" class="mt-1 text-xl font-bold text-gray-950">-</p>
+      </div>
+      <div class="schedule-stat">
+        <p class="text-xs font-medium text-gray-600">In progress</p>
+        <p id="stat-progress" class="mt-1 text-xl font-bold text-gray-950">-</p>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 gap-5 lg:grid-cols-12">
+      <section class="schedule-panel lg:col-span-8">
+        <div class="flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="font-semibold text-gray-950" id="week-title">Week view</h2>
+            <p class="text-xs text-gray-500">Jobs render here only when they have scheduled dates.</p>
+          </div>
+          <a href="/jobs" class="btn-text btn-sm justify-center">Open jobs</a>
+        </div>
+        <div id="calendar-grid" class="p-3 sm:p-4">
+          <div class="py-12 text-center text-gray-500">Loading calendar...</div>
+        </div>
+      </section>
+
+      <aside class="schedule-panel lg:col-span-4">
+        <div class="border-b px-4 py-3">
+          <h2 class="font-semibold text-gray-950">Needs scheduling</h2>
+          <p class="mt-1 text-xs text-gray-500">These jobs are active, but do not have a calendar date yet.</p>
+        </div>
+        <div id="unscheduled-jobs" class="grid gap-3 p-3 sm:p-4">
+          <div class="py-8 text-center text-gray-500">Loading jobs...</div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const DAY_MS = 86400000;
+    let currentWeekStart = getWeekStart(new Date());
+    let allJobs = [];
+    let allGoogleEvents = [];
+
+    function escapeHtml(value = '') {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    }
+
+    function label(value) {
+      return window.PaintFlowFormat?.label(value) ?? String(value || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function address(job) {
+      return window.PaintFlowFormat?.address(job, 'lead') || [
+        job.leadStreetAddress,
+        [job.leadCity, job.leadState].filter(Boolean).join(', '),
+        job.leadPostalCode,
+      ].filter(Boolean).join(' ');
+    }
+
+    function money(value) {
+      return window.PaintFlowFormat?.money(value, { cents: false }) ?? new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+      }).format(Number(value || 0));
+    }
+
+    function getWeekStart(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(diff);
+      return d;
+    }
+
+    function dateKey(date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function formatDate(date) {
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function formatTime(value) {
+      if (!value) return '';
+      return new Date(value).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    }
+
+    function toDateTimeLocal(value) {
+      const date = value ? new Date(value) : new Date();
+      const offsetMs = date.getTimezoneOffset() * 60000;
+      return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+    }
+
+    function fromDateTimeLocal(value) {
+      return value ? new Date(value).toISOString() : null;
+    }
+
+    function jobStart(job) {
+      return job.scheduledStartAt ? new Date(job.scheduledStartAt) : null;
+    }
+
+    function jobEnd(job) {
+      return job.scheduledEndAt ? new Date(job.scheduledEndAt) : null;
+    }
+
+    function activeJob(job) {
+      return !['completed', 'cancelled'].includes(job.status);
+    }
+
+    function jobHasSchedule(job) {
+      return Boolean(job.scheduledStartAt);
+    }
+
+    function jobIntersectsDay(job, day) {
+      const start = jobStart(job);
+      if (!start) return false;
+      const end = jobEnd(job) || start;
+      const dayStart = new Date(day);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart.getTime() + DAY_MS);
+      return start < dayEnd && end >= dayStart;
+    }
+
+    function jobIsInWeek(job) {
+      return Array.from({ length: 7 }, (_, index) => new Date(currentWeekStart.getTime() + index * DAY_MS))
+        .some((date) => jobIntersectsDay(job, date));
+    }
+
+    function notify(message, type = 'success') {
+      if (window.PaintFlowUI?.toast) {
+        window.PaintFlowUI.toast({ message, type });
+        return;
+      }
+      console.log(message);
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+        ...options,
+      });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      return res.json();
+    }
+
+    async function loadCalendar() {
+      const timeMin = currentWeekStart.toISOString();
+      const timeMax = new Date(currentWeekStart.getTime() + 7 * DAY_MS).toISOString();
+
+      try {
+        const [eventsPayload, jobsPayload] = await Promise.all([
+          api(`/v1/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`),
+          api('/v1/jobs'),
         ]);
 
-        if (eventsRes.status === 401 || jobsRes.status === 401) {
-          window.location.href = '/login';
-          return;
-        }
-
-        const { data: events } = await eventsRes.json();
-        const { data: jobs } = await jobsRes.json();
-        renderWeek(events?.google || [], jobs || []);
-      }
-
-      function renderWeek(googleEvents, jobs) {
-        const grid = document.getElementById('calendar-grid');
-        const weekEnd = new Date(currentWeekStart.getTime() + 6 * 86400000);
-        document.getElementById('week-title').textContent = `${formatDate(currentWeekStart)} - ${formatDate(weekEnd)}`;
-
-        const days = Array.from({ length: 7 }, (_, index) => {
-          const date = new Date(currentWeekStart.getTime() + index * 86400000);
-          const dayEvents = googleEvents.filter((event) => {
-            const start = event.start?.dateTime || event.start?.date;
-            return start && new Date(start).toDateString() === date.toDateString();
-          });
-
-          return `
-            <div class="border rounded p-3 min-h-[140px]">
-              <div class="text-sm font-medium mb-2">${date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}</div>
-              <div class="space-y-2">
-                ${dayEvents.map((event) => `<div class="text-xs p-2 rounded bg-blue-50 text-blue-800">${event.summary || 'Scheduled event'}</div>`).join('')}
-              </div>
-            </div>
-          `;
-        }).join('');
-
-        grid.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-7 gap-2">${days}</div>`;
-
-        const unscheduled = jobs.filter((job) => job.status !== 'completed');
-        document.getElementById('unscheduled-jobs').innerHTML = unscheduled.length
-          ? unscheduled.map((job) => `
-              <div class="border rounded p-3">
-                <div class="font-medium">${job.name}</div>
-                <div class="text-sm text-gray-600">${label(job.status)}</div>
-              </div>
-            `).join('')
-          : '<div class="text-center text-gray-500 py-8">No unscheduled jobs</div>';
-      }
-
-      document.getElementById('sync-btn')?.addEventListener('click', () => {
-        window.location.href = `${API_URL}/v1/calendar/connect`;
-      });
-
-      document.getElementById('prev-btn')?.addEventListener('click', () => {
-        currentWeekStart = new Date(currentWeekStart.getTime() - 7 * 86400000);
-        loadCalendar();
-      });
-
-      document.getElementById('today-btn')?.addEventListener('click', () => {
-        currentWeekStart = getWeekStart(new Date());
-        loadCalendar();
-      });
-
-      document.getElementById('next-btn')?.addEventListener('click', () => {
-        currentWeekStart = new Date(currentWeekStart.getTime() + 7 * 86400000);
-        loadCalendar();
-      });
-
-      loadCalendar().catch((error) => {
+        allGoogleEvents = eventsPayload?.data?.google || [];
+        allJobs = jobsPayload?.data || [];
+        renderWeek();
+      } catch (error) {
         console.error(error);
-        document.getElementById('calendar-grid').innerHTML = '<div class="text-center text-red-600 py-12">Failed to load calendar</div>';
-      });
-    </script>
+        document.getElementById('calendar-grid').innerHTML = '<div class="py-12 text-center text-red-600">Failed to load calendar</div>';
+        document.getElementById('unscheduled-jobs').innerHTML = '<div class="py-8 text-center text-red-600">Failed to load jobs</div>';
+      }
+    }
+
+    function renderStats() {
+      const active = allJobs.filter(activeJob);
+      document.getElementById('stat-week').textContent = allJobs.filter((job) => activeJob(job) && jobHasSchedule(job) && jobIsInWeek(job)).length;
+      document.getElementById('stat-needs-date').textContent = active.filter((job) => !jobHasSchedule(job)).length;
+      document.getElementById('stat-progress').textContent = active.filter((job) => job.status === 'in_progress').length;
+    }
+
+    function renderWeek() {
+      renderStats();
+      const grid = document.getElementById('calendar-grid');
+      const weekEnd = new Date(currentWeekStart.getTime() + 6 * DAY_MS);
+      document.getElementById('week-title').textContent = `${formatDate(currentWeekStart)} - ${formatDate(weekEnd)}`;
+
+      const todayKey = dateKey(new Date());
+      const days = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(currentWeekStart.getTime() + index * DAY_MS);
+        const key = dateKey(date);
+        const dayEvents = allGoogleEvents.filter((event) => {
+          const start = event.start?.dateTime || event.start?.date;
+          return start && dateKey(start) === key;
+        });
+        const dayJobs = allJobs
+          .filter((job) => activeJob(job) && jobIntersectsDay(job, date))
+          .sort((a, b) => String(a.scheduledStartAt).localeCompare(String(b.scheduledStartAt)));
+
+        const empty = !dayEvents.length && !dayJobs.length
+          ? '<div class="rounded-lg border border-dashed border-gray-200 p-3 text-center text-xs text-gray-500">No scheduled work</div>'
+          : '';
+
+        return `
+          <div class="schedule-day ${key === todayKey ? 'is-today' : ''} p-3">
+            <div class="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <p class="text-sm font-semibold text-gray-950">${date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
+                <p class="text-xs text-gray-500">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
+              </div>
+              ${key === todayKey ? '<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
+            </div>
+            <div class="grid gap-2">
+              ${dayJobs.map(jobCard).join('')}
+              ${dayEvents.map((event) => `
+                <div class="schedule-google-card text-xs">
+                  <p class="font-semibold">${escapeHtml(event.summary || 'Google event')}</p>
+                  <p class="mt-0.5 opacity-80">${escapeHtml(formatTime(event.start?.dateTime || event.start?.date))}</p>
+                </div>
+              `).join('')}
+              ${empty}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      grid.innerHTML = `<div class="grid grid-cols-1 gap-2 md:grid-cols-7">${days}</div>`;
+      renderNeedsScheduling();
+    }
+
+    function jobCard(job) {
+      const jobAddress = address(job);
+      const time = [formatTime(job.scheduledStartAt), formatTime(job.scheduledEndAt)].filter(Boolean).join(' - ');
+      return `
+        <a href="/jobs/${escapeHtml(job.id)}" class="schedule-job-card">
+          <div class="flex items-start justify-between gap-2">
+            <p class="min-w-0 truncate text-xs font-semibold text-gray-950">${escapeHtml(job.name || 'Job')}</p>
+            ${window.PaintFlowUI?.statusBadge({ value: job.status }) || `<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">${escapeHtml(label(job.status))}</span>`}
+          </div>
+          <p class="mt-1 text-[0.72rem] font-medium text-gray-700">${escapeHtml(time || 'All day')}</p>
+          ${jobAddress ? `<p class="mt-1 line-clamp-2 text-[0.72rem] text-gray-600">${escapeHtml(jobAddress)}</p>` : ''}
+        </a>
+      `;
+    }
+
+    function renderNeedsScheduling() {
+      const container = document.getElementById('unscheduled-jobs');
+      const needsDate = allJobs
+        .filter((job) => activeJob(job) && !jobHasSchedule(job))
+        .sort((a, b) => String(a.updatedAt || a.createdAt).localeCompare(String(b.updatedAt || b.createdAt)));
+
+      container.innerHTML = needsDate.length
+        ? needsDate.map(scheduleForm).join('')
+        : '<div class="py-8 text-center text-gray-500"><p class="font-medium text-gray-700">Everything active has a date.</p><p class="mt-1 text-sm">New accepted jobs without dates will appear here.</p></div>';
+    }
+
+    function scheduleForm(job) {
+      const start = new Date();
+      start.setDate(start.getDate() + 1);
+      start.setHours(8, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(16, 0, 0, 0);
+      const jobAddress = address(job);
+      const statusCopy = job.status === 'scheduled' ? 'Ready to schedule' : label(job.status);
+
+      return `
+        <form class="schedule-backlog-card schedule-job-form" data-job-id="${escapeHtml(job.id)}">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <a href="/jobs/${escapeHtml(job.id)}" class="font-semibold text-gray-950 hover:underline">${escapeHtml(job.name || 'Job')}</a>
+              <p class="mt-1 text-xs text-gray-600">${escapeHtml(statusCopy)}${job.budget ? ` - ${money(job.budget)}` : ''}</p>
+              ${jobAddress ? `<p class="mt-1 text-xs text-gray-600">${escapeHtml(jobAddress)}</p>` : ''}
+            </div>
+          </div>
+          <div class="mt-3 grid gap-2">
+            <label class="grid gap-1 text-xs font-medium text-gray-700">
+              Start
+              <input type="datetime-local" name="scheduledStartAt" value="${escapeHtml(toDateTimeLocal(start))}" class="form-input text-sm" required>
+            </label>
+            <label class="grid gap-1 text-xs font-medium text-gray-700">
+              End
+              <input type="datetime-local" name="scheduledEndAt" value="${escapeHtml(toDateTimeLocal(end))}" class="form-input text-sm" required>
+            </label>
+            <button type="submit" class="btn-primary btn-sm justify-center">Add to calendar</button>
+          </div>
+        </form>
+      `;
+    }
+
+    document.getElementById('sync-btn')?.addEventListener('click', () => {
+      window.location.href = `${API_URL}/v1/calendar/connect`;
+    });
+
+    document.getElementById('prev-btn')?.addEventListener('click', () => {
+      currentWeekStart = new Date(currentWeekStart.getTime() - 7 * DAY_MS);
+      loadCalendar();
+    });
+
+    document.getElementById('today-btn')?.addEventListener('click', () => {
+      currentWeekStart = getWeekStart(new Date());
+      loadCalendar();
+    });
+
+    document.getElementById('next-btn')?.addEventListener('click', () => {
+      currentWeekStart = new Date(currentWeekStart.getTime() + 7 * DAY_MS);
+      loadCalendar();
+    });
+
+    document.addEventListener('submit', async (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement) || !form.classList.contains('schedule-job-form')) return;
+      event.preventDefault();
+
+      const button = form.querySelector('button[type="submit"]');
+      const data = new FormData(form);
+      const scheduledStartAt = fromDateTimeLocal(data.get('scheduledStartAt'));
+      const scheduledEndAt = fromDateTimeLocal(data.get('scheduledEndAt'));
+      const jobId = form.dataset.jobId;
+
+      if (!jobId || !scheduledStartAt || !scheduledEndAt) return;
+      if (new Date(scheduledEndAt) <= new Date(scheduledStartAt)) {
+        notify('End time must be after start time.', 'error');
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = 'Scheduling...';
+      try {
+        await api(`/v1/jobs/${jobId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ scheduledStartAt, scheduledEndAt, status: 'scheduled' }),
+        });
+        notify('Job scheduled.');
+        await loadCalendar();
+      } catch (error) {
+        console.error(error);
+        notify('Failed to schedule job.', 'error');
+        button.disabled = false;
+        button.textContent = 'Add to calendar';
+      }
+    });
+
+    loadCalendar();
+  </script>
 </Base>
