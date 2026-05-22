@@ -335,11 +335,24 @@ function escapeHtml(value: string) {
   }[char] || char));
 }
 
-function verifyMagicLinkHtml(token: string, error?: string) {
+function verifyMagicLinkHtml(token: string, publicUrl: string, error?: string) {
   const escapedToken = escapeHtml(token);
+  const loginUrl = `${publicUrl}/login`;
   const errorHtml = error
     ? `<p style="padding: 12px 14px; border-radius: 8px; background: #fef2f2; color: #991b1b;">${escapeHtml(error)}</p>`
     : '';
+  const actionHtml = error
+    ? `<a href="${escapeHtml(loginUrl)}" style="display: inline-flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; border-radius: 999px; background: #0b57d0; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none;">Request a new link</a>`
+    : `<form method="post" action="/v1/auth/verify">
+        <input type="hidden" name="token" value="${escapedToken}">
+        <button type="submit" style="width: 100%; min-height: 44px; border: 0; border-radius: 999px; background: #0b57d0; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;">Continue</button>
+      </form>`;
+  const bodyCopy = error
+    ? 'This sign-in link cannot be used. Request a fresh link to continue.'
+    : 'Confirm this sign-in request to open your workspace.';
+  const helperCopy = error
+    ? 'Magic links expire after 15 minutes and can only be used once.'
+    : 'This extra confirmation keeps email security scanners from using your sign-in link before you do.';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -352,13 +365,10 @@ function verifyMagicLinkHtml(token: string, error?: string) {
   <main style="min-height: 100vh; display: grid; place-items: center; padding: 24px;">
     <section style="width: min(100%, 420px); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 28px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);">
       <h1 style="margin: 0 0 8px; font-size: 24px; line-height: 1.2;">Sign in to PaintFlow</h1>
-      <p style="margin: 0 0 20px; color: #4b5563; line-height: 1.5;">Confirm this sign-in request to open your workspace.</p>
+      <p style="margin: 0 0 20px; color: #4b5563; line-height: 1.5;">${bodyCopy}</p>
       ${errorHtml}
-      <form method="post" action="/v1/auth/verify">
-        <input type="hidden" name="token" value="${escapedToken}">
-        <button type="submit" style="width: 100%; min-height: 44px; border: 0; border-radius: 999px; background: #0b57d0; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;">Continue</button>
-      </form>
-      <p style="margin: 18px 0 0; color: #6b7280; font-size: 13px; line-height: 1.45;">This extra confirmation keeps email security scanners from using your sign-in link before you do.</p>
+      ${actionHtml}
+      <p style="margin: 18px 0 0; color: #6b7280; font-size: 13px; line-height: 1.45;">${helperCopy}</p>
     </section>
   </main>
 </body>
@@ -525,13 +535,13 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
   c.header('Pragma', 'no-cache');
 
   if (!token) {
-    return c.html(verifyMagicLinkHtml('', 'Token required'), 400);
+    return c.html(verifyMagicLinkHtml('', c.env.PUBLIC_URL, 'Token required'), 400);
   }
 
   const data = await c.env.KV.get(`magic:${token}`);
 
   if (!data) {
-    return c.html(verifyMagicLinkHtml('', 'This sign-in link is invalid or expired. Please request a new one.'), 400);
+    return c.html(verifyMagicLinkHtml('', c.env.PUBLIC_URL, 'This sign-in link is invalid or expired.'), 400);
   }
 
   const { email, userId, orgId, isNewUser } = JSON.parse(data);
@@ -560,16 +570,16 @@ auth.get('/verify', async (c) => {
   c.header('Pragma', 'no-cache');
 
   if (!token) {
-    return c.html(verifyMagicLinkHtml('', 'Token required'), 400);
+    return c.html(verifyMagicLinkHtml('', c.env.PUBLIC_URL, 'Token required'), 400);
   }
 
   const data = await c.env.KV.get(`magic:${token}`);
 
   if (!data) {
-    return c.html(verifyMagicLinkHtml('', 'This sign-in link is invalid or expired. Please request a new one.'), 400);
+    return c.html(verifyMagicLinkHtml('', c.env.PUBLIC_URL, 'This sign-in link is invalid or expired.'), 400);
   }
 
-  return c.html(verifyMagicLinkHtml(token));
+  return c.html(verifyMagicLinkHtml(token, c.env.PUBLIC_URL));
 });
 
 // POST /v1/auth/verify
