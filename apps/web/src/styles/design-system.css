@@ -335,6 +335,10 @@ button[class*="bg-blue"][class*="text-white"]:active {
   backdrop-filter: blur(16px);
 }
 
+.pf-mobile-nav.is-open {
+  display: block;
+}
+
 .pf-mobile-nav a {
   border-radius: 0.65rem;
   color: var(--pf-text-muted);

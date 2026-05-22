@@ -130,7 +130,7 @@ const { title = 'PaintFlow' } = Astro.props;
             </div>
           </div>
           <button type="button" data-logout class="pf-logout-button hidden lg:inline-flex">Log out</button>
-          <button id="mobile-menu" class="pf-mobile-menu-button lg:hidden" aria-label="Open navigation" aria-expanded="false">
+          <button id="mobile-menu" type="button" class="pf-mobile-menu-button lg:hidden" aria-label="Open navigation" aria-controls="mobile-nav" aria-expanded="false">
             <Icon name="menu" />
           </button>
         </div>
@@ -320,10 +320,39 @@ const { title = 'PaintFlow' } = Astro.props;
       navigator.serviceWorker.register('/sw.js').catch((error) => console.warn('Service worker registration failed', error));
     }
 
-    document.getElementById('mobile-menu')?.addEventListener('click', () => {
-      document.getElementById('mobile-nav')?.classList.toggle('hidden');
+    function setMobileNavOpen(open) {
+      const nav = document.getElementById('mobile-nav');
       const button = document.getElementById('mobile-menu');
-      button?.setAttribute('aria-expanded', String(document.getElementById('mobile-nav') && !document.getElementById('mobile-nav')?.classList.contains('hidden')));
+      if (!nav || !button) return;
+      nav.classList.toggle('hidden', !open);
+      nav.classList.toggle('is-open', open);
+      button.setAttribute('aria-expanded', String(open));
+    }
+
+    function toggleMobileNav(event) {
+      event?.preventDefault?.();
+      const nav = document.getElementById('mobile-nav');
+      const isOpen = Boolean(nav && !nav.classList.contains('hidden'));
+      setMobileNavOpen(!isOpen);
+      if (!isOpen) {
+        const notificationMenu = document.getElementById('notifications-menu');
+        const notificationButton = document.getElementById('notifications-button');
+        notificationMenu?.classList.add('hidden');
+        notificationButton?.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    document.addEventListener('click', (event) => {
+      const menuButton = event.target?.closest?.('#mobile-menu');
+      if (menuButton) {
+        toggleMobileNav(event);
+        return;
+      }
+
+      const nav = document.getElementById('mobile-nav');
+      if (!nav || nav.classList.contains('hidden')) return;
+      if (nav.contains(event.target)) return;
+      setMobileNavOpen(false);
     });
 
     document.getElementById('notifications-button')?.addEventListener('click', () => {
