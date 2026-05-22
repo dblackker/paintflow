@@ -9,15 +9,51 @@ import Icon from '../components/Icon.astro';
       background: var(--pf-surface-muted);
       opacity: 0.82;
     }
-    .team-member-row.is-inactive .chip {
-      background: var(--pf-surface);
-    }
-    .team-status-active {
-      background: var(--md-sys-color-primary-container);
-      color: var(--md-sys-color-on-primary-container);
+    .team-status-deactivated {
+      background: var(--md-sys-color-error-container);
+      border-color: color-mix(in srgb, var(--md-sys-color-error) 35%, var(--md-sys-color-outline-variant));
+      color: var(--md-sys-color-on-error-container);
     }
     .team-archived-section {
       margin-top: 1rem;
+    }
+    .team-status-toggle {
+      align-items: center;
+      background: var(--pf-surface-muted);
+      border: 1px solid var(--pf-border);
+      border-radius: var(--pf-radius-lg);
+      display: flex;
+      gap: 0.85rem;
+      justify-content: space-between;
+      padding: 0.85rem;
+    }
+    .team-status-toggle input {
+      appearance: none;
+      background: var(--md-sys-color-outline);
+      border-radius: 999px;
+      cursor: pointer;
+      flex: 0 0 auto;
+      height: 1.75rem;
+      position: relative;
+      transition: background 150ms ease;
+      width: 3.25rem;
+    }
+    .team-status-toggle input::after {
+      background: var(--md-sys-color-surface);
+      border-radius: 999px;
+      content: '';
+      height: 1.25rem;
+      left: 0.25rem;
+      position: absolute;
+      top: 0.25rem;
+      transition: transform 150ms ease;
+      width: 1.25rem;
+    }
+    .team-status-toggle input:checked {
+      background: var(--md-sys-color-primary);
+    }
+    .team-status-toggle input:checked::after {
+      transform: translateX(1.5rem);
     }
     @media (max-width: 640px) {
       .team-policy {
@@ -139,6 +175,13 @@ import Icon from '../components/Icon.astro';
             </label>
           </div>
           <div id="rate-preview" class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3 text-sm text-gray-700"></div>
+          <label id="member-status-control" class="team-status-toggle hidden">
+            <span>
+              <span class="block font-semibold">Active crew member</span>
+              <span class="block text-sm text-gray-600">Active crew show in scheduling and time entry forms. Deactivated crew stay in historical job costs.</span>
+            </span>
+            <input name="isActive" type="checkbox" role="switch" aria-label="Active crew member">
+          </label>
           <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
             <button type="button" id="cancel-btn" class="btn-secondary flex-1">Cancel</button>
             <button type="submit" class="btn-primary flex-1">Save member</button>
@@ -250,7 +293,7 @@ import Icon from '../components/Icon.astro';
             <div class="flex flex-wrap items-center gap-2">
               <h3 class="font-semibold truncate">${escapeHtml(member.name || 'Unnamed')}</h3>
               <span class="chip">${roleLabels[member.role] || escapeHtml(member.role)}</span>
-              <span class="chip ${inactive ? '' : 'team-status-active'}">${inactive ? 'Deactivated' : 'Active'}</span>
+              ${inactive ? '<span class="chip team-status-deactivated">Deactivated</span>' : ''}
             </div>
             <p class="text-sm text-gray-600 mt-1">${escapeHtml(member.email || 'No email on file')}</p>
           </div>
@@ -269,10 +312,6 @@ import Icon from '../components/Icon.astro';
             </div>
             <div class="team-member-actions flex justify-end gap-1.5 col-span-2 sm:col-span-1">
               <button type="button" onclick="editMember('${member.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit ${escapeHtml(member.name || 'crew member')}">${iconSvg('edit')}</button>
-              ${inactive
-                ? `<button type="button" onclick="setMemberActive('${member.id}', true)" class="btn-primary btn-sm" aria-label="Reactivate ${escapeHtml(member.name || 'crew member')}">Reactivate</button>`
-                : `<button type="button" onclick="setMemberActive('${member.id}', false)" class="btn-secondary btn-sm" aria-label="Deactivate ${escapeHtml(member.name || 'crew member')}">Deactivate</button>`
-              }
             </div>
           </div>
         </article>
@@ -282,8 +321,10 @@ import Icon from '../components/Icon.astro';
     function openModal(member = null) {
       const form = document.getElementById('member-form');
       const fields = form.elements;
+      const statusControl = document.getElementById('member-status-control');
       form.reset();
       document.getElementById('modal-title').textContent = member ? 'Edit Crew Member' : 'Add Crew Member';
+      statusControl.classList.toggle('hidden', !member);
       if (member) {
         fields.id.value = member.id;
         fields.name.value = member.name || '';
@@ -291,9 +332,11 @@ import Icon from '../components/Icon.astro';
         fields.role.value = member.role || 'painter';
         fields.hourlyRate.value = member.hourlyRate || '';
         fields.burdenRate.value = member.burdenRate || 30;
+        fields.isActive.checked = isActiveMember(member);
       } else {
         fields.role.value = 'painter';
         fields.burdenRate.value = 30;
+        fields.isActive.checked = true;
       }
       updateRatePreview();
       document.getElementById('modal').classList.remove('hidden');
@@ -316,16 +359,6 @@ import Icon from '../components/Icon.astro';
       if (member) openModal(member);
     };
 
-    window.setMemberActive = async (id, isActive) => {
-      if (!isActive && !confirm('Deactivate this crew member? They will be hidden from new timecards, but historical time stays on jobs.')) return;
-      await request(`/v1/settings/team/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ isActive }),
-      });
-      window.showToast(isActive ? 'Crew member reactivated' : 'Crew member deactivated', 'success');
-      loadMembers();
-    };
-
     document.getElementById('add-member-btn').addEventListener('click', () => openModal());
     document.getElementById('cancel-btn').addEventListener('click', closeModal);
     document.getElementById('close-modal-btn').addEventListener('click', closeModal);
@@ -336,6 +369,11 @@ import Icon from '../components/Icon.astro';
       const data = Object.fromEntries(new FormData(form));
       const id = data.id;
       delete data.id;
+      data.isActive = form.elements.isActive.checked;
+      const existingMember = id ? members.find((member) => member.id === id) : null;
+      if (existingMember && isActiveMember(existingMember) && !data.isActive && !confirm('Deactivate this crew member? They will be hidden from new timecards, but historical time stays on jobs.')) {
+        return;
+      }
 
       await request(id ? `/v1/settings/team/${id}` : '/v1/settings/team', {
         method: id ? 'PATCH' : 'POST',
