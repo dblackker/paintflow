@@ -102,8 +102,8 @@ import Base from '../../layouts/Base.astro';
         <div class="scroll-mt-24 space-y-4" data-stage="scope">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-900">Scope Builder</h2>
-              <p id="scope-builder-helper" class="text-sm text-gray-600">Use starter scope for a fast first pass, or add rooms and substrates manually.</p>
+              <h2 class="text-lg font-semibold text-gray-900">Rooms & Scope</h2>
+              <p id="scope-builder-helper" class="text-sm text-gray-600">Add rooms, elevations, or work spaces, then define the substrates in each one.</p>
             </div>
           </div>
           <div id="quick-scope-builder" class="hidden space-y-3">
@@ -115,19 +115,19 @@ import Base from '../../layouts/Base.astro';
             </div>
             <div id="quick-scope-skip-summary" class="hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
               <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p class="text-gray-700">Starter scope skipped. Add rooms and substrates manually below.</p>
+                <p class="text-gray-700">Starter scope skipped. Add rooms, spaces, and substrates manually below.</p>
                 <button id="restore-quick-scope" type="button" class="btn-text btn-sm justify-center">Use starter scope</button>
               </div>
             </div>
           </div>
           <div id="rooms-container" class="space-y-4"></div>
           <div id="empty-scope-state" class="rounded-lg border border-dashed border-gray-300 bg-white p-4 text-center">
-            <p class="text-sm text-gray-700">Start with a room, exterior side, or work area.</p>
-            <p class="mt-1 text-xs text-gray-500">The starter scope tool appears after an area exists, or you can add substrates manually.</p>
+            <p class="text-sm text-gray-700">Start with a room, exterior elevation, or work space.</p>
+            <p class="mt-1 text-xs text-gray-500">Use starter scope for a generated first pass, or add a space manually.</p>
             <button id="start-with-starter-scope" type="button" class="btn-text btn-sm mt-2 justify-center">Use starter scope</button>
           </div>
           <button id="add-room" class="btn-secondary w-full justify-center">
-            Add Room or Area
+            Add Room or Space
           </button>
         </div>
 
@@ -525,7 +525,7 @@ import Base from '../../layouts/Base.astro';
         showWidth: true,
         showHeight: true,
         showQty: true,
-        helper: 'Area substrates use width times height, with optional direct square-foot override.',
+        helper: 'Measured substrates use width times height, with optional direct square-foot override.',
       };
     }
 
@@ -696,8 +696,8 @@ import Base from '../../layouts/Base.astro';
       div.innerHTML = `
         <div class="production-room-header flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-3">
           <label class="min-w-0 flex-1">
-            <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Area</span>
-            <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Room, side, or area name" class="input min-w-0 text-base font-semibold" data-room-name>
+            <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">Room / Space</span>
+            <input value="${escapeHtml(name)}" autocomplete="off" placeholder="Bedroom 1, hallway, front elevation, kitchen cabinets" class="input min-w-0 text-base font-semibold" data-room-name>
           </label>
           <input type="hidden" data-area-type value="${estimateAreaType()}">
           <div class="production-room-actions flex gap-3">
@@ -1323,7 +1323,7 @@ import Base from '../../layouts/Base.astro';
         room.querySelector('[data-area-type]').value = estimateAreaType();
         const nameInput = room.querySelector('[data-room-name]');
         const currentName = nameInput.value.trim();
-        if (['', 'Interior', 'Exterior', 'Cabinets', 'Custom area'].includes(currentName)) {
+        if (shouldAutoNameSpace(currentName)) {
           nameInput.value = estimateDefaultAreaName();
         }
       });
@@ -1336,12 +1336,17 @@ import Base from '../../layouts/Base.astro';
 
     function estimateDefaultAreaName() {
       const type = document.getElementById('estimate-type')?.value || 'interior';
+      const nextIndex = document.querySelectorAll('#rooms-container > div').length + 1;
       return ({
-        interior: 'Interior',
-        exterior: 'Exterior',
-        cabinet: 'Cabinets',
-        custom: 'Custom area',
-      })[type] || 'Area';
+        interior: `Room ${nextIndex}`,
+        exterior: `Exterior elevation ${nextIndex}`,
+        cabinet: `Cabinet area ${nextIndex}`,
+        custom: `Work area ${nextIndex}`,
+      })[type] || `Space ${nextIndex}`;
+    }
+
+    function shouldAutoNameSpace(name) {
+      return ['', 'Interior', 'Exterior', 'Cabinets', 'Custom area', 'Area'].includes(name);
     }
 
     function syncAreaType(room) {
@@ -1665,7 +1670,7 @@ import Base from '../../layouts/Base.astro';
       let optionalTotal = 0;
 
       document.querySelectorAll('#rooms-container > div').forEach(room => {
-        const roomName = room.querySelector('[data-room-name]').value.trim() || 'Area';
+        const roomName = room.querySelector('[data-room-name]').value.trim() || 'Unnamed space';
         room.querySelectorAll('[data-surface-item]').forEach(surface => {
           const rate = rates.find(item => item.id === surface.querySelector('[data-field="rateId"]').value);
           if (!rate) return;
@@ -1876,7 +1881,7 @@ import Base from '../../layouts/Base.astro';
       };
     }
 
-    document.getElementById('add-room').addEventListener('click', () => addRoom());
+    document.getElementById('add-room').addEventListener('click', () => addRoom(estimateDefaultAreaName()));
     document.getElementById('start-with-starter-scope').addEventListener('click', () => {
       const room = addRoom(estimateDefaultAreaName(), [], { seedSurface: false });
       setQuickScopeCollapsed(false);
@@ -1966,7 +1971,7 @@ import Base from '../../layouts/Base.astro';
       }
       if (event.target.classList.contains('copy-room')) {
         const source = event.target.closest('#rooms-container > div');
-        const roomName = source.querySelector('[data-room-name]').value.trim() || 'Area';
+        const roomName = source.querySelector('[data-room-name]').value.trim() || 'Unnamed space';
         const items = Array.from(source.querySelectorAll('[data-surface-item]')).map(collectSurfaceData);
         const copied = addRoom(`${roomName} copy`, items);
         copied.querySelector('[data-area-type]').value = source.querySelector('[data-area-type]').value;
