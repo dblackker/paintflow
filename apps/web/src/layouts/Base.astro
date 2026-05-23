@@ -13,6 +13,7 @@ interface Props {
 }
 
 const { title = 'PaintFlow' } = Astro.props;
+const shellTitle = title.replace(/\s+-\s+PaintFlow$/i, '');
 
 const navSections = [
   {
@@ -124,25 +125,14 @@ const navSections = [
 <body class="bg-gray-50 min-h-screen">
   <nav class="pf-app-nav shadow-sm border-b sticky top-0 z-10">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16 items-center">
-        <div class="flex items-center space-x-8">
-          <a href="/dashboard" class="flex items-center gap-3">
-            <span class="pf-brand-mark">P</span>
-            <span class="text-xl font-semibold text-gray-950">PaintFlow</span>
-          </a>
-          <div class="hidden lg:flex items-center gap-2" data-owner-nav>
-            <a href="/dashboard" class="pf-nav-link text-sm">Dashboard</a>
-            {navSections.map((section) => (
-              <details class="pf-nav-group">
-                <summary class="pf-nav-link text-sm">{section.label}</summary>
-                <div class="pf-nav-menu">
-                  {section.links.map((link) => (
-                    <a href={link.href}>{link.label}</a>
-                  ))}
-                </div>
-              </details>
-            ))}
-          </div>
+      <div class="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+        <div class="flex items-center">
+          <button id="mobile-menu" type="button" class="pf-mobile-menu-button" aria-label="Open navigation" aria-controls="mobile-nav" aria-expanded="false" data-owner-nav>
+            <Icon name="menu" />
+          </button>
+        </div>
+        <div class="min-w-0">
+          <p id="app-bar-title" class="truncate text-lg font-semibold text-gray-950 sm:text-xl">{shellTitle}</p>
         </div>
         <div class="flex items-center gap-2">
           <div class="relative" data-owner-nav>
@@ -167,13 +157,21 @@ const navSections = [
             </div>
           </div>
           <button type="button" data-logout class="pf-logout-button hidden lg:inline-flex">Log out</button>
-          <button id="mobile-menu" type="button" class="pf-mobile-menu-button lg:hidden" aria-label="Open navigation" aria-controls="mobile-nav" aria-expanded="false" data-owner-nav>
-            <Icon name="menu" />
-          </button>
+          <a href="/dashboard" class="pf-app-brand-link" aria-label="PaintFlow dashboard">
+            <span class="pf-brand-mark">P</span>
+          </a>
         </div>
       </div>
     </div>
-    <div id="mobile-nav" class="pf-mobile-nav hidden lg:hidden border-t" data-owner-nav>
+    <div id="mobile-nav-scrim" class="pf-mobile-nav-scrim hidden" data-owner-nav></div>
+    <div id="mobile-nav" class="pf-mobile-nav hidden border-r" data-owner-nav>
+      <div class="flex items-center justify-between gap-3 border-b px-4 py-4">
+        <a href="/dashboard" class="flex items-center gap-3">
+          <span class="pf-brand-mark">P</span>
+          <span class="text-lg font-semibold text-gray-950">PaintFlow</span>
+        </a>
+        <button id="mobile-nav-close" type="button" class="btn-icon" aria-label="Close navigation">x</button>
+      </div>
       <div class="px-4 py-3 space-y-4">
         <a href="/dashboard" class="block py-2 text-sm">Dashboard</a>
         {navSections.map((section) => (
@@ -391,22 +389,15 @@ const navSections = [
 
     function setMobileNavOpen(open) {
       const nav = document.getElementById('mobile-nav');
+      const scrim = document.getElementById('mobile-nav-scrim');
       const button = document.getElementById('mobile-menu');
       if (!nav || !button) return;
-      if (open) positionMobileNav();
       nav.classList.toggle('hidden', !open);
       nav.classList.toggle('is-open', open);
+      scrim?.classList.toggle('hidden', !open);
+      scrim?.classList.toggle('is-open', open);
       button.setAttribute('aria-expanded', String(open));
-    }
-
-    function positionMobileNav() {
-      const nav = document.getElementById('mobile-nav');
-      const button = document.getElementById('mobile-menu');
-      if (!nav || !button) return;
-      const rect = button.getBoundingClientRect();
-      const edgePadding = 12;
-      nav.style.setProperty('--pf-mobile-nav-top', `${Math.round(rect.bottom + 8)}px`);
-      nav.style.setProperty('--pf-mobile-nav-right', `${Math.max(edgePadding, Math.round(window.innerWidth - rect.right))}px`);
+      document.body.classList.toggle('pf-nav-drawer-open', open);
     }
 
     function toggleMobileNav(event) {
@@ -419,6 +410,18 @@ const navSections = [
         const notificationButton = document.getElementById('notifications-button');
         notificationMenu?.classList.add('hidden');
         notificationButton?.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    function hideDuplicatePageTitle() {
+      const shellTitle = document.getElementById('app-bar-title')?.textContent?.trim().toLowerCase();
+      if (!shellTitle) return;
+      const heading = document.querySelector('main h1, main h2');
+      if (!heading || heading.closest('[data-keep-page-title]')) return;
+      const headingText = heading.textContent?.trim().toLowerCase();
+      if (headingText === shellTitle) {
+        heading.classList.add('sr-only');
+        heading.setAttribute('data-shell-title-hidden', 'true');
       }
     }
 
@@ -435,16 +438,18 @@ const navSections = [
       }
 
       const nav = document.getElementById('mobile-nav');
+      const scrim = event.target?.closest?.('#mobile-nav-scrim');
+      if (scrim) {
+        setMobileNavOpen(false);
+        return;
+      }
       if (!nav || nav.classList.contains('hidden')) return;
       if (nav.contains(event.target)) return;
       setMobileNavOpen(false);
     });
 
-    window.addEventListener('resize', () => {
-      const nav = document.getElementById('mobile-nav');
-      if (!nav || nav.classList.contains('hidden')) return;
-      positionMobileNav();
-    });
+    document.getElementById('mobile-nav-close')?.addEventListener('click', () => setMobileNavOpen(false));
+    hideDuplicatePageTitle();
 
     document.getElementById('notifications-button')?.addEventListener('click', () => {
       const menu = document.getElementById('notifications-menu');
