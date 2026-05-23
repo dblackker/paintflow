@@ -715,6 +715,23 @@ body.pf-crew-mode .pf-logout-button {
   color: var(--md-sys-color-on-error-container);
 }
 
+.contact-action-group {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.contact-action-group .btn-icon {
+  height: 2.25rem;
+  width: 2.25rem;
+}
+
+.contact-action-disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 .pf-icon {
   display: block;
   flex: 0 0 auto;

@@ -1,6 +1,7 @@
 ---
 import Toast from '../components/Toast.astro';
 import ContactSummary from '../components/ContactSummary.astro';
+import ContactActions from '../components/ContactActions.astro';
 import StatusBadge from '../components/StatusBadge.astro';
 import Icon from '../components/Icon.astro';
 import AuthBridge from '../components/AuthBridge.astro';
@@ -192,6 +193,7 @@ const navSections = [
     <slot />
   </main>
   <ContactSummary defineOnly />
+  <ContactActions defineOnly />
   <StatusBadge defineOnly />
   <Toast />
   <script>
