@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
+import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -116,6 +116,10 @@ const createEstimateSchema = z.object({
   }
 });
 
+const cancelEstimateSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
 function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, packageName: string | undefined, selectedOptions: z.infer<typeof selectedOptionSchema>[]) {
   const packages = Array.isArray(estimate.packages) ? estimate.packages as Array<{ name: string; items?: unknown[]; lineItems?: unknown[] }> : [];
   const pkg = packages.find((item) => item.name === packageName) ?? packages.find((item) => item.name === 'proposal') ?? packages[0];
@@ -212,6 +216,12 @@ estimatesApp.post('/:id/sign', async (c) => {
   if (!estimate) {
     return c.json({ error: 'Not found' }, 404);
   }
+  if (estimate.status === 'canceled') {
+    return c.json({ error: 'This estimate has been canceled' }, 409);
+  }
+  if (estimate.status === 'accepted') {
+    return c.json({ error: 'This estimate has already been accepted' }, 409);
+  }
 
   const job = await createJobFromAcceptedEstimate(db, estimate, {
     packageName,
@@ -263,6 +273,7 @@ estimatesApp.get('/', async (c) => {
   const leadsById = new Map(leadRows.map((lead) => [lead.id, lead]));
   const data = rows.map((estimate) => ({
     ...estimate,
+    payments: [] as Array<typeof customerPayments.$inferSelect>,
     leadName: leadsById.get(estimate.leadId)?.name ?? 'Customer',
     leadPhone: leadsById.get(estimate.leadId)?.phone,
     leadEmail: leadsById.get(estimate.leadId)?.email,
@@ -273,6 +284,23 @@ estimatesApp.get('/', async (c) => {
     publicUrl: publicEstimateUrl(baseUrl, estimate.id),
     customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id),
   }));
+
+  const estimateIds = rows.map((estimate) => estimate.id);
+  const paymentRows = estimateIds.length
+    ? await optionalPaymentRows(db.select().from(customerPayments)
+      .where(and(eq(customerPayments.orgId, orgId), inArray(customerPayments.estimateId, estimateIds)))
+      .orderBy(desc(customerPayments.receivedAt)))
+    : [];
+  const paymentsByEstimate = new Map<string, Array<typeof customerPayments.$inferSelect>>();
+  paymentRows.forEach((payment) => {
+    if (!payment.estimateId) return;
+    const list = paymentsByEstimate.get(payment.estimateId) || [];
+    list.push(payment);
+    paymentsByEstimate.set(payment.estimateId, list);
+  });
+  data.forEach((estimate) => {
+    estimate.payments = paymentsByEstimate.get(estimate.id) || [];
+  });
   
   return c.json({ data });
 });
@@ -388,7 +416,55 @@ estimatesApp.get('/:id', async (c) => {
   }
 
   const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
-  return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
+  const payments = await optionalPaymentRows(db.select().from(customerPayments)
+    .where(and(eq(customerPayments.orgId, orgId), eq(customerPayments.estimateId, estimate.id)))
+    .orderBy(desc(customerPayments.receivedAt)));
+  return c.json({ data: { ...estimate, payments, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
+});
+
+estimatesApp.post('/:id/cancel', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const parsed = cancelEstimateSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid cancellation request', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  if (estimate.status === 'accepted') {
+    return c.json({ error: 'Accepted estimates cannot be canceled here. Cancel or close the job instead.' }, 409);
+  }
+  if (estimate.status === 'canceled') {
+    return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id), customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id) } });
+  }
+
+  const [updated] = await db.update(estimates)
+    .set({ status: 'canceled', updatedAt: new Date() })
+    .where(and(eq(estimates.id, id), eq(estimates.orgId, orgId)))
+    .returning();
+
+  await db.insert(auditLogs).values({
+    orgId,
+    userId: c.get('userId'),
+    action: 'estimate.canceled',
+    entityType: 'estimate',
+    entityId: updated.id,
+    metadata: {
+      leadId: updated.leadId,
+      previousStatus: estimate.status,
+      reason: parsed.data.reason || null,
+    },
+  });
+
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  return c.json({ data: { ...updated, payments: [], publicUrl: publicEstimateUrl(baseUrl, updated.id), customerPreviewUrl: publicEstimateUrl(baseUrl, updated.id) } });
 });
 
 estimatesApp.patch('/:id', async (c) => {
@@ -571,6 +647,18 @@ async function recordEmailSend(db: ReturnType<typeof createDb>, values: typeof e
     if (isMissingRelation(error)) {
       console.warn('Email send logging unavailable; run email communications migration.');
       return null;
+    }
+    throw error;
+  }
+}
+
+async function optionalPaymentRows<T>(query: Promise<T[]>) {
+  try {
+    return await query;
+  } catch (error) {
+    if (isMissingRelation(error)) {
+      console.warn('Payment history unavailable; run payments migration.');
+      return [];
     }
     throw error;
   }

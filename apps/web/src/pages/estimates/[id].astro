@@ -167,6 +167,10 @@ import '../../styles/design-system.css';
             document.getElementById('loading').innerHTML = `<div class="bg-white border rounded-lg p-8"><p class="text-green-700 font-medium">This estimate has been signed.</p><p class="text-sm text-gray-600 mt-2">Signed by ${escapeHtml(data.signedName)} on ${new Date(data.signedAt).toLocaleDateString()}</p></div>`;
             return;
           }
+          if (data.status === 'canceled') {
+            document.getElementById('loading').innerHTML = `<div class="bg-white border rounded-lg p-8"><p class="text-red-700 font-medium">This estimate has been canceled.</p><p class="text-sm text-gray-600 mt-2">Please contact your contractor if you have questions or need a revised proposal.</p></div>`;
+            return;
+          }
 
           document.getElementById('estimate-id').textContent = data.id.slice(0, 8);
           renderProposal(data.packages || []);

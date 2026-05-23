@@ -30,6 +30,10 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       sent: 'Sent',
       accepted: 'Accepted',
       declined: 'Declined',
+      canceled: 'Canceled',
+      partially_refunded: 'Partially refunded',
+      refunded: 'Refunded',
+      succeeded: 'Paid',
     };
 
     const currency = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
@@ -176,6 +180,55 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       `).join('');
     }
 
+    function renderPayments(payments = []) {
+      if (!payments.length) {
+        return '<div class="p-5 text-sm text-gray-500">No payment history yet.</div>';
+      }
+      return payments.map((payment) => {
+        const amount = Number(payment.amount || 0);
+        const refunded = Number(payment.refundedAmount || 0);
+        const refundable = Math.max(amount - refunded, 0);
+        return `
+          <details class="p-4">
+            <summary class="cursor-pointer list-none">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="font-semibold text-gray-950">${currency(amount)}</p>
+                    ${statusBadge(payment.status || 'succeeded', { label: statusLabels[payment.status] || label(payment.status || 'succeeded') })}
+                  </div>
+                  <p class="mt-1 text-xs text-gray-500">${escapeHtml(payment.description || 'Customer payment')} &middot; ${dateLabel(payment.receivedAt)}</p>
+                  ${refunded > 0 ? `<p class="mt-1 text-sm text-red-700">${currency(refunded)} refunded</p>` : ''}
+                </div>
+                <span class="btn-text btn-sm pointer-events-none">${refundable > 0 ? 'Refund' : 'View'}</span>
+              </div>
+            </summary>
+            <div class="mt-3 rounded-lg border bg-gray-50 p-3">
+              <dl class="grid grid-cols-2 gap-3 text-sm">
+                <div><dt class="text-gray-500">Paid</dt><dd class="font-medium">${currency(amount)}</dd></div>
+                <div><dt class="text-gray-500">Refundable</dt><dd class="font-medium">${currency(refundable)}</dd></div>
+                <div><dt class="text-gray-500">Source</dt><dd class="font-medium">${escapeHtml(label(payment.source || 'stripe'))}</dd></div>
+                <div><dt class="text-gray-500">Payment ID</dt><dd class="font-mono text-xs">${escapeHtml(payment.id.slice(0, 8))}</dd></div>
+              </dl>
+              ${refundable > 0 ? `
+                <form class="mt-4 grid gap-2 sm:grid-cols-[8rem_1fr_auto]" data-refund-payment="${payment.id}">
+                  <label class="text-sm">
+                    <span class="sr-only">Refund amount</span>
+                    <input name="amount" type="number" min="0.01" max="${refundable.toFixed(2)}" step="0.01" value="${refundable.toFixed(2)}" class="w-full rounded-md border px-3 py-2" aria-label="Refund amount">
+                  </label>
+                  <label class="text-sm">
+                    <span class="sr-only">Refund reason</span>
+                    <input name="reason" type="text" maxlength="500" class="w-full rounded-md border px-3 py-2" placeholder="Reason, credit, or damage note">
+                  </label>
+                  <button type="submit" class="btn-secondary btn-sm text-red-700 justify-center">Issue refund</button>
+                </form>
+              ` : ''}
+            </div>
+          </details>
+        `;
+      }).join('');
+    }
+
     function renderPhotos(photos) {
       const all = [...photos.estimates.map((photo) => ({ ...photo, source: 'Estimate' })), ...photos.jobs.map((photo) => ({ ...photo, source: 'Job' }))];
       if (!all.length) {
@@ -284,6 +337,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
         <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           ${renderStat('Estimates', data.estimates.length, recentEstimate ? `${currency(recentEstimate.total)} latest` : 'No estimate yet')}
           ${renderStat('Jobs', data.jobs.length, data.jobs.find((job) => job.status !== 'completed') ? 'Active production' : 'No active job')}
+          ${renderStat('Payments', currency((data.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0)), `${data.payments?.length || 0} recorded`)}
           ${renderStat('Messages', data.messages.length + (data.emailSends?.length || 0), 'Text and email history')}
           ${renderStat('Photos', data.photos.estimates.length + data.photos.jobs.length, 'Estimate and job media')}
         </section>
@@ -341,6 +395,13 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
             </section>
             <section class="bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b flex items-center justify-between gap-3">
+                <h2 class="font-semibold">Payments</h2>
+                <span class="text-xs text-gray-500">${data.payments?.length || 0} recorded</span>
+              </div>
+              <div class="divide-y max-h-[520px] overflow-auto">${renderPayments(data.payments || [])}</div>
+            </section>
+            <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b flex items-center justify-between gap-3">
                 <h2 class="font-semibold">Messages</h2>
                 <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `/sms?leadId=${customer.id}` : '#'}">Open thread</a>
               </div>
@@ -362,6 +423,31 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       });
 
     document.addEventListener('submit', async (event) => {
+      const refundForm = event.target?.closest('[data-refund-payment]');
+      if (refundForm) {
+        event.preventDefault();
+        const button = refundForm.querySelector('button[type="submit"]');
+        const formData = new FormData(refundForm);
+        button.disabled = true;
+        try {
+          await apiJson(`/v1/payments/${refundForm.dataset.refundPayment}/refund`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({
+              amount: Number(formData.get('amount')),
+              reason: formData.get('reason') || undefined,
+            }),
+          });
+          window.showToast?.('Refund submitted', 'success');
+          const payload = await apiJson(`/v1/leads/${leadId}`);
+          if (payload) render(payload.data);
+        } catch (err) {
+          window.showToast?.(err.message || 'Failed to issue refund', 'error');
+          button.disabled = false;
+        }
+        return;
+      }
+
       if (event.target?.id !== 'customer-activity-form') return;
       event.preventDefault();
       const form = event.target;

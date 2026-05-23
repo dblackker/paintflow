@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { activities, auditLogs, emailSends, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@paintflow/db/schema';
+import { activities, auditLogs, customerPayments, emailSends, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@paintflow/db/schema';
 import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -59,12 +59,12 @@ function isMissingRelation(error: unknown) {
   return err?.code === '42P01' || /relation .* does not exist/i.test(err?.message || '');
 }
 
-async function optionalEmailSends<T>(query: Promise<T[]>) {
+async function optionalRows<T>(query: Promise<T[]>, label: string) {
   try {
     return await query;
   } catch (error) {
     if (isMissingRelation(error)) {
-      console.warn('Email send history unavailable; run email communications migration.');
+      console.warn(`${label} unavailable; run the latest database migration.`);
       return [];
     }
     throw error;
@@ -166,7 +166,7 @@ leadsApp.get('/:id', async (c) => {
     return c.json({ error: 'Lead not found' }, 404);
   }
 
-  const [customerEstimates, customerJobs, customerMessages, customerEmailSends, customerActivity, customerActivities] = await Promise.all([
+  const [customerEstimates, customerJobs, customerMessages, customerEmailSends, customerPaymentsRows, customerActivity, customerActivities] = await Promise.all([
     db.select().from(estimates)
       .where(and(eq(estimates.orgId, orgId), eq(estimates.leadId, id)))
       .orderBy(desc(estimates.createdAt)),
@@ -177,10 +177,14 @@ leadsApp.get('/:id', async (c) => {
       .where(and(eq(messages.orgId, orgId), eq(messages.leadId, id)))
       .orderBy(desc(messages.createdAt))
       .limit(50),
-    optionalEmailSends(db.select().from(emailSends)
+    optionalRows(db.select().from(emailSends)
       .where(and(eq(emailSends.orgId, orgId), eq(emailSends.leadId, id)))
       .orderBy(desc(emailSends.sentAt))
-      .limit(50)),
+      .limit(50), 'Email send history'),
+    optionalRows(db.select().from(customerPayments)
+      .where(and(eq(customerPayments.orgId, orgId), eq(customerPayments.leadId, id)))
+      .orderBy(desc(customerPayments.receivedAt))
+      .limit(100), 'Payment history'),
     db.select().from(auditLogs)
       .where(and(eq(auditLogs.orgId, orgId), eq(auditLogs.entityType, 'lead'), eq(auditLogs.entityId, id)))
       .orderBy(desc(auditLogs.createdAt))
@@ -218,6 +222,7 @@ leadsApp.get('/:id', async (c) => {
       jobs: customerJobs,
       messages: customerMessages,
       emailSends: customerEmailSends,
+      payments: customerPaymentsRows,
       activity: customerActivity,
       activities: customerActivities,
       photos: {

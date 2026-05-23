@@ -38,6 +38,46 @@ export async function createCheckoutSession(env: any, params: {
   return await response.json() as { id: string; url: string | null };
 }
 
+export async function createRefund(env: any, params: {
+  paymentIntentId?: string | null;
+  chargeId?: string | null;
+  amount: number;
+  reason?: string;
+  connectedAccountId?: string;
+}) {
+  const body = new URLSearchParams({
+    amount: Math.round(params.amount * 100).toString(),
+  });
+  if (params.paymentIntentId) {
+    body.set('payment_intent', params.paymentIntentId);
+  } else if (params.chargeId) {
+    body.set('charge', params.chargeId);
+  } else {
+    throw new Error('Payment does not have a refundable Stripe reference');
+  }
+  if (params.reason) {
+    body.set('metadata[reason]', params.reason);
+  }
+
+  const response = await fetch('https://api.stripe.com/v1/refunds', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...(params.connectedAccountId ? { 'Stripe-Account': params.connectedAccountId } : {}),
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Stripe refund error:', error);
+    throw new Error('Failed to create Stripe refund');
+  }
+
+  return await response.json() as { id: string; status?: string };
+}
+
 export async function verifyWebhookSignature(
   payload: string,
   signature: string,

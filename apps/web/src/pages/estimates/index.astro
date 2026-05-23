@@ -41,6 +41,7 @@ import Base from '../../layouts/Base.astro';
           <option value="sent">Sent</option>
           <option value="accepted">Accepted</option>
           <option value="declined">Declined</option>
+          <option value="canceled">Canceled</option>
           <option value="draft">Draft</option>
         </select>
       </div>
@@ -86,6 +87,14 @@ import Base from '../../layouts/Base.astro';
 
     function customerPreviewHref(estimate) {
       return new URL(estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`, window.location.origin).pathname;
+    }
+
+    function paymentSummary(payments = []) {
+      const paid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const refunded = payments.reduce((sum, payment) => sum + Number(payment.refundedAmount || 0), 0);
+      const net = Math.max(paid - refunded, 0);
+      if (!payments.length) return '<p class="text-xs text-gray-500">No payments recorded</p>';
+      return `<p class="text-xs text-gray-600">${money(net)} paid${refunded > 0 ? ` · ${money(refunded)} refunded` : ''}</p>`;
     }
 
     async function apiJson(url, options = {}) {
@@ -162,11 +171,17 @@ import Base from '../../layouts/Base.astro';
               </div>
             </div>
             <div class="sm:text-right flex items-center justify-between gap-3 sm:block">
-              <p class="text-lg sm:text-xl font-bold">${money(estimate.total)}</p>
+              <div>
+                <p class="text-lg sm:text-xl font-bold">${money(estimate.total)}</p>
+                ${paymentSummary(estimate.payments || [])}
+              </div>
               <div class="mt-2 flex flex-wrap justify-end gap-2">
                 ${estimate.status === 'draft'
                   ? `<a href="/estimates/production?draft=${estimate.id}" class="btn-secondary btn-sm justify-center">Edit draft</a>`
                   : `<a href="${customerPreviewHref(estimate)}" class="btn-secondary btn-sm justify-center">Client preview</a>`}
+                ${['draft', 'sent', 'declined'].includes(estimate.status)
+                  ? `<button type="button" class="btn-text btn-sm text-red-700" data-cancel-estimate="${estimate.id}">Cancel</button>`
+                  : ''}
               </div>
             </div>
           </div>
@@ -177,9 +192,33 @@ import Base from '../../layouts/Base.astro';
     document.getElementById('search').addEventListener('input', render);
     document.getElementById('status-filter').addEventListener('change', render);
     const initialStatus = new URLSearchParams(window.location.search).get('status');
-    if (initialStatus && ['all', 'sent', 'accepted', 'declined', 'draft'].includes(initialStatus)) {
+    if (initialStatus && ['all', 'sent', 'accepted', 'declined', 'canceled', 'draft'].includes(initialStatus)) {
       document.getElementById('status-filter').value = initialStatus;
     }
+
+    async function cancelEstimate(id) {
+      const estimate = estimates.find((item) => item.id === id);
+      if (!estimate || estimate.status === 'accepted') return;
+      const shouldCancel = window.confirm('Cancel this estimate? The customer preview will no longer be approvable.');
+      if (!shouldCancel) return;
+      try {
+        await apiJson(`${API_URL}/v1/estimates/${id}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({ reason: 'Canceled from estimates list' }),
+        });
+        window.showToast?.('Estimate canceled', 'success');
+        await loadEstimates();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to cancel estimate', 'error');
+      }
+    }
+
+    document.addEventListener('click', (event) => {
+      const cancelButton = event.target.closest('[data-cancel-estimate]');
+      if (!cancelButton) return;
+      cancelEstimate(cancelButton.dataset.cancelEstimate);
+    });
     loadEstimates();
   </script>
 </Base>

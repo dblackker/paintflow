@@ -3,7 +3,7 @@ import { relations } from 'drizzle-orm';
 
 export const roleEnum = pgEnum('role', ['owner', 'member']);
 export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'estimate_sent', 'won', 'lost']);
-export const estimateStatusEnum = pgEnum('estimate_status', ['draft', 'sent', 'accepted', 'declined']);
+export const estimateStatusEnum = pgEnum('estimate_status', ['draft', 'sent', 'accepted', 'declined', 'canceled']);
 export const messageDirectionEnum = pgEnum('message_direction', ['inbound', 'outbound']);
 
 export const organizations = pgTable('organizations', {
@@ -331,6 +331,30 @@ export const emailSends = pgTable('email_sends', {
   sentBy: uuid('sent_by').references(() => users.id),
   sentAt: timestamp('sent_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const customerPayments = pgTable('customer_payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id).notNull(),
+  estimateId: uuid('estimate_id').references(() => estimates.id),
+  jobId: uuid('job_id').references(() => jobs.id),
+  changeOrderId: uuid('change_order_id').references(() => changeOrders.id),
+  source: varchar('source', { length: 50 }).notNull().default('stripe'),
+  status: varchar('status', { length: 50 }).notNull().default('succeeded'),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  refundedAmount: decimal('refunded_amount', { precision: 10, scale: 2 }).notNull().default('0'),
+  currency: varchar('currency', { length: 10 }).notNull().default('usd'),
+  description: text('description'),
+  stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }),
+  stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
+  stripeChargeId: varchar('stripe_charge_id', { length: 255 }),
+  stripeRefundId: varchar('stripe_refund_id', { length: 255 }),
+  receivedAt: timestamp('received_at').defaultNow().notNull(),
+  refundedAt: timestamp('refunded_at'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // Lead sources
