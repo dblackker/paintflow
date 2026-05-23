@@ -54,30 +54,79 @@ const { defineOnly = false } = Astro.props;
         const actions = [];
 
         if (canEdit) {
-          actions.push(`<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-text btn-sm justify-center">${status === 'sent' ? 'Edit sent' : 'Edit draft'}</a>`);
+          actions.push({ priority: true, html: `<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-text btn-sm justify-center">${status === 'sent' ? 'Edit sent' : 'Edit draft'}</a>` });
         }
 
         if (status !== 'draft') {
-          actions.push(`<a href="${escapeHtml(previewHref || `/estimates/${estimateId}`)}" class="btn-text btn-sm justify-center">Preview link</a>`);
+          actions.push({ priority: !canEdit, html: `<a href="${escapeHtml(previewHref || `/estimates/${estimateId}`)}" class="btn-text btn-sm justify-center">Preview link</a>` });
         }
 
         if (canCancel) {
-          actions.push(`<button type="button" class="btn-text btn-sm text-red-700 justify-center" data-cancel-estimate="${escapeHtml(estimateId)}">${escapeHtml(cancelLabel)}</button>`);
+          actions.push({ destructive: true, html: `<button type="button" class="btn-text btn-sm text-red-700 justify-center" data-cancel-estimate="${escapeHtml(estimateId)}">${escapeHtml(cancelLabel)}</button>` });
         }
 
         if (canRecordPayment) {
-          actions.push(`<button type="button" class="btn-text btn-sm justify-center" data-record-estimate-payment="${escapeHtml(estimateId)}" data-estimate-total="${escapeHtml(String(Number(estimate.total || 0)))}">Record payment</button>`);
+          actions.push({ html: `<button type="button" class="btn-text btn-sm justify-center" data-record-estimate-payment="${escapeHtml(estimateId)}" data-estimate-total="${escapeHtml(String(Number(estimate.total || 0)))}">Record payment</button>` });
         }
 
         if (canReviseAgreement) {
-          actions.push(`<button type="button" class="btn-text btn-sm justify-center" data-revise-estimate="${escapeHtml(estimateId)}">Create revision</button>`);
+          actions.push({ html: `<button type="button" class="btn-text btn-sm justify-center" data-revise-estimate="${escapeHtml(estimateId)}">Create revision</button>` });
         }
 
         if (canVoidAgreement) {
-          actions.push(`<button type="button" class="btn-text btn-sm text-red-700 justify-center" data-void-estimate="${escapeHtml(estimateId)}">Void agreement</button>`);
+          actions.push({ destructive: true, html: `<button type="button" class="btn-text btn-sm text-red-700 justify-center" data-void-estimate="${escapeHtml(estimateId)}">Void agreement</button>` });
         }
 
-        return `<div class="estimate-actions flex flex-wrap gap-2 ${escapeHtml(className)}">${actions.join('')}</div>`;
+        const primary = actions.find((action) => action.priority) || actions[0];
+        const overflow = actions
+          .filter((action) => action !== primary)
+          .sort((a, b) => Number(Boolean(a.destructive)) - Number(Boolean(b.destructive)));
+        const overflowId = `estimate-actions-${escapeHtml(estimateId || crypto.randomUUID())}`;
+        return `
+          <div class="estimate-actions flex items-center gap-1 ${escapeHtml(className)}" data-estimate-actions>
+            ${primary?.html || ''}
+            ${overflow.length ? `
+              <button type="button" class="btn-icon btn-icon-tonal h-8 w-8" aria-label="More estimate actions" aria-expanded="false" data-estimate-actions-trigger="${overflowId}">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
+                  <circle cx="5" cy="12" r="1.8"></circle>
+                  <circle cx="12" cy="12" r="1.8"></circle>
+                  <circle cx="19" cy="12" r="1.8"></circle>
+                </svg>
+              </button>
+              <template id="${overflowId}">${overflow.map((action) => action.html).join('')}</template>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      function closeEstimateActionsMenu() {
+        document.querySelectorAll('[data-estimate-actions-trigger][aria-expanded="true"]').forEach((button) => {
+          button.setAttribute('aria-expanded', 'false');
+        });
+        document.getElementById('estimate-actions-menu')?.remove();
+      }
+
+      function openEstimateActionsMenu(button) {
+        const template = document.getElementById(button.dataset.estimateActionsTrigger);
+        if (!template) return;
+        const wasOpen = button.getAttribute('aria-expanded') === 'true';
+        closeEstimateActionsMenu();
+        if (wasOpen) return;
+        button.setAttribute('aria-expanded', 'true');
+        const menu = document.createElement('div');
+        menu.id = 'estimate-actions-menu';
+        menu.className = 'fixed z-[80] min-w-44 rounded-lg border bg-white p-1 shadow-lg';
+        menu.innerHTML = `<div class="grid gap-1">${template.innerHTML}</div>`;
+        document.body.appendChild(menu);
+        menu.querySelectorAll('a, button').forEach((item) => {
+          item.classList.add('w-full', 'justify-start');
+        });
+        const rect = button.getBoundingClientRect();
+        const menuRect = menu.getBoundingClientRect();
+        const left = Math.min(Math.max(8, rect.right - menuRect.width), window.innerWidth - menuRect.width - 8);
+        const top = Math.min(rect.bottom + 6, window.innerHeight - menuRect.height - 8);
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
       }
 
       function ensureAgreementActionModal() {
@@ -333,21 +382,43 @@ const { defineOnly = false } = Astro.props;
       }
 
       document.addEventListener('click', (event) => {
+        const menuButton = event.target.closest('[data-estimate-actions-trigger]');
+        if (menuButton) {
+          event.preventDefault();
+          event.stopPropagation();
+          openEstimateActionsMenu(menuButton);
+          return;
+        }
+
+        const menu = document.getElementById('estimate-actions-menu');
+        if (menu && !menu.contains(event.target)) {
+          closeEstimateActionsMenu();
+        }
+      });
+
+      document.addEventListener('click', (event) => {
         const button = event.target.closest('[data-record-estimate-payment]');
         if (!button) return;
+        closeEstimateActionsMenu();
         openManualPaymentModal(button.dataset.recordEstimatePayment);
       });
 
       document.addEventListener('click', (event) => {
         const reviseButton = event.target.closest('[data-revise-estimate]');
         if (reviseButton) {
+          closeEstimateActionsMenu();
           openAgreementActionModal('revise', reviseButton.dataset.reviseEstimate);
           return;
         }
         const voidButton = event.target.closest('[data-void-estimate]');
         if (voidButton) {
+          closeEstimateActionsMenu();
           openAgreementActionModal('void', voidButton.dataset.voidEstimate);
         }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeEstimateActionsMenu();
       });
 
       window.PaintFlowUI = window.PaintFlowUI || {};
