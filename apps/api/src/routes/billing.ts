@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, changeOrders, customerPayments, estimates, jobs, leads, quickbooksConnections, stripeConnections } from '@paintflow/db/schema';
+import { auditLogs, changeOrders, customerPayments, estimates, jobs, leads, orgSettings, quickbooksConnections, stripeConnections } from '@paintflow/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createCheckoutSession, createRefund, verifyWebhookSignature } from '../lib/stripe';
 import { createQBInvoice, createQBPayment } from '../lib/quickbooks';
 import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
+import { estimatePaymentSchedule, nextPayableMilestone } from '../lib/payment-schedule';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -53,7 +54,7 @@ function selectedOptionsForPackage(pkg: { items?: unknown[]; lineItems?: unknown
 }
 
 billing.post('/checkout', async (c) => {
-  const { estimateId, packageName, selectedOptions = [] } = await c.req.json();
+  const { estimateId, packageName, selectedOptions = [], milestoneKey } = await c.req.json();
   
   const db = createDb(c.env.DATABASE_URL);
   
@@ -89,15 +90,34 @@ billing.post('/checkout', async (c) => {
     if (!Number.isFinite(packageTotal) || packageTotal <= 0) {
       return c.json({ error: 'Invalid package total' }, 400);
     }
+    const [settings, existingPayments] = await Promise.all([
+      db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, estimate.orgId) }),
+      db.select().from(customerPayments)
+        .where(and(eq(customerPayments.estimateId, estimate.id), eq(customerPayments.orgId, estimate.orgId))),
+    ]);
+    const paidAmount = existingPayments
+      .filter((payment) => ['succeeded', 'paid'].includes(payment.status))
+      .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+    const schedule = estimatePaymentSchedule(settings || {}, packageTotal, paidAmount);
+    const milestone = nextPayableMilestone(schedule, milestoneKey);
+    if (!milestone) {
+      return c.json({ error: 'No online payment is due for this estimate right now' }, 409);
+    }
+    const amountDue = Math.round((milestone.amount - milestone.paidAmount) * 100) / 100;
+    if (!Number.isFinite(amountDue) || amountDue <= 0) {
+      return c.json({ error: 'No online payment is due for this estimate right now' }, 409);
+    }
 
     const session = await createCheckoutSession(c.env, {
-      amount: Math.round(packageTotal * 0.5 * 100) / 100,
+      amount: amountDue,
       successUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}/success`,
       cancelUrl: `${c.env.PUBLIC_URL}/estimates/${estimateId}`,
       metadata: {
         estimateId,
         orgId: estimate.orgId,
         packageName,
+        milestoneKey: milestone.key,
+        milestoneLabel: milestone.label,
         optionTotal: optionTotal.toFixed(2),
         selectedOptions: selectedOptionsMetadata.length <= 450 ? selectedOptionsMetadata : '[]',
       },
@@ -152,6 +172,7 @@ billing.post('/webhook', async (c) => {
       const estimateId = metadata?.estimateId;
       const orgId = metadata?.orgId;
       const packageName = metadata?.packageName;
+      const milestoneLabel = metadata?.milestoneLabel;
       const selectedOptions = metadata?.selectedOptions ? JSON.parse(metadata.selectedOptions) : [];
       const amountTotal = (event.data?.object?.amount_total ?? 0) / 100;
 
@@ -246,11 +267,13 @@ billing.post('/webhook', async (c) => {
         status: 'succeeded',
         amount: amountTotal.toFixed(2),
         currency: event.data?.object?.currency || 'usd',
-        description: packageName ? `${packageName} estimate deposit` : 'Estimate deposit',
+        description: milestoneLabel || (packageName ? `${packageName} estimate payment` : 'Estimate payment'),
         stripeCheckoutSessionId: event.data?.object?.id || null,
         stripePaymentIntentId: event.data?.object?.payment_intent || null,
         metadata: {
           packageName,
+          milestoneKey: metadata?.milestoneKey,
+          milestoneLabel,
           selectedOptions,
           paymentStatus: event.data?.object?.payment_status,
           customerEmail: event.data?.object?.customer_details?.email,

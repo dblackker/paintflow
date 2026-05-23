@@ -7,6 +7,7 @@ import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, renderEstimateEmail } from '../lib/email';
 import { estimateContractValue } from '../lib/estimate-handoff';
+import { estimatePaymentSchedule } from '../lib/payment-schedule';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -160,6 +161,9 @@ estimatesApp.get('/:id/public', async (c) => {
   const branding = await db.query.orgBranding.findFirst({
     where: eq(orgBranding.orgId, estimate.orgId),
   });
+  const settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, estimate.orgId),
+  });
 
   const photos = await db.query.estimatePhotos.findMany({
     where: eq(estimatePhotos.estimateId, estimate.id),
@@ -170,6 +174,8 @@ estimatesApp.get('/:id/public', async (c) => {
   const paidAmount = payments
     .filter((payment) => ['succeeded', 'paid'].includes(payment.status))
     .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+  const total = estimateContractValue(estimate);
+  const paymentSchedule = estimatePaymentSchedule(settings || {}, total, paidAmount);
   
   return c.json({ 
     data: {
@@ -183,7 +189,10 @@ estimatesApp.get('/:id/public', async (c) => {
       paymentSummary: {
         paidAmount: Math.max(paidAmount, 0),
         paymentCount: payments.length,
+        balanceDue: Math.max(total - paidAmount, 0),
       },
+      paymentSchedule,
+      paymentTerms: settings?.paymentTerms || 'Due on completion',
       photos,
       branding: branding ? {
         logoUrl: branding.logoUrl,
@@ -218,8 +227,11 @@ estimatesApp.post('/:id/sign', async (c) => {
   if (existing.status === 'canceled') {
     return c.json({ error: 'This estimate has been canceled' }, 409);
   }
-  if (existing.status === 'accepted' || existing.signedAt) {
+  if (existing.status === 'accepted') {
     return c.json({ error: 'This estimate has already been accepted' }, 409);
+  }
+  if (existing.signedAt) {
+    return c.json({ error: 'This estimate has already been signed' }, 409);
   }
   
   const [estimate] = await db.update(estimates)

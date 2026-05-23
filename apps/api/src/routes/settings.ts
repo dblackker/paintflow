@@ -42,7 +42,7 @@ const orgSettingsPatchSchema = z.object({
   yelpReviewUrl: optionalText(1000),
   reviewRequestDelayHours: z.coerce.number().int().min(0).max(720).optional(),
   estimateValidDays: z.coerce.number().int().min(1).max(365).optional(),
-  paymentTerms: z.string().trim().max(50).optional(),
+  paymentTerms: z.string().trim().max(255).optional(),
   acceptChecks: z.boolean().optional(),
   acceptCash: z.boolean().optional(),
   onboardingCompletedAt: z.string().datetime().optional(),

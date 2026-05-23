@@ -427,6 +427,11 @@ import Icon from '../components/Icon.astro';
                 <input name="depositPercent" type="number" min="0" max="100" step="0.1" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
             </div>
+            <label class="settings-field">
+              <span>Customer payment schedule</span>
+              <input name="paymentTerms" type="text" maxlength="255" autocomplete="off" placeholder="40% deposit, progress payment after prep, balance due on completion" class="w-full px-3 py-2 border rounded-lg">
+              <span class="text-xs text-gray-500">Shown on proposals. If this mentions a progress payment, PaintFlow splits the remaining balance into progress and final milestones.</span>
+            </label>
             <button type="submit" class="btn-primary">Save</button>
           </form>
         </div>

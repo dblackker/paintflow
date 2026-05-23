@@ -58,7 +58,7 @@ import '../../styles/design-system.css';
 
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-5" id="accept-panel">
           <h3 class="font-semibold text-gray-900 mb-2">Ready to proceed?</h3>
-          <p class="text-gray-700 mb-4">Approve the proposal to review terms, sign, and pay the deposit.</p>
+          <p class="text-gray-700 mb-4">Approve the proposal to review terms and sign. Any payment due will be shown separately.</p>
           <div id="accept-buttons"></div>
         </div>
 
@@ -85,7 +85,7 @@ import '../../styles/design-system.css';
         <h3 class="text-xl font-semibold mb-4">Terms and Conditions</h3>
         <div class="text-sm text-gray-700 space-y-4 mb-6">
           <div><h4 class="font-semibold text-gray-900">Scope of Work</h4><p>Contractor agrees to perform painting services described in the selected package using professional practices and quality materials.</p></div>
-          <div><h4 class="font-semibold text-gray-900">Payment Terms</h4><p>Deposit is required to schedule work. Final payment is due upon completion unless otherwise agreed in writing.</p></div>
+          <div><h4 class="font-semibold text-gray-900">Payment Terms</h4><p>The payment schedule shown on this proposal controls when deposits, progress payments, and final balances are due.</p></div>
           <div><h4 class="font-semibold text-gray-900">Change Orders</h4><p>Changes to scope must be approved in writing and may affect price and schedule.</p></div>
           <div><h4 class="font-semibold text-gray-900">Warranty</h4><p>Workmanship warranty and material manufacturer warranties apply according to contractor policy and product terms.</p></div>
           <div><h4 class="font-semibold text-gray-900">Access</h4><p>Customer agrees to provide reasonable access to the property and work areas during scheduled business hours.</p></div>
@@ -112,7 +112,7 @@ import '../../styles/design-system.css';
         </div>
         <div class="flex gap-3">
           <button id="cancel-sign" class="btn-secondary flex-1 justify-center">Back</button>
-          <button id="submit-sign" class="btn-primary flex-1 justify-center">Sign and Pay Deposit</button>
+          <button id="submit-sign" class="btn-primary flex-1 justify-center">Sign Proposal</button>
         </div>
       </div>
     </div>
@@ -129,6 +129,7 @@ import '../../styles/design-system.css';
       let hasSignature = false;
       let selectedPackageData = null;
       let estimatePhotos = [];
+      let currentEstimateData = null;
 
       function money(value) {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
@@ -150,6 +151,7 @@ import '../../styles/design-system.css';
             return;
           }
           const { data } = await res.json();
+          currentEstimateData = data;
 
           if (data.branding?.companyName) {
             document.title = `${data.branding.companyName} - Estimate`;
@@ -187,17 +189,25 @@ import '../../styles/design-system.css';
 
       function renderSignedState(data) {
         const paidAmount = Number(data.paymentSummary?.paidAmount || 0);
+        const nextPayment = nextDuePayment(data.paymentSchedule || []);
         document.getElementById('accept-panel').className = 'bg-green-50 border border-green-200 rounded-lg p-5';
         document.getElementById('accept-panel').innerHTML = `
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 class="font-semibold text-green-950">Final signed copy</h3>
               <p class="mt-1 text-sm text-green-800">Signed by ${escapeHtml(data.signedName || 'Customer')} on ${new Date(data.signedAt).toLocaleDateString()}.</p>
-              <p class="mt-2 text-sm text-gray-700">${paidAmount > 0 ? `${money(paidAmount)} payment recorded.` : 'No online deposit is recorded on this copy yet. Contact your contractor if payment was expected.'}</p>
+              <p class="mt-2 text-sm text-gray-700">${paidAmount > 0 ? `${money(paidAmount)} payment recorded.` : 'No online payment is recorded on this copy yet.'}</p>
+              ${nextPayment ? `<p class="mt-1 text-sm text-gray-700">Next payment: <strong>${escapeHtml(nextPayment.label)}</strong> ${money(nextPayment.amount - nextPayment.paidAmount)}.</p>` : '<p class="mt-1 text-sm text-gray-700">No online payment is due right now.</p>'}
             </div>
-            <button type="button" class="btn-secondary btn-sm justify-center" onclick="window.print()">Print / save copy</button>
+            <div class="flex flex-col gap-2 sm:min-w-40">
+              ${nextPayment ? `<button type="button" class="btn-primary btn-sm justify-center" data-pay-milestone="${escapeHtml(nextPayment.key)}">Pay ${escapeHtml(nextPayment.label)}</button>` : ''}
+              <button type="button" class="btn-secondary btn-sm justify-center" onclick="window.print()">Print / save copy</button>
+            </div>
           </div>
         `;
+        document.querySelector('[data-pay-milestone]')?.addEventListener('click', (event) => {
+          startCheckout(event.currentTarget.dataset.payMilestone, event.currentTarget);
+        });
       }
 
       function itemMaterial(item) {
@@ -303,6 +313,54 @@ import '../../styles/design-system.css';
         return selectedOptionalItems().reduce((sum, item) => sum + Number(item.qty || 1) * Number(item.rate || 0), 0);
       }
 
+      function nextDuePayment(schedule) {
+        return schedule.find(item => item.payable && item.status !== 'paid' && Number(item.amount || 0) > Number(item.paidAmount || 0)) || null;
+      }
+
+      function adjustedPaymentSchedule(total) {
+        const schedule = Array.isArray(currentEstimateData?.paymentSchedule) ? currentEstimateData.paymentSchedule : [];
+        const paidAmount = Number(currentEstimateData?.paymentSummary?.paidAmount || 0);
+        let remainingPaid = paidAmount;
+        return schedule.map((item, index) => {
+          const amount = Math.round(total * (Number(item.percent || 0) / 100) * 100) / 100;
+          const paid = Math.min(remainingPaid, amount);
+          remainingPaid = Math.max(remainingPaid - paid, 0);
+          return {
+            ...item,
+            amount,
+            paidAmount: paid,
+            status: paid >= amount - 0.01 ? 'paid' : index === 0 || item.payable ? 'due' : 'upcoming',
+          };
+        });
+      }
+
+      function renderPaymentSchedule(total) {
+        const schedule = adjustedPaymentSchedule(total).filter(item => Number(item.percent || 0) > 0);
+        if (!schedule.length) return '';
+        return `
+          <div class="mt-5 border-t pt-4">
+            <p class="text-sm font-semibold text-gray-900">Payment schedule</p>
+            <div class="mt-3 space-y-2" data-payment-schedule>
+              ${schedule.map(item => `
+                <div class="rounded-md bg-white border px-3 py-2">
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900">${escapeHtml(item.label)}</p>
+                      <p class="text-xs text-gray-500">${escapeHtml(item.due)}</p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-sm font-semibold text-gray-900">${money(item.amount)}</p>
+                      <p class="text-xs text-gray-500">${Number(item.percent || 0).toFixed(Number(item.percent || 0) % 1 ? 1 : 0)}%</p>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <p class="mt-2 text-xs text-gray-500">${escapeHtml(currentEstimateData?.paymentTerms || '')}</p>
+          </div>
+        `;
+      }
+
       function updateSelectedTotal() {
         if (!selectedPackageData) return;
         const baseTotal = Number(selectedPackageData.total ?? 0);
@@ -312,6 +370,8 @@ import '../../styles/design-system.css';
         });
         const optionNode = document.querySelector('[data-selected-options-total]');
         if (optionNode) optionNode.textContent = money(optionTotal());
+        const scheduleNode = document.querySelector('[data-payment-schedule-shell]');
+        if (scheduleNode) scheduleNode.innerHTML = renderPaymentSchedule(total);
       }
 
       function priceSummary(pkg) {
@@ -330,6 +390,7 @@ import '../../styles/design-system.css';
             <div class="flex justify-between gap-4 border-t pt-3 text-lg"><span class="font-semibold text-gray-900">Base total</span><span class="font-bold" style="color: ${primaryColor}">${money(total)}</span></div>
             <div class="flex justify-between gap-4"><span class="text-gray-600">Selected options</span><span class="font-medium" data-selected-options-total>$0.00</span></div>
             <div class="flex justify-between gap-4 border-t pt-3 text-lg"><span class="font-semibold text-gray-900">Estimated total</span><span class="font-bold" style="color: ${primaryColor}" data-selected-total>${money(total)}</span></div>
+            <div data-payment-schedule-shell>${renderPaymentSchedule(total)}</div>
           </div>
         `;
       }
@@ -426,7 +487,7 @@ import '../../styles/design-system.css';
 
         document.getElementById('accept-buttons').innerHTML = `
           <button onclick="selectPackage('${escapeHtml(pkg.name)}')" class="w-full sm:w-auto px-5 py-3 text-white rounded-lg font-medium hover:opacity-90" style="background-color: ${primaryColor}">
-            Approve Proposal - <span data-selected-total>${money(pkg.total)}</span>
+            Approve and sign - <span data-selected-total>${money(pkg.total)}</span>
           </button>
         `;
         document.querySelectorAll('[data-option-index]').forEach(input => {
@@ -512,19 +573,6 @@ import '../../styles/design-system.css';
 
         try {
           button.disabled = true;
-          button.textContent = 'Preparing deposit...';
-          const checkoutRes = await fetch(`${API_URL}/v1/payments/checkout`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-            body: JSON.stringify({ estimateId, packageName: selectedPackage, selectedOptions }),
-          });
-          const checkoutPayload = await checkoutRes.json().catch(() => ({}));
-          const { checkoutUrl } = checkoutPayload;
-          if (checkoutRes.status === 409) {
-            throw new Error('Online deposits are not available yet. Please contact your contractor to arrange payment.');
-          }
-          if (!checkoutRes.ok || !checkoutUrl) throw new Error(checkoutPayload.error || 'Failed to create payment checkout');
-
           button.textContent = 'Signing...';
           const signRes = await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
             method: 'POST',
@@ -535,13 +583,40 @@ import '../../styles/design-system.css';
             const payload = await signRes.json().catch(() => ({}));
             throw new Error(payload.error || 'Failed to sign estimate');
           }
-          window.location.href = checkoutUrl;
+          document.getElementById('signature-modal').classList.add('hidden');
+          await loadEstimate();
         } catch (err) {
           alert(err.message || 'Failed to process signature');
           button.disabled = false;
-          button.textContent = 'Sign and Pay Deposit';
+          button.textContent = 'Sign Proposal';
         }
       };
+
+      async function startCheckout(milestoneKey, button) {
+        try {
+          if (button) {
+            button.disabled = true;
+            button.textContent = 'Preparing payment...';
+          }
+          const checkoutRes = await fetch(`${API_URL}/v1/payments/checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ estimateId, packageName: selectedPackageData?.name || 'proposal', selectedOptions: selectedOptionalItems(), milestoneKey }),
+          });
+          const checkoutPayload = await checkoutRes.json().catch(() => ({}));
+          if (checkoutRes.status === 409) {
+            throw new Error(checkoutPayload.error || 'Online payments are not available yet. Please contact your contractor to arrange payment.');
+          }
+          if (!checkoutRes.ok || !checkoutPayload.checkoutUrl) throw new Error(checkoutPayload.error || 'Failed to create payment checkout');
+          window.location.href = checkoutPayload.checkoutUrl;
+        } catch (err) {
+          alert(err.message || 'Failed to start payment');
+          if (button) {
+            button.disabled = false;
+            button.textContent = 'Pay deposit';
+          }
+        }
+      }
 
       loadEstimate();
     </script>
