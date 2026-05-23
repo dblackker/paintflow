@@ -122,6 +122,10 @@ const cancelEstimateSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 
+const sendEstimateEmailSchema = z.object({
+  reason: z.enum(['sent', 'updated']).optional(),
+});
+
 function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, packageName: string | undefined, selectedOptions: z.infer<typeof selectedOptionSchema>[]) {
   const packages = Array.isArray(estimate.packages) ? estimate.packages as Array<{ name: string; items?: unknown[]; lineItems?: unknown[] }> : [];
   const pkg = packages.find((item) => item.name === packageName) ?? packages.find((item) => item.name === 'proposal') ?? packages[0];
@@ -187,6 +191,8 @@ estimatesApp.get('/:id/public', async (c) => {
       total: estimate.total,
       status: estimate.status,
       createdAt: estimate.createdAt,
+      updatedAt: estimate.updatedAt,
+      sentAt: estimate.sentAt,
       signedName: estimate.signedName,
       signedAt: estimate.signedAt,
       paymentSummary: {
@@ -467,8 +473,8 @@ estimatesApp.post('/:id/cancel', async (c) => {
   if (!estimate) {
     return c.json({ error: 'Not found' }, 404);
   }
-  if (estimate.status === 'accepted') {
-    return c.json({ error: 'Accepted estimates cannot be canceled here. Cancel or close the job instead.' }, 409);
+  if (estimate.status === 'accepted' || estimate.signedAt) {
+    return c.json({ error: 'Signed estimates cannot be canceled here. Use a change order, new estimate agreement, or close the job instead.' }, 409);
   }
   if (estimate.status === 'canceled') {
     return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id), customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id) } });
@@ -514,8 +520,9 @@ estimatesApp.patch('/:id', async (c) => {
   if (!existing) {
     return c.json({ error: 'Not found' }, 404);
   }
-  if (existing.status !== 'draft') {
-    return c.json({ error: 'Only draft estimates can be edited' }, 409);
+  const canEditSent = existing.status === 'sent' && !existing.signedAt;
+  if (existing.status !== 'draft' && !canEditSent) {
+    return c.json({ error: 'Only draft or unsigned sent estimates can be edited' }, 409);
   }
 
   const lead = await db.query.leads.findFirst({
@@ -526,7 +533,8 @@ estimatesApp.patch('/:id', async (c) => {
     return c.json({ error: 'Lead not found' }, 404);
   }
 
-  const isDraft = parsed.data.status === 'draft';
+  const isDraft = existing.status === 'draft' && parsed.data.status === 'draft';
+  const isUpdatingSent = existing.status === 'sent';
   const recommendedPackage = parsed.data.packages.find((pkg) => /better|recommended/i.test(pkg.name))
     ?? parsed.data.packages[0];
   const estimateTotal = recommendedPackage ? Number(recommendedPackage.total).toFixed(2) : '0.00';
@@ -538,7 +546,7 @@ estimatesApp.patch('/:id', async (c) => {
       packages: parsed.data.packages,
       total: estimateTotal,
       status: isDraft ? 'draft' : 'sent',
-      sentAt: isDraft ? existing.sentAt : now,
+      sentAt: isDraft ? existing.sentAt : (existing.sentAt || now),
       updatedAt: now,
     })
     .where(and(eq(estimates.id, id), eq(estimates.orgId, orgId)))
@@ -553,14 +561,16 @@ estimatesApp.patch('/:id', async (c) => {
   await db.insert(auditLogs).values({
     orgId,
     userId: c.get('userId'),
-    action: isDraft ? 'estimate.draft.updated' : 'estimate.sent',
+    action: isDraft ? 'estimate.draft.updated' : isUpdatingSent ? 'estimate.updated' : 'estimate.sent',
     entityType: 'estimate',
     entityId: estimate.id,
     metadata: {
       leadId: lead.id,
       packageCount: parsed.data.packages.length,
       total: estimate.total,
-      source: 'draft_edit',
+      previousTotal: existing.total,
+      previousStatus: existing.status,
+      source: isUpdatingSent ? 'sent_estimate_edit' : 'draft_edit',
     },
   });
 
@@ -696,6 +706,10 @@ async function optionalPaymentRows<T>(query: Promise<T[]>) {
 estimatesApp.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
+  const parsed = sendEstimateEmailSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid email request', details: parsed.error.flatten() }, 400);
+  }
   const db = createDb(c.env.DATABASE_URL);
 
   const estimate = await db.query.estimates.findFirst({
@@ -729,7 +743,8 @@ estimatesApp.post('/:id/send-email', async (c) => {
   const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const projectType = estimateProjectType(estimate);
   const templateKey = estimateEmailTemplateKey(projectType);
-  const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
+  const isUpdateEmail = parsed.data.reason === 'updated';
+  const templateOverride = await findEmailTemplateOverride(db, orgId, isUpdateEmail ? 'estimate.updated.sent' : templateKey);
   const renderedEmail = renderEstimateEmail({
     estimateId: estimate.id,
     leadName: lead.name,
@@ -741,6 +756,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
     estimatorPhone: settings?.phone || null,
     estimateType: projectType,
     scopeSummary: proposalScopeSummary(estimate),
+    isUpdate: isUpdateEmail,
   }, templateOverride);
   const fromEmail = c.env.EMAIL_FROM || 'estimates@paintflow.app';
   const replyTo = settings?.email || estimator?.email || undefined;
@@ -770,12 +786,13 @@ estimatesApp.post('/:id/send-email', async (c) => {
     metadata: {
       estimateType: projectType,
       link: previewUrl,
+      reason: parsed.data.reason || 'sent',
     },
   });
   await db.insert(auditLogs).values({
     orgId,
     userId: c.get('userId'),
-    action: 'estimate.email.sent',
+    action: isUpdateEmail ? 'estimate.email.updated' : 'estimate.email.sent',
     entityType: 'estimate',
     entityId: estimate.id,
     metadata: {
@@ -785,6 +802,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
       subject: renderedEmail.subject,
       templateKey: renderedEmail.templateKey,
       link: previewUrl,
+      reason: parsed.data.reason || 'sent',
     },
   });
 

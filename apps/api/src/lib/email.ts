@@ -191,6 +191,7 @@ type EstimateEmailInput = {
     space: string;
     substrates: string[];
   }>;
+  isUpdate?: boolean;
 };
 
 type ChangeOrderEmailInput = {
@@ -274,6 +275,17 @@ export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
     cta: 'Review and approve proposal',
     outro: 'If anything in the scope should change, reply to this email before approving so everyone is working from the current version.',
   },
+  'estimate.updated.sent': {
+    key: 'estimate.updated.sent',
+    name: 'Estimate update sent',
+    category: 'estimate',
+    channel: 'transactional',
+    subject: 'Updated painting proposal from {{companyName}}',
+    preheader: 'Review the latest version of your painting proposal before approving.',
+    intro: '{{companyName}} updated your painting proposal. Please use the secure link below to review the latest scope, paint selections, payment schedule, and total before approving.',
+    cta: 'Review updated proposal',
+    outro: 'Once the proposal is signed, it becomes the approved agreement. Any later scope or price changes require a change order or a new estimate agreement.',
+  },
   'change_order.approval.sent': {
     key: 'change_order.approval.sent',
     name: 'Change order approval request',
@@ -331,7 +343,9 @@ function scopeSummaryText(scopeSummary: Array<{ space: string; substrates: strin
 }
 
 export function renderEstimateEmail(input: EstimateEmailInput, override?: EmailTemplateOverride | null): RenderedEmail {
-  const template = estimateEmailTemplates[estimateTemplateKey(input)] || estimateEmailTemplates['estimate.standard.sent'];
+  const template = input.isUpdate
+    ? estimateEmailTemplates['estimate.updated.sent']
+    : estimateEmailTemplates[estimateTemplateKey(input)] || estimateEmailTemplates['estimate.standard.sent'];
   const baseUrl = input.baseUrl || 'https://app.paintflow.app';
   const url = `${baseUrl}/estimates/${encodeURIComponent(input.estimateId)}`;
   const companyName = escapeHtml(input.companyName || 'your painting contractor');
@@ -384,6 +398,7 @@ export function renderEstimateEmail(input: EstimateEmailInput, override?: EmailT
   <p>Use the secure link below to review the included scope, choose any optional add-ons, approve the proposal, sign, and pay the deposit.</p>
   <a href="${url}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${escapeHtml(template.cta)}</a>
   <p style="color: #4b5563;">A PDF copy can be provided for your records, but approvals, selected options, signatures, and deposits should happen through the secure proposal link so everyone is working from the current version.</p>
+  <p style="color: #4b5563;">Until this proposal is signed, your contractor may update it so the link always reflects the current version. Once signed, it becomes the approved agreement and any later changes require a change order or a new estimate agreement.</p>
   <p>This proposal is valid for 30 days unless otherwise noted.</p>
   <p>${escapeHtml(outro)}</p>
   <p>Questions? Reply to this email${estimatorPhone ? ` or call ${estimatorPhone}` : ''}.</p>

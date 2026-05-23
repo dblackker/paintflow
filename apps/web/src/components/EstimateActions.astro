@@ -44,14 +44,17 @@ const { defineOnly = false } = Astro.props;
       } = {}) {
         const status = String(estimate.status || '').toLowerCase();
         const estimateId = String(estimate.id || '');
-        const canCancel = ['draft', 'sent', 'declined'].includes(status);
+        const canCancel = ['draft', 'sent', 'declined'].includes(status) && !estimate.signedAt;
+        const canEdit = status === 'draft' || (status === 'sent' && !estimate.signedAt);
         const balance = estimateBalance(estimate);
         const canRecordPayment = estimateId && !['draft', 'canceled'].includes(status) && balance > 0.005;
         const actions = [];
 
-        if (status === 'draft') {
-          actions.push(`<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-text btn-sm justify-center">Edit draft</a>`);
-        } else {
+        if (canEdit) {
+          actions.push(`<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-text btn-sm justify-center">${status === 'sent' ? 'Edit sent' : 'Edit draft'}</a>`);
+        }
+
+        if (status !== 'draft') {
           actions.push(`<a href="${escapeHtml(previewHref || `/estimates/${estimateId}`)}" class="btn-text btn-sm justify-center">Preview link</a>`);
         }
 

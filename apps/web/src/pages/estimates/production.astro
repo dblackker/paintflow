@@ -193,6 +193,7 @@ import Base from '../../layouts/Base.astro';
               Send Estimate
             </button>
           </div>
+          <p id="estimate-edit-note" class="hidden mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-950"></p>
           <p id="save-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
         </div>
 
@@ -326,7 +327,7 @@ import Base from '../../layouts/Base.astro';
       editingEstimate = draftRes?.data || null;
       if (editingEstimate) {
         hydrateDraftEstimate(editingEstimate);
-        window.showToast('Draft loaded.');
+        window.showToast(editingEstimate.status === 'sent' ? 'Sent estimate loaded.' : 'Draft loaded.');
       } else {
         const templateRooms = consumeTemplateRooms();
         if (templateRooms.length) {
@@ -622,13 +623,22 @@ import Base from '../../layouts/Base.astro';
     }
 
     function hydrateDraftEstimate(estimate) {
-      if (!estimate || estimate.status !== 'draft') {
-        window.showToast('Only draft estimates can be edited here.', 'error');
+      const canEdit = estimate && (estimate.status === 'draft' || (estimate.status === 'sent' && !estimate.signedAt));
+      if (!canEdit) {
+        window.showToast('Only draft or unsigned sent estimates can be edited here.', 'error');
         return;
       }
       document.getElementById('lead-select').value = estimate.leadId || '';
-      document.querySelector('h2').textContent = 'Edit Draft Estimate';
-      document.getElementById('save-estimate').textContent = 'Send Estimate';
+      const editingSent = estimate.status === 'sent';
+      document.querySelector('h2').textContent = editingSent ? 'Edit Sent Estimate' : 'Edit Draft Estimate';
+      document.getElementById('save-estimate').textContent = editingSent ? 'Send Update' : 'Send Estimate';
+      document.getElementById('confirm-send-estimate').textContent = editingSent ? 'Send Update Email' : 'Send Email';
+      document.getElementById('save-draft').classList.toggle('hidden', editingSent);
+      const editNote = document.getElementById('estimate-edit-note');
+      editNote.classList.toggle('hidden', !editingSent);
+      editNote.textContent = editingSent
+        ? 'This proposal has been sent but is not signed yet. Saving will update the existing preview link and email the customer that the proposal changed. Once signed, the agreement is locked and later changes require a change order or a new estimate.'
+        : '';
       document.getElementById('rooms-container').innerHTML = '';
       document.getElementById('line-items-container').innerHTML = '';
       roomCounter = 0;
@@ -2045,7 +2055,10 @@ import Base from '../../layouts/Base.astro';
       const optional = visibleItems.filter(item => item.optional);
       const groups = groupedProposalItems(included);
       const estimateType = document.getElementById('estimate-type')?.value || 'painting';
-      const subjectPreview = `${selectedLeadLabel()} ${estimateType} painting proposal`;
+      const editingSent = editingEstimate?.status === 'sent';
+      const subjectPreview = editingSent
+        ? `Updated ${estimateType} painting proposal for ${selectedLeadLabel()}`
+        : `${selectedLeadLabel()} ${estimateType} painting proposal`;
       content.innerHTML = `
         <div class="rounded-lg border bg-gray-50 p-3">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -2061,7 +2074,8 @@ import Base from '../../layouts/Base.astro';
           <div class="mt-3 rounded-md border bg-white p-3 text-sm">
             <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Email preview</p>
             <p class="mt-1 font-medium text-gray-950">${escapeHtml(subjectPreview)}</p>
-            <p class="mt-1 text-gray-600">Includes estimator contact details, this compact scope summary, and a secure link to review, approve, sign, and pay the deposit.</p>
+            <p class="mt-1 text-gray-600">${editingSent ? 'Tells the customer this is an updated proposal and keeps the same preview link current.' : 'Includes estimator contact details, this compact scope summary, and a secure link to review, approve, sign, and pay the deposit.'}</p>
+            <p class="mt-2 text-xs text-gray-500">Once the customer signs, the estimate becomes immutable. Later scope or price changes should be handled with a change order or new estimate agreement.</p>
           </div>
         </div>
         <div class="space-y-2">
@@ -2314,9 +2328,10 @@ import Base from '../../layouts/Base.astro';
 
     async function persistEstimate(statusValue = 'sent') {
       if (isPersistingEstimate) return;
+      const editingSent = editingEstimate?.status === 'sent';
+      const effectiveStatus = editingSent ? 'sent' : statusValue;
       const previewOpen = !document.getElementById('send-preview-modal').classList.contains('hidden');
-      const button = document.getElementById(statusValue === 'draft' ? 'save-draft' : previewOpen ? 'confirm-send-estimate' : 'save-estimate');
-      const otherButton = document.getElementById(statusValue === 'draft' ? 'save-estimate' : 'save-draft');
+      const button = document.getElementById(effectiveStatus === 'draft' ? 'save-draft' : previewOpen ? 'confirm-send-estimate' : 'save-estimate');
       const sendButton = document.getElementById('save-estimate');
       const draftButton = document.getElementById('save-draft');
       const confirmButton = document.getElementById('confirm-send-estimate');
@@ -2327,7 +2342,7 @@ import Base from '../../layouts/Base.astro';
         window.showToast('Select a customer first', 'error');
         return;
       }
-      if (statusValue !== 'draft' && packages.length === 0) {
+      if (effectiveStatus !== 'draft' && packages.length === 0) {
         window.showToast('Add at least one measured substrate', 'error');
         return;
       }
@@ -2335,32 +2350,38 @@ import Base from '../../layouts/Base.astro';
       try {
         isPersistingEstimate = true;
         [sendButton, draftButton, confirmButton].forEach(item => { if (item) item.disabled = true; });
-        button.textContent = statusValue === 'draft' ? 'Saving draft...' : 'Sending email...';
-        status.textContent = statusValue === 'draft' ? 'Saving draft estimate...' : 'Creating estimate, sending email, and opening the customer proposal...';
+        button.textContent = effectiveStatus === 'draft' ? 'Saving draft...' : editingSent ? 'Sending update...' : 'Sending email...';
+        status.textContent = effectiveStatus === 'draft'
+          ? 'Saving draft estimate...'
+          : editingSent
+            ? 'Updating the proposal link and emailing the customer...'
+            : 'Creating estimate, sending email, and opening the customer proposal...';
         status.classList.remove('hidden');
-        const isEditingDraft = Boolean(editingEstimateId);
-        const { data } = await apiJson(isEditingDraft ? `${API_URL}/v1/estimates/${editingEstimateId}` : `${API_URL}/v1/estimates`, {
-          method: isEditingDraft ? 'PATCH' : 'POST',
+        const isEditingEstimate = Boolean(editingEstimateId);
+        const { data } = await apiJson(isEditingEstimate ? `${API_URL}/v1/estimates/${editingEstimateId}` : `${API_URL}/v1/estimates`, {
+          method: isEditingEstimate ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leadId, packages, status: statusValue }),
+          body: JSON.stringify({ leadId, packages, status: effectiveStatus }),
         });
         let sendResult = null;
-        if (statusValue !== 'draft') {
+        if (effectiveStatus !== 'draft') {
           const sendPayload = await apiJson(`${API_URL}/v1/estimates/${data.id}/send-email`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Idempotency-Key': crypto.randomUUID(),
             },
+            body: JSON.stringify({ reason: editingSent ? 'updated' : 'sent' }),
           });
           sendResult = sendPayload?.data || null;
         }
-        window.showToast(statusValue === 'draft' ? 'Draft saved.' : 'Estimate emailed. Opening it now.');
+        window.showToast(effectiveStatus === 'draft' ? 'Draft saved.' : editingSent ? 'Estimate updated and emailed.' : 'Estimate emailed. Opening it now.');
         editingEstimateId = data.id;
+        editingEstimate = data;
         closeSendPreview();
         const previewUrl = sendResult?.previewUrl || data.customerPreviewUrl || data.publicUrl || `/estimates/${data.id}`;
         const previewPath = new URL(previewUrl, window.location.origin).pathname;
-        window.location.href = statusValue === 'draft' ? '/estimates?status=draft' : previewPath;
+        window.location.href = effectiveStatus === 'draft' ? '/estimates?status=draft' : previewPath;
       } catch (err) {
         window.showToast(err.message || 'Failed to save estimate', 'error');
         status.textContent = err.message || 'Failed to save estimate';
@@ -2368,8 +2389,8 @@ import Base from '../../layouts/Base.astro';
         isPersistingEstimate = false;
         [sendButton, draftButton, confirmButton].forEach(item => { if (item) item.disabled = false; });
         draftButton.textContent = 'Save Draft';
-        sendButton.textContent = 'Send Estimate';
-        confirmButton.textContent = 'Send Email';
+        sendButton.textContent = editingSent ? 'Send Update' : 'Send Estimate';
+        confirmButton.textContent = editingSent ? 'Send Update Email' : 'Send Email';
       }
     }
 

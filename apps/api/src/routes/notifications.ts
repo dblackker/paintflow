@@ -20,7 +20,9 @@ const markReadSchema = z.object({
 const importantAuditActions = [
   'estimate.accepted',
   'estimate.sent',
+  'estimate.updated',
   'estimate.email.sent',
+  'estimate.email.updated',
   'estimate.portal_link.created',
 ];
 
@@ -28,7 +30,9 @@ function estimateEventTitle(action: string) {
   const labels: Record<string, string> = {
     'estimate.accepted': 'Estimate accepted',
     'estimate.sent': 'Estimate sent',
+    'estimate.updated': 'Estimate updated',
     'estimate.email.sent': 'Estimate email sent',
+    'estimate.email.updated': 'Estimate update emailed',
     'estimate.portal_link.created': 'Estimate portal link created',
   };
   return labels[action] || action.replace(/[._-]/g, ' ');
