@@ -412,21 +412,29 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           <span class="chip">Clocked in</span>
           <p class="font-semibold mt-1">${escapeHtml(active.jobName || 'Job')}</p>
           <p class="text-gray-600">Started ${new Date(active.startedAtActual).toLocaleString()} • ${activePunchHours(active)} hrs</p>
-          ${active.status === 'missed_clock_out' ? '<p class="text-red-700 font-medium mt-1">Past the max shift window. Clock out with the actual end time.</p>' : ''}
+          ${active.status === 'missed_clock_out' ? '<p class="text-red-700 font-medium mt-1">Past the max shift window. Check the forgotten clock-out option if the actual end time was earlier.</p>' : ''}
         `;
         controls.innerHTML = `
-          <div class="grid punch-actions sm:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-            <label class="block">
-              <span class="form-label">Actual clock-out time if different</span>
-              <input id="punch-out-time" type="datetime-local" class="input" value="${toDateTimeLocal()}">
-            </label>
-            <label class="block">
-              <span class="form-label">Note for lead review</span>
-              <input id="punch-out-note" class="input" placeholder="Finished at 4:30, forgot to clock out">
-            </label>
-            <button id="punch-out-btn" class="btn-primary">Clock out</button>
+          <div class="grid punch-actions gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input id="forgot-clock-out-toggle" type="checkbox" class="h-4 w-4">
+                <span>I forgot to clock out earlier</span>
+              </label>
+              <button id="punch-out-btn" class="btn-primary">Clock out</button>
+            </div>
+            <div id="forgot-clock-out-fields" class="hidden grid sm:grid-cols-2 gap-3 rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3">
+              <label class="block">
+                <span class="form-label">Actual clock-out time</span>
+                <input id="punch-out-time" type="datetime-local" class="input" value="${toDateTimeLocal()}">
+              </label>
+              <label class="block">
+                <span class="form-label">Reason for lead review</span>
+                <input id="punch-out-note" class="input" placeholder="Finished at 4:30, forgot to clock out">
+              </label>
+            </div>
           </div>
-          <p class="text-xs text-gray-500">If you need to clock into a new job but forgot to clock out, close this previous shift first. It will be flagged for review.</p>
+          <p class="text-xs text-gray-500">Normal clock-out uses the current time. Check the forgotten clock-out option only when the actual end time was earlier.</p>
         `;
       } else {
         copy.textContent = `${memberName} is not punched in. Start a job timer from the field with location permission enabled.`;
@@ -451,7 +459,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       document.getElementById('bulk-time-btn').classList.toggle('hidden', !status.canManage);
       document.getElementById('punch-in-btn')?.addEventListener('click', () => punchIn(false));
       document.getElementById('forgot-in-btn')?.addEventListener('click', openForgotClockInModal);
+      document.getElementById('forgot-clock-out-toggle')?.addEventListener('change', toggleForgotClockOutFields);
       document.getElementById('punch-out-btn')?.addEventListener('click', punchOut);
+    }
+
+    function toggleForgotClockOutFields(event) {
+      const fields = document.getElementById('forgot-clock-out-fields');
+      fields?.classList.toggle('hidden', !event.target.checked);
     }
 
     function availableRoles() {
@@ -740,8 +754,12 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       try {
         isPunching = true;
         const location = await requireLocation();
-        const note = document.getElementById('punch-out-note')?.value || '';
-        const endedAtValue = document.getElementById('punch-out-time')?.value;
+        const forgotClockOut = Boolean(document.getElementById('forgot-clock-out-toggle')?.checked);
+        const note = forgotClockOut ? document.getElementById('punch-out-note')?.value || '' : '';
+        const endedAtValue = forgotClockOut ? document.getElementById('punch-out-time')?.value : '';
+        if (forgotClockOut && !endedAtValue) {
+          throw new Error('Enter the actual clock-out time for lead review.');
+        }
         await api('/v1/team/punch/out', {
           method: 'POST',
           body: JSON.stringify({
