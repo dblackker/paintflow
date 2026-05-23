@@ -7,7 +7,7 @@ import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createCheckoutSession, createRefund, verifyWebhookSignature } from '../lib/stripe';
 import { createQBInvoice, createQBPayment } from '../lib/quickbooks';
-import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
+import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule, nextPayableMilestone } from '../lib/payment-schedule';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -16,6 +16,28 @@ const refundSchema = z.object({
   amount: z.coerce.number().positive(),
   reason: z.string().trim().max(500).optional(),
 });
+
+const manualPaymentSchema = z.object({
+  estimateId: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+  source: z.enum(['cash', 'check', 'ach', 'other']).default('check'),
+  reference: z.string().trim().max(120).optional().nullable(),
+  description: z.string().trim().max(255).optional().nullable(),
+  receivedAt: z.string().datetime().optional().nullable(),
+});
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function metadataObject(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function netPaymentAmount(payment: typeof customerPayments.$inferSelect) {
+  if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status)) return 0;
+  return Number(payment.amount || 0) - Number(payment.refundedAmount || 0);
+}
 
 async function paymentAlreadyRecorded(db: ReturnType<typeof createDb>, stripeCheckoutSessionId?: string) {
   if (!stripeCheckoutSessionId) return false;
@@ -52,6 +74,88 @@ function selectedOptionsForPackage(pkg: { items?: unknown[]; lineItems?: unknown
       category: String(option.category || 'option'),
     }));
 }
+
+billing.use('/manual', authMiddleware);
+
+billing.post('/manual', async (c) => {
+  const orgId = c.get('orgId');
+  if (!orgId) return c.json({ error: 'Unauthorized' }, 401);
+  const idempotencyKey = c.req.header('Idempotency-Key')?.trim();
+  if (!idempotencyKey) {
+    return c.json({ error: 'Idempotency-Key is required when recording payments.' }, 400);
+  }
+
+  const parsed = manualPaymentSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid payment request', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, parsed.data.estimateId), eq(estimates.orgId, orgId)),
+  });
+  if (!estimate) return c.json({ error: 'Estimate not found' }, 404);
+  if (estimate.status === 'canceled') return c.json({ error: 'Cannot record payment on a canceled estimate.' }, 409);
+
+  const existingPayments = await db.select().from(customerPayments)
+    .where(and(eq(customerPayments.estimateId, estimate.id), eq(customerPayments.orgId, orgId)));
+  const duplicate = existingPayments.find((payment) => metadataObject(payment.metadata).idempotencyKey === idempotencyKey);
+  if (duplicate) return c.json({ data: duplicate, duplicate: true });
+
+  const contractTotal = roundMoney(estimateContractValue(estimate));
+  const paidAmount = roundMoney(existingPayments.reduce((sum, payment) => sum + netPaymentAmount(payment), 0));
+  const remaining = roundMoney(Math.max(contractTotal - paidAmount, 0));
+  const amount = roundMoney(parsed.data.amount);
+  if (remaining <= 0) {
+    return c.json({ error: 'This estimate is already paid in full.' }, 409);
+  }
+  if (amount > remaining + 0.005) {
+    return c.json({ error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(2)}.` }, 409);
+  }
+
+  const job = await db.query.jobs.findFirst({
+    where: and(eq(jobs.orgId, orgId), eq(jobs.estimateId, estimate.id)),
+  }).catch(() => null);
+  const receivedAt = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
+  const description = parsed.data.description || `${parsed.data.source.toUpperCase()} payment`;
+  const [payment] = await db.insert(customerPayments).values({
+    orgId,
+    leadId: estimate.leadId,
+    estimateId: estimate.id,
+    jobId: job?.id || null,
+    source: parsed.data.source,
+    status: 'succeeded',
+    amount: amount.toFixed(2),
+    currency: 'usd',
+    description,
+    receivedAt,
+    metadata: {
+      idempotencyKey,
+      reference: parsed.data.reference || null,
+      recordedByUserId: c.get('userId') || null,
+      note: 'Manual payment recorded by contractor. No Stripe charge was created.',
+    },
+  }).returning();
+
+  await db.insert(auditLogs).values({
+    orgId,
+    userId: c.get('userId'),
+    action: 'payment.manual_recorded',
+    entityType: 'payment',
+    entityId: payment.id,
+    metadata: {
+      leadId: estimate.leadId,
+      estimateId: estimate.id,
+      jobId: job?.id || null,
+      amount,
+      source: parsed.data.source,
+      reference: parsed.data.reference || null,
+      remainingAfterPayment: roundMoney(remaining - amount),
+    },
+  });
+
+  return c.json({ data: payment }, 201);
+});
 
 billing.post('/checkout', async (c) => {
   const { estimateId, packageName, selectedOptions = [], milestoneKey } = await c.req.json();
@@ -386,16 +490,19 @@ billing.post('/:id/refund', async (c) => {
     return c.json({ error: `Refund cannot exceed ${refundableAmount.toFixed(2)}` }, 400);
   }
 
-  const stripeConnection = await db.query.stripeConnections.findFirst({
-    where: eq(stripeConnections.orgId, orgId),
-  });
-  const refund = await createRefund(c.env, {
-    paymentIntentId: payment.stripePaymentIntentId,
-    chargeId: payment.stripeChargeId,
-    amount: parsed.data.amount,
-    reason: parsed.data.reason,
-    connectedAccountId: stripeConnection?.stripeAccountId,
-  });
+  const hasStripeReference = Boolean(payment.stripePaymentIntentId || payment.stripeChargeId);
+  const refund = hasStripeReference
+    ? await createRefund(c.env, {
+      paymentIntentId: payment.stripePaymentIntentId,
+      chargeId: payment.stripeChargeId,
+      amount: parsed.data.amount,
+      reason: parsed.data.reason,
+      connectedAccountId: (await db.query.stripeConnections.findFirst({ where: eq(stripeConnections.orgId, orgId) }))?.stripeAccountId,
+    })
+    : {
+      id: null,
+      status: 'manual_credit_recorded',
+    };
 
   const nextRefundedAmount = refundedAmount + parsed.data.amount;
   const nextStatus = nextRefundedAmount >= paidAmount - 0.005 ? 'refunded' : 'partially_refunded';
@@ -407,9 +514,10 @@ billing.post('/:id/refund', async (c) => {
       refundedAt: new Date(),
       updatedAt: new Date(),
       metadata: {
-        ...(typeof payment.metadata === 'object' && payment.metadata ? payment.metadata : {}),
+        ...metadataObject(payment.metadata),
         lastRefundReason: parsed.data.reason || null,
         lastRefundStatus: refund.status || null,
+        lastRefundMode: hasStripeReference ? 'stripe' : 'manual',
       },
     })
     .where(and(eq(customerPayments.id, paymentId), eq(customerPayments.orgId, orgId)))
@@ -430,6 +538,7 @@ billing.post('/:id/refund', async (c) => {
       status: nextStatus,
       reason: parsed.data.reason,
       stripeRefundId: refund.id,
+      refundMode: hasStripeReference ? 'stripe' : 'manual',
     },
   });
 

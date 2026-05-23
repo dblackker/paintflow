@@ -426,6 +426,11 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
         root.innerHTML = `<div class="bg-white border rounded-lg p-8 text-center text-red-600">${escapeHtml(err.message || 'Failed to load customer')}</div>`;
       });
 
+    window.addEventListener('paintflow:payment-recorded', async () => {
+      const payload = await apiJson(`/v1/leads/${leadId}`);
+      if (payload) render(payload.data);
+    });
+
     document.addEventListener('submit', async (event) => {
       const refundForm = event.target?.closest('[data-refund-payment]');
       if (refundForm) {

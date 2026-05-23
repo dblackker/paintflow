@@ -221,6 +221,7 @@ import Base from '../../layouts/Base.astro';
       if (!cancelButton) return;
       cancelEstimate(cancelButton.dataset.cancelEstimate);
     });
+    window.addEventListener('paintflow:payment-recorded', loadEstimates);
     loadEstimates();
   </script>
 </Base>

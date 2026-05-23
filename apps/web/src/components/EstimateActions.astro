@@ -13,6 +13,28 @@ const { defineOnly = false } = Astro.props;
         return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
       }
 
+      function money(value) {
+        return window.PaintFlowFormat?.money(value) || new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+      }
+
+      function netPaid(payments = []) {
+        return payments.reduce((sum, payment) => {
+          const status = String(payment.status || '');
+          if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(status)) return sum;
+          return sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0);
+        }, 0);
+      }
+
+      function estimateContractTotal(estimate = {}) {
+        const packages = Array.isArray(estimate.packages) ? estimate.packages : [];
+        const selected = packages.find((pkg) => /better|recommended/i.test(String(pkg?.name || ''))) || packages[0];
+        return Number(selected?.total ?? estimate.total ?? 0);
+      }
+
+      function estimateBalance(estimate = {}) {
+        return Math.max(estimateContractTotal(estimate) - netPaid(Array.isArray(estimate.payments) ? estimate.payments : []), 0);
+      }
+
       function estimateActions({
         estimate = {},
         previewHref = '',
@@ -23,6 +45,8 @@ const { defineOnly = false } = Astro.props;
         const status = String(estimate.status || '').toLowerCase();
         const estimateId = String(estimate.id || '');
         const canCancel = ['draft', 'sent', 'declined'].includes(status);
+        const balance = estimateBalance(estimate);
+        const canRecordPayment = estimateId && !['draft', 'canceled'].includes(status) && balance > 0.005;
         const actions = [];
 
         if (status === 'draft') {
@@ -35,11 +59,171 @@ const { defineOnly = false } = Astro.props;
           actions.push(`<button type="button" class="btn-text btn-sm text-red-700 justify-center" data-cancel-estimate="${escapeHtml(estimateId)}">${escapeHtml(cancelLabel)}</button>`);
         }
 
+        if (canRecordPayment) {
+          actions.push(`<button type="button" class="btn-tonal btn-sm justify-center" data-record-estimate-payment="${escapeHtml(estimateId)}" data-estimate-total="${escapeHtml(String(Number(estimate.total || 0)))}">Record payment</button>`);
+        }
+
         return `<div class="estimate-actions flex flex-wrap gap-2 ${escapeHtml(className)}">${actions.join('')}</div>`;
       }
 
+      function apiBaseUrl() {
+        return window.__PAINTFLOW_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+      }
+
+      async function apiJson(path, options = {}) {
+        const res = await fetch(`${apiBaseUrl()}${path}`, { credentials: 'include', ...options });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          throw new Error('Unauthorized');
+        }
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || 'Request failed');
+        return payload;
+      }
+
+      function ensureManualPaymentModal() {
+        let modal = document.getElementById('manual-payment-modal');
+        if (modal) return modal;
+        modal = document.createElement('div');
+        modal.id = 'manual-payment-modal';
+        modal.className = 'mobile-sheet hidden fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4';
+        modal.innerHTML = `
+          <div class="bg-white rounded-t-lg sm:rounded-lg p-5 sm:p-6 w-full max-w-lg max-h-[92vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h3 class="text-lg font-semibold text-gray-950">Record manual payment</h3>
+                <p id="manual-payment-summary" class="mt-1 text-sm text-gray-600"></p>
+              </div>
+              <button type="button" class="btn-icon" data-close-manual-payment aria-label="Close payment form">&times;</button>
+            </div>
+            <form id="manual-payment-form" class="mt-4 space-y-4">
+              <input type="hidden" name="estimateId">
+              <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                This records money received outside Stripe. It will reduce the remaining balance, but it does not charge the customer.
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="block text-sm font-medium text-gray-700">Payment type
+                  <select name="source" class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
+                    <option value="check">Check</option>
+                    <option value="cash">Cash</option>
+                    <option value="ach">ACH / bank transfer</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label class="block text-sm font-medium text-gray-700">Amount
+                  <input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
+                </label>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="block text-sm font-medium text-gray-700">Received date
+                  <input name="receivedAt" type="date" class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
+                </label>
+                <label class="block text-sm font-medium text-gray-700">Check / reference #
+                  <input name="reference" maxlength="120" autocomplete="off" class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Optional">
+                </label>
+              </div>
+              <label class="block text-sm font-medium text-gray-700">Description
+                <input name="description" maxlength="255" autocomplete="off" class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Deposit, progress payment, final payment">
+              </label>
+              <div class="flex justify-end gap-2">
+                <button type="button" class="btn-secondary btn-sm" data-close-manual-payment>Cancel</button>
+                <button id="save-manual-payment" type="submit" class="btn-primary btn-sm">Record payment</button>
+              </div>
+            </form>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (event) => {
+          if (event.target.closest('[data-close-manual-payment]') || event.target === modal) closeManualPaymentModal();
+        });
+        modal.querySelector('#manual-payment-form').addEventListener('submit', submitManualPayment);
+        return modal;
+      }
+
+      function closeManualPaymentModal() {
+        document.getElementById('manual-payment-modal')?.classList.add('hidden');
+      }
+
+      async function openManualPaymentModal(estimateId) {
+        const modal = ensureManualPaymentModal();
+        const form = modal.querySelector('#manual-payment-form');
+        const summary = modal.querySelector('#manual-payment-summary');
+        form.reset();
+        form.elements.estimateId.value = estimateId;
+        form.elements.receivedAt.value = new Date().toISOString().slice(0, 10);
+        summary.textContent = 'Loading balance...';
+        modal.classList.remove('hidden');
+        form.elements.amount.disabled = true;
+        try {
+          const { data } = await apiJson(`/v1/estimates/${estimateId}`);
+          const payments = Array.isArray(data.payments) ? data.payments : [];
+          const balance = Math.max(estimateContractTotal(data) - netPaid(payments), 0);
+          form.dataset.remaining = String(balance);
+          form.elements.amount.max = balance.toFixed(2);
+          form.elements.amount.value = balance > 0 ? balance.toFixed(2) : '';
+          summary.textContent = `${money(netPaid(payments))} recorded · ${money(balance)} remaining`;
+          if (balance <= 0.005) {
+            summary.textContent = 'This estimate is already paid in full.';
+            form.elements.amount.value = '';
+          }
+        } catch (err) {
+          summary.textContent = err.message || 'Unable to load payment balance.';
+        } finally {
+          form.elements.amount.disabled = false;
+          form.elements.amount.focus();
+        }
+      }
+
+      async function submitManualPayment(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const button = form.querySelector('#save-manual-payment');
+        const amount = Number(form.elements.amount.value);
+        const remaining = Number(form.dataset.remaining || 0);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          window.showToast?.('Enter a positive payment amount.', 'error');
+          return;
+        }
+        if (amount > remaining + 0.005) {
+          window.showToast?.(`Payment cannot exceed the remaining balance of ${money(remaining)}.`, 'error');
+          return;
+        }
+        button.disabled = true;
+        try {
+          const receivedAt = form.elements.receivedAt.value
+            ? new Date(`${form.elements.receivedAt.value}T12:00:00`).toISOString()
+            : null;
+          await apiJson('/v1/payments/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({
+              estimateId: form.elements.estimateId.value,
+              amount,
+              source: form.elements.source.value,
+              reference: form.elements.reference.value || null,
+              description: form.elements.description.value || null,
+              receivedAt,
+            }),
+          });
+          closeManualPaymentModal();
+          window.showToast?.('Payment recorded', 'success');
+          window.dispatchEvent(new CustomEvent('paintflow:payment-recorded', { detail: { estimateId: form.elements.estimateId.value } }));
+        } catch (err) {
+          window.showToast?.(err.message || 'Failed to record payment', 'error');
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-record-estimate-payment]');
+        if (!button) return;
+        openManualPaymentModal(button.dataset.recordEstimatePayment);
+      });
+
       window.PaintFlowUI = window.PaintFlowUI || {};
       window.PaintFlowUI.estimateActions = estimateActions;
+      window.PaintFlowUI.openManualPaymentModal = openManualPaymentModal;
     })();
   </script>
 )}
