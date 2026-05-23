@@ -227,7 +227,12 @@ const { defineOnly = false } = Astro.props;
           throw new Error('Unauthorized');
         }
         const payload = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(payload.error || 'Request failed');
+        if (!res.ok) {
+          const message = typeof payload.error === 'string'
+            ? payload.error
+            : payload.error?.message || payload.message || 'Request failed';
+          throw new Error(message);
+        }
         return payload;
       }
 
