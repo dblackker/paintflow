@@ -6,6 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
+import { paymentScheduleSettingsFromPreferences } from '../lib/payment-schedule';
 
 const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -76,6 +77,26 @@ const legalSettingsSchema = z.object({
   disclosureText: z.string().trim().max(12000).optional(),
   legalReviewNote: z.string().trim().max(1000).optional(),
 }).strict();
+
+const paymentScheduleSchema = z.object({
+  enabled: z.boolean().optional(),
+  milestones: z.array(z.object({
+    key: z.string().trim().max(80).optional(),
+    label: z.string().trim().min(1).max(80),
+    due: z.string().trim().min(1).max(160),
+    percent: z.coerce.number().positive().max(100),
+    payable: z.boolean().optional(),
+  })).min(1).max(6),
+}).strict().superRefine((data, ctx) => {
+  const total = data.milestones.reduce((sum, item) => sum + Number(item.percent || 0), 0);
+  if (Math.abs(total - 100) > 0.01) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Payment milestone percentages must total 100%',
+      path: ['milestones'],
+    });
+  }
+});
 
 const brandingPatchSchema = z.object({
   companyName: optionalText(255),
@@ -355,6 +376,65 @@ settings.put('/legal', async (c) => {
     .returning();
 
   return c.json({ data: legalSettingsFromPreferences(readBusinessHours(settings.businessHours)) });
+});
+
+settings.get('/payment-schedule', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  let settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+
+  if (!settings) {
+    [settings] = await db.insert(orgSettings).values({ orgId }).returning();
+  }
+
+  return c.json({ data: paymentScheduleSettingsFromPreferences(settings) });
+});
+
+settings.put('/payment-schedule', async (c) => {
+  const orgId = c.get('orgId');
+  const parsed = paymentScheduleSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  const preferences = readBusinessHours(existing?.businessHours);
+  const paymentSchedule = {
+    enabled: parsed.data.enabled !== false,
+    milestones: parsed.data.milestones.map((milestone, index) => ({
+      key: (milestone.key || milestone.label)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 40) || `milestone_${index + 1}`,
+      label: milestone.label,
+      due: milestone.due,
+      percent: Number(milestone.percent),
+      payable: Boolean(milestone.payable),
+    })),
+  };
+  const businessHours = { ...preferences, paymentSchedule };
+  const firstPayable = paymentSchedule.milestones.find((milestone) => milestone.payable);
+  const depositPercent = (firstPayable?.percent ?? paymentSchedule.milestones[0]?.percent ?? 0).toFixed(2);
+  const paymentTerms = paymentSchedule.milestones
+    .map((milestone) => `${milestone.percent}% ${milestone.label.toLowerCase()} (${milestone.due.toLowerCase()})`)
+    .join(', ')
+    .slice(0, 255);
+
+  const [settings] = await db.insert(orgSettings)
+    .values({ orgId, businessHours, depositPercent, paymentTerms })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { businessHours, depositPercent, paymentTerms, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({ data: paymentScheduleSettingsFromPreferences(settings) });
 });
 
 settings.get('/branding', async (c) => {

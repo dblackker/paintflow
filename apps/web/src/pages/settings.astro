@@ -204,6 +204,15 @@ import Icon from '../components/Icon.astro';
         padding: 0 0.75rem;
       }
 
+      .settings-payment-row {
+        border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 82%, transparent);
+        border-radius: var(--pf-radius);
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.5fr) 5.5rem 7rem auto;
+        padding: 0.75rem;
+      }
+
       @media (max-width: 640px) {
         .settings-stack {
           gap: 0.85rem;
@@ -230,6 +239,9 @@ import Icon from '../components/Icon.astro';
         }
         .settings-action-card-copy {
           display: none;
+        }
+        .settings-payment-row {
+          grid-template-columns: 1fr;
         }
         .settings-connectors > div {
           align-items: flex-start;
@@ -433,17 +445,26 @@ import Icon from '../components/Icon.astro';
                 <label class="text-sm text-gray-600">Sales Tax (%)</label>
                 <input name="salesTaxRate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
-              <div>
-                <label class="text-sm text-gray-600">Deposit (%)</label>
-                <input name="depositPercent" type="number" min="0" max="100" step="0.1" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
-              </div>
             </div>
             <label class="settings-field">
-              <span>Customer payment schedule</span>
-              <input name="paymentTerms" type="text" maxlength="255" autocomplete="off" placeholder="40% deposit, progress payment after prep, balance due on completion" class="w-full px-3 py-2 border rounded-lg">
-              <span class="text-xs text-gray-500">Shown on proposals. If this mentions a progress payment, PaintFlow splits the remaining balance into progress and final milestones.</span>
+              <span>Payment terms summary</span>
+              <input name="paymentTerms" type="text" maxlength="255" autocomplete="off" placeholder="40% deposit, 30% before production, balance due on completion" class="w-full px-3 py-2 border rounded-lg">
+              <span class="text-xs text-gray-500">Shown on proposals as the short summary. The milestone schedule below controls deposit and payment amounts.</span>
             </label>
             <button type="submit" class="btn-primary">Save</button>
+          </form>
+
+          <form id="payment-schedule-form" class="mt-6 space-y-4 border-t pt-5">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h4 class="font-semibold text-gray-950">Deposit & Payment Schedule</h4>
+                <p class="mt-1 text-sm text-gray-600">Define the payment milestones customers see on proposals. Percentages must total 100%.</p>
+              </div>
+              <button type="button" id="add-payment-milestone" class="btn-secondary btn-sm justify-center">Add Payment</button>
+            </div>
+            <div id="payment-schedule-rows" class="space-y-2"></div>
+            <p id="payment-schedule-total" class="text-sm font-medium text-gray-700"></p>
+            <button type="submit" class="btn-primary">Save Schedule</button>
           </form>
         </div>
 
@@ -628,6 +649,7 @@ import Icon from '../components/Icon.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    let paymentScheduleState = [];
 
     function phoneDigits(value) {
       return String(value || '').replace(/\D/g, '').slice(0, 10);
@@ -644,15 +666,89 @@ import Icon from '../components/Icon.astro';
       event.target.value = formatPhone(event.target.value);
     });
 
+    function slugifyPaymentKey(value, fallback) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 40) || fallback;
+    }
+
+    function defaultPaymentMilestone() {
+      return {
+        key: `payment_${paymentScheduleState.length + 1}`,
+        label: 'Progress payment',
+        due: 'Due before the next phase starts',
+        percent: 0,
+        payable: false,
+      };
+    }
+
+    function renderPaymentScheduleRows() {
+      const rows = document.getElementById('payment-schedule-rows');
+      rows.innerHTML = paymentScheduleState.map((milestone, index) => `
+        <div class="settings-payment-row" data-payment-index="${index}">
+          <label class="settings-field">
+            <span>Milestone</span>
+            <input name="label" value="${escapeAttr(milestone.label)}" maxlength="80" class="px-3 py-2 border rounded-lg">
+          </label>
+          <label class="settings-field">
+            <span>Due</span>
+            <input name="due" value="${escapeAttr(milestone.due)}" maxlength="160" class="px-3 py-2 border rounded-lg">
+          </label>
+          <label class="settings-field">
+            <span>Percent</span>
+            <input name="percent" type="number" min="0.1" max="100" step="0.1" inputmode="decimal" value="${Number(milestone.percent || 0)}" class="px-3 py-2 border rounded-lg">
+          </label>
+          <label class="flex items-center gap-2 pt-6 text-sm text-gray-700 sm:pt-7">
+            <input name="payable" type="checkbox" class="rounded border-gray-300" ${milestone.payable ? 'checked' : ''}>
+            <span>Online pay</span>
+          </label>
+          <button type="button" class="btn-icon btn-tonal self-end" aria-label="Remove payment milestone" data-remove-payment="${index}">x</button>
+        </div>
+      `).join('');
+      updatePaymentScheduleTotal();
+    }
+
+    function readPaymentScheduleRows() {
+      paymentScheduleState = Array.from(document.querySelectorAll('[data-payment-index]')).map((row, index) => {
+        const label = row.querySelector('[name="label"]').value.trim();
+        return {
+          key: slugifyPaymentKey(label, `payment_${index + 1}`),
+          label,
+          due: row.querySelector('[name="due"]').value.trim(),
+          percent: Number(row.querySelector('[name="percent"]').value || 0),
+          payable: row.querySelector('[name="payable"]').checked,
+        };
+      });
+      updatePaymentScheduleTotal();
+      return paymentScheduleState;
+    }
+
+    function updatePaymentScheduleTotal() {
+      const total = Array.from(document.querySelectorAll('#payment-schedule-rows [name="percent"]'))
+        .reduce((sum, input) => sum + Number(input.value || 0), 0);
+      const node = document.getElementById('payment-schedule-total');
+      const rounded = Math.round(total * 10) / 10;
+      node.textContent = `Configured total: ${rounded}%`;
+      node.className = `text-sm font-medium ${Math.abs(total - 100) <= 0.01 ? 'text-green-700' : 'text-red-700'}`;
+    }
+
+    function escapeAttr(value) {
+      return String(value || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     async function loadSettings() {
-      const [settingsRes, brandingRes, legalRes] = await Promise.all([
+      const [settingsRes, brandingRes, legalRes, paymentScheduleRes] = await Promise.all([
         fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' }),
         fetch(`${API_URL}/v1/settings/branding`, { credentials: 'include' }),
         fetch(`${API_URL}/v1/settings/legal`, { credentials: 'include' }),
+        fetch(`${API_URL}/v1/settings/payment-schedule`, { credentials: 'include' }),
       ]);
       const { data } = await settingsRes.json();
       const { data: branding } = await brandingRes.json();
       const { data: legal } = await legalRes.json();
+      const { data: paymentSchedule } = await paymentScheduleRes.json();
       
       // Populate forms
       ['business-form', 'pricing-form', 'reviews-form'].forEach(formId => {
@@ -690,6 +786,13 @@ import Icon from '../components/Icon.astro';
           el.value = legal[el.name] || '';
         }
       });
+
+      paymentScheduleState = Array.isArray(paymentSchedule?.milestones) ? paymentSchedule.milestones : [
+        { key: 'deposit', label: 'Deposit', due: 'Due after approval to reserve the schedule', percent: 40, payable: true },
+        { key: 'progress', label: 'Progress payment', due: 'Due before production starts', percent: 30, payable: false },
+        { key: 'completion', label: 'Final payment', due: 'Due on completion', percent: 30, payable: false },
+      ];
+      renderPaymentScheduleRows();
     }
 
     function updateBrandingPreview() {
@@ -785,6 +888,53 @@ import Icon from '../components/Icon.astro';
         return;
       }
       window.showToast('Contract terms saved', 'success');
+    });
+
+    document.getElementById('add-payment-milestone').addEventListener('click', () => {
+      readPaymentScheduleRows();
+      paymentScheduleState.push(defaultPaymentMilestone());
+      renderPaymentScheduleRows();
+    });
+
+    document.getElementById('payment-schedule-rows').addEventListener('input', (event) => {
+      if (event.target?.name === 'percent') updatePaymentScheduleTotal();
+    });
+
+    document.getElementById('payment-schedule-rows').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-remove-payment]');
+      if (!button) return;
+      readPaymentScheduleRows();
+      const index = Number(button.dataset.removePayment);
+      paymentScheduleState.splice(index, 1);
+      renderPaymentScheduleRows();
+    });
+
+    document.getElementById('payment-schedule-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const milestones = readPaymentScheduleRows().filter((milestone) => milestone.label && milestone.due && milestone.percent > 0);
+      const total = milestones.reduce((sum, milestone) => sum + Number(milestone.percent || 0), 0);
+      if (milestones.length === 0) {
+        window.showToast('Add at least one payment milestone', 'error');
+        return;
+      }
+      if (Math.abs(total - 100) > 0.01) {
+        window.showToast('Payment milestones must total 100%', 'error');
+        return;
+      }
+      const res = await fetch(`${API_URL}/v1/settings/payment-schedule`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled: true, milestones }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.showToast(payload.error || 'Failed to save payment schedule', 'error');
+        return;
+      }
+      paymentScheduleState = payload.data?.milestones || milestones;
+      renderPaymentScheduleRows();
+      window.showToast('Payment schedule saved', 'success');
     });
 
     loadSettings();

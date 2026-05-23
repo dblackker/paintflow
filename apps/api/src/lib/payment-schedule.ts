@@ -1,6 +1,7 @@
 type PaymentSettings = {
   depositPercent?: string | number | null;
   paymentTerms?: string | null;
+  businessHours?: unknown;
 };
 
 export type EstimatePaymentMilestone = {
@@ -14,6 +15,19 @@ export type EstimatePaymentMilestone = {
   payable: boolean;
 };
 
+export type PaymentScheduleMilestoneSetting = {
+  key: string;
+  label: string;
+  due: string;
+  percent: number;
+  payable: boolean;
+};
+
+export type PaymentScheduleSettings = {
+  enabled: boolean;
+  milestones: PaymentScheduleMilestoneSetting[];
+};
+
 function asPercent(value: unknown, fallback: number) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -24,7 +38,21 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function baseMilestones(settings: PaymentSettings) {
+function readPreferenceObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function cleanKey(value: unknown, fallback: string) {
+  const raw = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+  return raw || fallback;
+}
+
+function defaultMilestones(settings: PaymentSettings): PaymentScheduleMilestoneSetting[] {
   const depositPercent = asPercent(settings.depositPercent, 50);
   const terms = String(settings.paymentTerms || '').toLowerCase();
   const hasProgressPayment = /progress|prep|start|milestone|draw/.test(terms);
@@ -51,6 +79,40 @@ function baseMilestones(settings: PaymentSettings) {
     { key: 'deposit', label: 'Deposit', due: 'Due after approval to reserve the schedule', percent: depositPercent, payable: true },
     { key: 'completion', label: 'Final payment', due: 'Due on completion', percent: remaining, payable: false },
   ].filter((item) => item.percent > 0);
+}
+
+export function paymentScheduleSettingsFromPreferences(settings: PaymentSettings): PaymentScheduleSettings {
+  const preferences = readPreferenceObject(settings.businessHours);
+  const raw = preferences.paymentSchedule && typeof preferences.paymentSchedule === 'object' && !Array.isArray(preferences.paymentSchedule)
+    ? preferences.paymentSchedule as Record<string, unknown>
+    : {};
+  const rawMilestones = Array.isArray(raw.milestones) ? raw.milestones : [];
+  const milestones = rawMilestones
+    .slice(0, 6)
+    .map((item, index) => {
+      const rawItem = readPreferenceObject(item);
+      const percent = asPercent(rawItem.percent, 0);
+      return {
+        key: cleanKey(rawItem.key || rawItem.label, `milestone_${index + 1}`),
+        label: String(rawItem.label || `Payment ${index + 1}`).trim().slice(0, 80),
+        due: String(rawItem.due || 'Due per agreement').trim().slice(0, 160),
+        percent,
+        payable: Boolean(rawItem.payable),
+      };
+    })
+    .filter((item) => item.label && item.percent > 0);
+  const percentTotal = roundMoney(milestones.reduce((sum, item) => sum + item.percent, 0));
+  const enabled = Boolean(raw.enabled) && milestones.length > 0 && Math.abs(percentTotal - 100) <= 0.01;
+
+  return {
+    enabled,
+    milestones: enabled ? milestones : defaultMilestones(settings),
+  };
+}
+
+function baseMilestones(settings: PaymentSettings) {
+  const schedule = paymentScheduleSettingsFromPreferences(settings);
+  return schedule.milestones;
 }
 
 export function estimatePaymentSchedule(settings: PaymentSettings, total: number, paidAmount = 0): EstimatePaymentMilestone[] {
