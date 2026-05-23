@@ -331,6 +331,10 @@ import '../../styles/design-system.css';
         return selectedOptionalItems().reduce((sum, item) => sum + Number(item.qty || 1) * Number(item.rate || 0), 0);
       }
 
+      function hasProposalOptions() {
+        return Boolean(document.querySelector('[data-option-index]'));
+      }
+
       function pricingBreakdown(pkg) {
         const baseTotal = Number(pkg.total ?? 0);
         const discount = Number(pkg.discount ?? 0);
@@ -425,6 +429,7 @@ import '../../styles/design-system.css';
 
       function priceSummary(pkg) {
         const breakdown = pricingBreakdown(pkg);
+        const showOptions = packageItems(pkg).some(item => item.optional && item.customerVisible !== false);
         return `
           <div class="space-y-4">
             <div>
@@ -434,8 +439,8 @@ import '../../styles/design-system.css';
             <div class="space-y-2 border-y py-3 text-sm">
               <div class="flex justify-between gap-4"><span class="text-gray-600">Base scope subtotal</span><span class="font-medium text-gray-900">${money(breakdown.baseSubtotal)}</span></div>
               ${breakdown.discount ? `<div class="flex justify-between gap-4 text-green-700"><span>Discount</span><span class="font-medium">-${money(breakdown.discount)}</span></div>` : ''}
-              <div class="flex justify-between gap-4"><span class="text-gray-600">Selected options</span><span class="font-medium text-gray-900" data-selected-options-total>$0.00</span></div>
-              <div class="flex justify-between gap-4"><span class="text-gray-600">Tax on selected options</span><span class="font-medium text-gray-900" data-selected-options-tax>$0.00</span></div>
+              ${showOptions ? `<div class="flex justify-between gap-4"><span class="text-gray-600">Selected options</span><span class="font-medium text-gray-900" data-selected-options-total>$0.00</span></div>` : ''}
+              ${showOptions ? `<div class="flex justify-between gap-4"><span class="text-gray-600">Tax on selected options</span><span class="font-medium text-gray-900" data-selected-options-tax>$0.00</span></div>` : ''}
               <div class="flex justify-between gap-4"><span class="text-gray-600">Estimated tax total</span><span class="font-medium text-gray-900" data-selected-tax-total>${money(breakdown.totalTax)}</span></div>
             </div>
             <div class="flex justify-between gap-4 text-base">
@@ -531,7 +536,7 @@ import '../../styles/design-system.css';
             </section>
             <aside class="rounded-lg border p-5 bg-gray-50 self-start">
               <div class="mt-4">${priceSummary(pkg)}</div>
-              <p class="text-sm text-gray-600 mt-4">Includes labor, selected paint products, prep, listed materials, selected options, and applicable estimated tax.</p>
+              <p class="text-sm text-gray-600 mt-4">Includes labor, selected paint products, prep, listed materials${optionalItems.length ? ', selected options,' : ''} and applicable estimated tax.</p>
             </aside>
           </div>
         `;
