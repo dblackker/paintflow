@@ -5,6 +5,7 @@ import { orgSettings, serviceAreas, teamMembers, orgBranding, stripeConnections 
 import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 
 const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -64,6 +65,18 @@ const timeClockSettingsSchema = z.object({
   reminderWindowEndHour: z.coerce.number().int().min(1).max(24).optional(),
 }).strict();
 
+const legalSettingsSchema = z.object({
+  jurisdiction: z.string().trim().max(80).optional(),
+  contractorRegistrationNumber: z.string().trim().max(120).optional(),
+  bondAmount: z.string().trim().max(120).optional(),
+  contractTerms: z.string().trim().max(12000).optional(),
+  disclosureEnabled: z.boolean().optional(),
+  disclosureRequired: z.boolean().optional(),
+  disclosureTitle: z.string().trim().max(255).optional(),
+  disclosureText: z.string().trim().max(12000).optional(),
+  legalReviewNote: z.string().trim().max(1000).optional(),
+}).strict();
+
 const brandingPatchSchema = z.object({
   companyName: optionalText(255),
   logoUrl: optionalText(2000),
@@ -119,8 +132,7 @@ function onboardingState(settings: typeof orgSettings.$inferSelect | null, servi
 }
 
 function readBusinessHours(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return value as Record<string, unknown>;
+  return readPreferenceObject(value);
 }
 
 function timeClockSettingsFromPreferences(preferences: Record<string, unknown>) {
@@ -299,6 +311,50 @@ settings.put('/time-clock', async (c) => {
     .returning();
 
   return c.json({ data: timeClockSettingsFromPreferences(readBusinessHours(settings.businessHours)) });
+});
+
+settings.get('/legal', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  let settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+
+  if (!settings) {
+    [settings] = await db.insert(orgSettings).values({ orgId }).returning();
+  }
+
+  return c.json({ data: legalSettingsFromPreferences(readBusinessHours(settings.businessHours)) });
+});
+
+settings.put('/legal', async (c) => {
+  const orgId = c.get('orgId');
+  const parsed = legalSettingsSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  const preferences = readBusinessHours(existing?.businessHours);
+  const currentLegal = legalSettingsFromPreferences(preferences);
+  const legal = {
+    ...currentLegal,
+    ...Object.fromEntries(Object.entries(parsed.data).filter(([, value]) => value !== undefined)),
+  };
+  const businessHours = { ...preferences, legal };
+
+  const [settings] = await db.insert(orgSettings)
+    .values({ orgId, businessHours })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { businessHours, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({ data: legalSettingsFromPreferences(readBusinessHours(settings.businessHours)) });
 });
 
 settings.get('/branding', async (c) => {

@@ -351,6 +351,17 @@ import Icon from '../components/Icon.astro';
               <li>Logged customer communication</li>
             </ul>
           </a>
+          <a href="#legal-settings" class="settings-setup-card">
+            <span class="settings-setup-pill">Legal</span>
+            <div>
+              <h3 class="font-semibold text-gray-950">Contract terms</h3>
+              <p class="mt-1 text-sm text-gray-600">Set company-reviewed proposal terms, required disclosures, and registration details.</p>
+            </div>
+            <ul>
+              <li>Shown before customer signature</li>
+              <li>Snapshot saved with accepted estimates</li>
+            </ul>
+          </a>
         </div>
       </section>
 
@@ -453,6 +464,60 @@ import Icon from '../components/Icon.astro';
               </span>
             </a>
           </div>
+        </div>
+
+        <div id="legal-settings" class="settings-card settings-anchor-card bg-white rounded-lg shadow-sm border p-6">
+          <h3 class="font-semibold mb-2">Contract Terms & Disclosures</h3>
+          <p class="text-sm text-gray-600">Configure company-reviewed language shown to customers before they sign a proposal. PaintFlow stores the accepted snapshot in estimate activity.</p>
+          <form id="legal-form" class="mt-4 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label class="settings-field">
+                <span>Jurisdiction</span>
+                <input name="jurisdiction" autocomplete="address-level1" placeholder="WA" maxlength="80" class="px-3 py-2 border rounded-lg">
+              </label>
+              <label class="settings-field">
+                <span>Registration/license number</span>
+                <input name="contractorRegistrationNumber" autocomplete="off" placeholder="Contractor registration #" maxlength="120" class="px-3 py-2 border rounded-lg">
+              </label>
+            </div>
+            <label class="settings-field">
+              <span>Bond/insurance summary</span>
+              <input name="bondAmount" autocomplete="off" placeholder="Bonded and insured per state requirements" maxlength="120" class="w-full px-3 py-2 border rounded-lg">
+            </label>
+            <label class="settings-field">
+              <span>Contract terms</span>
+              <textarea name="contractTerms" rows="8" maxlength="12000" class="w-full px-3 py-2 border rounded-lg" placeholder="Scope, payment terms, change orders, warranty, access, and exclusions."></textarea>
+            </label>
+            <div class="rounded-lg border bg-gray-50 p-4 space-y-3">
+              <label class="flex items-start gap-3 text-sm text-gray-700">
+                <input name="disclosureEnabled" type="checkbox" class="mt-1 rounded border-gray-300">
+                <span>
+                  <span class="block font-medium text-gray-900">Show statutory disclosure before signature</span>
+                  <span class="block text-gray-600">Use for state-required notices, lien disclosures, cancellation language, or other contractor-specific legal copy.</span>
+                </span>
+              </label>
+              <label class="flex items-start gap-3 text-sm text-gray-700">
+                <input name="disclosureRequired" type="checkbox" class="mt-1 rounded border-gray-300">
+                <span>
+                  <span class="block font-medium text-gray-900">Require customer acknowledgement</span>
+                  <span class="block text-gray-600">Customers must check an acknowledgement box before the signature modal opens.</span>
+                </span>
+              </label>
+            </div>
+            <label class="settings-field">
+              <span>Disclosure title</span>
+              <input name="disclosureTitle" maxlength="255" placeholder="Required disclosure" class="w-full px-3 py-2 border rounded-lg">
+            </label>
+            <label class="settings-field">
+              <span>Disclosure text</span>
+              <textarea name="disclosureText" rows="6" maxlength="12000" class="w-full px-3 py-2 border rounded-lg" placeholder="Paste the exact disclosure language your company wants customers to acknowledge."></textarea>
+            </label>
+            <label class="settings-field">
+              <span>Internal legal review note</span>
+              <input name="legalReviewNote" maxlength="1000" class="w-full px-3 py-2 border rounded-lg">
+            </label>
+            <button type="submit" class="btn-primary">Save Terms</button>
+          </form>
         </div>
 
         <div id="operations-settings" class="settings-card settings-anchor-card bg-white rounded-lg shadow-sm border p-6">
@@ -580,12 +645,14 @@ import Icon from '../components/Icon.astro';
     });
 
     async function loadSettings() {
-      const [settingsRes, brandingRes] = await Promise.all([
+      const [settingsRes, brandingRes, legalRes] = await Promise.all([
         fetch(`${API_URL}/v1/settings/org`, { credentials: 'include' }),
         fetch(`${API_URL}/v1/settings/branding`, { credentials: 'include' }),
+        fetch(`${API_URL}/v1/settings/legal`, { credentials: 'include' }),
       ]);
       const { data } = await settingsRes.json();
       const { data: branding } = await brandingRes.json();
+      const { data: legal } = await legalRes.json();
       
       // Populate forms
       ['business-form', 'pricing-form', 'reviews-form'].forEach(formId => {
@@ -613,6 +680,16 @@ import Icon from '../components/Icon.astro';
         if (el.name && branding?.[el.name] !== undefined) el.value = branding[el.name] || '';
       });
       updateBrandingPreview();
+
+      const legalForm = document.getElementById('legal-form');
+      Array.from(legalForm.elements).forEach(el => {
+        if (!el.name || legal?.[el.name] === undefined) return;
+        if (el.type === 'checkbox') {
+          el.checked = Boolean(legal[el.name]);
+        } else {
+          el.value = legal[el.name] || '';
+        }
+      });
     }
 
     function updateBrandingPreview() {
@@ -688,6 +765,26 @@ import Icon from '../components/Icon.astro';
       }
       window.showToast('Branding saved', 'success');
       updateBrandingPreview();
+    });
+
+    document.getElementById('legal-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const formData = Object.fromEntries(new FormData(form));
+      formData.disclosureEnabled = form.elements.disclosureEnabled.checked;
+      formData.disclosureRequired = form.elements.disclosureRequired.checked;
+      const res = await fetch(`${API_URL}/v1/settings/legal`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(formData),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.showToast(payload.error || 'Failed to save terms', 'error');
+        return;
+      }
+      window.showToast('Contract terms saved', 'success');
     });
 
     loadSettings();

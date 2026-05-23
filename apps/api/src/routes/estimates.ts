@@ -8,6 +8,7 @@ import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, renderEstimateEmail } from '../lib/email';
 import { estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule } from '../lib/payment-schedule';
+import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -23,6 +24,7 @@ const signSchema = z.object({
   signatureData: z.string().min(1).max(100000),
   packageName: z.string().optional(),
   selectedOptions: z.array(selectedOptionSchema).max(20).optional(),
+  acknowledgedDisclosure: z.boolean().optional(),
 });
 
 const estimateLineItemSchema = z.object({
@@ -164,6 +166,7 @@ estimatesApp.get('/:id/public', async (c) => {
   const settings = await db.query.orgSettings.findFirst({
     where: eq(orgSettings.orgId, estimate.orgId),
   });
+  const legal = legalSettingsFromPreferences(readPreferenceObject(settings?.businessHours));
 
   const photos = await db.query.estimatePhotos.findMany({
     where: eq(estimatePhotos.estimateId, estimate.id),
@@ -193,6 +196,7 @@ estimatesApp.get('/:id/public', async (c) => {
       },
       paymentSchedule,
       paymentTerms: settings?.paymentTerms || 'Due on completion',
+      legal,
       photos,
       branding: branding ? {
         logoUrl: branding.logoUrl,
@@ -212,7 +216,7 @@ estimatesApp.post('/:id/sign', async (c) => {
     return c.json({ error: 'Invalid input', details: parsed.error.errors }, 400);
   }
   
-  const { name, signatureData, packageName, selectedOptions = [] } = parsed.data;
+  const { name, signatureData, packageName, selectedOptions = [], acknowledgedDisclosure = false } = parsed.data;
   
   const db = createDb(c.env.DATABASE_URL);
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
@@ -232,6 +236,14 @@ estimatesApp.post('/:id/sign', async (c) => {
   }
   if (existing.signedAt) {
     return c.json({ error: 'This estimate has already been signed' }, 409);
+  }
+
+  const settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, existing.orgId),
+  });
+  const legal = legalSettingsFromPreferences(readPreferenceObject(settings?.businessHours));
+  if (legal.disclosureEnabled && legal.disclosureRequired && !acknowledgedDisclosure) {
+    return c.json({ error: 'Please acknowledge the required disclosure before signing.' }, 400);
   }
   
   const [estimate] = await db.update(estimates)
@@ -257,6 +269,8 @@ estimatesApp.post('/:id/sign', async (c) => {
       contractValue: estimateContractValue(estimate, packageName, cleanOptions),
       selectedOptions: cleanOptions,
       awaitingPayment: true,
+      legalSnapshot: legal,
+      acknowledgedDisclosure: Boolean(legal.disclosureEnabled && acknowledgedDisclosure),
     },
     ipAddress: ip,
     userAgent,
