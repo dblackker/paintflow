@@ -257,6 +257,7 @@ button[class*="bg-blue"][class*="text-white"]:active {
   background: color-mix(in srgb, var(--md-sys-color-surface-container-low) 88%, transparent);
   border-color: var(--pf-border);
   backdrop-filter: blur(18px);
+  position: sticky;
 }
 
 .pf-brand-mark {
@@ -403,7 +404,16 @@ body.pf-crew-mode .pf-logout-button {
 .pf-mobile-nav {
   background: rgb(255 255 255 / 0.94);
   border-color: var(--pf-border);
+  border-radius: 0 0 1rem 1rem;
+  box-shadow: var(--pf-elevation-2);
   backdrop-filter: blur(16px);
+  max-height: calc(100dvh - 4.25rem);
+  overflow-y: auto;
+  position: absolute;
+  right: 0.75rem;
+  top: 100%;
+  width: min(20rem, calc(100vw - 1.5rem));
+  z-index: 40;
 }
 
 .pf-mobile-nav.is-open {
