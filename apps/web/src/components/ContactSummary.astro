@@ -114,7 +114,17 @@ const {
           ? `<a href="/leads/${escapeHtml(leadId)}" class="block truncate ${titleClass} hover:text-blue-700">${escapeHtml(name)}</a>`
           : `<p class="truncate ${titleClass}">${escapeHtml(name)}</p>`;
         const addressMarkup = address
-          ? `<a href="${mapsUrl(address)}" target="_blank" rel="noreferrer" class="mt-0.5 block truncate ${addressClass} hover:text-blue-700 hover:underline">${escapeHtml(address)}</a>`
+          ? `
+            <span class="mt-0.5 pf-address-inline ${addressClass}">
+              <span class="pf-address-text">${escapeHtml(address)}</span>
+              <a href="${mapsUrl(address)}" target="_blank" rel="noreferrer" class="pf-address-map-button" aria-label="Open address in maps" title="Open in maps">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" stroke-width="1.8" />
+                  <circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+              </a>
+            </span>
+          `
           : `<p class="mt-0.5 truncate ${addressClass}">No jobsite address</p>`;
         const contactParts = [
           formattedPhone ? `<a href="${escapeHtml(phoneHref)}" class="hover:text-blue-700 hover:underline">${escapeHtml(formattedPhone)}</a>` : '',

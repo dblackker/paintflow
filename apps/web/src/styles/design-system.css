@@ -789,6 +789,45 @@ body.pf-nav-drawer-open {
   width: 1.25rem;
 }
 
+.pf-address-inline {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.pf-address-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-address-map-button {
+  align-items: center;
+  border-radius: var(--pf-radius-full);
+  color: var(--pf-primary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.65rem;
+  justify-content: center;
+  margin-inline-start: 0.05rem;
+  width: 1.65rem;
+}
+
+.pf-address-map-button:hover {
+  background: var(--pf-state-hover);
+  color: var(--pf-primary-hover);
+}
+
+.pf-address-map-button svg {
+  display: block;
+  height: 1rem;
+  width: 1rem;
+}
+
 .btn-compact {
   align-items: center;
   background: var(--pf-surface);
