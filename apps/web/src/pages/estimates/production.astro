@@ -251,7 +251,10 @@ import Base from '../../layouts/Base.astro';
     let materialsCatalog = [];
     let settings = {};
     let roomCounter = 0;
-    let editingEstimateId = new URLSearchParams(window.location.search).get('draft') || '';
+    const estimatorParams = new URLSearchParams(window.location.search);
+    let editingEstimateId = estimatorParams.get('estimateId') || estimatorParams.get('draft') || '';
+    const initialLeadId = estimatorParams.get('leadId') || '';
+    let isPersistingEstimate = false;
     let editingEstimate = null;
 
     const money = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
@@ -305,7 +308,7 @@ import Base from '../../layouts/Base.astro';
       const draftRequest = editingEstimateId ? apiJson(`${API_URL}/v1/estimates/${editingEstimateId}`) : Promise.resolve(null);
       const [ratesRes, leadsRes, settingsRes, materialsRes, draftRes] = await Promise.all([
         apiJson(`${API_URL}/v1/production-rates`),
-        apiJson(`${API_URL}/v1/leads?limit=200`),
+        apiJson(`${API_URL}/v1/leads?status=all&limit=200`),
         apiJson(`${API_URL}/v1/settings/org`),
         apiJson(`${API_URL}/v1/materials`),
         draftRequest,
@@ -316,6 +319,9 @@ import Base from '../../layouts/Base.astro';
       document.getElementById('lead-select').innerHTML =
         '<option value="">Select customer...</option>' +
         leadsRes.data.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)}</option>`).join('');
+      if (!editingEstimateId && initialLeadId && leadsRes.data.some(lead => lead.id === initialLeadId)) {
+        document.getElementById('lead-select').value = initialLeadId;
+      }
       renderMaterialSelectors();
       editingEstimate = draftRes?.data || null;
       if (editingEstimate) {
@@ -2307,9 +2313,13 @@ import Base from '../../layouts/Base.astro';
     });
 
     async function persistEstimate(statusValue = 'sent') {
+      if (isPersistingEstimate) return;
       const previewOpen = !document.getElementById('send-preview-modal').classList.contains('hidden');
       const button = document.getElementById(statusValue === 'draft' ? 'save-draft' : previewOpen ? 'confirm-send-estimate' : 'save-estimate');
       const otherButton = document.getElementById(statusValue === 'draft' ? 'save-estimate' : 'save-draft');
+      const sendButton = document.getElementById('save-estimate');
+      const draftButton = document.getElementById('save-draft');
+      const confirmButton = document.getElementById('confirm-send-estimate');
       const status = document.getElementById('save-status');
       const leadId = document.getElementById('lead-select').value;
       const packages = buildPackages();
@@ -2323,8 +2333,8 @@ import Base from '../../layouts/Base.astro';
       }
 
       try {
-        button.disabled = true;
-        otherButton.disabled = true;
+        isPersistingEstimate = true;
+        [sendButton, draftButton, confirmButton].forEach(item => { if (item) item.disabled = true; });
         button.textContent = statusValue === 'draft' ? 'Saving draft...' : 'Sending email...';
         status.textContent = statusValue === 'draft' ? 'Saving draft estimate...' : 'Creating estimate, sending email, and opening the customer proposal...';
         status.classList.remove('hidden');
@@ -2354,9 +2364,12 @@ import Base from '../../layouts/Base.astro';
       } catch (err) {
         window.showToast(err.message || 'Failed to save estimate', 'error');
         status.textContent = err.message || 'Failed to save estimate';
-        button.disabled = false;
-        otherButton.disabled = false;
-        button.textContent = statusValue === 'draft' ? 'Save Draft' : previewOpen ? 'Send Email' : 'Send Estimate';
+      } finally {
+        isPersistingEstimate = false;
+        [sendButton, draftButton, confirmButton].forEach(item => { if (item) item.disabled = false; });
+        draftButton.textContent = 'Save Draft';
+        sendButton.textContent = 'Send Estimate';
+        confirmButton.textContent = 'Send Email';
       }
     }
 

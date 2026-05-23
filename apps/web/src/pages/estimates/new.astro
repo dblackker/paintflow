@@ -74,6 +74,8 @@ import Base from '../../layouts/Base.astro';
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const initialLeadId = new URLSearchParams(window.location.search).get('leadId') || '';
+    let isCreatingEstimate = false;
     const defaultItems = [
       { desc: 'Prep, patching, masking, and setup', qty: 1, unit: 'project', laborHours: 4, materialCost: 1 },
       { desc: 'Paint walls and ceilings', qty: 1, unit: 'area', laborHours: 8, materialCost: 1 },
@@ -118,6 +120,9 @@ import Base from '../../layouts/Base.astro';
       select.innerHTML = leads.length
         ? '<option value="">Select customer...</option>' + leads.map(lead => `<option value="${lead.id}">${escapeHtml(lead.name)} ${lead.phone ? `(${escapeHtml(phone(lead.phone))})` : ''}</option>`).join('')
         : '<option value="">No customers found - add a lead first</option>';
+      if (initialLeadId && leads.some(lead => lead.id === initialLeadId)) {
+        select.value = initialLeadId;
+      }
       document.getElementById('labor-rate').value = Number(settings.defaultLaborRate || 65).toFixed(2);
       document.getElementById('markup').value = Number(settings.materialMarkupPercent || 30).toFixed(2);
       document.getElementById('tax-rate').value = (Number(settings.salesTaxRate || 0.092) * 100).toFixed(2);
@@ -218,6 +223,7 @@ import Base from '../../layouts/Base.astro';
 
     document.getElementById('estimate-form').addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (isCreatingEstimate) return;
       const button = document.getElementById('create-estimate-btn');
       const status = document.getElementById('create-estimate-status');
       const leadId = new FormData(event.target).get('leadId');
@@ -233,6 +239,7 @@ import Base from '../../layouts/Base.astro';
       }
 
       try {
+        isCreatingEstimate = true;
         button.disabled = true;
         button.textContent = 'Creating estimate...';
         status.textContent = 'Creating estimate and opening the customer proposal...';
@@ -247,6 +254,8 @@ import Base from '../../layouts/Base.astro';
       } catch (err) {
         window.showToast(err.message || 'Failed to create estimate', 'error');
         status.textContent = err.message || 'Failed to create estimate';
+      } finally {
+        isCreatingEstimate = false;
         button.disabled = false;
         button.textContent = 'Create Estimate';
       }
