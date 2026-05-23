@@ -42,6 +42,8 @@ import Base from '../../layouts/Base.astro';
           <option value="accepted">Accepted</option>
           <option value="declined">Declined</option>
           <option value="canceled">Canceled</option>
+          <option value="superseded">Superseded</option>
+          <option value="voided">Voided</option>
           <option value="draft">Draft</option>
         </select>
       </div>
@@ -194,13 +196,13 @@ import Base from '../../layouts/Base.astro';
     document.getElementById('search').addEventListener('input', render);
     document.getElementById('status-filter').addEventListener('change', render);
     const initialStatus = new URLSearchParams(window.location.search).get('status');
-    if (initialStatus && ['all', 'sent', 'accepted', 'declined', 'canceled', 'draft'].includes(initialStatus)) {
+    if (initialStatus && ['all', 'sent', 'accepted', 'declined', 'canceled', 'superseded', 'voided', 'draft'].includes(initialStatus)) {
       document.getElementById('status-filter').value = initialStatus;
     }
 
     async function cancelEstimate(id) {
       const estimate = estimates.find((item) => item.id === id);
-      if (!estimate || estimate.status === 'accepted') return;
+      if (!estimate || estimate.status === 'accepted' || estimate.signedAt) return;
       const shouldCancel = window.confirm('Cancel this estimate? The customer preview will no longer be approvable.');
       if (!shouldCancel) return;
       try {
@@ -222,6 +224,7 @@ import Base from '../../layouts/Base.astro';
       cancelEstimate(cancelButton.dataset.cancelEstimate);
     });
     window.addEventListener('paintflow:payment-recorded', loadEstimates);
+    window.addEventListener('paintflow:estimate-updated', loadEstimates);
     loadEstimates();
   </script>
 </Base>

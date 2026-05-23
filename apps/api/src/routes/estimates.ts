@@ -122,6 +122,10 @@ const cancelEstimateSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 
+const agreementActionSchema = z.object({
+  reason: z.string().trim().min(3).max(500).optional(),
+});
+
 const sendEstimateEmailSchema = z.object({
   reason: z.enum(['sent', 'updated']).optional(),
 });
@@ -236,6 +240,9 @@ estimatesApp.post('/:id/sign', async (c) => {
   }
   if (existing.status === 'canceled') {
     return c.json({ error: 'This estimate has been canceled' }, 409);
+  }
+  if (['superseded', 'voided'].includes(existing.status)) {
+    return c.json({ error: 'This estimate agreement is no longer active' }, 409);
   }
   if (existing.status === 'accepted') {
     return c.json({ error: 'This estimate has already been accepted' }, 409);
@@ -500,6 +507,129 @@ estimatesApp.post('/:id/cancel', async (c) => {
 
   const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
   return c.json({ data: { ...updated, payments: [], publicUrl: publicEstimateUrl(baseUrl, updated.id), customerPreviewUrl: publicEstimateUrl(baseUrl, updated.id) } });
+});
+
+estimatesApp.post('/:id/void', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const parsed = agreementActionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid void request', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) return c.json({ error: 'Not found' }, 404);
+  if (!estimate.signedAt && estimate.status !== 'accepted') {
+    return c.json({ error: 'Only signed agreements can be voided. Use cancel for unsigned estimates.' }, 409);
+  }
+  if (estimate.status === 'voided') {
+    const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+    return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
+  }
+  if (estimate.status === 'superseded') {
+    return c.json({ error: 'This agreement was superseded by a revision.' }, 409);
+  }
+
+  const [updated] = await db.update(estimates)
+    .set({ status: 'voided', updatedAt: new Date() })
+    .where(and(eq(estimates.id, id), eq(estimates.orgId, orgId)))
+    .returning();
+
+  await db.insert(auditLogs).values({
+    orgId,
+    userId: c.get('userId'),
+    action: 'estimate.agreement.voided',
+    entityType: 'estimate',
+    entityId: updated.id,
+    metadata: {
+      leadId: updated.leadId,
+      previousStatus: estimate.status,
+      reason: parsed.data.reason || null,
+    },
+  });
+
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  return c.json({ data: { ...updated, publicUrl: publicEstimateUrl(baseUrl, updated.id), customerPreviewUrl: publicEstimateUrl(baseUrl, updated.id) } });
+});
+
+estimatesApp.post('/:id/revise', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const parsed = agreementActionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid revision request', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) return c.json({ error: 'Not found' }, 404);
+  if (!estimate.signedAt && estimate.status !== 'accepted') {
+    return c.json({ error: 'Only signed agreements need revisions. Edit unsigned sent estimates directly.' }, 409);
+  }
+  if (['voided', 'superseded'].includes(estimate.status)) {
+    return c.json({ error: 'This agreement is no longer active.' }, 409);
+  }
+
+  const now = new Date();
+  const [revision] = await db.insert(estimates)
+    .values({
+      orgId,
+      leadId: estimate.leadId,
+      packages: estimate.packages,
+      total: estimate.total,
+      status: 'draft',
+    })
+    .returning();
+
+  const [superseded] = await db.update(estimates)
+    .set({ status: 'superseded', updatedAt: now })
+    .where(and(eq(estimates.id, id), eq(estimates.orgId, orgId)))
+    .returning();
+
+  await db.insert(auditLogs).values([
+    {
+      orgId,
+      userId: c.get('userId'),
+      action: 'estimate.revision.created',
+      entityType: 'estimate',
+      entityId: revision.id,
+      metadata: {
+        leadId: revision.leadId,
+        previousEstimateId: estimate.id,
+        reason: parsed.data.reason || null,
+      },
+    },
+    {
+      orgId,
+      userId: c.get('userId'),
+      action: 'estimate.agreement.superseded',
+      entityType: 'estimate',
+      entityId: superseded.id,
+      metadata: {
+        leadId: superseded.leadId,
+        revisionEstimateId: revision.id,
+        reason: parsed.data.reason || null,
+      },
+    },
+  ]);
+
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  return c.json({
+    data: {
+      ...revision,
+      supersededEstimateId: superseded.id,
+      publicUrl: publicEstimateUrl(baseUrl, revision.id),
+      customerPreviewUrl: publicEstimateUrl(baseUrl, revision.id),
+      editUrl: `/estimates/production?estimateId=${revision.id}`,
+    },
+  }, 201);
 });
 
 estimatesApp.patch('/:id', async (c) => {

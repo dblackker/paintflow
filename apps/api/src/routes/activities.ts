@@ -72,13 +72,15 @@ function estimateTitle(status: string, clientName?: string | null, total?: unkno
   if (status === 'accepted') return `Estimate accepted for ${name}${amount}`;
   if (status === 'declined') return `Estimate declined for ${name}${amount}`;
   if (status === 'sent') return `Estimate sent to ${name}${amount}`;
+  if (status === 'superseded') return `Estimate agreement superseded for ${name}${amount}`;
+  if (status === 'voided') return `Estimate agreement voided for ${name}${amount}`;
   if (status === 'draft') return `Draft estimate created for ${name}`;
   return `Estimate updated for ${name}${amount}`;
 }
 
 function estimateOccurredAt(status: string, createdAt: Date, sentAt?: Date | null, signedAt?: Date | null) {
   if (status === 'accepted' && signedAt) return signedAt;
-  if (['sent', 'declined'].includes(status) && sentAt) return sentAt;
+  if (['sent', 'declined', 'superseded', 'voided'].includes(status) && sentAt) return sentAt;
   return createdAt;
 }
 

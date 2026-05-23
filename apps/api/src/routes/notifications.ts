@@ -23,6 +23,9 @@ const importantAuditActions = [
   'estimate.updated',
   'estimate.email.sent',
   'estimate.email.updated',
+  'estimate.revision.created',
+  'estimate.agreement.superseded',
+  'estimate.agreement.voided',
   'estimate.portal_link.created',
 ];
 
@@ -33,6 +36,9 @@ function estimateEventTitle(action: string) {
     'estimate.updated': 'Estimate updated',
     'estimate.email.sent': 'Estimate email sent',
     'estimate.email.updated': 'Estimate update emailed',
+    'estimate.revision.created': 'Estimate revision created',
+    'estimate.agreement.superseded': 'Estimate agreement superseded',
+    'estimate.agreement.voided': 'Estimate agreement voided',
     'estimate.portal_link.created': 'Estimate portal link created',
   };
   return labels[action] || action.replace(/[._-]/g, ' ');

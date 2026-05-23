@@ -31,6 +31,8 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       accepted: 'Accepted',
       declined: 'Declined',
       canceled: 'Canceled',
+      superseded: 'Superseded',
+      voided: 'Voided',
       partially_refunded: 'Partially refunded',
       refunded: 'Refunded',
       succeeded: 'Paid',
@@ -432,6 +434,11 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       });
 
     window.addEventListener('paintflow:payment-recorded', async () => {
+      const payload = await apiJson(`/v1/leads/${leadId}`);
+      if (payload) render(payload.data);
+    });
+
+    window.addEventListener('paintflow:estimate-updated', async () => {
       const payload = await apiJson(`/v1/leads/${leadId}`);
       if (payload) render(payload.data);
     });

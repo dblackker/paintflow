@@ -46,8 +46,11 @@ const { defineOnly = false } = Astro.props;
         const estimateId = String(estimate.id || '');
         const canCancel = ['draft', 'sent', 'declined'].includes(status) && !estimate.signedAt;
         const canEdit = status === 'draft' || (status === 'sent' && !estimate.signedAt);
+        const isSignedAgreement = Boolean(estimate.signedAt) || status === 'accepted';
+        const canReviseAgreement = isSignedAgreement && status === 'accepted';
+        const canVoidAgreement = isSignedAgreement && status === 'accepted';
         const balance = estimateBalance(estimate);
-        const canRecordPayment = estimateId && !['draft', 'canceled'].includes(status) && balance > 0.005;
+        const canRecordPayment = estimateId && !['draft', 'canceled', 'voided', 'superseded'].includes(status) && balance > 0.005;
         const actions = [];
 
         if (canEdit) {
@@ -66,7 +69,102 @@ const { defineOnly = false } = Astro.props;
           actions.push(`<button type="button" class="btn-text btn-sm justify-center" data-record-estimate-payment="${escapeHtml(estimateId)}" data-estimate-total="${escapeHtml(String(Number(estimate.total || 0)))}">Record payment</button>`);
         }
 
+        if (canReviseAgreement) {
+          actions.push(`<button type="button" class="btn-text btn-sm justify-center" data-revise-estimate="${escapeHtml(estimateId)}">Create revision</button>`);
+        }
+
+        if (canVoidAgreement) {
+          actions.push(`<button type="button" class="btn-text btn-sm text-red-700 justify-center" data-void-estimate="${escapeHtml(estimateId)}">Void agreement</button>`);
+        }
+
         return `<div class="estimate-actions flex flex-wrap gap-2 ${escapeHtml(className)}">${actions.join('')}</div>`;
+      }
+
+      function ensureAgreementActionModal() {
+        let modal = document.getElementById('agreement-action-modal');
+        if (modal) return modal;
+        modal = document.createElement('div');
+        modal.id = 'agreement-action-modal';
+        modal.className = 'mobile-sheet hidden fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4';
+        modal.innerHTML = `
+          <div class="bg-white rounded-t-lg sm:rounded-lg p-5 sm:p-6 w-full max-w-lg max-h-[92vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h3 id="agreement-action-title" class="text-lg font-semibold text-gray-950"></h3>
+                <p id="agreement-action-copy" class="mt-1 text-sm text-gray-600"></p>
+              </div>
+              <button type="button" class="btn-icon" data-close-agreement-action aria-label="Close">&times;</button>
+            </div>
+            <form id="agreement-action-form" class="mt-4 space-y-4">
+              <input type="hidden" name="estimateId">
+              <input type="hidden" name="action">
+              <label class="block text-sm font-medium text-gray-700">Reason
+                <textarea name="reason" rows="3" maxlength="500" required class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Customer requested a different scope, job postponed, agreement rescinded..."></textarea>
+              </label>
+              <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                Signed agreements remain in the customer record for audit history. Use revisions for changed scope; use void only when the agreement should not proceed.
+              </div>
+              <div class="flex justify-end gap-2">
+                <button type="button" class="btn-secondary btn-sm" data-close-agreement-action>Cancel</button>
+                <button id="save-agreement-action" type="submit" class="btn-primary btn-sm">Continue</button>
+              </div>
+            </form>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', (event) => {
+          if (event.target.closest('[data-close-agreement-action]') || event.target === modal) closeAgreementActionModal();
+        });
+        modal.querySelector('#agreement-action-form').addEventListener('submit', submitAgreementAction);
+        return modal;
+      }
+
+      function closeAgreementActionModal() {
+        document.getElementById('agreement-action-modal')?.classList.add('hidden');
+      }
+
+      function openAgreementActionModal(action, estimateId) {
+        const modal = ensureAgreementActionModal();
+        const form = modal.querySelector('#agreement-action-form');
+        form.reset();
+        form.elements.estimateId.value = estimateId;
+        form.elements.action.value = action;
+        const isRevision = action === 'revise';
+        modal.querySelector('#agreement-action-title').textContent = isRevision ? 'Create revised agreement' : 'Void signed agreement';
+        modal.querySelector('#agreement-action-copy').textContent = isRevision
+          ? 'This creates a new draft estimate from the signed agreement and marks the signed agreement as superseded.'
+          : 'This marks the signed agreement as voided while preserving the signed copy and payment history.';
+        modal.querySelector('#save-agreement-action').textContent = isRevision ? 'Create revision' : 'Void agreement';
+        modal.classList.remove('hidden');
+        form.elements.reason.focus();
+      }
+
+      async function submitAgreementAction(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const action = form.elements.action.value;
+        const estimateId = form.elements.estimateId.value;
+        const button = form.querySelector('#save-agreement-action');
+        button.disabled = true;
+        try {
+          const { data } = await apiJson(`/v1/estimates/${estimateId}/${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ reason: form.elements.reason.value }),
+          });
+          closeAgreementActionModal();
+          if (action === 'revise') {
+            window.showToast?.('Revision draft created', 'success');
+            window.location.href = data?.editUrl || `/estimates/production?estimateId=${data?.id}`;
+            return;
+          }
+          window.showToast?.('Agreement voided', 'success');
+          window.dispatchEvent(new CustomEvent('paintflow:estimate-updated', { detail: { estimateId } }));
+        } catch (err) {
+          window.showToast?.(err.message || 'Agreement action failed', 'error');
+        } finally {
+          button.disabled = false;
+        }
       }
 
       function apiBaseUrl() {
@@ -238,6 +336,18 @@ const { defineOnly = false } = Astro.props;
         const button = event.target.closest('[data-record-estimate-payment]');
         if (!button) return;
         openManualPaymentModal(button.dataset.recordEstimatePayment);
+      });
+
+      document.addEventListener('click', (event) => {
+        const reviseButton = event.target.closest('[data-revise-estimate]');
+        if (reviseButton) {
+          openAgreementActionModal('revise', reviseButton.dataset.reviseEstimate);
+          return;
+        }
+        const voidButton = event.target.closest('[data-void-estimate]');
+        if (voidButton) {
+          openAgreementActionModal('void', voidButton.dataset.voidEstimate);
+        }
       });
 
       window.PaintFlowUI = window.PaintFlowUI || {};

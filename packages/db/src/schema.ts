@@ -3,7 +3,7 @@ import { relations } from 'drizzle-orm';
 
 export const roleEnum = pgEnum('role', ['owner', 'member']);
 export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'estimate_sent', 'won', 'lost']);
-export const estimateStatusEnum = pgEnum('estimate_status', ['draft', 'sent', 'accepted', 'declined', 'canceled']);
+export const estimateStatusEnum = pgEnum('estimate_status', ['draft', 'sent', 'accepted', 'declined', 'canceled', 'superseded', 'voided']);
 export const messageDirectionEnum = pgEnum('message_direction', ['inbound', 'outbound']);
 
 export const organizations = pgTable('organizations', {

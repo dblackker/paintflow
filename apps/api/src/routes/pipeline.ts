@@ -60,7 +60,7 @@ function stageFor(lead: typeof leads.$inferSelect, estimate?: typeof estimates.$
     if (estimate.status === 'declined') return 'lost';
     if (estimate.status === 'accepted') return 'won_deposit_pending';
     if (estimate.status === 'sent') return 'estimate_sent';
-    if (estimate.status !== 'canceled') return 'estimate_in_progress';
+    if (!['canceled', 'voided', 'superseded'].includes(estimate.status)) return 'estimate_in_progress';
   }
   if (explicitStage) return explicitStage;
   if (lead.status === 'contacted') return 'contacted';

@@ -96,7 +96,7 @@ billing.post('/manual', async (c) => {
     where: and(eq(estimates.id, parsed.data.estimateId), eq(estimates.orgId, orgId)),
   });
   if (!estimate) return c.json({ error: 'Estimate not found' }, 404);
-  if (estimate.status === 'canceled') return c.json({ error: 'Cannot record payment on a canceled estimate.' }, 409);
+  if (['canceled', 'voided', 'superseded'].includes(estimate.status)) return c.json({ error: 'Cannot record payment on an inactive estimate.' }, 409);
 
   const existingPayments = await db.select().from(customerPayments)
     .where(and(eq(customerPayments.estimateId, estimate.id), eq(customerPayments.orgId, orgId)));
@@ -174,8 +174,8 @@ billing.post('/checkout', async (c) => {
   if (!estimate) {
     return c.json({ error: 'Estimate not found' }, 404);
   }
-  if (estimate.status === 'canceled') {
-    return c.json({ error: 'This estimate has been canceled' }, 409);
+  if (['canceled', 'voided', 'superseded'].includes(estimate.status)) {
+    return c.json({ error: 'This estimate is no longer active' }, 409);
   }
 
   const stripeConnection = await db.query.stripeConnections.findFirst({
