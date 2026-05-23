@@ -88,6 +88,44 @@ import Base from '../layouts/Base.astro';
     </div>
   </div>
 
+  <div id="transition-modal" class="hidden fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-black/35" data-close-transition></div>
+    <div class="absolute inset-x-3 top-8 mx-auto max-w-lg rounded-lg border bg-white shadow-xl">
+      <form id="transition-form" class="p-4 sm:p-5 space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-950">Move customer</h2>
+            <p id="transition-customer" class="text-sm text-gray-600"></p>
+          </div>
+          <button type="button" class="btn-icon" data-close-transition aria-label="Close move form">&times;</button>
+        </div>
+        <input type="hidden" name="leadId">
+        <label class="block text-sm font-medium text-gray-700">Pipeline stage
+          <select name="targetStage" class="mt-1 w-full rounded-md border px-3 py-2 text-sm"></select>
+        </label>
+        <label class="block text-sm font-medium text-gray-700">Reason or note
+          <textarea name="reason" rows="3" maxlength="1000" class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Why is this moving? Required when archiving or marking won without a signed estimate."></textarea>
+        </label>
+        <div class="rounded-lg border bg-gray-50 p-3">
+          <p class="text-sm font-semibold text-gray-900">Optional follow-up</p>
+          <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="text-sm font-medium text-gray-700">Task
+              <input name="activityTitle" maxlength="255" autocomplete="off" class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Call customer Friday">
+            </label>
+            <label class="text-sm font-medium text-gray-700">Due
+              <input name="dueAt" type="datetime-local" class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
+            </label>
+          </div>
+        </div>
+        <div id="transition-helper" class="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900"></div>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn-secondary btn-sm" data-close-transition>Cancel</button>
+          <button id="save-transition" type="submit" class="btn-primary btn-sm">Move customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <style is:global>
     .pipeline-filter {
       border: 1px solid var(--pf-border);
@@ -113,6 +151,19 @@ import Base from '../layouts/Base.astro';
       overflow-x: auto;
       padding-bottom: 0.5rem;
       width: 100%;
+    }
+    .pipeline-stage {
+      transition: border-color 150ms ease, background-color 150ms ease;
+    }
+    .pipeline-stage.is-drop-target {
+      background: #eff6ff;
+      border-color: #93c5fd;
+    }
+    .pipeline-card[draggable="true"] {
+      cursor: grab;
+    }
+    .pipeline-card.is-dragging {
+      opacity: 0.55;
     }
     @media (max-width: 760px) {
       .pipeline-board {
@@ -151,6 +202,7 @@ import Base from '../layouts/Base.astro';
     let pipelineData = { stages: [], cards: [], summary: {} };
     let activeGroup = 'all';
     let attentionOnly = false;
+    let pendingTransition = null;
 
     async function apiJson(path, options = {}) {
       const res = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
@@ -194,7 +246,7 @@ import Base from '../layouts/Base.astro';
         ? window.PaintFlowFormat?.addressLink(address, { className: 'mt-1 block truncate text-xs text-gray-600 hover:text-blue-700 hover:underline' }) || `<span class="mt-1 block truncate text-xs text-gray-600">${escapeHtml(address)}</span>`
         : `<p class="mt-1 truncate text-xs text-gray-600">${escapeHtml(card.source || 'No address')}</p>`;
       return `
-        <article class="mobile-card-row rounded-lg border bg-white p-3 shadow-sm">
+        <article class="pipeline-card mobile-card-row rounded-lg border bg-white p-3 shadow-sm" draggable="true" data-lead-id="${escapeHtml(card.leadId)}" data-stage="${escapeHtml(card.stage)}" data-name="${escapeHtml(card.name)}">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <a class="block truncate text-sm font-semibold text-gray-950 hover:text-blue-700" href="${escapeHtml(card.href)}">${escapeHtml(card.name)}</a>
@@ -219,7 +271,10 @@ import Base from '../layouts/Base.astro';
           ` : ''}
           <div class="mt-3 flex items-center justify-between gap-2 border-t pt-3">
             <a class="text-xs font-semibold text-blue-700" href="/leads/${card.leadId}">Profile</a>
-            <button class="btn-secondary btn-sm" type="button" data-add-activity="${card.leadId}" data-name="${escapeHtml(card.name)}">Add activity</button>
+            <div class="flex gap-1.5">
+              <button class="btn-secondary btn-sm" type="button" data-move-card="${card.leadId}" data-stage="${escapeHtml(card.stage)}" data-name="${escapeHtml(card.name)}">Move</button>
+              <button class="btn-secondary btn-sm" type="button" data-add-activity="${card.leadId}" data-name="${escapeHtml(card.name)}">Activity</button>
+            </div>
           </div>
         </article>
       `;
@@ -238,7 +293,7 @@ import Base from '../layouts/Base.astro';
             const cards = stageCards(stage.id);
             const value = cards.reduce((sum, card) => sum + Number(card.value || 0), 0);
             return `
-              <section class="rounded-lg border bg-gray-50 p-3">
+              <section class="pipeline-stage rounded-lg border bg-gray-50 p-3" data-stage-id="${escapeHtml(stage.id)}">
                 <div class="mb-3 flex items-start justify-between gap-2">
                   <div>
                     <h2 class="text-sm font-semibold text-gray-950">${escapeHtml(stage.label)}</h2>
@@ -246,7 +301,7 @@ import Base from '../layouts/Base.astro';
                   </div>
                   <span class="rounded-full bg-white px-2 py-1 text-xs font-semibold text-gray-700">${money(value, { cents: false })}</span>
                 </div>
-                <div class="space-y-3">${cards.length ? cards.map(renderCard).join('') : '<div class="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-500">No customers here.</div>'}</div>
+                <div class="space-y-3">${cards.length ? cards.map(renderCard).join('') : '<div class="rounded-lg border border-dashed bg-white p-4 text-sm text-gray-500">Drop a customer here or use Move.</div>'}</div>
               </section>
             `;
           }).join('')}
@@ -280,10 +335,106 @@ import Base from '../layouts/Base.astro';
       document.getElementById('activity-modal').classList.add('hidden');
     }
 
+    function stageLabel(stageId) {
+      return pipelineData.stages.find((stage) => stage.id === stageId)?.label || label(stageId);
+    }
+
+    function transitionHelper(targetStage) {
+      if (targetStage === 'lost') return 'Archive lost work with a short reason so win/loss reports and future follow-ups stay useful.';
+      if (targetStage === 'estimate_sent') return 'This stage is normally set automatically when an estimate is sent.';
+      if (['scheduled', 'in_production', 'punch_list', 'completed_review'].includes(targetStage)) return 'Production stages are normally driven by the job status once a job exists.';
+      if (['won_deposit_pending', 'ready_to_schedule'].includes(targetStage)) return 'This is normally set after a customer signs an estimate, but you can move it manually for offline commitments.';
+      return 'Use this when the customer interaction happened outside PaintFlow.';
+    }
+
+    function openTransitionModal({ leadId, name, currentStage, targetStage }) {
+      const modal = document.getElementById('transition-modal');
+      const form = document.getElementById('transition-form');
+      const select = form.elements.targetStage;
+      form.reset();
+      select.innerHTML = pipelineData.stages.map((stage) => `<option value="${escapeHtml(stage.id)}">${escapeHtml(stage.label)}</option>`).join('');
+      form.elements.leadId.value = leadId;
+      select.value = targetStage || currentStage || 'contacted';
+      pendingTransition = { leadId, fromStage: currentStage, name };
+      document.getElementById('transition-customer').textContent = `${name} · ${stageLabel(currentStage)} to ${stageLabel(select.value)}`;
+      document.getElementById('transition-helper').textContent = transitionHelper(select.value);
+      modal.classList.remove('hidden');
+      select.focus();
+    }
+
+    function closeTransitionModal() {
+      document.getElementById('transition-modal').classList.add('hidden');
+      pendingTransition = null;
+    }
+
+    function findCard(leadId) {
+      return pipelineData.cards.find((card) => card.leadId === leadId || card.id === leadId);
+    }
+
     document.addEventListener('click', (event) => {
       const activityButton = event.target.closest('[data-add-activity]');
       if (activityButton) openActivityModal(activityButton.dataset.addActivity, activityButton.dataset.name);
       if (event.target.closest('[data-close-activity]')) closeActivityModal();
+      const moveButton = event.target.closest('[data-move-card]');
+      if (moveButton) openTransitionModal({
+        leadId: moveButton.dataset.moveCard,
+        name: moveButton.dataset.name,
+        currentStage: moveButton.dataset.stage,
+        targetStage: moveButton.dataset.stage,
+      });
+      if (event.target.closest('[data-close-transition]')) closeTransitionModal();
+    });
+
+    document.addEventListener('dragstart', (event) => {
+      const card = event.target.closest('.pipeline-card');
+      if (!card) return;
+      card.classList.add('is-dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', JSON.stringify({
+        leadId: card.dataset.leadId,
+        currentStage: card.dataset.stage,
+        name: card.dataset.name,
+      }));
+    });
+
+    document.addEventListener('dragend', (event) => {
+      event.target.closest?.('.pipeline-card')?.classList.remove('is-dragging');
+      document.querySelectorAll('.pipeline-stage.is-drop-target').forEach((node) => node.classList.remove('is-drop-target'));
+    });
+
+    document.addEventListener('dragover', (event) => {
+      const stage = event.target.closest('.pipeline-stage');
+      if (!stage) return;
+      event.preventDefault();
+      stage.classList.add('is-drop-target');
+    });
+
+    document.addEventListener('dragleave', (event) => {
+      const stage = event.target.closest('.pipeline-stage');
+      if (!stage || stage.contains(event.relatedTarget)) return;
+      stage.classList.remove('is-drop-target');
+    });
+
+    document.addEventListener('drop', (event) => {
+      const stage = event.target.closest('.pipeline-stage');
+      if (!stage) return;
+      event.preventDefault();
+      stage.classList.remove('is-drop-target');
+      const data = JSON.parse(event.dataTransfer.getData('text/plain') || '{}');
+      if (!data.leadId || data.currentStage === stage.dataset.stageId) return;
+      const card = findCard(data.leadId);
+      openTransitionModal({
+        leadId: data.leadId,
+        name: data.name || card?.name || 'Customer',
+        currentStage: data.currentStage || card?.stage,
+        targetStage: stage.dataset.stageId,
+      });
+    });
+
+    document.getElementById('transition-form').addEventListener('change', (event) => {
+      if (event.target.name !== 'targetStage' || !pendingTransition) return;
+      document.getElementById('transition-customer').textContent = `${pendingTransition.name} · ${stageLabel(pendingTransition.fromStage)} to ${stageLabel(event.target.value)}`;
+      document.getElementById('transition-helper').textContent = transitionHelper(event.target.value);
     });
 
     document.getElementById('group-filters').addEventListener('click', (event) => {
@@ -322,6 +473,33 @@ import Base from '../layouts/Base.astro';
         await loadPipeline();
       } catch (err) {
         window.showToast?.(err.message || 'Failed to save activity', 'error');
+      } finally {
+        save.disabled = false;
+      }
+    });
+
+    document.getElementById('transition-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const save = document.getElementById('save-transition');
+      const formData = new FormData(form);
+      save.disabled = true;
+      try {
+        const payload = await apiJson(`/v1/pipeline/cards/${formData.get('leadId')}/transition`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({
+            targetStage: formData.get('targetStage'),
+            reason: formData.get('reason') || null,
+            activityTitle: formData.get('activityTitle') || null,
+            dueAt: formData.get('dueAt') ? new Date(formData.get('dueAt')).toISOString() : null,
+          }),
+        });
+        closeTransitionModal();
+        window.showToast?.(payload?.data?.unchanged ? 'No pipeline change needed' : 'Customer moved', 'success');
+        await loadPipeline();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to move customer', 'error');
       } finally {
         save.disabled = false;
       }

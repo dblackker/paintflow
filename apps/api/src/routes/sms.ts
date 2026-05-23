@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { leads, messages } from '@paintflow/db/schema';
+import { auditLogs, leads, messages } from '@paintflow/db/schema';
 import { and, desc, eq, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -60,6 +60,25 @@ sms.post('/inbound', async (c) => {
       leadId: lead.id,
       metadata: { from },
     }).catch((err) => console.error('Push notification failed:', err));
+
+    if (lead.status === 'new') {
+      await db.update(leads)
+        .set({ status: 'contacted', updatedAt: new Date() })
+        .where(and(eq(leads.id, lead.id), eq(leads.orgId, lead.orgId)));
+      await db.insert(auditLogs).values({
+        orgId: lead.orgId,
+        action: 'lead.stage.changed',
+        entityType: 'lead',
+        entityId: lead.id,
+        metadata: {
+          fromStage: 'new_lead',
+          targetStage: 'contacted',
+          reason: 'Customer replied by SMS.',
+          leadName: lead.name,
+          source: 'sms_inbound',
+        },
+      });
+    }
     
     console.log(`SMS from ${lead.name}: ${body}`);
   }
@@ -161,6 +180,25 @@ sms.post('/send', async (c) => {
       body,
       twilioSid: result.sid,
     });
+
+    if (lead.status === 'new') {
+      await db.update(leads)
+        .set({ status: 'contacted', updatedAt: new Date() })
+        .where(and(eq(leads.id, leadId), eq(leads.orgId, orgId)));
+      await db.insert(auditLogs).values({
+        orgId,
+        action: 'lead.stage.changed',
+        entityType: 'lead',
+        entityId: leadId,
+        metadata: {
+          fromStage: 'new_lead',
+          targetStage: 'contacted',
+          reason: 'SMS sent to customer.',
+          leadName: lead.name,
+          source: 'sms_outbound',
+        },
+      });
+    }
     
     return c.json({ success: true, messageId: result.sid });
   } catch (err) {
