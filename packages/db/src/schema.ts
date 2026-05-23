@@ -123,6 +123,26 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const emailTemplates = pgTable('email_templates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  key: varchar('key', { length: 120 }).notNull(),
+  channel: varchar('channel', { length: 50 }).notNull().default('transactional'),
+  category: varchar('category', { length: 80 }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  subject: varchar('subject', { length: 255 }).notNull(),
+  preheader: varchar('preheader', { length: 255 }),
+  html: text('html').notNull(),
+  text: text('text'),
+  mergeFields: jsonb('merge_fields'),
+  isActive: boolean('is_active').notNull().default(true),
+  isDefault: boolean('is_default').notNull().default(false),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const quickbooksConnections = pgTable('quickbooks_connections', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull().unique(),
@@ -284,6 +304,32 @@ export const changeOrders = pgTable('change_orders', {
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
   approvedAt: timestamp('approved_at'),
   createdBy: varchar('created_by', { length: 100 }).notNull(), // contractor or customer
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const emailSends = pgTable('email_sends', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id),
+  estimateId: uuid('estimate_id').references(() => estimates.id),
+  jobId: uuid('job_id').references(() => jobs.id),
+  changeOrderId: uuid('change_order_id').references(() => changeOrders.id),
+  templateKey: varchar('template_key', { length: 120 }).notNull(),
+  templateName: varchar('template_name', { length: 255 }).notNull(),
+  channel: varchar('channel', { length: 50 }).notNull().default('transactional'),
+  toEmail: varchar('to_email', { length: 255 }).notNull(),
+  fromEmail: varchar('from_email', { length: 255 }),
+  replyTo: varchar('reply_to', { length: 255 }),
+  subject: varchar('subject', { length: 255 }).notNull(),
+  previewText: varchar('preview_text', { length: 255 }),
+  renderedHtml: text('rendered_html').notNull(),
+  renderedText: text('rendered_text'),
+  status: varchar('status', { length: 50 }).notNull().default('sent'),
+  provider: varchar('provider', { length: 50 }),
+  providerMessageId: varchar('provider_message_id', { length: 255 }),
+  metadata: jsonb('metadata'),
+  sentBy: uuid('sent_by').references(() => users.id),
+  sentAt: timestamp('sent_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

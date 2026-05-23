@@ -186,10 +186,69 @@ type EstimateEmailInput = {
   estimatorName?: string | null;
   estimatorEmail?: string | null;
   estimatorPhone?: string | null;
+  estimateType?: string | null;
   scopeSummary?: Array<{
     space: string;
     substrates: string[];
   }>;
+};
+
+type EmailTemplateDefinition = {
+  key: string;
+  name: string;
+  category: 'estimate' | 'change_order' | 'drip' | 'review' | 'system';
+  channel: 'transactional' | 'marketing' | 'operational';
+  subject: string;
+  preheader: string;
+  intro: string;
+  cta: string;
+  outro: string;
+};
+
+export type RenderedEmail = {
+  templateKey: string;
+  templateName: string;
+  channel: string;
+  subject: string;
+  preheader: string;
+  html: string;
+  text: string;
+};
+
+export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
+  'estimate.interior.sent': {
+    key: 'estimate.interior.sent',
+    name: 'Interior estimate ready',
+    category: 'estimate',
+    channel: 'transactional',
+    subject: '{{companyName}} interior painting proposal for {{leadName}}',
+    preheader: 'Review your interior painting scope, paint selections, total, and approval link.',
+    intro: '{{companyName}} has prepared your interior painting proposal. The proposal is organized by room or space so you can quickly confirm the walls, ceilings, trim, doors, coats, and paint selections.',
+    cta: 'Review and approve proposal',
+    outro: 'If a room, color, or substrate needs to change, reply to this email before approving so the estimate can be updated cleanly.',
+  },
+  'estimate.exterior.sent': {
+    key: 'estimate.exterior.sent',
+    name: 'Exterior estimate ready',
+    category: 'estimate',
+    channel: 'transactional',
+    subject: '{{companyName}} exterior painting proposal for {{leadName}}',
+    preheader: 'Review your exterior scope, substrates, paint selections, total, and approval link.',
+    intro: '{{companyName}} has prepared your exterior painting proposal. The proposal highlights the included substrates, prep expectations, coats, and paint selections so the scope is clear before work is scheduled.',
+    cta: 'Review and approve proposal',
+    outro: 'If exterior access, repairs, colors, or optional areas need to change, reply to this email before approving so the estimate can be updated cleanly.',
+  },
+  'estimate.standard.sent': {
+    key: 'estimate.standard.sent',
+    name: 'Painting estimate ready',
+    category: 'estimate',
+    channel: 'transactional',
+    subject: 'Painting proposal from {{companyName}}',
+    preheader: 'Review your painting scope, paint selections, total, and approval link.',
+    intro: '{{companyName}} has prepared your painting proposal for review. The secure proposal link includes the current scope, optional add-ons, approval, signature, and deposit steps.',
+    cta: 'Review and approve proposal',
+    outro: 'If anything in the scope should change, reply to this email before approving so everyone is working from the current version.',
+  },
 };
 
 function escapeHtml(value: string) {
@@ -203,6 +262,22 @@ function escapeHtml(value: string) {
 }
 
 export function estimateEmailTemplate(input: EstimateEmailInput) {
+  return renderEstimateEmail(input).html;
+}
+
+function replaceMergeTags(value: string, fields: Record<string, string>) {
+  return value.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => fields[key] || '');
+}
+
+function estimateTemplateKey(input: EstimateEmailInput) {
+  const type = String(input.estimateType || '').toLowerCase();
+  if (type.includes('interior')) return 'estimate.interior.sent';
+  if (type.includes('exterior')) return 'estimate.exterior.sent';
+  return 'estimate.standard.sent';
+}
+
+export function renderEstimateEmail(input: EstimateEmailInput): RenderedEmail {
+  const template = estimateEmailTemplates[estimateTemplateKey(input)] || estimateEmailTemplates['estimate.standard.sent'];
   const baseUrl = input.baseUrl || 'https://app.paintflow.app';
   const url = `${baseUrl}/estimates/${encodeURIComponent(input.estimateId)}`;
   const companyName = escapeHtml(input.companyName || 'your painting contractor');
@@ -212,6 +287,15 @@ export function estimateEmailTemplate(input: EstimateEmailInput) {
   const estimatorEmail = input.estimatorEmail ? escapeHtml(input.estimatorEmail) : '';
   const estimatorPhone = input.estimatorPhone ? escapeHtml(input.estimatorPhone) : '';
   const scopeSummary = Array.isArray(input.scopeSummary) ? input.scopeSummary.slice(0, 8) : [];
+  const mergeFields = {
+    companyName: input.companyName || 'your painting contractor',
+    leadName: input.leadName,
+    total: input.total,
+    estimatorName: input.estimatorName || input.companyName || 'Your estimator',
+  };
+  const subject = replaceMergeTags(template.subject, mergeFields);
+  const intro = replaceMergeTags(template.intro, mergeFields);
+  const outro = replaceMergeTags(template.outro, mergeFields);
   const scopeHtml = scopeSummary.length ? `
   <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;">
     <h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Included scope summary</h2>
@@ -224,23 +308,34 @@ export function estimateEmailTemplate(input: EstimateEmailInput) {
   </div>
   ` : '';
 
-  return `
+  const html = `
 <!DOCTYPE html>
 <html>
 <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
   <h1 style="color: #2563eb;">Your painting proposal is ready</h1>
   <p>Hi ${leadName},</p>
-  <p>${companyName} has prepared your painting proposal for review.</p>
+  <p>${escapeHtml(intro)}</p>
   <p><strong>Base proposal total: $${total}</strong></p>
   ${scopeHtml}
   <p>Use the secure link below to review the included scope, choose any optional add-ons, approve the proposal, sign, and pay the deposit.</p>
-  <a href="${url}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">Review and approve proposal</a>
+  <a href="${url}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${escapeHtml(template.cta)}</a>
   <p style="color: #4b5563;">A PDF copy can be provided for your records, but approvals, selected options, signatures, and deposits should happen through the secure proposal link so everyone is working from the current version.</p>
   <p>This proposal is valid for 30 days unless otherwise noted.</p>
+  <p>${escapeHtml(outro)}</p>
   <p>Questions? Reply to this email${estimatorPhone ? ` or call ${estimatorPhone}` : ''}.</p>
   <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
   <p style="color: #6b7280; font-size: 14px;">Sent by ${estimatorName}${estimatorEmail ? ` &lt;${estimatorEmail}&gt;` : ''}</p>
 </body>
 </html>
   `;
+
+  return {
+    templateKey: template.key,
+    templateName: template.name,
+    channel: template.channel,
+    subject,
+    preheader: template.preheader,
+    html,
+    text: plainTextFromHtml(html),
+  };
 }

@@ -141,6 +141,37 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       `).join('');
     }
 
+    function renderEmailSends(emailSends = []) {
+      if (!emailSends.length) {
+        return '<div class="p-5 text-sm text-gray-500">No email history yet.</div>';
+      }
+      return emailSends.map((email) => `
+        <details class="p-4">
+          <summary class="cursor-pointer list-none">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="text-sm font-semibold text-gray-950">${escapeHtml(email.subject)}</p>
+                  ${statusBadge(email.status || 'sent')}
+                </div>
+                <p class="mt-1 text-xs text-gray-500">${escapeHtml(email.templateName || 'Email')} &middot; Sent ${dateLabel(email.sentAt)} to ${escapeHtml(email.toEmail)}</p>
+                ${email.previewText ? `<p class="mt-1 text-sm text-gray-600">${escapeHtml(email.previewText)}</p>` : ''}
+              </div>
+              <span class="btn-text btn-sm pointer-events-none">View email</span>
+            </div>
+          </summary>
+          <div class="mt-3 rounded-lg border bg-gray-50 p-2">
+            <iframe
+              title="Sent email preview"
+              class="h-80 w-full rounded-md bg-white"
+              sandbox=""
+              srcdoc="${escapeHtml(email.renderedHtml || '<p>Email preview unavailable.</p>')}"
+            ></iframe>
+          </div>
+        </details>
+      `).join('');
+    }
+
     function renderPhotos(photos) {
       const all = [...photos.estimates.map((photo) => ({ ...photo, source: 'Estimate' })), ...photos.jobs.map((photo) => ({ ...photo, source: 'Job' }))];
       if (!all.length) {
@@ -249,7 +280,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
         <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           ${renderStat('Estimates', data.estimates.length, recentEstimate ? `${currency(recentEstimate.total)} latest` : 'No estimate yet')}
           ${renderStat('Jobs', data.jobs.length, data.jobs.find((job) => job.status !== 'completed') ? 'Active production' : 'No active job')}
-          ${renderStat('Messages', data.messages.length, 'Recent contact history')}
+          ${renderStat('Messages', data.messages.length + (data.emailSends?.length || 0), 'Text and email history')}
           ${renderStat('Photos', data.photos.estimates.length + data.photos.jobs.length, 'Estimate and job media')}
         </section>
 
@@ -296,6 +327,13 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
                 </div>
               </form>
               <div id="customer-activities-list" class="divide-y">${renderActivities(data.activities)}</div>
+            </section>
+            <section class="bg-white border rounded-lg overflow-hidden">
+              <div class="p-4 border-b flex items-center justify-between gap-3">
+                <h2 class="font-semibold">Emails</h2>
+                <span class="text-xs text-gray-500">${data.emailSends?.length || 0} sent</span>
+              </div>
+              <div class="divide-y max-h-[520px] overflow-auto">${renderEmailSends(data.emailSends || [])}</div>
             </section>
             <section class="bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b flex items-center justify-between gap-3">

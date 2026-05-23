@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
+import { auditLogs, emailSends, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
-import { sendEmail, estimateEmailTemplate } from '../lib/email';
+import { sendEmail, renderEstimateEmail } from '../lib/email';
 import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
 import { createNotificationAndPush } from '../lib/web-push';
 
@@ -515,6 +515,16 @@ function proposalScopeSummary(estimate: typeof estimates.$inferSelect) {
   }));
 }
 
+function estimateProjectType(estimate: typeof estimates.$inferSelect) {
+  const packages = Array.isArray(estimate.packages) ? estimate.packages as Array<{ estimateType?: string }> : [];
+  const explicit = packages.find((pkg) => pkg.estimateType)?.estimateType;
+  if (explicit) return explicit;
+  const summary = JSON.stringify(estimate.packages || '').toLowerCase();
+  if (summary.includes('exterior')) return 'exterior';
+  if (summary.includes('interior')) return 'interior';
+  return 'standard';
+}
+
 estimatesApp.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
@@ -548,7 +558,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
     : null;
   const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
   const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const html = estimateEmailTemplate({
+  const renderedEmail = renderEstimateEmail({
     estimateId: estimate.id,
     leadName: lead.name,
     total,
@@ -557,10 +567,39 @@ estimatesApp.post('/:id/send-email', async (c) => {
     estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
     estimatorEmail: settings?.email || estimator?.email || null,
     estimatorPhone: settings?.phone || null,
+    estimateType: estimateProjectType(estimate),
     scopeSummary: proposalScopeSummary(estimate),
   });
+  const fromEmail = c.env.EMAIL_FROM || 'estimates@paintflow.app';
+  const replyTo = settings?.email || estimator?.email || undefined;
 
-  await sendEmail(c.env, lead.email, `Painting estimate from ${branding?.companyName || 'PaintFlow'}`, html);
+  const providerResult = await sendEmail(c.env, lead.email, renderedEmail.subject, renderedEmail.html, undefined, {
+    replyTo,
+    text: renderedEmail.text,
+  }) as { id?: string; message_id?: string };
+  const [emailSend] = await db.insert(emailSends).values({
+    orgId,
+    leadId: lead.id,
+    estimateId: estimate.id,
+    templateKey: renderedEmail.templateKey,
+    templateName: renderedEmail.templateName,
+    channel: renderedEmail.channel,
+    toEmail: lead.email,
+    fromEmail,
+    replyTo: replyTo || null,
+    subject: renderedEmail.subject,
+    previewText: renderedEmail.preheader,
+    renderedHtml: renderedEmail.html,
+    renderedText: renderedEmail.text,
+    status: 'sent',
+    provider: c.env.EMAIL_PROVIDER || (c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'resend'),
+    providerMessageId: providerResult?.id || providerResult?.message_id || null,
+    sentBy: c.get('userId'),
+    metadata: {
+      estimateType: estimateProjectType(estimate),
+      link: `${baseUrl}/estimates/${estimate.id}`,
+    },
+  }).returning();
   await db.insert(auditLogs).values({
     orgId,
     userId: c.get('userId'),
@@ -570,11 +609,14 @@ estimatesApp.post('/:id/send-email', async (c) => {
     metadata: {
       leadId: lead.id,
       email: lead.email,
+      emailSendId: emailSend.id,
+      subject: renderedEmail.subject,
+      templateKey: renderedEmail.templateKey,
       link: `${baseUrl}/estimates/${estimate.id}`,
     },
   });
 
-  return c.json({ data: { sent: true, to: lead.email } });
+  return c.json({ data: { sent: true, to: lead.email, emailSendId: emailSend.id } });
 });
 
 estimatesApp.post('/:id/portal-link', async (c) => {

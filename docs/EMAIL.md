@@ -65,6 +65,38 @@ Estimate and change order emails:
 - Send the customer a secure link for review, acceptance, selected options, signature, and deposit/payment.
 - Do not rely on PDF attachments as the source of truth. PDFs can be generated for records after acceptance.
 - Set `replyTo` to the contractor or office email when available.
+- Preview the customer-facing email before any owner/estimator initiated send.
+- Store the rendered email content on the customer timeline so staff can see exactly what went out.
+
+## Template System Spec
+
+PaintFlow email communication should use three layers:
+
+- Template definitions: reusable subject, preheader, body, CTA, channel, category, and merge-field definitions. System templates cover estimates, change orders, review requests, summaries, and magic links. Org templates can override copy and branding later without changing send logic.
+- Rendered sends: immutable records of the exact HTML/text sent, recipient, sender, template key, related customer/estimate/job/change order, provider, and delivery status.
+- Automations: rules that decide when a template is queued or sent. Direct owner/estimator actions require preview first. Drip and summary automations need consent, suppression, frequency caps, and stop conditions.
+
+Initial estimate templates:
+
+- `estimate.interior.sent`: room/space oriented, references walls, ceilings, trim, doors, coats, and paint selections.
+- `estimate.exterior.sent`: substrate oriented, references exterior access, repairs, prep, coats, optional areas, and paint selections.
+- `estimate.standard.sent`: fallback for mixed or quick estimates.
+
+Future template groups:
+
+- Change orders: approval/payment request, reminder, approved, declined.
+- Estimate follow-up drips: 24-hour check-in, 3-day reminder, 7-day schedule/seasonality nudge, final follow-up. Stop when accepted, declined, job booked, or manually suppressed.
+- Job operations: schedule confirmation, color confirmation, job start reminder, job complete/thank you.
+- Review/referral: review request after completion, referral ask, maintenance/seasonal repaint reminder.
+
+Best-practice constraints:
+
+- Keep transactional email separate from marketing drips so unsubscribes never block login, approvals, or payment links.
+- Use merge fields instead of hard-coded customer and estimator details.
+- Store one immutable rendered send record for every outbound email.
+- Show email sends on the customer profile alongside SMS and activities.
+- Add campaign analytics later around opens/clicks/replies/conversions, but do not depend on tracking pixels for core workflow state.
+- Require unsubscribe and contact consent controls before turning on marketing campaigns.
 
 Daily summary reports:
 
