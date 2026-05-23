@@ -393,9 +393,20 @@ const navSections = [
       const nav = document.getElementById('mobile-nav');
       const button = document.getElementById('mobile-menu');
       if (!nav || !button) return;
+      if (open) positionMobileNav();
       nav.classList.toggle('hidden', !open);
       nav.classList.toggle('is-open', open);
       button.setAttribute('aria-expanded', String(open));
+    }
+
+    function positionMobileNav() {
+      const nav = document.getElementById('mobile-nav');
+      const button = document.getElementById('mobile-menu');
+      if (!nav || !button) return;
+      const rect = button.getBoundingClientRect();
+      const edgePadding = 12;
+      nav.style.setProperty('--pf-mobile-nav-top', `${Math.round(rect.bottom + 8)}px`);
+      nav.style.setProperty('--pf-mobile-nav-right', `${Math.max(edgePadding, Math.round(window.innerWidth - rect.right))}px`);
     }
 
     function toggleMobileNav(event) {
@@ -427,6 +438,12 @@ const navSections = [
       if (!nav || nav.classList.contains('hidden')) return;
       if (nav.contains(event.target)) return;
       setMobileNavOpen(false);
+    });
+
+    window.addEventListener('resize', () => {
+      const nav = document.getElementById('mobile-nav');
+      if (!nav || nav.classList.contains('hidden')) return;
+      positionMobileNav();
     });
 
     document.getElementById('notifications-button')?.addEventListener('click', () => {
