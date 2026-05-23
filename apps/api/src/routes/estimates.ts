@@ -246,6 +246,7 @@ estimatesApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const limit = Math.min(parseInt(c.req.query('limit') || '50'), 100);
   const offset = parseInt(c.req.query('offset') || '0');
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
   const db = createDb(c.env.DATABASE_URL);
   
   const rows = await db.query.estimates.findMany({
@@ -269,6 +270,8 @@ estimatesApp.get('/', async (c) => {
     leadCity: leadsById.get(estimate.leadId)?.city,
     leadState: leadsById.get(estimate.leadId)?.state,
     leadPostalCode: leadsById.get(estimate.leadId)?.postalCode,
+    publicUrl: publicEstimateUrl(baseUrl, estimate.id),
+    customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id),
   }));
   
   return c.json({ data });
@@ -365,6 +368,8 @@ estimatesApp.post('/', async (c) => {
     data: {
       ...estimate,
       recommendedTotal: estimateContractValue(estimate),
+      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
+      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
     },
   }, 201);
 });
@@ -382,7 +387,8 @@ estimatesApp.get('/:id', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
-  return c.json({ data: estimate });
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
 });
 
 estimatesApp.patch('/:id', async (c) => {
@@ -457,6 +463,8 @@ estimatesApp.patch('/:id', async (c) => {
     data: {
       ...estimate,
       recommendedTotal: estimateContractValue(estimate),
+      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
+      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
     },
   });
 });
@@ -532,6 +540,42 @@ function estimateEmailTemplateKey(projectType: string) {
   return 'estimate.standard.sent';
 }
 
+function publicEstimateUrl(baseUrl: string, id: string) {
+  return `${baseUrl.replace(/\/$/, '')}/estimates/${id}`;
+}
+
+function isMissingRelation(error: unknown) {
+  const err = error as { code?: string; message?: string };
+  return err?.code === '42P01' || /relation .* does not exist/i.test(err?.message || '');
+}
+
+async function findEmailTemplateOverride(db: ReturnType<typeof createDb>, orgId: string, templateKey: string) {
+  try {
+    return await db.query.emailTemplates.findFirst({
+      where: and(eq(emailTemplates.orgId, orgId), eq(emailTemplates.key, templateKey), eq(emailTemplates.isActive, true)),
+    });
+  } catch (error) {
+    if (isMissingRelation(error)) {
+      console.warn('Email template overrides unavailable; run email communications migration.');
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function recordEmailSend(db: ReturnType<typeof createDb>, values: typeof emailSends.$inferInsert) {
+  try {
+    const [emailSend] = await db.insert(emailSends).values(values).returning();
+    return emailSend;
+  } catch (error) {
+    if (isMissingRelation(error)) {
+      console.warn('Email send logging unavailable; run email communications migration.');
+      return null;
+    }
+    throw error;
+  }
+}
+
 estimatesApp.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
@@ -564,12 +608,11 @@ estimatesApp.post('/:id/send-email', async (c) => {
     ? await db.query.users.findFirst({ where: eq(users.id, userId) })
     : null;
   const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const previewUrl = publicEstimateUrl(baseUrl, estimate.id);
   const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const projectType = estimateProjectType(estimate);
   const templateKey = estimateEmailTemplateKey(projectType);
-  const templateOverride = await db.query.emailTemplates.findFirst({
-    where: and(eq(emailTemplates.orgId, orgId), eq(emailTemplates.key, templateKey), eq(emailTemplates.isActive, true)),
-  });
+  const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
   const renderedEmail = renderEstimateEmail({
     estimateId: estimate.id,
     leadName: lead.name,
@@ -589,7 +632,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
     replyTo,
     text: renderedEmail.text,
   }) as { id?: string; message_id?: string };
-  const [emailSend] = await db.insert(emailSends).values({
+  const emailSend = await recordEmailSend(db, {
     orgId,
     leadId: lead.id,
     estimateId: estimate.id,
@@ -609,9 +652,9 @@ estimatesApp.post('/:id/send-email', async (c) => {
     sentBy: c.get('userId'),
     metadata: {
       estimateType: projectType,
-      link: `${baseUrl}/estimates/${estimate.id}`,
+      link: previewUrl,
     },
-  }).returning();
+  });
   await db.insert(auditLogs).values({
     orgId,
     userId: c.get('userId'),
@@ -621,14 +664,14 @@ estimatesApp.post('/:id/send-email', async (c) => {
     metadata: {
       leadId: lead.id,
       email: lead.email,
-      emailSendId: emailSend.id,
+      emailSendId: emailSend?.id,
       subject: renderedEmail.subject,
       templateKey: renderedEmail.templateKey,
-      link: `${baseUrl}/estimates/${estimate.id}`,
+      link: previewUrl,
     },
   });
 
-  return c.json({ data: { sent: true, to: lead.email, emailSendId: emailSend.id } });
+  return c.json({ data: { sent: true, to: lead.email, emailSendId: emailSend?.id ?? null, previewUrl } });
 });
 
 estimatesApp.post('/:id/portal-link', async (c) => {

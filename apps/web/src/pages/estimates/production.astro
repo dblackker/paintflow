@@ -2334,19 +2334,23 @@ import Base from '../../layouts/Base.astro';
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, packages, status: statusValue }),
         });
+        let sendResult = null;
         if (statusValue !== 'draft') {
-          await apiJson(`${API_URL}/v1/estimates/${data.id}/send-email`, {
+          const sendPayload = await apiJson(`${API_URL}/v1/estimates/${data.id}/send-email`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Idempotency-Key': crypto.randomUUID(),
             },
           });
+          sendResult = sendPayload?.data || null;
         }
         window.showToast(statusValue === 'draft' ? 'Draft saved.' : 'Estimate emailed. Opening it now.');
         editingEstimateId = data.id;
         closeSendPreview();
-        window.location.href = statusValue === 'draft' ? '/estimates?status=draft' : `/estimates/${data.id}`;
+        const previewUrl = sendResult?.previewUrl || data.customerPreviewUrl || data.publicUrl || `/estimates/${data.id}`;
+        const previewPath = new URL(previewUrl, window.location.origin).pathname;
+        window.location.href = statusValue === 'draft' ? '/estimates?status=draft' : previewPath;
       } catch (err) {
         window.showToast(err.message || 'Failed to save estimate', 'error');
         status.textContent = err.message || 'Failed to save estimate';

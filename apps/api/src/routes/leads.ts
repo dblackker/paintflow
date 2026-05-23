@@ -50,6 +50,27 @@ function normalizePhone(phone?: string) {
   }
 }
 
+function publicEstimateUrl(baseUrl: string, id: string) {
+  return `${baseUrl.replace(/\/$/, '')}/estimates/${id}`;
+}
+
+function isMissingRelation(error: unknown) {
+  const err = error as { code?: string; message?: string };
+  return err?.code === '42P01' || /relation .* does not exist/i.test(err?.message || '');
+}
+
+async function optionalEmailSends<T>(query: Promise<T[]>) {
+  try {
+    return await query;
+  } catch (error) {
+    if (isMissingRelation(error)) {
+      console.warn('Email send history unavailable; run email communications migration.');
+      return [];
+    }
+    throw error;
+  }
+}
+
 leadsApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const status = c.req.query('status');
@@ -135,6 +156,7 @@ leadsApp.get('/:id', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
 
   const customer = await db.query.leads.findFirst({
     where: and(eq(leads.id, id), eq(leads.orgId, orgId)),
@@ -155,10 +177,10 @@ leadsApp.get('/:id', async (c) => {
       .where(and(eq(messages.orgId, orgId), eq(messages.leadId, id)))
       .orderBy(desc(messages.createdAt))
       .limit(50),
-    db.select().from(emailSends)
+    optionalEmailSends(db.select().from(emailSends)
       .where(and(eq(emailSends.orgId, orgId), eq(emailSends.leadId, id)))
       .orderBy(desc(emailSends.sentAt))
-      .limit(50),
+      .limit(50)),
     db.select().from(auditLogs)
       .where(and(eq(auditLogs.orgId, orgId), eq(auditLogs.entityType, 'lead'), eq(auditLogs.entityId, id)))
       .orderBy(desc(auditLogs.createdAt))
@@ -188,7 +210,11 @@ leadsApp.get('/:id', async (c) => {
   return c.json({
     data: {
       customer,
-      estimates: customerEstimates,
+      estimates: customerEstimates.map((estimate) => ({
+        ...estimate,
+        publicUrl: publicEstimateUrl(baseUrl, estimate.id),
+        customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id),
+      })),
       jobs: customerJobs,
       messages: customerMessages,
       emailSends: customerEmailSends,

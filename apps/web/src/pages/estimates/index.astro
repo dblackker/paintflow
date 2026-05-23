@@ -84,6 +84,10 @@ import Base from '../../layouts/Base.astro';
       return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
     }
 
+    function customerPreviewHref(estimate) {
+      return new URL(estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`, window.location.origin).pathname;
+    }
+
     async function apiJson(url, options = {}) {
       const res = await fetch(url, { credentials: 'include', ...options });
       if (res.status === 401) {
@@ -159,7 +163,11 @@ import Base from '../../layouts/Base.astro';
             </div>
             <div class="sm:text-right flex items-center justify-between gap-3 sm:block">
               <p class="text-lg sm:text-xl font-bold">${money(estimate.total)}</p>
-              <a href="${estimate.status === 'draft' ? `/estimates/production?draft=${estimate.id}` : `/estimates/${estimate.id}`}" class="btn-secondary btn-sm mt-2 justify-center">${estimate.status === 'draft' ? 'Edit draft' : 'Open'}</a>
+              <div class="mt-2 flex flex-wrap justify-end gap-2">
+                ${estimate.status === 'draft'
+                  ? `<a href="/estimates/production?draft=${estimate.id}" class="btn-secondary btn-sm justify-center">Edit draft</a>`
+                  : `<a href="${customerPreviewHref(estimate)}" class="btn-secondary btn-sm justify-center">Client preview</a>`}
+              </div>
             </div>
           </div>
         </article>
