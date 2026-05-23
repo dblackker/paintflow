@@ -110,6 +110,14 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       if (!estimates.length) {
         return '<div class="p-5 text-sm text-gray-500">No estimates yet.</div>';
       }
+      const estimateTimeline = (estimate) => [
+        ['Created', estimate.createdAt],
+        ['Sent', estimate.sentAt],
+        ['Accepted', estimate.signedAt],
+      ]
+        .filter(([, value]) => value)
+        .map(([name, value]) => `<p>${name} ${dateLabel(value)}</p>`)
+        .join('');
       return estimates.map((estimate) => `
         <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 sm:p-4">
           <div class="min-w-0">
@@ -117,7 +125,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
               <p class="shrink-0 font-semibold text-gray-950">${currency(estimate.total)}</p>
               ${statusBadge(estimate.status, { label: statusLabels[estimate.status] || estimate.status })}
             </div>
-            <p class="mt-1 truncate text-xs text-gray-600">Created ${dateLabel(estimate.createdAt)}${estimate.sentAt ? ` · Sent ${dateLabel(estimate.sentAt)}` : ''}${estimate.signedAt ? ` · Accepted ${dateLabel(estimate.signedAt)}` : ''}</p>
+            <div class="mt-1 space-y-0.5 text-xs leading-5 text-gray-600">${estimateTimeline(estimate)}</div>
           </div>
           <div class="shrink-0 justify-self-end">${estimateActions(estimate)}</div>
         </div>
