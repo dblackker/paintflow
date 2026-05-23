@@ -49,9 +49,14 @@ const { defineOnly = false } = Astro.props;
         const isSignedAgreement = Boolean(estimate.signedAt) || status === 'accepted';
         const canReviseAgreement = isSignedAgreement && status === 'accepted';
         const canVoidAgreement = isSignedAgreement && status === 'accepted';
+        const isInactiveAgreement = ['voided', 'superseded'].includes(status);
         const balance = estimateBalance(estimate);
         const canRecordPayment = estimateId && !['draft', 'canceled', 'voided', 'superseded'].includes(status) && balance > 0.005;
         const actions = [];
+
+        if (isInactiveAgreement) {
+          actions.push({ priority: true, html: `<a href="/estimates/${escapeHtml(estimateId)}/details" class="btn-text btn-sm justify-center">View details</a>` });
+        }
 
         if (canEdit) {
           actions.push({ priority: true, html: `<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-text btn-sm justify-center">${status === 'sent' ? 'Edit sent' : 'Edit draft'}</a>` });

@@ -1,0 +1,336 @@
+---
+import Base from '../../../layouts/Base.astro';
+import DetailBackButton from '../../../components/DetailBackButton.astro';
+---
+
+<Base title="Estimate Details">
+  <main class="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+    <div class="mb-4">
+      <DetailBackButton href="/estimates" label="Back to estimates" />
+    </div>
+    <div id="estimate-detail-root" class="space-y-5">
+      <div class="rounded-lg border bg-white p-8 text-center text-gray-500">Loading estimate details...</div>
+    </div>
+  </main>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const estimateId = window.location.pathname.split('/').filter(Boolean).at(-2);
+    const root = document.getElementById('estimate-detail-root');
+
+    const currency = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+    const dateLabel = (value) => value ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not recorded';
+    const shortDate = (value) => value ? new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not recorded';
+    const label = (value) => window.PaintFlowFormat?.label(value) ?? String(value || '').replace(/[_-]+/g, ' ');
+    const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
+    const statusBadge = (value, options = {}) => window.PaintFlowUI?.statusBadge({ value, ...options }) || `<span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">${escapeHtml(options.label || label(value))}</span>`;
+
+    function escapeHtml(value = '') {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    async function apiJson(path, options = {}) {
+      const response = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
+      if (response.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function packageItems(pkg = {}) {
+      return Array.isArray(pkg.items) ? pkg.items : Array.isArray(pkg.lineItems) ? pkg.lineItems : [];
+    }
+
+    function proposalPackage(estimate) {
+      const packages = Array.isArray(estimate?.packages) ? estimate.packages : [];
+      return packages.find((pkg) => pkg.name === 'proposal') || packages.find((pkg) => /better|recommended/i.test(pkg.name || '')) || packages[0] || null;
+    }
+
+    function scopeParts(item) {
+      const raw = String(item.desc || item.description || 'Scope item');
+      const [room, detail] = raw.split(/:\s(.+)/);
+      const surface = item.surfaceName || detail || room || 'Scope item';
+      return {
+        room: item.roomName || (detail ? room : 'Project'),
+        surface: surface.replace(/^(Interior|Exterior)\s+/i, '').trim(),
+      };
+    }
+
+    function applicationLabel(value) {
+      return ({
+        brush_roll: 'Brush & roll',
+        spray_backroll: 'Spray & back-roll',
+        spray_only: 'Spray only',
+      })[value] || label(value);
+    }
+
+    function itemDetails(item) {
+      const labor = item.labor || {};
+      const material = item.material || {};
+      const paint = material.name ? [material.brand, material.name].filter(Boolean).join(' ') : '';
+      const color = [material.colorName, material.colorCode].filter(Boolean).join(' ');
+      return [
+        labor.coats ? `${Number(labor.coats)} coat${Number(labor.coats) === 1 ? '' : 's'}` : '',
+        labor.prepLevel ? `${label(labor.prepLevel)} prep` : '',
+        labor.applicationMethod ? applicationLabel(labor.applicationMethod) : '',
+        paint ? `Paint: ${paint}` : '',
+        color ? `Color: ${color}` : '',
+      ].filter(Boolean).join(' | ');
+    }
+
+    function groupItems(items) {
+      const groups = new Map();
+      items.forEach((item) => {
+        const parts = scopeParts(item);
+        if (!groups.has(parts.room)) groups.set(parts.room, []);
+        groups.get(parts.room).push({ item, parts });
+      });
+      return Array.from(groups.entries());
+    }
+
+    function customerAddress(customer = {}) {
+      return window.PaintFlowFormat?.address(customer) || [customer.streetAddress, [customer.city, customer.state].filter(Boolean).join(', '), customer.postalCode].filter(Boolean).join(' ');
+    }
+
+    function customerCard(customer) {
+      if (!customer) {
+        return '<div class="rounded-lg border bg-white p-5 text-sm text-gray-500">Customer details unavailable.</div>';
+      }
+      const address = customerAddress(customer);
+      return `
+        <section class="rounded-lg border bg-white p-5">
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Customer</p>
+          <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <a href="/leads/${escapeHtml(customer.id)}" class="text-xl font-semibold text-gray-950 hover:text-blue-700">${escapeHtml(customer.name || 'Customer')}</a>
+              <div class="mt-2 text-sm text-gray-700">
+                ${address ? (window.PaintFlowFormat?.addressLink(address, { className: 'inline text-gray-700 hover:text-blue-700 hover:underline' }) || escapeHtml(address)) : 'No jobsite address'}
+              </div>
+            </div>
+            <div class="text-sm text-gray-600 sm:text-right">
+              <p>${escapeHtml(customer.phone ? phone(customer.phone) : 'No phone')}</p>
+              <p>${escapeHtml(customer.email || 'No email')}</p>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function inactiveNotice(estimate) {
+      if (estimate.status === 'voided') {
+        return `
+          <section class="rounded-lg border border-red-200 bg-red-50 p-4 text-red-950">
+            <p class="font-semibold">This signed agreement has been voided.</p>
+            <p class="mt-1 text-sm">The customer preview stays inactive, but the contractor record remains available here for scope, payment, and audit history.</p>
+          </section>
+        `;
+      }
+      if (estimate.status === 'superseded') {
+        return `
+          <section class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950">
+            <p class="font-semibold">This signed agreement was superseded by a revision.</p>
+            <p class="mt-1 text-sm">Use this page for the historical record. Customers should use the latest proposal link for approval or payment.</p>
+          </section>
+        `;
+      }
+      return '';
+    }
+
+    function renderScope(estimate) {
+      const pkg = proposalPackage(estimate);
+      const items = packageItems(pkg || {});
+      if (!pkg || !items.length) {
+        return '<section class="rounded-lg border bg-white p-5 text-sm text-gray-500">No scope lines are stored on this estimate.</section>';
+      }
+      const included = items.filter((item) => item.customerVisible !== false && !item.optional);
+      const optional = items.filter((item) => item.customerVisible !== false && item.optional);
+      return `
+        <section class="rounded-lg border bg-white">
+          <div class="border-b p-4">
+            <h2 class="font-semibold text-gray-950">Scope Details</h2>
+            <p class="mt-1 text-sm text-gray-600">Internal detail is preserved even when the public preview is inactive.</p>
+          </div>
+          <div class="divide-y">
+            ${groupItems(included).map(([room, rows]) => `
+              <div class="p-4">
+                <div class="flex items-center justify-between gap-3">
+                  <h3 class="font-medium text-gray-950">${escapeHtml(room)}</h3>
+                  <span class="text-xs text-gray-500">${rows.length} substrate${rows.length === 1 ? '' : 's'}</span>
+                </div>
+                <div class="mt-3 overflow-x-auto">
+                  <table class="min-w-full text-left text-sm">
+                    <thead class="text-xs uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th class="py-2 pr-3 font-semibold">Substrate</th>
+                        <th class="py-2 pr-3 font-semibold">Details</th>
+                        <th class="py-2 pr-3 text-right font-semibold">Qty</th>
+                        <th class="py-2 pr-3 text-right font-semibold">Rate</th>
+                        <th class="py-2 text-right font-semibold">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                      ${rows.map(({ item, parts }) => `
+                        <tr>
+                          <td class="py-2 pr-3 font-medium text-gray-900">${escapeHtml(label(parts.surface))}</td>
+                          <td class="py-2 pr-3 text-gray-600">${escapeHtml(itemDetails(item) || item.notes || 'Included')}</td>
+                          <td class="py-2 pr-3 text-right text-gray-700">${Number(item.qty || 1).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${escapeHtml(label(item.unit || ''))}</td>
+                          <td class="py-2 pr-3 text-right text-gray-700">${currency(item.rate || 0)}</td>
+                          <td class="py-2 text-right font-medium text-gray-950">${currency(Number(item.qty || 1) * Number(item.rate || 0))}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `).join('')}
+            ${optional.length ? `
+              <div class="p-4">
+                <h3 class="font-medium text-gray-950">Optional Items</h3>
+                <div class="mt-3 grid gap-2">
+                  ${optional.map((item) => `<div class="rounded-md border bg-gray-50 p-3 text-sm"><span class="font-medium">${escapeHtml(scopeParts(item).surface)}</span><span class="text-gray-600"> - ${escapeHtml(itemDetails(item) || item.notes || 'Optional scope')}</span><span class="float-right font-semibold">${currency(Number(item.qty || 1) * Number(item.rate || 0))}</span></div>`).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderPayments(payments = []) {
+      const net = payments.reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+      return `
+        <section class="rounded-lg border bg-white">
+          <div class="flex items-center justify-between gap-3 border-b p-4">
+            <div>
+              <h2 class="font-semibold text-gray-950">Payments</h2>
+              <p class="mt-1 text-sm text-gray-600">${currency(net)} net recorded</p>
+            </div>
+            <span class="text-xs text-gray-500">${payments.length} payment${payments.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="divide-y">
+            ${payments.length ? payments.map((payment) => `
+              <div class="p-4 text-sm">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <p class="font-medium text-gray-950">${currency(payment.amount)} ${payment.refundedAmount ? `<span class="text-red-700">(${currency(payment.refundedAmount)} refunded)</span>` : ''}</p>
+                    <p class="mt-1 text-gray-600">${escapeHtml(payment.description || label(payment.source || 'payment'))}</p>
+                  </div>
+                  <div class="text-right">
+                    ${statusBadge(payment.status || 'succeeded')}
+                    <p class="mt-1 text-xs text-gray-500">${shortDate(payment.receivedAt)}</p>
+                  </div>
+                </div>
+              </div>
+            `).join('') : '<div class="p-4 text-sm text-gray-500">No payment history is attached to this estimate.</div>'}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderActivity(activity = []) {
+      return `
+        <section class="rounded-lg border bg-white">
+          <div class="border-b p-4">
+            <h2 class="font-semibold text-gray-950">Activity Log</h2>
+          </div>
+          <div class="divide-y">
+            ${activity.length ? activity.map((item) => `
+              <div class="flex items-start gap-3 p-4">
+                <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600"></span>
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-gray-950">${escapeHtml(label(String(item.action || '').replaceAll('.', ' ')))}</p>
+                  <p class="mt-1 text-xs text-gray-500">${dateLabel(item.createdAt)}</p>
+                  ${item.metadata?.reason ? `<p class="mt-1 text-sm text-gray-600">${escapeHtml(item.metadata.reason)}</p>` : ''}
+                </div>
+              </div>
+            `).join('') : '<div class="p-4 text-sm text-gray-500">No estimate activity has been recorded yet.</div>'}
+          </div>
+        </section>
+      `;
+    }
+
+    function lifecycleStats(estimate) {
+      return [
+        ['Created', shortDate(estimate.createdAt)],
+        ['Sent', shortDate(estimate.sentAt)],
+        ['Signed', estimate.signedAt ? `${shortDate(estimate.signedAt)}${estimate.signedName ? ` by ${estimate.signedName}` : ''}` : 'Not signed'],
+        ['Updated', shortDate(estimate.updatedAt)],
+      ].map(([name, value]) => `
+        <div class="rounded-lg border bg-gray-50 px-3 py-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">${name}</p>
+          <p class="mt-1 text-sm font-medium text-gray-950">${escapeHtml(value)}</p>
+        </div>
+      `).join('');
+    }
+
+    function render(data) {
+      const { estimate, customer, activity } = data;
+      const previewHref = new URL(estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`, window.location.origin).pathname;
+      root.innerHTML = `
+        ${inactiveNotice(estimate)}
+        <section class="rounded-lg border bg-white p-5 sm:p-6">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <h1 class="text-2xl font-semibold text-gray-950">Estimate ${escapeHtml(estimate.id.slice(0, 8))}</h1>
+                ${statusBadge(estimate.status)}
+              </div>
+              <p class="mt-2 text-sm text-gray-600">Internal contractor record. Customer preview links for voided or superseded agreements remain inactive.</p>
+            </div>
+            <div class="flex flex-wrap gap-2 lg:justify-end">
+              <a class="btn-secondary btn-sm" href="${escapeHtml(previewHref)}">Preview link</a>
+              ${estimate.status === 'draft' || (estimate.status === 'sent' && !estimate.signedAt) ? `<a class="btn-primary btn-sm" href="/estimates/production?estimateId=${escapeHtml(estimate.id)}">Edit estimate</a>` : ''}
+              <a class="btn-text btn-sm" href="/estimates/${escapeHtml(estimate.id)}/photos">Photos</a>
+            </div>
+          </div>
+          <div class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div class="rounded-lg border bg-blue-50 px-3 py-2">
+              <p class="text-xs font-semibold uppercase tracking-wide text-blue-800">Total</p>
+              <p class="mt-1 text-xl font-semibold text-blue-950">${currency(estimate.total)}</p>
+            </div>
+            ${lifecycleStats(estimate)}
+          </div>
+        </section>
+        <section class="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)]">
+          <div class="space-y-5">
+            ${customerCard(customer)}
+            ${renderScope(estimate)}
+          </div>
+          <aside class="space-y-5">
+            ${renderPayments(estimate.payments || [])}
+            ${renderActivity(activity || [])}
+          </aside>
+        </section>
+      `;
+    }
+
+    async function load() {
+      try {
+        const estimatePayload = await apiJson(`/v1/estimates/${estimateId}`);
+        if (!estimatePayload) return;
+        const estimate = estimatePayload.data;
+        const [leadPayload, activityPayload] = await Promise.all([
+          estimate.leadId ? apiJson(`/v1/leads/${estimate.leadId}`).catch(() => null) : Promise.resolve(null),
+          apiJson(`/v1/estimates/${estimate.id}/activity`).catch(() => ({ data: [] })),
+        ]);
+        render({
+          estimate,
+          customer: leadPayload?.data?.customer || null,
+          activity: activityPayload?.data || [],
+        });
+      } catch (error) {
+        root.innerHTML = `
+          <div class="rounded-lg border border-red-200 bg-red-50 p-6 text-red-900">
+            <p class="font-semibold">Estimate details could not be loaded</p>
+            <p class="mt-1 text-sm">${escapeHtml(error.message || 'Check the API server and try again.')}</p>
+          </div>
+        `;
+      }
+    }
+
+    load();
+  </script>
+</Base>
