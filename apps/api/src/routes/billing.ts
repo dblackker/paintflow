@@ -24,6 +24,7 @@ const manualPaymentSchema = z.object({
   reference: z.string().trim().max(120).optional().nullable(),
   description: z.string().trim().max(255).optional().nullable(),
   receivedAt: z.string().datetime().optional().nullable(),
+  confirmAdditionalPayment: z.boolean().optional(),
 });
 
 function roundMoney(value: number) {
@@ -106,6 +107,9 @@ billing.post('/manual', async (c) => {
   const paidAmount = roundMoney(existingPayments.reduce((sum, payment) => sum + netPaymentAmount(payment), 0));
   const remaining = roundMoney(Math.max(contractTotal - paidAmount, 0));
   const amount = roundMoney(parsed.data.amount);
+  if (paidAmount > 0.005 && !parsed.data.confirmAdditionalPayment) {
+    return c.json({ error: `This estimate already has ${paidAmount.toFixed(2)} recorded. Confirm this is an additional payment before saving.` }, 409);
+  }
   if (remaining <= 0) {
     return c.json({ error: 'This estimate is already paid in full.' }, 409);
   }
@@ -132,6 +136,7 @@ billing.post('/manual', async (c) => {
     metadata: {
       idempotencyKey,
       reference: parsed.data.reference || null,
+      confirmedAdditionalPayment: paidAmount > 0.005,
       recordedByUserId: c.get('userId') || null,
       note: 'Manual payment recorded by contractor. No Stripe charge was created.',
     },

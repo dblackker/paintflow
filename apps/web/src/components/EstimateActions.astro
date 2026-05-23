@@ -101,6 +101,12 @@ const { defineOnly = false } = Astro.props;
               <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                 This records money received outside Stripe. It will reduce the remaining balance, but it does not charge the customer.
               </div>
+              <label id="manual-payment-confirm-wrap" class="hidden rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+                <span class="flex items-start gap-3">
+                  <input name="confirmAdditionalPayment" type="checkbox" class="mt-1 rounded border-red-300">
+                  <span>This estimate already has a payment recorded. I confirm this is an additional payment and not a duplicate entry.</span>
+                </span>
+              </label>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label class="block text-sm font-medium text-gray-700">Payment type
                   <select name="source" class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
@@ -157,11 +163,14 @@ const { defineOnly = false } = Astro.props;
         try {
           const { data } = await apiJson(`/v1/estimates/${estimateId}`);
           const payments = Array.isArray(data.payments) ? data.payments : [];
-          const balance = Math.max(estimateContractTotal(data) - netPaid(payments), 0);
+          const paid = netPaid(payments);
+          const balance = Math.max(estimateContractTotal(data) - paid, 0);
           form.dataset.remaining = String(balance);
+          form.dataset.hasRecordedPayment = paid > 0.005 ? 'true' : 'false';
           form.elements.amount.max = balance.toFixed(2);
           form.elements.amount.value = balance > 0 ? balance.toFixed(2) : '';
-          summary.textContent = `${money(netPaid(payments))} recorded · ${money(balance)} remaining`;
+          summary.textContent = `${money(paid)} recorded · ${money(balance)} remaining`;
+          modal.querySelector('#manual-payment-confirm-wrap')?.classList.toggle('hidden', paid <= 0.005);
           if (balance <= 0.005) {
             summary.textContent = 'This estimate is already paid in full.';
             form.elements.amount.value = '';
@@ -188,6 +197,12 @@ const { defineOnly = false } = Astro.props;
           window.showToast?.(`Payment cannot exceed the remaining balance of ${money(remaining)}.`, 'error');
           return;
         }
+        const hasRecordedPayment = form.dataset.hasRecordedPayment === 'true';
+        if (hasRecordedPayment && !form.elements.confirmAdditionalPayment.checked) {
+          window.showToast?.('Confirm this is not a duplicate payment before saving.', 'error');
+          form.elements.confirmAdditionalPayment.focus();
+          return;
+        }
         button.disabled = true;
         try {
           const receivedAt = form.elements.receivedAt.value
@@ -203,6 +218,7 @@ const { defineOnly = false } = Astro.props;
               reference: form.elements.reference.value || null,
               description: form.elements.description.value || null,
               receivedAt,
+              confirmAdditionalPayment: hasRecordedPayment && form.elements.confirmAdditionalPayment.checked,
             }),
           });
           closeManualPaymentModal();
