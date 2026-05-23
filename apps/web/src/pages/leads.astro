@@ -7,7 +7,7 @@ import Base from '../layouts/Base.astro';
     <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
-          <p class="text-sm text-gray-600 mt-1">Capture inquiries, qualify them, and keep follow-up moving.</p>
+          <p class="text-sm text-gray-600 mt-1">Customers before they become scheduled jobs.</p>
         </div>
         <button id="add-lead" class="btn-primary w-full justify-center sm:w-auto">
           Add Lead
@@ -102,6 +102,7 @@ import Base from '../layouts/Base.astro';
     };
     let leads = [];
     let leadSources = [];
+    let currentLeadFilters = { status: 'all', source: 'all', q: '' };
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -169,6 +170,7 @@ import Base from '../layouts/Base.astro';
         const status = document.getElementById('status-filter').value;
         const source = document.getElementById('source-filter').value;
         const q = document.getElementById('search').value.trim();
+        currentLeadFilters = { status, source, q };
         if (status !== 'all') params.set('status', status);
         if (source !== 'all') params.set('source', source);
         if (q) params.set('q', q);
@@ -204,7 +206,39 @@ import Base from '../layouts/Base.astro';
       renderSummary();
 
       if (leads.length === 0) {
-        list.innerHTML = '<div class="bg-white border rounded-lg p-8 text-center text-gray-500">No leads match this view. Add a lead or adjust filters.</div>';
+        const filtered = currentLeadFilters.status !== 'all' || currentLeadFilters.source !== 'all' || currentLeadFilters.q;
+        list.innerHTML = filtered ? `
+          <div class="bg-white border rounded-lg p-6 sm:p-8 text-center">
+            <p class="text-sm font-semibold text-gray-950">No leads match this view</p>
+            <p class="mt-1 text-sm text-gray-600">Clear the search or change filters to see more customers.</p>
+          </div>
+        ` : `
+          <div class="bg-white border rounded-lg p-5 sm:p-8">
+            <div class="mx-auto max-w-2xl text-center">
+              <p class="text-lg font-semibold text-gray-950">Start with your first lead</p>
+              <p class="mt-2 text-sm text-gray-600">Add a homeowner, jobsite address, and source. From there you can text or call them, create an estimate, schedule follow-ups, and move the customer through the pipeline.</p>
+            </div>
+            <div class="mt-5 grid gap-3 sm:grid-cols-3">
+              <div class="rounded-lg border bg-gray-50 p-3">
+                <p class="text-sm font-semibold text-gray-950">1. Add inquiry</p>
+                <p class="mt-1 text-sm text-gray-600">Name, phone, email, jobsite, and how they found you.</p>
+              </div>
+              <div class="rounded-lg border bg-gray-50 p-3">
+                <p class="text-sm font-semibold text-gray-950">2. Qualify</p>
+                <p class="mt-1 text-sm text-gray-600">Capture notes, book a visit, or start an estimate.</p>
+              </div>
+              <div class="rounded-lg border bg-gray-50 p-3">
+                <p class="text-sm font-semibold text-gray-950">3. Follow up</p>
+                <p class="mt-1 text-sm text-gray-600">Keep reminders and pipeline movement attached to the customer.</p>
+              </div>
+            </div>
+            <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button type="button" class="btn-primary justify-center" data-open-lead-modal>Add first lead</button>
+              <a class="btn-secondary justify-center" href="/settings#lead-sources">Set lead sources</a>
+              <a class="btn-text justify-center" href="/pipeline">View pipeline</a>
+            </div>
+          </div>
+        `;
         return;
       }
 
@@ -230,7 +264,11 @@ import Base from '../layouts/Base.astro';
     }
 
     const modal = document.getElementById('modal');
-    document.getElementById('add-lead')?.addEventListener('click', () => modal?.classList.remove('hidden'));
+    function openLeadModal() {
+      modal?.classList.remove('hidden');
+    }
+
+    document.getElementById('add-lead')?.addEventListener('click', openLeadModal);
     document.getElementById('cancel')?.addEventListener('click', () => modal?.classList.add('hidden'));
     document.getElementById('cancel-bottom')?.addEventListener('click', () => modal?.classList.add('hidden'));
     document.getElementById('status-filter')?.addEventListener('change', loadLeads);
@@ -256,6 +294,10 @@ import Base from '../layouts/Base.astro';
     });
 
     document.getElementById('leads-list')?.addEventListener('click', (e) => {
+      if (e.target.closest('[data-open-lead-modal]')) {
+        openLeadModal();
+        return;
+      }
       if (e.target.closest('a, button, select, input, textarea, label')) return;
       const card = e.target.closest('.lead-card');
       if (!card?.dataset.href) return;
