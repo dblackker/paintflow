@@ -163,10 +163,6 @@ import '../../styles/design-system.css';
             document.getElementById('brand-block').innerHTML = `<img src="${escapeHtml(data.branding.logoUrl)}" class="h-12 mb-3" alt="Logo" />` + document.getElementById('brand-block').innerHTML;
           }
 
-          if (data.signedAt) {
-            document.getElementById('loading').innerHTML = `<div class="bg-white border rounded-lg p-8"><p class="text-green-700 font-medium">This estimate has been signed.</p><p class="text-sm text-gray-600 mt-2">Signed by ${escapeHtml(data.signedName)} on ${new Date(data.signedAt).toLocaleDateString()}</p></div>`;
-            return;
-          }
           if (data.status === 'canceled') {
             document.getElementById('loading').innerHTML = `<div class="bg-white border rounded-lg p-8"><p class="text-red-700 font-medium">This estimate has been canceled.</p><p class="text-sm text-gray-600 mt-2">Please contact your contractor if you have questions or need a revised proposal.</p></div>`;
             return;
@@ -176,13 +172,32 @@ import '../../styles/design-system.css';
           renderProposal(data.packages || []);
           estimatePhotos = Array.isArray(data.photos) ? data.photos : [];
           renderEstimatePhotos();
+          if (data.signedAt) {
+            renderSignedState(data);
+          } else {
+            setupSignaturePad();
+          }
           document.getElementById('loading').classList.add('hidden');
           document.getElementById('estimate-content').classList.remove('hidden');
-          setupSignaturePad();
         } catch (err) {
           console.error('Failed to load estimate', err);
           showError();
         }
+      }
+
+      function renderSignedState(data) {
+        const paidAmount = Number(data.paymentSummary?.paidAmount || 0);
+        document.getElementById('accept-panel').className = 'bg-green-50 border border-green-200 rounded-lg p-5';
+        document.getElementById('accept-panel').innerHTML = `
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 class="font-semibold text-green-950">Final signed copy</h3>
+              <p class="mt-1 text-sm text-green-800">Signed by ${escapeHtml(data.signedName || 'Customer')} on ${new Date(data.signedAt).toLocaleDateString()}.</p>
+              <p class="mt-2 text-sm text-gray-700">${paidAmount > 0 ? `${money(paidAmount)} payment recorded.` : 'No online deposit is recorded on this copy yet. Contact your contractor if payment was expected.'}</p>
+            </div>
+            <button type="button" class="btn-secondary btn-sm justify-center" onclick="window.print()">Print / save copy</button>
+          </div>
+        `;
       }
 
       function itemMaterial(item) {
@@ -493,28 +508,33 @@ import '../../styles/design-system.css';
         const name = document.getElementById('signer-name').value.trim();
         if (!name) return alert('Please enter your name');
         if (!hasSignature) return alert('Please add your signature');
+        const selectedOptions = selectedOptionalItems();
 
         try {
           button.disabled = true;
-          button.textContent = 'Processing...';
-          const signRes = await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, signatureData: canvas.toDataURL(), packageName: selectedPackage, selectedOptions: selectedOptionalItems() }),
-          });
-          if (!signRes.ok) throw new Error('Failed to sign estimate');
-
+          button.textContent = 'Preparing deposit...';
           const checkoutRes = await fetch(`${API_URL}/v1/payments/checkout`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ estimateId, packageName: selectedPackage, selectedOptions: selectedOptionalItems() }),
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ estimateId, packageName: selectedPackage, selectedOptions }),
           });
-          const checkoutPayload = await checkoutRes.json();
+          const checkoutPayload = await checkoutRes.json().catch(() => ({}));
           const { checkoutUrl } = checkoutPayload;
           if (checkoutRes.status === 409) {
             throw new Error('Online deposits are not available yet. Please contact your contractor to arrange payment.');
           }
           if (!checkoutRes.ok || !checkoutUrl) throw new Error(checkoutPayload.error || 'Failed to create payment checkout');
+
+          button.textContent = 'Signing...';
+          const signRes = await fetch(`${API_URL}/v1/estimates/${estimateId}/sign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ name, signatureData: canvas.toDataURL(), packageName: selectedPackage, selectedOptions }),
+          });
+          if (!signRes.ok) {
+            const payload = await signRes.json().catch(() => ({}));
+            throw new Error(payload.error || 'Failed to sign estimate');
+          }
           window.location.href = checkoutUrl;
         } catch (err) {
           alert(err.message || 'Failed to process signature');

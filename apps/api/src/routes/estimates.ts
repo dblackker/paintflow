@@ -6,8 +6,7 @@ import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, renderEstimateEmail } from '../lib/email';
-import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
-import { createNotificationAndPush } from '../lib/web-push';
+import { estimateContractValue } from '../lib/estimate-handoff';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -166,6 +165,11 @@ estimatesApp.get('/:id/public', async (c) => {
     where: eq(estimatePhotos.estimateId, estimate.id),
     orderBy: (photos, { desc }) => [desc(photos.createdAt)],
   });
+  const payments = await optionalPaymentRows(db.select().from(customerPayments)
+    .where(and(eq(customerPayments.estimateId, estimate.id), eq(customerPayments.orgId, estimate.orgId))));
+  const paidAmount = payments
+    .filter((payment) => ['succeeded', 'paid'].includes(payment.status))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
   
   return c.json({ 
     data: {
@@ -176,6 +180,10 @@ estimatesApp.get('/:id/public', async (c) => {
       createdAt: estimate.createdAt,
       signedName: estimate.signedName,
       signedAt: estimate.signedAt,
+      paymentSummary: {
+        paidAmount: Math.max(paidAmount, 0),
+        paymentCount: payments.length,
+      },
       photos,
       branding: branding ? {
         logoUrl: branding.logoUrl,
@@ -200,6 +208,19 @@ estimatesApp.post('/:id/sign', async (c) => {
   const db = createDb(c.env.DATABASE_URL);
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
   const userAgent = c.req.header('User-Agent') || 'unknown';
+
+  const existing = await db.query.estimates.findFirst({
+    where: eq(estimates.id, id),
+  });
+  if (!existing) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  if (existing.status === 'canceled') {
+    return c.json({ error: 'This estimate has been canceled' }, 409);
+  }
+  if (existing.status === 'accepted' || existing.signedAt) {
+    return c.json({ error: 'This estimate has already been accepted' }, 409);
+  }
   
   const [estimate] = await db.update(estimates)
     .set({
@@ -208,46 +229,28 @@ estimatesApp.post('/:id/sign', async (c) => {
       signedAt: new Date(),
       signedIp: ip,
       signedUserAgent: userAgent,
-      status: 'accepted',
+      updatedAt: new Date(),
     })
     .where(eq(estimates.id, id))
     .returning();
-  
-  if (!estimate) {
-    return c.json({ error: 'Not found' }, 404);
-  }
-  if (estimate.status === 'canceled') {
-    return c.json({ error: 'This estimate has been canceled' }, 409);
-  }
-  if (estimate.status === 'accepted') {
-    return c.json({ error: 'This estimate has already been accepted' }, 409);
-  }
 
-  const job = await createJobFromAcceptedEstimate(db, estimate, {
-    packageName,
-    selectedOptions: selectedOptionsForPackage(estimate, packageName, selectedOptions),
-    signedBy: name,
+  const cleanOptions = selectedOptionsForPackage(estimate, packageName, selectedOptions);
+  await db.insert(auditLogs).values({
+    orgId: estimate.orgId,
+    action: 'estimate.signed',
+    entityType: 'estimate',
+    entityId: estimate.id,
+    metadata: {
+      packageName: packageName ?? null,
+      contractValue: estimateContractValue(estimate, packageName, cleanOptions),
+      selectedOptions: cleanOptions,
+      awaitingPayment: true,
+    },
     ipAddress: ip,
     userAgent,
   });
-
-  const lead = await db.query.leads.findFirst({
-    where: eq(leads.id, estimate.leadId),
-  });
-  await createNotificationAndPush(c.env, {
-    orgId: estimate.orgId,
-    type: 'estimate.accepted',
-    title: `Estimate accepted${lead?.name ? ` by ${lead.name}` : ''}`,
-    body: `${name} accepted a ${estimateContractValue(estimate, packageName, selectedOptions).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} proposal.`,
-    href: `/jobs/${job.id}`,
-    priority: 'high',
-    sourceType: 'estimate',
-    sourceId: estimate.id,
-    leadId: estimate.leadId,
-    metadata: { jobId: job.id, signedBy: name, packageName },
-  }).catch((err) => console.error('Push notification failed:', err));
   
-  return c.json({ data: { id: estimate.id, status: 'accepted', jobId: job.id } });
+  return c.json({ data: { id: estimate.id, status: estimate.status, signedAt: estimate.signedAt, awaitingPayment: true } });
 });
 
 estimatesApp.use('*', authMiddleware);
