@@ -91,7 +91,7 @@ const { defineOnly = false } = Astro.props;
           <div class="estimate-actions flex items-center gap-1 ${escapeHtml(className)}" data-estimate-actions>
             ${primary?.html || ''}
             ${overflow.length ? `
-              <button type="button" class="btn-icon btn-icon-tonal h-8 w-8" aria-label="More estimate actions" aria-expanded="false" data-estimate-actions-trigger="${overflowId}">
+              <button type="button" class="btn-icon btn-icon-tonal pf-estimate-menu-button" aria-label="More estimate actions" aria-expanded="false" data-estimate-actions-trigger="${overflowId}">
                 <svg aria-hidden="true" viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor">
                   <circle cx="5" cy="12" r="1.8"></circle>
                   <circle cx="12" cy="12" r="1.8"></circle>

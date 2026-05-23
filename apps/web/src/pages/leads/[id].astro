@@ -102,7 +102,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
         estimate,
         previewHref: customerPreviewHref(estimate),
         editHref: `/estimates/production?estimateId=${estimate.id}`,
-        className: 'sm:justify-end',
+        className: 'justify-end shrink-0',
       }) || '';
     }
 
@@ -111,15 +111,15 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
         return '<div class="p-5 text-sm text-gray-500">No estimates yet.</div>';
       }
       return estimates.map((estimate) => `
-        <div class="p-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <p class="font-medium">${currency(estimate.total)}</p>
+        <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 sm:p-4">
+          <div class="min-w-0">
+            <div class="flex min-w-0 items-center gap-2">
+              <p class="shrink-0 font-semibold text-gray-950">${currency(estimate.total)}</p>
               ${statusBadge(estimate.status, { label: statusLabels[estimate.status] || estimate.status })}
             </div>
-            <p class="text-sm text-gray-600">Created ${dateLabel(estimate.createdAt)}${estimate.sentAt ? ` &middot; Sent ${dateLabel(estimate.sentAt)}` : ''}${estimate.signedAt ? ` &middot; Accepted ${dateLabel(estimate.signedAt)}` : ''}</p>
+            <p class="mt-1 truncate text-xs text-gray-600">Created ${dateLabel(estimate.createdAt)}${estimate.sentAt ? ` · Sent ${dateLabel(estimate.sentAt)}` : ''}${estimate.signedAt ? ` · Accepted ${dateLabel(estimate.signedAt)}` : ''}</p>
           </div>
-          ${estimateActions(estimate)}
+          <div class="shrink-0 justify-self-end">${estimateActions(estimate)}</div>
         </div>
       `).join('');
     }
