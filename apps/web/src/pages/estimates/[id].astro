@@ -225,15 +225,33 @@ import '../../styles/design-system.css';
         })[value] || String(value || '').replace(/_/g, ' ');
       }
 
+      function titleCaseScope(value) {
+        return String(value || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .split(/(\s+|,|\/|-)/)
+          .map(part => /^[a-z]/.test(part) ? part.charAt(0).toUpperCase() + part.slice(1) : part)
+          .join('')
+          .replace(/\bAnd\b/g, 'and');
+      }
+
+      function cleanScopeLabel(value) {
+        return String(value || '')
+          .replace(/\s*,?\s*(spray\s*(and|&|-|\/)\s*back-?roll|spray\/back-?roll|brush\s*(and|&)\s*roll|spray only)\s*$/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
       function scopeParts(item) {
         const [area = 'Project', rawLabel = item.desc || 'Scope item'] = String(item.desc || '').split(/:\s(.+)/);
-        const label = rawLabel || area;
+        const label = cleanScopeLabel(rawLabel || area);
         const surfaceMatch = label.match(/^(.*)\s+(walls?|ceilings?|trim|doors?|cabinets?|siding|soffits?|fascia|corner boards?)$/i);
+        const surface = item.surfaceName || (surfaceMatch ? surfaceMatch[2].trim() : label.trim());
         return {
           area: area.trim() || 'Project',
-          space: surfaceMatch ? surfaceMatch[1].trim() : area.trim() || 'Project',
-          surface: surfaceMatch ? surfaceMatch[2].trim() : label.trim(),
-          label: label.trim(),
+          space: area.trim() || surfaceMatch?.[1]?.trim() || 'Project',
+          surface: titleCaseScope(surface).replace(/^(Interior|Exterior)\s+/i, ''),
+          label: titleCaseScope(label).replace(/^(Interior|Exterior)\s+/i, ''),
         };
       }
 
@@ -428,7 +446,7 @@ import '../../styles/design-system.css';
                           <p class="font-medium text-gray-900">${escapeHtml(parts.surface)}</p>
                           <p class="text-gray-600">
                             ${customerScopeDetail(item)}
-                            ${itemMaterial(item) ? `<span class="mx-1 text-gray-300">·</span>${itemMaterial(item)}` : ''}
+                            ${itemMaterial(item) ? `<span class="mx-1 text-gray-300">·</span> ${itemMaterial(item)}` : ''}
                           </p>
                         </div>
                       `).join('')}
