@@ -331,6 +331,34 @@ import '../../styles/design-system.css';
         return selectedOptionalItems().reduce((sum, item) => sum + Number(item.qty || 1) * Number(item.rate || 0), 0);
       }
 
+      function pricingBreakdown(pkg) {
+        const baseTotal = Number(pkg.total ?? 0);
+        const discount = Number(pkg.discount ?? 0);
+        const baseTax = Number(pkg.tax ?? 0);
+        const rawSubtotal = Number(pkg.subtotal ?? 0);
+        const baseSubtotal = rawSubtotal > 0 && Math.abs((rawSubtotal - discount + baseTax) - baseTotal) < 0.02
+          ? rawSubtotal
+          : Math.max(baseTotal - baseTax + discount, 0);
+        const taxableBase = Math.max(baseSubtotal - discount, 0);
+        const taxRate = taxableBase > 0 ? baseTax / taxableBase : 0;
+        const options = optionTotal();
+        const optionTax = Math.round(options * taxRate * 100) / 100;
+        const totalTax = baseTax + optionTax;
+        const total = baseTotal + options + optionTax;
+
+        return {
+          baseSubtotal,
+          discount,
+          baseTax,
+          taxRate,
+          options,
+          optionTax,
+          totalTax,
+          baseTotal,
+          total,
+        };
+      }
+
       function nextDuePayment(schedule) {
         return schedule.find(item => item.payable && item.status !== 'paid' && Number(item.amount || 0) > Number(item.paidAmount || 0)) || null;
       }
@@ -381,34 +409,40 @@ import '../../styles/design-system.css';
 
       function updateSelectedTotal() {
         if (!selectedPackageData) return;
-        const baseTotal = Number(selectedPackageData.total ?? 0);
-        const total = baseTotal + optionTotal();
+        const breakdown = pricingBreakdown(selectedPackageData);
         document.querySelectorAll('[data-selected-total]').forEach(node => {
-          node.textContent = money(total);
+          node.textContent = money(breakdown.total);
         });
         const optionNode = document.querySelector('[data-selected-options-total]');
-        if (optionNode) optionNode.textContent = money(optionTotal());
+        if (optionNode) optionNode.textContent = money(breakdown.options);
+        const optionTaxNode = document.querySelector('[data-selected-options-tax]');
+        if (optionTaxNode) optionTaxNode.textContent = money(breakdown.optionTax);
+        const taxNode = document.querySelector('[data-selected-tax-total]');
+        if (taxNode) taxNode.textContent = money(breakdown.totalTax);
         const scheduleNode = document.querySelector('[data-payment-schedule-shell]');
-        if (scheduleNode) scheduleNode.innerHTML = renderPaymentSchedule(total);
+        if (scheduleNode) scheduleNode.innerHTML = renderPaymentSchedule(breakdown.total);
       }
 
       function priceSummary(pkg) {
-        const total = Number(pkg.total ?? 0);
-        const discount = Number(pkg.discount ?? 0);
-        const tax = Number(pkg.tax ?? 0);
-        const rawSubtotal = Number(pkg.subtotal ?? 0);
-        const subtotal = rawSubtotal > 0 && Math.abs((rawSubtotal - discount + tax) - total) < 0.02
-          ? rawSubtotal
-          : Math.max(total - tax + discount, 0);
+        const breakdown = pricingBreakdown(pkg);
         return `
-          <div class="space-y-2 text-sm">
-            <div class="flex justify-between gap-4"><span class="text-gray-600">Subtotal</span><span class="font-medium">${money(subtotal)}</span></div>
-            ${discount ? `<div class="flex justify-between gap-4 text-green-700"><span>Discount</span><span class="font-medium">-${money(discount)}</span></div>` : ''}
-            <div class="flex justify-between gap-4"><span class="text-gray-600">Estimated tax</span><span class="font-medium">${money(tax)}</span></div>
-            <div class="flex justify-between gap-4 border-t pt-3 text-lg"><span class="font-semibold text-gray-900">Base total</span><span class="font-bold" style="color: ${primaryColor}">${money(total)}</span></div>
-            <div class="flex justify-between gap-4"><span class="text-gray-600">Selected options</span><span class="font-medium" data-selected-options-total>$0.00</span></div>
-            <div class="flex justify-between gap-4 border-t pt-3 text-lg"><span class="font-semibold text-gray-900">Estimated total</span><span class="font-bold" style="color: ${primaryColor}" data-selected-total>${money(total)}</span></div>
-            <div data-payment-schedule-shell>${renderPaymentSchedule(total)}</div>
+          <div class="space-y-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Project investment</p>
+              <p class="mt-1 text-3xl font-semibold text-gray-950" data-selected-total>${money(breakdown.total)}</p>
+            </div>
+            <div class="space-y-2 border-y py-3 text-sm">
+              <div class="flex justify-between gap-4"><span class="text-gray-600">Base scope subtotal</span><span class="font-medium text-gray-900">${money(breakdown.baseSubtotal)}</span></div>
+              ${breakdown.discount ? `<div class="flex justify-between gap-4 text-green-700"><span>Discount</span><span class="font-medium">-${money(breakdown.discount)}</span></div>` : ''}
+              <div class="flex justify-between gap-4"><span class="text-gray-600">Selected options</span><span class="font-medium text-gray-900" data-selected-options-total>$0.00</span></div>
+              <div class="flex justify-between gap-4"><span class="text-gray-600">Tax on selected options</span><span class="font-medium text-gray-900" data-selected-options-tax>$0.00</span></div>
+              <div class="flex justify-between gap-4"><span class="text-gray-600">Estimated tax total</span><span class="font-medium text-gray-900" data-selected-tax-total>${money(breakdown.totalTax)}</span></div>
+            </div>
+            <div class="flex justify-between gap-4 text-base">
+              <span class="font-semibold text-gray-900">Estimated total</span>
+              <span class="font-bold" style="color: ${primaryColor}" data-selected-total>${money(breakdown.total)}</span>
+            </div>
+            <div data-payment-schedule-shell>${renderPaymentSchedule(breakdown.total)}</div>
           </div>
         `;
       }
@@ -496,9 +530,8 @@ import '../../styles/design-system.css';
               </section>
             </section>
             <aside class="rounded-lg border p-5 bg-gray-50 self-start">
-              <p class="text-sm text-gray-600">Project investment</p>
               <div class="mt-4">${priceSummary(pkg)}</div>
-              <p class="text-sm text-gray-600 mt-4">The base price includes labor, selected paint products, prep, and listed materials for the included scope shown.</p>
+              <p class="text-sm text-gray-600 mt-4">Includes labor, selected paint products, prep, listed materials, selected options, and applicable estimated tax.</p>
             </aside>
           </div>
         `;

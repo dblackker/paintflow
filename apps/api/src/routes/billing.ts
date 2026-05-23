@@ -76,7 +76,7 @@ billing.post('/checkout', async (c) => {
     return c.json({ error: 'Stripe payments are not ready for this workspace' }, 409);
   }
   
-  const packages = estimate.packages as Array<{ name: string; total: number; items?: unknown[]; lineItems?: unknown[] }>;
+  const packages = estimate.packages as Array<{ name: string; total: number; subtotal?: number; tax?: number; discount?: number; items?: unknown[]; lineItems?: unknown[] }>;
   const pkg = packages.find((p) => p.name === packageName);
   if (!pkg) {
     return c.json({ error: 'Package not found' }, 404);
@@ -86,7 +86,17 @@ billing.post('/checkout', async (c) => {
     const cleanOptions = Array.isArray(selectedOptions) ? selectedOptionsForPackage(pkg, selectedOptions) : [];
     const optionTotal = cleanOptions.reduce((sum, option) => sum + option.qty * option.rate, 0);
     const selectedOptionsMetadata = JSON.stringify(cleanOptions);
-    const packageTotal = Number(pkg.total) + optionTotal;
+    const baseTotal = Number(pkg.total || 0);
+    const baseTax = Number(pkg.tax || 0);
+    const discount = Number(pkg.discount || 0);
+    const rawSubtotal = Number(pkg.subtotal || 0);
+    const baseSubtotal = rawSubtotal > 0 && Math.abs((rawSubtotal - discount + baseTax) - baseTotal) < 0.02
+      ? rawSubtotal
+      : Math.max(baseTotal - baseTax + discount, 0);
+    const taxableBase = Math.max(baseSubtotal - discount, 0);
+    const taxRate = taxableBase > 0 ? baseTax / taxableBase : 0;
+    const optionTax = Math.round(optionTotal * taxRate * 100) / 100;
+    const packageTotal = baseTotal + optionTotal + optionTax;
     if (!Number.isFinite(packageTotal) || packageTotal <= 0) {
       return c.json({ error: 'Invalid package total' }, 400);
     }
@@ -119,6 +129,7 @@ billing.post('/checkout', async (c) => {
         milestoneKey: milestone.key,
         milestoneLabel: milestone.label,
         optionTotal: optionTotal.toFixed(2),
+        optionTax: optionTax.toFixed(2),
         selectedOptions: selectedOptionsMetadata.length <= 450 ? selectedOptionsMetadata : '[]',
       },
       connectedAccountId: stripeConnection.stripeAccountId,
