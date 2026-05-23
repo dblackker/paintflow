@@ -50,9 +50,9 @@ const { defineOnly = false } = Astro.props;
         const actions = [];
 
         if (status === 'draft') {
-          actions.push(`<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-secondary btn-sm justify-center">Edit draft</a>`);
+          actions.push(`<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-text btn-sm justify-center">Edit draft</a>`);
         } else {
-          actions.push(`<a href="${escapeHtml(previewHref || `/estimates/${estimateId}`)}" class="btn-secondary btn-sm justify-center">Client preview</a>`);
+          actions.push(`<a href="${escapeHtml(previewHref || `/estimates/${estimateId}`)}" class="btn-text btn-sm justify-center">Preview link</a>`);
         }
 
         if (canCancel) {
@@ -60,7 +60,7 @@ const { defineOnly = false } = Astro.props;
         }
 
         if (canRecordPayment) {
-          actions.push(`<button type="button" class="btn-tonal btn-sm justify-center" data-record-estimate-payment="${escapeHtml(estimateId)}" data-estimate-total="${escapeHtml(String(Number(estimate.total || 0)))}">Record payment</button>`);
+          actions.push(`<button type="button" class="btn-text btn-sm justify-center" data-record-estimate-payment="${escapeHtml(estimateId)}" data-estimate-total="${escapeHtml(String(Number(estimate.total || 0)))}">Record payment</button>`);
         }
 
         return `<div class="estimate-actions flex flex-wrap gap-2 ${escapeHtml(className)}">${actions.join('')}</div>`;
