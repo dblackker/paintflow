@@ -190,7 +190,7 @@ import Base from '../../layouts/Base.astro';
               Save Draft
             </button>
             <button id="save-estimate" class="btn-primary w-full justify-center">
-              Create Estimate
+              Send Estimate
             </button>
           </div>
           <p id="save-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
@@ -203,6 +203,27 @@ import Base from '../../layouts/Base.astro';
       </aside>
     </div>
   </main>
+
+  <div id="send-preview-modal" class="hidden fixed inset-0 z-50 bg-black/50 p-0 sm:p-4">
+    <div class="flex min-h-full items-end justify-center sm:items-center">
+      <section class="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
+        <div class="sticky top-0 z-10 border-b bg-white px-4 py-3 sm:px-5">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-950">Review Before Sending</h2>
+              <p class="text-sm text-gray-600">This is the customer-facing summary that will be emailed with the proposal link.</p>
+            </div>
+            <button id="close-send-preview" type="button" class="btn-icon" aria-label="Close preview">X</button>
+          </div>
+        </div>
+        <div id="send-preview-content" class="space-y-4 px-4 py-4 sm:px-5"></div>
+        <div class="sticky bottom-0 flex flex-col gap-2 border-t bg-white px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
+          <button id="cancel-send-preview" type="button" class="btn-secondary justify-center">Keep Editing</button>
+          <button id="confirm-send-estimate" type="button" class="btn-primary justify-center">Send Email</button>
+        </div>
+      </section>
+    </div>
+  </div>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
@@ -1969,6 +1990,110 @@ import Base from '../../layouts/Base.astro';
       }];
     }
 
+    function selectedLeadLabel() {
+      const select = document.getElementById('lead-select');
+      return select.options[select.selectedIndex]?.textContent?.trim() || 'Selected customer';
+    }
+
+    function proposalSurfaceLabel(item) {
+      const raw = String(item.desc || '');
+      const [, label = raw] = raw.match(/^[^:]+:\s(.+)$/) || [];
+      return label || raw || 'Scope item';
+    }
+
+    function proposalItemDetail(item) {
+      if (item.kind === 'line_item') return item.notes || 'Additional scope';
+      const labor = item.labor || {};
+      const material = item.material;
+      const product = material?.name ? `Paint: ${[material.brand, material.name].filter(Boolean).join(' ')}` : 'Paint: TBD';
+      const color = [material?.colorName, material?.colorCode].filter(Boolean).join(' ');
+      return [
+        labor.coats ? `${Number(labor.coats)} coat${Number(labor.coats) === 1 ? '' : 's'}` : '',
+        labor.prepLevel ? `${label(labor.prepLevel)} prep` : '',
+        product,
+        color,
+      ].filter(Boolean).join(' - ') || 'Included';
+    }
+
+    function groupedProposalItems(items) {
+      const groups = new Map();
+      items.forEach((item) => {
+        const key = item.roomName || String(item.desc || 'Project').split(':')[0] || 'Project';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+      });
+      return Array.from(groups.entries()).map(([name, groupItems]) => ({ name, items: groupItems }));
+    }
+
+    function renderSendPreview() {
+      const packages = buildPackages();
+      const pkg = packages[0];
+      const content = document.getElementById('send-preview-content');
+      if (!pkg) {
+        window.showToast('Add at least one measured substrate', 'error');
+        return false;
+      }
+      const visibleItems = pkg.items.filter(item => item.customerVisible !== false);
+      const included = visibleItems.filter(item => !item.optional);
+      const optional = visibleItems.filter(item => item.optional);
+      const groups = groupedProposalItems(included);
+      content.innerHTML = `
+        <div class="rounded-lg border bg-gray-50 p-3">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Customer</p>
+              <p class="font-semibold text-gray-950">${escapeHtml(selectedLeadLabel())}</p>
+            </div>
+            <div class="sm:text-right">
+              <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Proposal total</p>
+              <p class="text-lg font-bold text-gray-950">${money(pkg.total)}</p>
+            </div>
+          </div>
+          <p class="mt-2 text-sm text-gray-600">Email will include this summary plus a secure link to review, approve, sign, and pay the deposit.</p>
+        </div>
+        <div class="space-y-2">
+          ${groups.map(group => `
+            <section class="rounded-lg border bg-white">
+              <div class="flex items-center justify-between gap-3 border-b bg-gray-50 px-3 py-2">
+                <h3 class="font-semibold text-gray-950">${escapeHtml(group.name)}</h3>
+                <span class="text-xs text-gray-500">${group.items.length} substrate${group.items.length === 1 ? '' : 's'}</span>
+              </div>
+              <div class="divide-y">
+                ${group.items.map(item => `
+                  <div class="grid gap-1 px-3 py-2 text-sm sm:grid-cols-[9rem_1fr]">
+                    <p class="font-medium text-gray-900">${escapeHtml(proposalSurfaceLabel(item))}</p>
+                    <p class="text-gray-600">${escapeHtml(proposalItemDetail(item))}</p>
+                  </div>
+                `).join('')}
+              </div>
+            </section>
+          `).join('')}
+        </div>
+        ${optional.length ? `
+          <section class="rounded-lg border bg-white p-3">
+            <h3 class="font-semibold text-gray-950">Customer Options</h3>
+            <div class="mt-2 space-y-1 text-sm text-gray-700">
+              ${optional.map(item => `
+                <div class="grid gap-1 border-t py-2 sm:grid-cols-[1fr_auto]">
+                  <span>
+                    <span class="block font-medium text-gray-900">${escapeHtml(proposalSurfaceLabel(item))}</span>
+                    <span class="block text-gray-600">${escapeHtml(proposalItemDetail(item))}</span>
+                  </span>
+                  <span class="font-semibold text-gray-900">${money(Number(item.qty || 1) * Number(item.rate || 0))}</span>
+                </div>
+              `).join('')}
+            </div>
+          </section>
+        ` : ''}
+      `;
+      document.getElementById('send-preview-modal').classList.remove('hidden');
+      return true;
+    }
+
+    function closeSendPreview() {
+      document.getElementById('send-preview-modal').classList.add('hidden');
+    }
+
     function calculateTotal() {
       const result = collectItems();
       document.getElementById('total-hours').textContent = result.hours.toFixed(1);
@@ -2175,7 +2300,8 @@ import Base from '../../layouts/Base.astro';
     });
 
     async function persistEstimate(statusValue = 'sent') {
-      const button = document.getElementById(statusValue === 'draft' ? 'save-draft' : 'save-estimate');
+      const previewOpen = !document.getElementById('send-preview-modal').classList.contains('hidden');
+      const button = document.getElementById(statusValue === 'draft' ? 'save-draft' : previewOpen ? 'confirm-send-estimate' : 'save-estimate');
       const otherButton = document.getElementById(statusValue === 'draft' ? 'save-estimate' : 'save-draft');
       const status = document.getElementById('save-status');
       const leadId = document.getElementById('lead-select').value;
@@ -2192,8 +2318,8 @@ import Base from '../../layouts/Base.astro';
       try {
         button.disabled = true;
         otherButton.disabled = true;
-        button.textContent = statusValue === 'draft' ? 'Saving draft...' : 'Creating estimate...';
-        status.textContent = statusValue === 'draft' ? 'Saving draft estimate...' : 'Creating estimate and opening the customer proposal...';
+        button.textContent = statusValue === 'draft' ? 'Saving draft...' : 'Sending email...';
+        status.textContent = statusValue === 'draft' ? 'Saving draft estimate...' : 'Creating estimate, sending email, and opening the customer proposal...';
         status.classList.remove('hidden');
         const isEditingDraft = Boolean(editingEstimateId);
         const { data } = await apiJson(isEditingDraft ? `${API_URL}/v1/estimates/${editingEstimateId}` : `${API_URL}/v1/estimates`, {
@@ -2201,22 +2327,40 @@ import Base from '../../layouts/Base.astro';
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ leadId, packages, status: statusValue }),
         });
-        window.showToast(statusValue === 'draft' ? 'Draft saved.' : 'Estimate created. Opening it now.');
+        if (statusValue !== 'draft') {
+          await apiJson(`${API_URL}/v1/estimates/${data.id}/send-email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          });
+        }
+        window.showToast(statusValue === 'draft' ? 'Draft saved.' : 'Estimate emailed. Opening it now.');
         editingEstimateId = data.id;
+        closeSendPreview();
         window.location.href = statusValue === 'draft' ? '/estimates?status=draft' : `/estimates/${data.id}`;
       } catch (err) {
         window.showToast(err.message || 'Failed to save estimate', 'error');
         status.textContent = err.message || 'Failed to save estimate';
         button.disabled = false;
         otherButton.disabled = false;
-        button.textContent = statusValue === 'draft' ? 'Save Draft' : 'Create Estimate';
+        button.textContent = statusValue === 'draft' ? 'Save Draft' : previewOpen ? 'Send Email' : 'Send Estimate';
       }
     }
 
     document.getElementById('save-draft').addEventListener('click', () => persistEstimate('draft'));
     document.getElementById('save-estimate').addEventListener('click', () => {
-      persistEstimate('sent');
+      const leadId = document.getElementById('lead-select').value;
+      if (!leadId) {
+        window.showToast('Select a customer first', 'error');
+        return;
+      }
+      renderSendPreview();
     });
+    document.getElementById('close-send-preview').addEventListener('click', closeSendPreview);
+    document.getElementById('cancel-send-preview').addEventListener('click', closeSendPreview);
+    document.getElementById('confirm-send-estimate').addEventListener('click', () => persistEstimate('sent'));
 
     loadSetup().catch((err) => {
       console.error('Failed to load production estimator', err);

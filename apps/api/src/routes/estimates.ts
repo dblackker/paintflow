@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, estimatePhotos, estimates, leads, orgBranding, portalTokens } from '@paintflow/db/schema';
+import { auditLogs, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -483,6 +483,38 @@ estimatesApp.get('/:id/activity', async (c) => {
   return c.json({ data: rows });
 });
 
+function packageItems(pkg: unknown) {
+  const value = pkg as { items?: unknown[]; lineItems?: unknown[] } | undefined;
+  return Array.isArray(value?.items) ? value.items : Array.isArray(value?.lineItems) ? value.lineItems : [];
+}
+
+function proposalScopeSummary(estimate: typeof estimates.$inferSelect) {
+  const packages = Array.isArray(estimate.packages) ? estimate.packages as Array<{ name?: string; items?: unknown[]; lineItems?: unknown[] }> : [];
+  const pkg = packages.find((item) => item.name === 'proposal') ?? packages[0];
+  const groups = new Map<string, Set<string>>();
+  packageItems(pkg)
+    .map((item) => item as { customerVisible?: boolean; optional?: boolean; roomName?: string; desc?: string; surfaceName?: string; labor?: { coats?: number }; material?: { brand?: string; name?: string; colorName?: string; colorCode?: string } })
+    .filter((item) => item.customerVisible !== false && !item.optional)
+    .forEach((item) => {
+      const desc = String(item.desc || '');
+      const room = item.roomName || desc.split(':')[0] || 'Project';
+      const surface = item.surfaceName || desc.replace(/^[^:]+:\s*/, '') || 'Scope item';
+      const details = [
+        surface,
+        item.labor?.coats ? `${Number(item.labor.coats)} coat${Number(item.labor.coats) === 1 ? '' : 's'}` : '',
+        item.material?.name ? [item.material.brand, item.material.name].filter(Boolean).join(' ') : '',
+        [item.material?.colorName, item.material?.colorCode].filter(Boolean).join(' '),
+      ].filter(Boolean).join(' - ');
+      if (!groups.has(room)) groups.set(room, new Set());
+      groups.get(room)?.add(details);
+    });
+
+  return Array.from(groups.entries()).slice(0, 8).map(([space, substrates]) => ({
+    space,
+    substrates: Array.from(substrates).slice(0, 6),
+  }));
+}
+
 estimatesApp.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
@@ -507,14 +539,25 @@ estimatesApp.post('/:id/send-email', async (c) => {
   const branding = await db.query.orgBranding.findFirst({
     where: eq(orgBranding.orgId, orgId),
   });
+  const settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  const userId = c.get('userId');
+  const estimator = userId
+    ? await db.query.users.findFirst({ where: eq(users.id, userId) })
+    : null;
   const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
-  const total = estimateContractValue(estimate).toFixed(2);
+  const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const html = estimateEmailTemplate({
     estimateId: estimate.id,
     leadName: lead.name,
     total,
     baseUrl,
-    companyName: branding?.companyName || 'your painting contractor',
+    companyName: branding?.companyName || settings?.companyName || 'your painting contractor',
+    estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
+    estimatorEmail: settings?.email || estimator?.email || null,
+    estimatorPhone: settings?.phone || null,
+    scopeSummary: proposalScopeSummary(estimate),
   });
 
   await sendEmail(c.env, lead.email, `Painting estimate from ${branding?.companyName || 'PaintFlow'}`, html);

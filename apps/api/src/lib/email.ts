@@ -183,6 +183,13 @@ type EstimateEmailInput = {
   total: string;
   baseUrl?: string;
   companyName?: string;
+  estimatorName?: string | null;
+  estimatorEmail?: string | null;
+  estimatorPhone?: string | null;
+  scopeSummary?: Array<{
+    space: string;
+    substrates: string[];
+  }>;
 };
 
 function escapeHtml(value: string) {
@@ -201,6 +208,21 @@ export function estimateEmailTemplate(input: EstimateEmailInput) {
   const companyName = escapeHtml(input.companyName || 'your painting contractor');
   const leadName = escapeHtml(input.leadName);
   const total = escapeHtml(input.total);
+  const estimatorName = escapeHtml(input.estimatorName || input.companyName || 'Your estimator');
+  const estimatorEmail = input.estimatorEmail ? escapeHtml(input.estimatorEmail) : '';
+  const estimatorPhone = input.estimatorPhone ? escapeHtml(input.estimatorPhone) : '';
+  const scopeSummary = Array.isArray(input.scopeSummary) ? input.scopeSummary.slice(0, 8) : [];
+  const scopeHtml = scopeSummary.length ? `
+  <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;">
+    <h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Included scope summary</h2>
+    ${scopeSummary.map((group) => `
+      <div style="padding: 8px 0; border-top: 1px solid #f3f4f6;">
+        <strong>${escapeHtml(group.space)}</strong>
+        <div style="color: #4b5563; font-size: 14px; margin-top: 3px;">${group.substrates.map(escapeHtml).join(', ')}</div>
+      </div>
+    `).join('')}
+  </div>
+  ` : '';
 
   return `
 <!DOCTYPE html>
@@ -210,13 +232,14 @@ export function estimateEmailTemplate(input: EstimateEmailInput) {
   <p>Hi ${leadName},</p>
   <p>${companyName} has prepared your painting proposal for review.</p>
   <p><strong>Base proposal total: $${total}</strong></p>
+  ${scopeHtml}
   <p>Use the secure link below to review the included scope, choose any optional add-ons, approve the proposal, sign, and pay the deposit.</p>
   <a href="${url}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">Review and approve proposal</a>
   <p style="color: #4b5563;">A PDF copy can be provided for your records, but approvals, selected options, signatures, and deposits should happen through the secure proposal link so everyone is working from the current version.</p>
   <p>This proposal is valid for 30 days unless otherwise noted.</p>
-  <p>Questions? Just reply to this email.</p>
+  <p>Questions? Reply to this email${estimatorPhone ? ` or call ${estimatorPhone}` : ''}.</p>
   <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-  <p style="color: #6b7280; font-size: 14px;">PaintFlow - Professional Painting Estimates</p>
+  <p style="color: #6b7280; font-size: 14px;">Sent by ${estimatorName}${estimatorEmail ? ` &lt;${estimatorEmail}&gt;` : ''}</p>
 </body>
 </html>
   `;
