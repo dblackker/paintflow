@@ -441,10 +441,10 @@ import '../../styles/design-system.css';
               ${breakdown.discount ? `<div class="flex justify-between gap-4 text-green-700"><span>Discount</span><span class="font-medium">-${money(breakdown.discount)}</span></div>` : ''}
               ${showOptions ? `<div class="flex justify-between gap-4"><span class="text-gray-600">Selected options</span><span class="font-medium text-gray-900" data-selected-options-total>$0.00</span></div>` : ''}
               ${showOptions ? `<div class="flex justify-between gap-4"><span class="text-gray-600">Tax on selected options</span><span class="font-medium text-gray-900" data-selected-options-tax>$0.00</span></div>` : ''}
-              <div class="flex justify-between gap-4"><span class="text-gray-600">Estimated tax total</span><span class="font-medium text-gray-900" data-selected-tax-total>${money(breakdown.totalTax)}</span></div>
+              <div class="flex justify-between gap-4"><span class="text-gray-600">Tax total</span><span class="font-medium text-gray-900" data-selected-tax-total>${money(breakdown.totalTax)}</span></div>
             </div>
             <div class="flex justify-between gap-4 text-base">
-              <span class="font-semibold text-gray-900">Estimated total</span>
+              <span class="font-semibold text-gray-900">Total</span>
               <span class="font-bold" style="color: ${primaryColor}" data-selected-total>${money(breakdown.total)}</span>
             </div>
             <div data-payment-schedule-shell>${renderPaymentSchedule(breakdown.total)}</div>
@@ -536,7 +536,7 @@ import '../../styles/design-system.css';
             </section>
             <aside class="rounded-lg border p-5 bg-gray-50 self-start">
               <div class="mt-4">${priceSummary(pkg)}</div>
-              <p class="text-sm text-gray-600 mt-4">Includes labor, selected paint products, prep, listed materials${optionalItems.length ? ', selected options,' : ''} and applicable estimated tax.</p>
+              <p class="text-sm text-gray-600 mt-4">Includes labor, selected paint products, prep, listed materials${optionalItems.length ? ', selected options,' : ''} and applicable tax.</p>
             </aside>
           </div>
         `;
