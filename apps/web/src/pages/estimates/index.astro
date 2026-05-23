@@ -89,6 +89,15 @@ import Base from '../../layouts/Base.astro';
       return new URL(estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`, window.location.origin).pathname;
     }
 
+    function estimateActions(estimate) {
+      return window.PaintFlowUI?.estimateActions({
+        estimate,
+        previewHref: customerPreviewHref(estimate),
+        editHref: `/estimates/production?estimateId=${estimate.id}`,
+        className: 'justify-end',
+      }) || '';
+    }
+
     function paymentSummary(payments = []) {
       const paid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
       const refunded = payments.reduce((sum, payment) => sum + Number(payment.refundedAmount || 0), 0);
@@ -175,14 +184,7 @@ import Base from '../../layouts/Base.astro';
                 <p class="text-lg sm:text-xl font-bold">${money(estimate.total)}</p>
                 ${paymentSummary(estimate.payments || [])}
               </div>
-              <div class="mt-2 flex flex-wrap justify-end gap-2">
-                ${estimate.status === 'draft'
-                  ? `<a href="/estimates/production?draft=${estimate.id}" class="btn-secondary btn-sm justify-center">Edit draft</a>`
-                  : `<a href="${customerPreviewHref(estimate)}" class="btn-secondary btn-sm justify-center">Client preview</a>`}
-                ${['draft', 'sent', 'declined'].includes(estimate.status)
-                  ? `<button type="button" class="btn-text btn-sm text-red-700" data-cancel-estimate="${estimate.id}">Cancel</button>`
-                  : ''}
-              </div>
+              <div class="mt-2">${estimateActions(estimate)}</div>
             </div>
           </div>
         </article>

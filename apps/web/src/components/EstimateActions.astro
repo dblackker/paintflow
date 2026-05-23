@@ -1,0 +1,45 @@
+---
+interface Props {
+  defineOnly?: boolean;
+}
+
+const { defineOnly = false } = Astro.props;
+---
+
+{defineOnly && (
+  <script is:inline>
+    (() => {
+      function escapeHtml(value = '') {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+      }
+
+      function estimateActions({
+        estimate = {},
+        previewHref = '',
+        editHref = '',
+        className = '',
+        cancelLabel = 'Cancel',
+      } = {}) {
+        const status = String(estimate.status || '').toLowerCase();
+        const estimateId = String(estimate.id || '');
+        const canCancel = ['draft', 'sent', 'declined'].includes(status);
+        const actions = [];
+
+        if (status === 'draft') {
+          actions.push(`<a href="${escapeHtml(editHref || `/estimates/production?estimateId=${estimateId}`)}" class="btn-secondary btn-sm justify-center">Edit draft</a>`);
+        } else {
+          actions.push(`<a href="${escapeHtml(previewHref || `/estimates/${estimateId}`)}" class="btn-secondary btn-sm justify-center">Client preview</a>`);
+        }
+
+        if (canCancel) {
+          actions.push(`<button type="button" class="btn-text btn-sm text-red-700 justify-center" data-cancel-estimate="${escapeHtml(estimateId)}">${escapeHtml(cancelLabel)}</button>`);
+        }
+
+        return `<div class="estimate-actions flex flex-wrap gap-2 ${escapeHtml(className)}">${actions.join('')}</div>`;
+      }
+
+      window.PaintFlowUI = window.PaintFlowUI || {};
+      window.PaintFlowUI.estimateActions = estimateActions;
+    })();
+  </script>
+)}

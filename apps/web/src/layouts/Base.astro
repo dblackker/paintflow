@@ -3,6 +3,7 @@ import Toast from '../components/Toast.astro';
 import ContactSummary from '../components/ContactSummary.astro';
 import ContactActions from '../components/ContactActions.astro';
 import StatusBadge from '../components/StatusBadge.astro';
+import EstimateActions from '../components/EstimateActions.astro';
 import Icon from '../components/Icon.astro';
 import AuthBridge from '../components/AuthBridge.astro';
 import '../styles/design-system.css';
@@ -195,6 +196,7 @@ const navSections = [
   <ContactSummary defineOnly />
   <ContactActions defineOnly />
   <StatusBadge defineOnly />
+  <EstimateActions defineOnly />
   <Toast />
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;

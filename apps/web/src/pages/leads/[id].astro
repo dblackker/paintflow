@@ -93,6 +93,15 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       return new URL(estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`, window.location.origin).pathname;
     }
 
+    function estimateActions(estimate) {
+      return window.PaintFlowUI?.estimateActions({
+        estimate,
+        previewHref: customerPreviewHref(estimate),
+        editHref: `/estimates/production?estimateId=${estimate.id}`,
+        className: 'sm:justify-end',
+      }) || '';
+    }
+
     function renderEstimates(estimates) {
       if (!estimates.length) {
         return '<div class="p-5 text-sm text-gray-500">No estimates yet.</div>';
@@ -106,10 +115,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
             </div>
             <p class="text-sm text-gray-600">Created ${dateLabel(estimate.createdAt)}${estimate.sentAt ? ` &middot; Sent ${dateLabel(estimate.sentAt)}` : ''}${estimate.signedAt ? ` &middot; Accepted ${dateLabel(estimate.signedAt)}` : ''}</p>
           </div>
-          <div class="flex gap-2 sm:justify-end">
-            ${estimate.status === 'draft' ? `<a class="btn-secondary btn-sm" href="/estimates/production?estimateId=${estimate.id}">Edit</a>` : ''}
-            ${estimate.status !== 'draft' ? `<a class="btn-secondary btn-sm" href="${customerPreviewHref(estimate)}">Client preview</a>` : ''}
-          </div>
+          ${estimateActions(estimate)}
         </div>
       `).join('');
     }
@@ -474,6 +480,27 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
     });
 
     document.addEventListener('click', async (event) => {
+      const cancelEstimateButton = event.target.closest('[data-cancel-estimate]');
+      if (cancelEstimateButton) {
+        const shouldCancel = window.confirm('Cancel this estimate? The customer preview will no longer be approvable.');
+        if (!shouldCancel) return;
+        cancelEstimateButton.disabled = true;
+        try {
+          await apiJson(`/v1/estimates/${cancelEstimateButton.dataset.cancelEstimate}/cancel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ reason: 'Canceled from customer detail' }),
+          });
+          window.showToast?.('Estimate canceled', 'success');
+          const payload = await apiJson(`/v1/leads/${leadId}`);
+          if (payload) render(payload.data);
+        } catch (err) {
+          window.showToast?.(err.message || 'Failed to cancel estimate', 'error');
+          cancelEstimateButton.disabled = false;
+        }
+        return;
+      }
+
       const button = event.target.closest('[data-complete-activity]');
       if (!button) return;
       button.disabled = true;
