@@ -1,0 +1,108 @@
+---
+import Icon from './Icon.astro';
+
+interface Props {
+  eyebrow?: string;
+  title: string;
+  body: string;
+  ctaId?: string;
+  ctaText: string;
+  icon?: 'bell' | 'credit-card' | 'mail' | 'message' | 'settings';
+}
+
+const {
+  eyebrow = 'Recommended',
+  title,
+  body,
+  ctaId,
+  ctaText,
+  icon = 'bell',
+} = Astro.props;
+---
+
+<section class="upsell-card" aria-label={title}>
+  <div class="upsell-icon" aria-hidden="true">
+    <Icon name={icon} />
+  </div>
+  <div class="upsell-content">
+    <p class="upsell-eyebrow">{eyebrow}</p>
+    <h2>{title}</h2>
+    <p>{body}</p>
+  </div>
+  <button id={ctaId} class="btn-primary btn-sm upsell-action" type="button">{ctaText}</button>
+</section>
+
+<style>
+  .upsell-card {
+    align-items: center;
+    background: color-mix(in srgb, var(--md-sys-color-primary-container) 42%, var(--md-sys-color-surface-container-lowest));
+    border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 24%, var(--md-sys-color-outline-variant));
+    border-radius: var(--pf-radius);
+    box-shadow: 0 1px 3px rgb(25 28 32 / 0.06);
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 1rem;
+  }
+
+  .upsell-icon {
+    align-items: center;
+    background: var(--md-sys-color-primary);
+    border-radius: 999px;
+    color: var(--md-sys-color-on-primary);
+    display: inline-flex;
+    height: 2.5rem;
+    justify-content: center;
+    width: 2.5rem;
+  }
+
+  .upsell-icon :global(.pf-icon) {
+    height: 1.15rem;
+    width: 1.15rem;
+  }
+
+  .upsell-content {
+    min-width: 0;
+  }
+
+  .upsell-eyebrow {
+    color: var(--md-sys-color-primary);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.15rem;
+    text-transform: uppercase;
+  }
+
+  .upsell-content h2 {
+    color: var(--md-sys-color-on-surface);
+    font-size: 1rem;
+    font-weight: 750;
+    line-height: 1.25;
+    margin: 0;
+  }
+
+  .upsell-content p:not(.upsell-eyebrow) {
+    color: var(--pf-text-muted);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    margin: 0.25rem 0 0;
+  }
+
+  .upsell-action {
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    .upsell-card {
+      align-items: flex-start;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .upsell-action {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+  }
+</style>

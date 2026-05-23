@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import UpsellCard from '../components/UpsellCard.astro';
 ---
 
 <Base title="Notifications">
@@ -11,9 +12,19 @@ import Base from '../layouts/Base.astro';
           <p class="mt-1 text-sm text-gray-600">New messages, accepted estimates, and important customer activity.</p>
         </div>
         <div class="flex gap-2">
-          <button id="enable-browser-notifications" class="btn-secondary btn-sm" type="button">Enable browser alerts</button>
           <button id="mark-all-read" class="btn-primary btn-sm" type="button">Mark read</button>
         </div>
+      </div>
+
+      <div class="mb-4">
+        <UpsellCard
+          eyebrow="Field alerts"
+          title="Get notified before work slips through the cracks"
+          body="Turn on browser alerts for new customer messages, accepted estimates, and time-sensitive production updates while PaintFlow is open."
+          ctaId="enable-browser-notifications"
+          ctaText="Enable alerts"
+          icon="bell"
+        />
       </div>
 
       <section class="overflow-hidden rounded-lg border bg-white shadow-sm">
