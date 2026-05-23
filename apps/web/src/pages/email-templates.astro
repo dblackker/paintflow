@@ -1,0 +1,313 @@
+---
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+---
+
+<Base title="Email Templates - PaintFlow">
+  <section class="mx-auto max-w-5xl px-4 py-6 pb-24 sm:px-6 lg:px-8">
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Customer communication</p>
+        <h1 class="text-2xl font-semibold text-gray-950">Email Templates</h1>
+        <p class="mt-1 max-w-2xl text-sm text-gray-600">
+          Manage customer-facing estimate emails. Direct estimate and change-order sends should be previewed before delivery, then logged on the customer profile.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/settings" class="btn-secondary btn-sm">Settings</a>
+        <button id="new-template" type="button" class="btn-primary btn-sm">
+          <Icon name="plus" />
+          New Template
+        </button>
+      </div>
+    </div>
+
+    <div class="mb-5 rounded-lg border bg-white p-4">
+      <h2 class="font-semibold text-gray-950">Recommended structure</h2>
+      <div class="mt-3 grid gap-3 text-sm text-gray-700 sm:grid-cols-3">
+        <div class="rounded-lg bg-gray-50 p-3">
+          <p class="font-medium text-gray-950">Transactional</p>
+          <p class="mt-1">Estimates, change orders, deposits, and approvals. Always preview when sent by a person.</p>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3">
+          <p class="font-medium text-gray-950">Operational</p>
+          <p class="mt-1">Daily summaries, stale follow-ups, schedule confirmations, and job readiness.</p>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3">
+          <p class="font-medium text-gray-950">Marketing</p>
+          <p class="mt-1">Drips, referral asks, win-back campaigns, and seasonal repaint reminders with consent controls.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="templates-list" class="space-y-3">
+      <div class="rounded-lg border bg-white p-6 text-center text-gray-500">Loading templates...</div>
+    </div>
+  </section>
+
+  <div id="template-modal" class="mobile-sheet fixed inset-0 z-50 hidden bg-black/50 p-0 sm:p-4">
+    <div class="flex min-h-full items-end justify-center sm:items-center">
+      <section class="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
+        <div class="sticky top-0 z-10 border-b bg-white px-4 py-3 sm:px-5">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="modal-title" class="text-lg font-semibold text-gray-950">Edit template</h2>
+              <p class="text-sm text-gray-600">Merge tags use double braces, such as <code>{'{{leadName}}'}</code> and <code>{'{{proposalUrl}}'}</code>.</p>
+            </div>
+            <button id="close-template" type="button" class="btn-icon" aria-label="Close template editor"><Icon name="close" /></button>
+          </div>
+        </div>
+        <form id="template-form" class="space-y-4 px-4 py-4 sm:px-5">
+          <input type="hidden" name="id">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label>
+              <span class="form-label">Template key</span>
+              <input name="key" class="input" required placeholder="estimate.interior.sent">
+            </label>
+            <label>
+              <span class="form-label">Name</span>
+              <input name="name" class="input" required placeholder="Interior estimate ready">
+            </label>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-3">
+            <label>
+              <span class="form-label">Category</span>
+              <select name="category" class="input">
+                <option value="estimate">Estimate</option>
+                <option value="change_order">Change order</option>
+                <option value="drip">Drip</option>
+                <option value="review">Review</option>
+                <option value="system">System</option>
+              </select>
+            </label>
+            <label>
+              <span class="form-label">Channel</span>
+              <select name="channel" class="input">
+                <option value="transactional">Transactional</option>
+                <option value="operational">Operational</option>
+                <option value="marketing">Marketing</option>
+              </select>
+            </label>
+            <label class="flex items-end gap-2 rounded-lg border px-3 py-2">
+              <input name="isActive" type="checkbox" class="rounded border-gray-300" checked>
+              <span class="text-sm font-medium text-gray-800">Active override</span>
+            </label>
+          </div>
+          <label>
+            <span class="form-label">Subject</span>
+            <input name="subject" class="input" required placeholder="{{companyName}} painting proposal for {{leadName}}">
+          </label>
+          <label>
+            <span class="form-label">Preheader</span>
+            <input name="preheader" class="input" maxlength="255" placeholder="Short inbox preview text">
+          </label>
+          <label>
+            <span class="form-label">HTML body</span>
+            <textarea name="html" class="input min-h-[18rem] font-mono text-xs" required></textarea>
+          </label>
+          <label>
+            <span class="form-label">Plain text fallback</span>
+            <textarea name="text" class="input min-h-28 font-mono text-xs" placeholder="Optional. Generated from HTML when blank."></textarea>
+          </label>
+          <div class="rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+            Available merge tags: <code>{'{{companyName}}'}</code>, <code>{'{{leadName}}'}</code>, <code>{'{{total}}'}</code>, <code>{'{{estimatorName}}'}</code>, <code>{'{{estimatorEmail}}'}</code>, <code>{'{{estimatorPhone}}'}</code>, <code>{'{{proposalUrl}}'}</code>, <code>{'{{scopeSummaryHtml}}'}</code>, <code>{'{{scopeSummaryText}}'}</code>.
+          </div>
+          <div class="mobile-sticky-actions flex flex-col gap-2 border-t bg-white pt-3 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent">
+            <button id="delete-template" type="button" class="btn-text justify-center text-red-700">Reset to system default</button>
+            <button type="button" id="cancel-template" class="btn-secondary justify-center">Cancel</button>
+            <button id="save-template" type="submit" class="btn-primary justify-center">Save template</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+    const list = document.getElementById('templates-list');
+    const modal = document.getElementById('template-modal');
+    const form = document.getElementById('template-form');
+    const saveButton = document.getElementById('save-template');
+    const deleteButton = document.getElementById('delete-template');
+    let templates = [];
+    let editingTemplate = null;
+
+    function escapeHtml(value = '') {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    function label(value) {
+      return window.PaintFlowFormat?.label(value) || String(value || '').replace(/_/g, ' ');
+    }
+
+    async function apiJson(path, options = {}) {
+      const res = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return null;
+      }
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function statusPill(template) {
+      if (template.source === 'system') return '<span class="badge badge-neutral">System default</span>';
+      if (!template.isActive) return '<span class="badge badge-danger">Inactive override</span>';
+      return '<span class="badge badge-success">Org override</span>';
+    }
+
+    function renderTemplates() {
+      if (!templates.length) {
+        list.innerHTML = '<div class="rounded-lg border bg-white p-6 text-center text-gray-500">No templates found.</div>';
+        return;
+      }
+      const grouped = templates.reduce((groups, template) => {
+        const key = template.category || 'other';
+        groups[key] ||= [];
+        groups[key].push(template);
+        return groups;
+      }, {});
+      list.innerHTML = Object.entries(grouped).map(([category, items]) => `
+        <section class="rounded-lg border bg-white">
+          <div class="border-b px-4 py-3">
+            <h2 class="font-semibold text-gray-950">${escapeHtml(label(category))}</h2>
+          </div>
+          <div class="divide-y">
+            ${items.map((template) => `
+              <div class="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="font-semibold text-gray-950">${escapeHtml(template.name)}</p>
+                    ${statusPill(template)}
+                    <span class="badge badge-neutral">${escapeHtml(label(template.channel))}</span>
+                  </div>
+                  <p class="mt-1 text-sm text-gray-700">${escapeHtml(template.subject)}</p>
+                  <p class="mt-1 text-xs text-gray-500">${escapeHtml(template.key)}${template.preheader ? ` - ${escapeHtml(template.preheader)}` : ''}</p>
+                </div>
+                <button type="button" class="btn-secondary btn-sm justify-center" data-edit-template="${escapeHtml(template.key)}">${template.source === 'system' ? 'Customize' : 'Edit'}</button>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+      `).join('');
+    }
+
+    function openEditor(template = null) {
+      editingTemplate = template;
+      form.reset();
+      form.elements.id.value = template?.id || '';
+      form.elements.key.value = template?.key || '';
+      form.elements.key.disabled = Boolean(template?.id);
+      form.elements.name.value = template?.name || '';
+      form.elements.category.value = template?.category || 'estimate';
+      form.elements.channel.value = template?.channel || 'transactional';
+      form.elements.subject.value = template?.subject || '';
+      form.elements.preheader.value = template?.preheader || '';
+      form.elements.html.value = template?.html || '';
+      form.elements.text.value = template?.text || '';
+      form.elements.isActive.checked = template?.isActive !== false;
+      document.getElementById('modal-title').textContent = template?.source === 'system' ? 'Customize system template' : template?.id ? 'Edit template' : 'New template';
+      deleteButton.classList.toggle('hidden', !template?.id);
+      modal.classList.remove('hidden');
+    }
+
+    function closeEditor() {
+      modal.classList.add('hidden');
+      editingTemplate = null;
+    }
+
+    async function loadTemplates() {
+      try {
+        const payload = await apiJson('/v1/email-templates');
+        templates = payload?.data || [];
+        renderTemplates();
+      } catch (err) {
+        list.innerHTML = `<div class="rounded-lg border bg-white p-6 text-center text-red-600">${escapeHtml(err.message || 'Failed to load email templates')}</div>`;
+      }
+    }
+
+    document.getElementById('new-template').addEventListener('click', () => openEditor({
+      source: 'org',
+      key: 'estimate.followup.custom',
+      category: 'estimate',
+      channel: 'transactional',
+      name: 'Custom estimate email',
+      subject: 'Painting proposal from {{companyName}}',
+      preheader: 'Review your painting proposal and approval link.',
+      html: '<p>Hi {{leadName}},</p>\\n<p>Your proposal from {{companyName}} is ready.</p>\\n<p>Total: ${{total}}</p>\\n{{scopeSummaryHtml}}\\n<p><a href="{{proposalUrl}}">Review and approve proposal</a></p>',
+      isActive: true,
+    }));
+
+    list.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-edit-template]');
+      if (!button) return;
+      const template = templates.find((item) => item.key === button.dataset.editTemplate);
+      if (template) openEditor(template);
+    });
+
+    document.getElementById('close-template').addEventListener('click', closeEditor);
+    document.getElementById('cancel-template').addEventListener('click', closeEditor);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      saveButton.disabled = true;
+      const data = Object.fromEntries(new FormData(form).entries());
+      const body = {
+        key: form.elements.key.value,
+        name: data.name,
+        category: data.category,
+        channel: data.channel,
+        subject: data.subject,
+        preheader: data.preheader || null,
+        html: data.html,
+        text: data.text || null,
+        isActive: form.elements.isActive.checked,
+      };
+      try {
+        if (data.id) {
+          const { key, ...patch } = body;
+          await apiJson(`/v1/email-templates/${data.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify(patch),
+          });
+        } else {
+          await apiJson('/v1/email-templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify(body),
+          });
+        }
+        window.showToast?.('Email template saved', 'success');
+        closeEditor();
+        await loadTemplates();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to save template', 'error');
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+
+    deleteButton.addEventListener('click', async () => {
+      const id = form.elements.id.value;
+      if (!id) return;
+      deleteButton.disabled = true;
+      try {
+        await apiJson(`/v1/email-templates/${id}`, {
+          method: 'DELETE',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
+        });
+        window.showToast?.('Template reset to system default', 'success');
+        closeEditor();
+        await loadTemplates();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to reset template', 'error');
+      } finally {
+        deleteButton.disabled = false;
+      }
+    });
+
+    loadTemplates();
+  </script>
+</Base>

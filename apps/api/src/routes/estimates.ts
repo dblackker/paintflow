@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, emailSends, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
+import { auditLogs, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -525,6 +525,13 @@ function estimateProjectType(estimate: typeof estimates.$inferSelect) {
   return 'standard';
 }
 
+function estimateEmailTemplateKey(projectType: string) {
+  const type = projectType.toLowerCase();
+  if (type.includes('interior')) return 'estimate.interior.sent';
+  if (type.includes('exterior')) return 'estimate.exterior.sent';
+  return 'estimate.standard.sent';
+}
+
 estimatesApp.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
@@ -558,6 +565,11 @@ estimatesApp.post('/:id/send-email', async (c) => {
     : null;
   const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
   const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const projectType = estimateProjectType(estimate);
+  const templateKey = estimateEmailTemplateKey(projectType);
+  const templateOverride = await db.query.emailTemplates.findFirst({
+    where: and(eq(emailTemplates.orgId, orgId), eq(emailTemplates.key, templateKey), eq(emailTemplates.isActive, true)),
+  });
   const renderedEmail = renderEstimateEmail({
     estimateId: estimate.id,
     leadName: lead.name,
@@ -567,9 +579,9 @@ estimatesApp.post('/:id/send-email', async (c) => {
     estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
     estimatorEmail: settings?.email || estimator?.email || null,
     estimatorPhone: settings?.phone || null,
-    estimateType: estimateProjectType(estimate),
+    estimateType: projectType,
     scopeSummary: proposalScopeSummary(estimate),
-  });
+  }, templateOverride);
   const fromEmail = c.env.EMAIL_FROM || 'estimates@paintflow.app';
   const replyTo = settings?.email || estimator?.email || undefined;
 
@@ -596,7 +608,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
     providerMessageId: providerResult?.id || providerResult?.message_id || null,
     sentBy: c.get('userId'),
     metadata: {
-      estimateType: estimateProjectType(estimate),
+      estimateType: projectType,
       link: `${baseUrl}/estimates/${estimate.id}`,
     },
   }).returning();

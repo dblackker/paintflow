@@ -215,6 +215,16 @@ export type RenderedEmail = {
   text: string;
 };
 
+export type EmailTemplateOverride = {
+  key: string;
+  name?: string | null;
+  channel?: string | null;
+  subject?: string | null;
+  preheader?: string | null;
+  html?: string | null;
+  text?: string | null;
+};
+
 export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
   'estimate.interior.sent': {
     key: 'estimate.interior.sent',
@@ -276,27 +286,8 @@ function estimateTemplateKey(input: EstimateEmailInput) {
   return 'estimate.standard.sent';
 }
 
-export function renderEstimateEmail(input: EstimateEmailInput): RenderedEmail {
-  const template = estimateEmailTemplates[estimateTemplateKey(input)] || estimateEmailTemplates['estimate.standard.sent'];
-  const baseUrl = input.baseUrl || 'https://app.paintflow.app';
-  const url = `${baseUrl}/estimates/${encodeURIComponent(input.estimateId)}`;
-  const companyName = escapeHtml(input.companyName || 'your painting contractor');
-  const leadName = escapeHtml(input.leadName);
-  const total = escapeHtml(input.total);
-  const estimatorName = escapeHtml(input.estimatorName || input.companyName || 'Your estimator');
-  const estimatorEmail = input.estimatorEmail ? escapeHtml(input.estimatorEmail) : '';
-  const estimatorPhone = input.estimatorPhone ? escapeHtml(input.estimatorPhone) : '';
-  const scopeSummary = Array.isArray(input.scopeSummary) ? input.scopeSummary.slice(0, 8) : [];
-  const mergeFields = {
-    companyName: input.companyName || 'your painting contractor',
-    leadName: input.leadName,
-    total: input.total,
-    estimatorName: input.estimatorName || input.companyName || 'Your estimator',
-  };
-  const subject = replaceMergeTags(template.subject, mergeFields);
-  const intro = replaceMergeTags(template.intro, mergeFields);
-  const outro = replaceMergeTags(template.outro, mergeFields);
-  const scopeHtml = scopeSummary.length ? `
+function scopeSummaryHtml(scopeSummary: Array<{ space: string; substrates: string[] }>) {
+  return scopeSummary.length ? `
   <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;">
     <h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Included scope summary</h2>
     ${scopeSummary.map((group) => `
@@ -307,6 +298,53 @@ export function renderEstimateEmail(input: EstimateEmailInput): RenderedEmail {
     `).join('')}
   </div>
   ` : '';
+}
+
+function scopeSummaryText(scopeSummary: Array<{ space: string; substrates: string[] }>) {
+  return scopeSummary.map((group) => `${group.space}: ${group.substrates.join(', ')}`).join('\n');
+}
+
+export function renderEstimateEmail(input: EstimateEmailInput, override?: EmailTemplateOverride | null): RenderedEmail {
+  const template = estimateEmailTemplates[estimateTemplateKey(input)] || estimateEmailTemplates['estimate.standard.sent'];
+  const baseUrl = input.baseUrl || 'https://app.paintflow.app';
+  const url = `${baseUrl}/estimates/${encodeURIComponent(input.estimateId)}`;
+  const companyName = escapeHtml(input.companyName || 'your painting contractor');
+  const leadName = escapeHtml(input.leadName);
+  const total = escapeHtml(input.total);
+  const estimatorName = escapeHtml(input.estimatorName || input.companyName || 'Your estimator');
+  const estimatorEmail = input.estimatorEmail ? escapeHtml(input.estimatorEmail) : '';
+  const estimatorPhone = input.estimatorPhone ? escapeHtml(input.estimatorPhone) : '';
+  const scopeSummary = Array.isArray(input.scopeSummary) ? input.scopeSummary.slice(0, 8) : [];
+  const scopeHtml = scopeSummaryHtml(scopeSummary);
+  const mergeFields = {
+    companyName: input.companyName || 'your painting contractor',
+    leadName: input.leadName,
+    total: input.total,
+    estimatorName: input.estimatorName || input.companyName || 'Your estimator',
+    estimatorEmail: input.estimatorEmail || '',
+    estimatorPhone: input.estimatorPhone || '',
+    proposalUrl: url,
+    ctaText: template.cta,
+    scopeSummaryHtml: scopeHtml,
+    scopeSummaryText: scopeSummaryText(scopeSummary),
+  };
+  const subject = replaceMergeTags(override?.subject || template.subject, mergeFields);
+  const preheader = replaceMergeTags(override?.preheader || template.preheader, mergeFields);
+  if (override?.html) {
+    const html = replaceMergeTags(override.html, mergeFields);
+    const text = override.text ? replaceMergeTags(override.text, mergeFields) : plainTextFromHtml(html);
+    return {
+      templateKey: override.key || template.key,
+      templateName: override.name || template.name,
+      channel: override.channel || template.channel,
+      subject,
+      preheader,
+      html,
+      text,
+    };
+  }
+  const intro = replaceMergeTags(template.intro, mergeFields);
+  const outro = replaceMergeTags(template.outro, mergeFields);
 
   const html = `
 <!DOCTYPE html>
@@ -334,7 +372,7 @@ export function renderEstimateEmail(input: EstimateEmailInput): RenderedEmail {
     templateName: template.name,
     channel: template.channel,
     subject,
-    preheader: template.preheader,
+    preheader,
     html,
     text: plainTextFromHtml(html),
   };
