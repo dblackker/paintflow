@@ -33,7 +33,7 @@ import '../../styles/design-system.css';
     const escapeHtml = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     
     async function loadPortal() {
-      const res = await fetch(`${API_URL}/v1/portal/${token}`, { credentials: 'include' });
+      const res = await fetch(`${API_URL}/v1/portal/${token}${window.location.search}`, { credentials: 'include' });
       if (!res.ok) {
         document.getElementById('portal-content').innerHTML = '<div class="text-center py-12 text-red-600">Invalid or expired link</div>';
         return;
@@ -100,6 +100,20 @@ import '../../styles/design-system.css';
       const isApproved = order.status === 'approved' || order.status === 'completed';
       const isPaid = order.paymentStatus === 'paid';
       const needsPayment = paymentRequired && !isPaid;
+      const actions = !isApproved ? `
+        <div class="mt-4 grid gap-3">
+          <label class="block">
+            <span class="form-label">Approval name</span>
+            <input id="approval-name-${order.id}" class="input" value="${escapeHtml(document.getElementById('customer-info').textContent || '')}" autocomplete="name">
+          </label>
+          <button onclick="approveChangeOrder('${order.id}')" class="btn-primary w-full justify-center">Approve Change Order</button>
+        </div>
+      ` : `
+        <div class="mt-4 flex flex-col sm:flex-row gap-3">
+          ${needsPayment ? `<button onclick="payChangeOrder('${order.id}')" class="btn-primary flex-1 justify-center">Pay ${money(paymentDue || order.amount)}</button>` : ''}
+          ${isPaid ? '<p class="text-sm font-medium text-green-700">Payment received. Thank you.</p>' : ''}
+        </div>
+      `;
       return `
         <article class="rounded-lg border p-4">
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -113,11 +127,7 @@ import '../../styles/design-system.css';
               ${paymentRequired ? `<span class="rounded-full bg-gray-100 px-2 py-1 text-gray-700">${label(order.paymentStatus)}</span>` : ''}
             </div>
           </div>
-          <div class="mt-4 flex flex-col sm:flex-row gap-3">
-            ${!isApproved ? `<button onclick="approveChangeOrder('${order.id}')" class="btn-primary flex-1 justify-center">Approve Change Order</button>` : ''}
-            ${isApproved && needsPayment ? `<button onclick="payChangeOrder('${order.id}')" class="btn-primary flex-1 justify-center">Pay ${money(paymentDue || order.amount)}</button>` : ''}
-            ${isPaid ? '<p class="text-sm font-medium text-green-700">Payment received. Thank you.</p>' : ''}
-          </div>
+          ${actions}
         </article>
       `;
     }
@@ -146,10 +156,10 @@ import '../../styles/design-system.css';
     };
 
     window.approveChangeOrder = async (id) => {
-      const approvedBy = document.getElementById('customer-info').textContent || 'customer';
+      const approvedBy = document.getElementById(`approval-name-${id}`)?.value?.trim() || document.getElementById('customer-info').textContent || 'customer';
       const res = await fetch(`${API_URL}/v1/portal/${token}/change-orders/${id}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
         credentials: 'include',
         body: JSON.stringify({ approvedBy }),
       });
@@ -164,6 +174,7 @@ import '../../styles/design-system.css';
     window.payChangeOrder = async (id) => {
       const res = await fetch(`${API_URL}/v1/portal/${token}/change-orders/${id}/checkout`, {
         method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
         credentials: 'include',
       });
       const payload = await res.json().catch(() => ({}));

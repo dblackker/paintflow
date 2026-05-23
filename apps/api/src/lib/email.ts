@@ -193,6 +193,21 @@ type EstimateEmailInput = {
   }>;
 };
 
+type ChangeOrderEmailInput = {
+  leadName: string;
+  companyName?: string;
+  estimatorName?: string | null;
+  estimatorEmail?: string | null;
+  estimatorPhone?: string | null;
+  jobName?: string | null;
+  jobAddress?: string | null;
+  description: string;
+  amount: string;
+  paymentRequired?: boolean;
+  paymentDue?: string | null;
+  portalUrl: string;
+};
+
 type EmailTemplateDefinition = {
   key: string;
   name: string;
@@ -258,6 +273,17 @@ export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
     intro: '{{companyName}} has prepared your painting proposal for review. The secure proposal link includes the current scope, optional add-ons, approval, signature, and deposit steps.',
     cta: 'Review and approve proposal',
     outro: 'If anything in the scope should change, reply to this email before approving so everyone is working from the current version.',
+  },
+  'change_order.approval.sent': {
+    key: 'change_order.approval.sent',
+    name: 'Change order approval request',
+    category: 'change_order',
+    channel: 'transactional',
+    subject: '{{companyName}} change order approval for {{leadName}}',
+    preheader: 'Review the added painting scope, approve it, and complete any required payment.',
+    intro: '{{companyName}} created a change order for work outside the current approved scope. Please review the added scope before the crew proceeds.',
+    cta: 'Review change order',
+    outro: 'If the scope or price does not look right, reply before approving so the production team can update the change order.',
   },
 };
 
@@ -359,6 +385,90 @@ export function renderEstimateEmail(input: EstimateEmailInput, override?: EmailT
   <a href="${url}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${escapeHtml(template.cta)}</a>
   <p style="color: #4b5563;">A PDF copy can be provided for your records, but approvals, selected options, signatures, and deposits should happen through the secure proposal link so everyone is working from the current version.</p>
   <p>This proposal is valid for 30 days unless otherwise noted.</p>
+  <p>${escapeHtml(outro)}</p>
+  <p>Questions? Reply to this email${estimatorPhone ? ` or call ${estimatorPhone}` : ''}.</p>
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+  <p style="color: #6b7280; font-size: 14px;">Sent by ${estimatorName}${estimatorEmail ? ` &lt;${estimatorEmail}&gt;` : ''}</p>
+</body>
+</html>
+  `;
+
+  return {
+    templateKey: template.key,
+    templateName: template.name,
+    channel: template.channel,
+    subject,
+    preheader,
+    html,
+    text: plainTextFromHtml(html),
+  };
+}
+
+export function renderChangeOrderEmail(input: ChangeOrderEmailInput, override?: EmailTemplateOverride | null): RenderedEmail {
+  const template = estimateEmailTemplates['change_order.approval.sent'];
+  const companyName = escapeHtml(input.companyName || 'your painting contractor');
+  const leadName = escapeHtml(input.leadName);
+  const estimatorName = escapeHtml(input.estimatorName || input.companyName || 'Your contractor');
+  const estimatorEmail = input.estimatorEmail ? escapeHtml(input.estimatorEmail) : '';
+  const estimatorPhone = input.estimatorPhone ? escapeHtml(input.estimatorPhone) : '';
+  const jobName = escapeHtml(input.jobName || 'Painting project');
+  const jobAddress = input.jobAddress ? escapeHtml(input.jobAddress) : '';
+  const description = escapeHtml(input.description);
+  const amount = escapeHtml(input.amount);
+  const paymentDue = input.paymentDue ? escapeHtml(input.paymentDue) : '';
+  const portalUrl = input.portalUrl;
+  const mergeFields = {
+    companyName: input.companyName || 'your painting contractor',
+    leadName: input.leadName,
+    estimatorName: input.estimatorName || input.companyName || 'Your contractor',
+    estimatorEmail: input.estimatorEmail || '',
+    estimatorPhone: input.estimatorPhone || '',
+    jobName: input.jobName || 'Painting project',
+    jobAddress: input.jobAddress || '',
+    description: input.description,
+    amount: input.amount,
+    paymentDue: input.paymentDue || '',
+    portalUrl,
+    ctaText: template.cta,
+  };
+  const subject = replaceMergeTags(override?.subject || template.subject, mergeFields);
+  const preheader = replaceMergeTags(override?.preheader || template.preheader, mergeFields);
+  if (override?.html) {
+    const html = replaceMergeTags(override.html, mergeFields);
+    const text = override.text ? replaceMergeTags(override.text, mergeFields) : plainTextFromHtml(html);
+    return {
+      templateKey: override.key || template.key,
+      templateName: override.name || template.name,
+      channel: override.channel || template.channel,
+      subject,
+      preheader,
+      html,
+      text,
+    };
+  }
+
+  const intro = replaceMergeTags(template.intro, mergeFields);
+  const outro = replaceMergeTags(template.outro, mergeFields);
+  const paymentCopy = input.paymentRequired
+    ? `Payment due after approval: $${paymentDue || amount}. The secure link will take you to payment after approval.`
+    : 'No online payment is required for this change order right now.';
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #2563eb;">Change order approval needed</h1>
+  <p>Hi ${leadName},</p>
+  <p>${escapeHtml(intro)}</p>
+  <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;">
+    <h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Change order summary</h2>
+    <p style="margin: 0 0 8px;"><strong>Job:</strong> ${jobName}${jobAddress ? ` &mdash; ${jobAddress}` : ''}</p>
+    <p style="margin: 0 0 8px;"><strong>Added scope:</strong> ${description}</p>
+    <p style="margin: 0 0 8px;"><strong>Change order total:</strong> $${amount}</p>
+    <p style="margin: 0; color: #4b5563;">${escapeHtml(paymentCopy)}</p>
+  </div>
+  <p>Use the secure link below to approve the added work. Approval is recorded with the job so the office and field crew can see that the scope is authorized.</p>
+  <a href="${portalUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${escapeHtml(template.cta)}</a>
   <p>${escapeHtml(outro)}</p>
   <p>Questions? Reply to this email${estimatorPhone ? ` or call ${estimatorPhone}` : ''}.</p>
   <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">

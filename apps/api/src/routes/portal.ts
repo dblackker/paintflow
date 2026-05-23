@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { auditLogs, changeOrders, estimates, jobs, leads, portalTokens, stripeConnections } from '@paintflow/db/schema';
+import { auditLogs, changeOrders, estimates, jobs, leads, notificationEvents, portalTokens, stripeConnections } from '@paintflow/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
@@ -8,8 +8,13 @@ import { createCheckoutSession } from '../lib/stripe';
 
 const portalApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+function leadNameFromApproval(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : 'Customer';
+}
+
 portalApp.get('/:token', async (c) => {
   const token = c.req.param('token');
+  const changeOrderId = c.req.query('changeOrderId');
   const db = createDb(c.env.DATABASE_URL);
   
   const portalToken = await db.query.portalTokens.findFirst({
@@ -33,13 +38,24 @@ portalApp.get('/:token', async (c) => {
     orderBy: [desc(estimates.createdAt)],
   });
   
-  const job = await db.query.jobs.findFirst({
-    where: and(eq(jobs.leadId, portalToken.leadId), eq(jobs.orgId, portalToken.orgId)),
-  });
+  const focusedChangeOrder = changeOrderId
+    ? await db.query.changeOrders.findFirst({
+      where: and(eq(changeOrders.id, changeOrderId), eq(changeOrders.orgId, portalToken.orgId)),
+    })
+    : null;
+  const job = focusedChangeOrder
+    ? await db.query.jobs.findFirst({
+      where: and(eq(jobs.id, focusedChangeOrder.jobId), eq(jobs.orgId, portalToken.orgId), eq(jobs.leadId, portalToken.leadId)),
+    })
+    : await db.query.jobs.findFirst({
+      where: and(eq(jobs.leadId, portalToken.leadId), eq(jobs.orgId, portalToken.orgId)),
+    });
 
   const orders = job
     ? await db.query.changeOrders.findMany({
-      where: and(eq(changeOrders.jobId, job.id), eq(changeOrders.orgId, portalToken.orgId)),
+      where: focusedChangeOrder
+        ? and(eq(changeOrders.id, focusedChangeOrder.id), eq(changeOrders.orgId, portalToken.orgId))
+        : and(eq(changeOrders.jobId, job.id), eq(changeOrders.orgId, portalToken.orgId)),
       orderBy: [desc(changeOrders.createdAt)],
     })
     : [];
@@ -141,6 +157,23 @@ portalApp.post('/:token/change-orders/:id/approve', async (c) => {
     userAgent: c.req.header('user-agent') || undefined,
   });
 
+  await db.insert(notificationEvents).values({
+    orgId: portalToken.orgId,
+    type: 'change_order.approved',
+    title: 'Change order approved',
+    body: `${leadNameFromApproval(body.approvedBy)} approved a ${Number(order.amount || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} change order.`,
+    href: `/jobs/${job.id}`,
+    priority: 'high',
+    sourceType: 'change_order',
+    sourceId: id,
+    leadId: portalToken.leadId,
+    metadata: {
+      jobId: job.id,
+      amount: order.amount,
+      paymentRequired,
+    },
+  });
+
   return c.json({ data: updated });
 });
 
@@ -183,8 +216,8 @@ portalApp.post('/:token/change-orders/:id/checkout', async (c) => {
   const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
   const session = await createCheckoutSession(c.env, {
     amount,
-    successUrl: `${baseUrl}/portal/${token}?changeOrderPaid=${id}`,
-    cancelUrl: `${baseUrl}/portal/${token}?changeOrderPaymentCanceled=${id}`,
+    successUrl: `${baseUrl}/portal/${token}?changeOrderId=${id}&changeOrderPaid=${id}`,
+    cancelUrl: `${baseUrl}/portal/${token}?changeOrderId=${id}&changeOrderPaymentCanceled=${id}`,
     productName: 'Painting Change Order',
     connectedAccountId: stripeConnection.stripeAccountId,
     metadata: {

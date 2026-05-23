@@ -311,7 +311,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
   <div id="approval-link-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-30 flex items-center justify-center p-4">
     <div class="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl">
       <h3 class="text-lg font-semibold">Customer Approval Link</h3>
-      <p class="mt-1 text-sm text-gray-600">Send this secure portal link to the customer for change order approval and payment. It expires in 14 days.</p>
+      <p class="mt-1 text-sm text-gray-600">This secure portal link lets the customer review, approve, and pay for the change order. It expires in 14 days.</p>
       <label class="mt-4 block">
         <span class="form-label">Approval link</span>
         <input id="approval-link-input" readonly class="input" value="">
@@ -790,8 +790,9 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
             <p class="font-semibold">${currency(order.amount)}</p>
             ${order.paymentRequired ? `<p class="text-xs text-gray-500">${currency(order.paymentDueAmount || order.amount)} due on approval</p>` : '<p class="text-xs text-gray-500">No payment required</p>'}
             <div class="job-mobile-actions mt-3 flex flex-wrap sm:justify-end gap-2">
-              ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" title="Creates a secure customer portal link and copies it to your clipboard." data-send-change-order="${order.id}">${order.sentAt ? 'Copy fresh link' : 'Create approval link'}</button>` : ''}
+              ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" title="Emails the secure approval and payment link to the customer." data-send-change-order="${order.id}">${order.sentAt ? 'Resend email' : 'Send for approval'}</button>` : ''}
               ${order.status === 'pending' ? `<button type="button" class="btn-secondary btn-sm" data-approve-change-order="${order.id}">Mark approved</button>` : ''}
+              ${order.status === 'approved' ? `<button type="button" class="btn-secondary btn-sm" data-complete-change-order="${order.id}">Mark complete</button>` : ''}
             </div>
           </div>
         </div>
@@ -1156,27 +1157,51 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
       if (sendButton) {
         sendButton.disabled = true;
         const originalText = sendButton.textContent;
-        sendButton.textContent = 'Creating link...';
+        sendButton.textContent = 'Sending...';
         try {
-          const payload = await api(`/v1/change-orders/${sendButton.dataset.sendChangeOrder}/portal-link`, { method: 'POST' });
+          const payload = await api(`/v1/change-orders/${sendButton.dataset.sendChangeOrder}/send-email`, {
+            method: 'POST',
+            headers: { 'Idempotency-Key': crypto.randomUUID() },
+          });
           const link = payload?.data?.link;
           if (link) {
             const copied = await navigator.clipboard?.writeText(link).then(() => true).catch(() => false);
             if (!copied) {
               openApprovalLinkModal(link);
-              window.showToast?.('Select the link and copy it manually', 'error');
+              window.showToast?.(`Change order emailed to ${payload.data.to}. Select the link and copy it manually if needed.`, 'success');
             } else {
-              window.showToast?.('Approval link copied. It expires in 14 days.', 'success');
+              window.showToast?.(`Change order emailed to ${payload.data.to}. Link copied for your records.`, 'success');
             }
           } else {
-            window.showToast?.('Approval link created', 'success');
+            window.showToast?.('Change order email sent', 'success');
           }
           await loadCosting();
         } catch (err) {
-          window.showToast?.(err.message || 'Failed to create approval link', 'error');
+          window.showToast?.(err.message || 'Failed to send change order', 'error');
         } finally {
           sendButton.disabled = false;
           sendButton.textContent = originalText;
+        }
+        return;
+      }
+
+      const completeButton = event.target.closest('[data-complete-change-order]');
+      if (completeButton) {
+        completeButton.disabled = true;
+        completeButton.textContent = 'Completing...';
+        try {
+          await api(`/v1/change-orders/${completeButton.dataset.completeChangeOrder}`, {
+            method: 'PATCH',
+            headers: { 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ status: 'completed' }),
+          });
+          await loadCosting();
+          window.showToast?.('Change order marked complete', 'success');
+        } catch (err) {
+          window.showToast?.(err.message || 'Failed to complete change order', 'error');
+        } finally {
+          completeButton.disabled = false;
+          completeButton.textContent = 'Mark complete';
         }
         return;
       }
@@ -1189,6 +1214,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
       try {
         await api(`/v1/change-orders/${approveButton.dataset.approveChangeOrder}`, {
           method: 'PATCH',
+          headers: { 'Idempotency-Key': crypto.randomUUID() },
           body: JSON.stringify({ status: 'approved' }),
         });
         await loadCosting();
