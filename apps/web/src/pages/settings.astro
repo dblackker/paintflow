@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
 ---
 
 <Base title="Settings">
@@ -84,6 +85,65 @@ import Base from '../layouts/Base.astro';
         font-weight: 650;
       }
 
+      .settings-label-row {
+        align-items: center;
+        display: inline-flex;
+        gap: 0.35rem;
+        position: relative;
+        width: fit-content;
+      }
+
+      .settings-info-button {
+        align-items: center;
+        background: transparent;
+        border: 0;
+        border-radius: 999px;
+        color: var(--pf-text-muted);
+        display: inline-flex;
+        height: 1.35rem;
+        justify-content: center;
+        padding: 0;
+        width: 1.35rem;
+      }
+
+      .settings-info-button .pf-icon {
+        height: 1rem;
+        width: 1rem;
+      }
+
+      .settings-info-button:hover,
+      .settings-info-button:focus-visible {
+        background: var(--pf-state-hover);
+        color: var(--pf-primary);
+        outline: none;
+      }
+
+      .settings-info-popover {
+        background: var(--pf-card-surface);
+        border: 1px solid var(--pf-border);
+        border-radius: var(--pf-radius-sm);
+        box-shadow: var(--pf-elevation-2);
+        color: var(--pf-text);
+        display: none;
+        font-size: 0.78rem;
+        font-weight: 500;
+        left: 100%;
+        line-height: 1.35;
+        margin-left: 0.45rem;
+        max-width: min(20rem, calc(100vw - 2rem));
+        padding: 0.65rem 0.75rem;
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: max-content;
+        z-index: 20;
+      }
+
+      .settings-label-row:hover .settings-info-popover,
+      .settings-label-row:focus-within .settings-info-popover {
+        display: block;
+      }
+
       .settings-link-grid {
         display: grid;
         gap: 0.75rem;
@@ -157,6 +217,13 @@ import Base from '../layouts/Base.astro';
         .settings-card button[type="submit"] {
           justify-content: center;
           width: 100%;
+        }
+        .settings-info-popover {
+          left: 0;
+          margin-left: 0;
+          top: calc(100% + 0.4rem);
+          transform: none;
+          width: min(20rem, calc(100vw - 2rem));
         }
         .settings-action-card {
           padding: 0.75rem;
@@ -464,11 +531,23 @@ import Base from '../layouts/Base.astro';
           <h3 class="font-semibold mb-4">Review Links</h3>
           <form id="reviews-form" class="space-y-4">
             <label class="settings-field">
-              <span>Google Business review URL</span>
+              <span class="settings-label-row">
+                <span>Google Business review URL</span>
+                <button type="button" class="settings-info-button" aria-label="Explain Google Business review URL">
+                  <Icon name="info" />
+                </button>
+                <span class="settings-info-popover" role="tooltip">The direct Google review link customers use after a completed job. PaintFlow can send happy customers here after they rate the project highly.</span>
+              </span>
               <input name="googleReviewUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://g.page/r/..." class="w-full px-3 py-2 border rounded-lg">
             </label>
             <label class="settings-field">
-              <span>Yelp review URL</span>
+              <span class="settings-label-row">
+                <span>Yelp review URL</span>
+                <button type="button" class="settings-info-button" aria-label="Explain Yelp review URL">
+                  <Icon name="info" />
+                </button>
+                <span class="settings-info-popover" role="tooltip">Optional Yelp review destination for customers who prefer Yelp or for future review-request routing by source, city, or campaign.</span>
+              </span>
               <input name="yelpReviewUrl" type="url" inputmode="url" autocomplete="url" placeholder="Optional" class="w-full px-3 py-2 border rounded-lg">
             </label>
             <button type="submit" class="btn-primary">Save</button>
