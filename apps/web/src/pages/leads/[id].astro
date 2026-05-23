@@ -79,13 +79,15 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
       return { label: 'Create estimate', href: `/estimates/production?leadId=${customer.id}` };
     }
 
-    function renderStat(label, value, help) {
+    function renderStat(label, value, help, href = '') {
+      const tag = href ? 'a' : 'div';
+      const attrs = href ? `href="${escapeHtml(href)}"` : '';
       return `
-        <div class="bg-white border rounded-lg p-4">
+        <${tag} ${attrs} class="block bg-white border rounded-lg p-4 hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">${label}</p>
           <p class="text-2xl font-semibold text-gray-950 mt-1">${value}</p>
           <p class="text-xs text-gray-500 mt-1">${help}</p>
-        </div>
+        </${tag}>
       `;
     }
 
@@ -339,24 +341,24 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
         </section>
 
         <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          ${renderStat('Estimates', data.estimates.length, recentEstimate ? `${currency(recentEstimate.total)} latest` : 'No estimate yet')}
-          ${renderStat('Jobs', data.jobs.length, data.jobs.find((job) => job.status !== 'completed') ? 'Active production' : 'No active job')}
-          ${renderStat('Payments', currency((data.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0)), `${data.payments?.length || 0} recorded`)}
-          ${renderStat('Messages', data.messages.length + (data.emailSends?.length || 0), 'Text and email history')}
-          ${renderStat('Photos', data.photos.estimates.length + data.photos.jobs.length, 'Estimate and job media')}
+          ${renderStat('Estimates', data.estimates.length, recentEstimate ? `${currency(recentEstimate.total)} latest` : 'No estimate yet', '#customer-estimates')}
+          ${renderStat('Jobs', data.jobs.length, data.jobs.find((job) => job.status !== 'completed') ? 'Active production' : 'No active job', '#customer-jobs')}
+          ${renderStat('Payments', currency((data.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0)), `${data.payments?.length || 0} recorded`, '#customer-payments')}
+          ${renderStat('Messages', data.messages.length + (data.emailSends?.length || 0), 'Text and email history', customer.phone ? `/sms?leadId=${customer.id}` : '#customer-messages')}
+          ${renderStat('Photos', data.photos.estimates.length + data.photos.jobs.length, 'Estimate and job media', '#customer-photos')}
         </section>
 
         <section class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)] gap-5">
           <div class="space-y-5">
-            <section class="bg-white border rounded-lg overflow-hidden">
+            <section id="customer-estimates" class="scroll-mt-24 bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b"><h2 class="font-semibold">Estimates</h2></div>
               <div class="divide-y">${renderEstimates(data.estimates)}</div>
             </section>
-            <section class="bg-white border rounded-lg overflow-hidden">
+            <section id="customer-jobs" class="scroll-mt-24 bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b"><h2 class="font-semibold">Jobs</h2></div>
               <div class="divide-y">${renderJobs(data.jobs)}</div>
             </section>
-            <section class="bg-white border rounded-lg overflow-hidden">
+            <section id="customer-photos" class="scroll-mt-24 bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b"><h2 class="font-semibold">Photos</h2></div>
               ${renderPhotos(data.photos)}
             </section>
@@ -390,21 +392,21 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
               </form>
               <div id="customer-activities-list" class="divide-y">${renderActivities(data.activities)}</div>
             </section>
-            <section class="bg-white border rounded-lg overflow-hidden">
+            <section id="customer-emails" class="scroll-mt-24 bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b flex items-center justify-between gap-3">
                 <h2 class="font-semibold">Emails</h2>
                 <span class="text-xs text-gray-500">${data.emailSends?.length || 0} sent</span>
               </div>
               <div class="divide-y max-h-[520px] overflow-auto">${renderEmailSends(data.emailSends || [])}</div>
             </section>
-            <section class="bg-white border rounded-lg overflow-hidden">
+            <section id="customer-payments" class="scroll-mt-24 bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b flex items-center justify-between gap-3">
                 <h2 class="font-semibold">Payments</h2>
                 <span class="text-xs text-gray-500">${data.payments?.length || 0} recorded</span>
               </div>
               <div class="divide-y max-h-[520px] overflow-auto">${renderPayments(data.payments || [])}</div>
             </section>
-            <section class="bg-white border rounded-lg overflow-hidden">
+            <section id="customer-messages" class="scroll-mt-24 bg-white border rounded-lg overflow-hidden">
               <div class="p-4 border-b flex items-center justify-between gap-3">
                 <h2 class="font-semibold">Messages</h2>
                 <a class="btn-secondary btn-sm ${customer.phone ? '' : 'pointer-events-none opacity-50'}" href="${customer.phone ? `/sms?leadId=${customer.id}` : '#'}">Open thread</a>
@@ -418,6 +420,9 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
           </aside>
         </section>
       `;
+      if (window.location.hash) {
+        requestAnimationFrame(() => document.querySelector(window.location.hash)?.scrollIntoView({ block: 'start' }));
+      }
     }
 
     apiJson(`/v1/leads/${leadId}`)
