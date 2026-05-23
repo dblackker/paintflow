@@ -2,59 +2,58 @@
 import Base from '../layouts/Base.astro';
 ---
 
-<Base title="Reviews">
-  <div class="min-h-screen bg-gray-50">
-    <nav class="bg-white shadow-sm border-b">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16 items-center">
-          <div class="flex items-center space-x-8">
-            <h1 class="text-xl font-semibold">PaintFlow</h1>
-            <nav class="flex space-x-4">
-              <a href="/dashboard" class="text-gray-600 hover:text-gray-900">Dashboard</a>
-              <a href="/leads" class="text-gray-600 hover:text-gray-900">Leads</a>
-              <a href="/jobs" class="text-gray-600 hover:text-gray-900">Jobs</a>
-              <a href="/reviews" class="text-blue-600 font-medium">Reviews</a>
-            </nav>
-          </div>
-        </div>
+<Base title="Review Analytics - PaintFlow">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-blue-700">Reputation marketing</p>
+        <h1 class="mt-1 text-2xl font-bold text-gray-950 sm:text-3xl">Review analytics</h1>
+        <p class="mt-2 max-w-2xl text-sm text-gray-600">
+          Track review requests, customer feedback, and the closeout flow that can later feed testimonials, before/after posts, and referral campaigns.
+        </p>
       </div>
-    </nav>
+      <a href="/reports" class="btn-secondary btn-sm justify-center">Back to reports</a>
+    </div>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">Review Analytics</h2>
-        <p class="text-gray-600">Track review requests and customer feedback</p>
-      </div>
+    <section class="mb-6 rounded-lg border bg-blue-50 p-4 text-sm text-blue-950">
+      <p class="font-semibold">Why this lives under Reports</p>
+      <p class="mt-1 text-blue-900">
+        Reviews are not a daily dispatch workflow. They are a reputation and marketing metric tied to completed jobs, so this page should remain a focused reporting drill-in until the marketing suite grows.
+      </p>
+    </section>
 
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white rounded-lg shadow-sm border p-6">
-          <p class="text-sm text-gray-600 mb-1">Total Requests</p>
-          <p class="text-3xl font-bold" id="total-requests">-</p>
-        </div>
-        <div class="bg-white rounded-lg shadow-sm border p-6">
-          <p class="text-sm text-gray-600 mb-1">Response Rate</p>
-          <p class="text-3xl font-bold" id="response-rate">-</p>
-        </div>
-        <div class="bg-white rounded-lg shadow-sm border p-6">
-          <p class="text-sm text-gray-600 mb-1">Avg Rating</p>
-          <p class="text-3xl font-bold" id="avg-rating">-</p>
-        </div>
-        <div class="bg-white rounded-lg shadow-sm border p-6">
-          <p class="text-sm text-gray-600 mb-1">5-Star Reviews</p>
-          <p class="text-3xl font-bold" id="five-star">-</p>
-        </div>
+    <div class="grid grid-cols-2 gap-3 md:grid-cols-4 sm:gap-4 mb-6" id="review-stats">
+      <div class="bg-white rounded-lg shadow-sm border p-4">
+        <p class="text-sm text-gray-600">Total requests</p>
+        <p class="mt-1 text-2xl font-bold" id="total-requests">-</p>
       </div>
+      <div class="bg-white rounded-lg shadow-sm border p-4">
+        <p class="text-sm text-gray-600">Response rate</p>
+        <p class="mt-1 text-2xl font-bold" id="response-rate">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border p-4">
+        <p class="text-sm text-gray-600">Avg rating</p>
+        <p class="mt-1 text-2xl font-bold" id="avg-rating">-</p>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border p-4">
+        <p class="text-sm text-gray-600">5-star reviews</p>
+        <p class="mt-1 text-2xl font-bold" id="five-star">-</p>
+      </div>
+    </div>
 
-      <div class="bg-white rounded-lg shadow-sm border">
-        <div class="p-4 border-b">
-          <h3 class="font-semibold">Recent Review Requests</h3>
+    <section class="bg-white rounded-lg shadow-sm border overflow-hidden">
+      <div class="p-4 border-b flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="font-semibold">Recent review requests</h2>
+          <p class="text-sm text-gray-600">Customer feedback and Google/Yelp handoff status.</p>
         </div>
-        <div id="requests-list" class="divide-y">
-          <div class="p-8 text-center text-gray-500">Loading...</div>
-        </div>
+        <a href="/settings#business-settings" class="btn-text btn-sm justify-center">Review links</a>
       </div>
-    </main>
-  </div>
+      <div id="requests-list" class="divide-y">
+        <div class="p-8 text-center text-gray-500">Loading review requests...</div>
+      </div>
+    </section>
+  </main>
 
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
@@ -64,6 +63,11 @@ import Base from '../layouts/Base.astro';
     }
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
     const statusBadge = (value) => window.PaintFlowUI?.statusBadge({ value }) || `<span class="px-2 py-1 text-xs rounded bg-gray-100">${escapeHtml(label(value))}</span>`;
+    const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : 'Not sent';
+
+    function formatAddress(record) {
+      return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+    }
 
     function customerProfileLink(req) {
       const name = req.leadName || 'Customer';
@@ -73,15 +77,10 @@ import Base from '../layouts/Base.astro';
         <div class="min-w-0 rounded-lg pr-2">
           <a href="/leads/${req.leadId}" class="block truncate text-sm font-medium text-gray-950 hover:text-blue-700">${escapeHtml(name)}</a>
           ${window.PaintFlowFormat?.addressLink(address) || `<span class="block truncate text-sm text-gray-700">${escapeHtml(address || 'No jobsite address')}</span>`}
-          <span class="block truncate text-xs text-gray-500">Open customer profile</span>
         </div>
       `;
     }
 
-    function formatAddress(record) {
-      return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
-    }
-    
     async function loadAnalytics() {
       try {
         const res = await fetch(`${API_URL}/v1/reviews/stats`, { credentials: 'include' });
@@ -89,39 +88,50 @@ import Base from '../layouts/Base.astro';
           window.location.href = '/login';
           return;
         }
-        const { data } = await res.json();
-        
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Failed to load reviews');
+        const { data } = payload;
+
         document.getElementById('total-requests').textContent = data.total;
         document.getElementById('response-rate').textContent = `${data.responseRate}%`;
-        document.getElementById('avg-rating').textContent = data.avgRating.toFixed(1);
+        document.getElementById('avg-rating').textContent = Number(data.avgRating || 0).toFixed(1);
         document.getElementById('five-star').textContent = data.fiveStar;
-        
+
         const container = document.getElementById('requests-list');
-        if (data.requests.length === 0) {
-          container.innerHTML = '<div class="p-8 text-center text-gray-500">No review requests yet</div>';
-          return;
-        }
-        
-        container.innerHTML = data.requests.map(req => {
-          return `
-            <div class="p-4 flex justify-between items-center">
-              <div>
-                ${customerProfileLink(req)}
-                <p class="text-sm text-gray-600">${req.jobName || 'Job'}</p>
-                <p class="text-xs text-gray-500">${new Date(req.createdAt).toLocaleDateString()}</p>
-              </div>
-              <div class="flex items-center gap-3">
-                ${req.rating ? `<div class="text-yellow-500">${'⭐'.repeat(parseInt(req.rating))}</div>` : ''}
-                ${statusBadge(req.status)}
-              </div>
+        if (!data.requests.length) {
+          container.innerHTML = `
+            <div class="p-8 text-center text-gray-500">
+              <p class="font-medium text-gray-700">No review requests yet</p>
+              <p class="mt-1 text-sm">Completed jobs can send review requests from the Jobs workflow.</p>
             </div>
           `;
-        }).join('');
+          return;
+        }
+
+        container.innerHTML = data.requests.map(req => `
+          <div class="p-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div class="min-w-0">
+              ${customerProfileLink(req)}
+              <p class="mt-1 text-sm text-gray-600">${escapeHtml(req.jobName || 'Job')}</p>
+              <p class="text-xs text-gray-500">Requested ${dateLabel(req.sentAt || req.createdAt)}${req.respondedAt ? ` · Responded ${dateLabel(req.respondedAt)}` : ''}</p>
+            </div>
+            <div class="flex items-center justify-between gap-3 sm:justify-end">
+              ${req.rating ? `<div class="text-sm font-semibold text-yellow-700" aria-label="${escapeHtml(req.rating)} star rating">${'★'.repeat(Number(req.rating))}</div>` : '<span class="text-sm text-gray-500">No rating</span>'}
+              ${statusBadge(req.status)}
+            </div>
+          </div>
+        `).join('');
       } catch (err) {
         console.error(err);
+        document.getElementById('requests-list').innerHTML = `
+          <div class="p-8 text-center text-red-700">
+            <p class="font-medium">Review analytics could not be loaded</p>
+            <p class="mt-1 text-sm">${escapeHtml(err.message || 'Try again later.')}</p>
+          </div>
+        `;
       }
     }
-    
+
     loadAnalytics();
   </script>
 </Base>
