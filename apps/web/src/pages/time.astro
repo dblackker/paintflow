@@ -496,6 +496,25 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     </div>
   </div>
 
+  <div id="long-clock-out-modal" class="mobile-sheet hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 class="time-section-title">Long shift check</h2>
+          <p id="long-clock-out-copy" class="time-copy">This shift is longer than expected.</p>
+        </div>
+        <button type="button" id="close-long-clock-out-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
+      </div>
+      <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3 time-copy mb-4">
+        If you actually finished earlier, use the forgotten clock-out option so the corrected time is flagged for lead review.
+      </div>
+      <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+        <button type="button" id="forgot-long-clock-out-btn" class="btn-secondary flex-1">I forgot earlier</button>
+        <button type="button" id="confirm-long-clock-out-btn" class="btn-primary time-danger-action flex-1">Clock out now</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let currentWeekStart = getWeekStart(new Date());
@@ -513,6 +532,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     let isSavingTime = false;
     let isSavingBulkTime = false;
     let isPunching = false;
+    let confirmedLongClockOut = false;
     let bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
     const bulkSelection = new Map();
     const bulkHours = new Map();
@@ -776,6 +796,15 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
     function activePunchHours(session) {
       return ((Date.now() - new Date(session.startedAtActual).getTime()) / 36e5).toFixed(2);
+    }
+
+    function activePunchHoursNumber(session) {
+      return (Date.now() - new Date(session.startedAtActual).getTime()) / 36e5;
+    }
+
+    function clockOutWarningHours() {
+      const value = Number(punchStatus?.settings?.clockOutWarningHours);
+      return value >= 1 && value <= 24 ? value : 8;
     }
 
     function mapLink(latitude, longitude, label) {
@@ -1266,6 +1295,23 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       document.getElementById('switch-job-modal').classList.add('hidden');
     }
 
+    function openLongClockOutModal(hoursWorked, threshold) {
+      document.getElementById('long-clock-out-copy').textContent =
+        `This shift has been active for ${hoursWorked.toFixed(2)} hours. Your company asks for confirmation after ${threshold} hours.`;
+      document.getElementById('long-clock-out-modal').classList.remove('hidden');
+    }
+
+    function closeLongClockOutModal() {
+      document.getElementById('long-clock-out-modal').classList.add('hidden');
+    }
+
+    function showForgotClockOutFields() {
+      const toggle = document.getElementById('forgot-clock-out-toggle');
+      if (toggle) toggle.checked = true;
+      document.getElementById('forgot-clock-out-fields')?.classList.remove('hidden');
+      document.getElementById('punch-out-time')?.focus();
+    }
+
     function renderPunchReview() {
       const review = document.getElementById('punch-review');
       const rows = punchStatus?.reviewQueue || [];
@@ -1363,6 +1409,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
     async function refreshPunchStatus() {
       punchStatus = (await api('/v1/team/punch/status')).data;
+      confirmedLongClockOut = false;
       renderPunchClock();
       await loadData();
     }
@@ -1399,14 +1446,21 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     async function punchOut() {
       if (isPunching) return;
       try {
-        isPunching = true;
-        const location = await requireLocation();
         const forgotClockOut = Boolean(document.getElementById('forgot-clock-out-toggle')?.checked);
         const note = forgotClockOut ? document.getElementById('punch-out-note')?.value || '' : '';
         const endedAtValue = forgotClockOut ? document.getElementById('punch-out-time')?.value : '';
+        const active = punchStatus?.activeSession;
+        const threshold = clockOutWarningHours();
+        const hoursWorked = active ? activePunchHoursNumber(active) : 0;
+        if (!forgotClockOut && !confirmedLongClockOut && hoursWorked > threshold) {
+          openLongClockOutModal(hoursWorked, threshold);
+          return;
+        }
+        isPunching = true;
         if (forgotClockOut && !endedAtValue) {
           throw new Error('Enter the actual clock-out time for lead review.');
         }
+        const location = await requireLocation();
         await api('/v1/team/punch/out', {
           method: 'POST',
           body: JSON.stringify({
@@ -1418,6 +1472,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           }),
         });
         window.showToast?.('Clocked out', 'success');
+        confirmedLongClockOut = false;
         await refreshPunchStatus();
       } catch (err) {
         window.showToast?.(err.message || 'Punch failed', 'error');
@@ -1772,6 +1827,16 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     document.getElementById('switch-job-form').addEventListener('submit', (event) => {
       event.preventDefault();
       switchJob();
+    });
+    document.getElementById('close-long-clock-out-btn').addEventListener('click', closeLongClockOutModal);
+    document.getElementById('forgot-long-clock-out-btn').addEventListener('click', () => {
+      closeLongClockOutModal();
+      showForgotClockOutFields();
+    });
+    document.getElementById('confirm-long-clock-out-btn').addEventListener('click', () => {
+      closeLongClockOutModal();
+      confirmedLongClockOut = true;
+      punchOut();
     });
     document.getElementById('forgot-clock-in-form').addEventListener('submit', async (event) => {
       event.preventDefault();

@@ -577,6 +577,7 @@ const reviewPunchSchema = z.object({
 
 type TimeClockSettings = {
   roundingIncrementMinutes: number;
+  clockOutWarningHours: number;
   maxShiftHours: number;
   reminderWindowStartHour: number;
   reminderWindowEndHour: number;
@@ -584,6 +585,7 @@ type TimeClockSettings = {
 
 const defaultTimeClockSettings: TimeClockSettings = {
   roundingIncrementMinutes: 15,
+  clockOutWarningHours: 8,
   maxShiftHours: 12,
   reminderWindowStartHour: 18,
   reminderWindowEndHour: 22,
@@ -602,11 +604,13 @@ function normalizeTimeClockSettings(value: unknown): TimeClockSettings {
   const raw = readObject(value);
   const timeClock = readObject(raw.timeClock);
   const increment = Number(timeClock.roundingIncrementMinutes);
+  const warning = Number(timeClock.clockOutWarningHours);
   const maxShift = Number(timeClock.maxShiftHours);
   const start = Number(timeClock.reminderWindowStartHour);
   const end = Number(timeClock.reminderWindowEndHour);
   return {
     roundingIncrementMinutes: [1, 5, 6, 15].includes(increment) ? increment : defaultTimeClockSettings.roundingIncrementMinutes,
+    clockOutWarningHours: warning >= 1 && warning <= 24 ? warning : defaultTimeClockSettings.clockOutWarningHours,
     maxShiftHours: maxShift >= 4 && maxShift <= 24 ? maxShift : defaultTimeClockSettings.maxShiftHours,
     reminderWindowStartHour: start >= 0 && start <= 23 ? start : defaultTimeClockSettings.reminderWindowStartHour,
     reminderWindowEndHour: end >= 1 && end <= 24 ? end : defaultTimeClockSettings.reminderWindowEndHour,

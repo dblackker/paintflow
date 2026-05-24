@@ -61,6 +61,7 @@ const timeClockSettingsSchema = z.object({
   roundingIncrementMinutes: z.coerce.number().int().refine((value) => [1, 5, 6, 15].includes(value), {
     message: 'Rounding must be exact, 5, 6, or 15 minutes',
   }).optional(),
+  clockOutWarningHours: z.coerce.number().min(1).max(24).optional(),
   maxShiftHours: z.coerce.number().min(4).max(24).optional(),
   reminderWindowStartHour: z.coerce.number().int().min(0).max(23).optional(),
   reminderWindowEndHour: z.coerce.number().int().min(1).max(24).optional(),
@@ -161,11 +162,13 @@ function timeClockSettingsFromPreferences(preferences: Record<string, unknown>) 
     ? preferences.timeClock as Record<string, unknown>
     : {};
   const rounding = Number(raw.roundingIncrementMinutes);
+  const warning = Number(raw.clockOutWarningHours);
   const maxShift = Number(raw.maxShiftHours);
   const start = Number(raw.reminderWindowStartHour);
   const end = Number(raw.reminderWindowEndHour);
   return {
     roundingIncrementMinutes: [1, 5, 6, 15].includes(rounding) ? rounding : 15,
+    clockOutWarningHours: warning >= 1 && warning <= 24 ? warning : 8,
     maxShiftHours: maxShift >= 4 && maxShift <= 24 ? maxShift : 12,
     reminderWindowStartHour: start >= 0 && start <= 23 ? start : 18,
     reminderWindowEndHour: end >= 1 && end <= 24 ? end : 22,
