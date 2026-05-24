@@ -42,27 +42,69 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     #punch-map {
       min-height: 22rem;
     }
-    .time-map-pin {
+    .time-map-marker {
       align-items: center;
+      background: var(--pf-color-primary);
       border: 2px solid #fff;
-      border-radius: 999px;
-      box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+      border-radius: 50% 50% 50% 0;
+      box-shadow: 0 4px 12px rgb(0 0 0 / 0.28);
       color: #fff;
       display: flex;
-      font-size: 0.68rem;
-      font-weight: 700;
-      height: 1.8rem;
+      height: 2rem;
       justify-content: center;
-      width: 1.8rem;
+      position: relative;
+      transform: rotate(-45deg);
+      width: 2rem;
     }
-    .time-map-pin-in {
+    .time-map-marker::after {
+      background: rgb(0 0 0 / 0.16);
+      border-radius: 999px;
+      bottom: -0.42rem;
+      content: "";
+      height: 0.28rem;
+      left: 50%;
+      position: absolute;
+      transform: translateX(-50%) rotate(45deg);
+      width: 0.85rem;
+    }
+    .time-map-marker-in {
       background: var(--pf-color-primary);
     }
-    .time-map-pin-out {
+    .time-map-marker-out {
       background: var(--pf-status-success-text);
     }
-    .time-map-pin-flagged {
+    .time-map-marker-flagged {
       background: var(--pf-status-warning-text);
+    }
+    .time-map-marker-glyph {
+      align-items: center;
+      display: flex;
+      height: 1.15rem;
+      justify-content: center;
+      transform: rotate(45deg);
+      width: 1.15rem;
+    }
+    .time-map-marker-glyph svg {
+      height: 1rem;
+      stroke-width: 2.5;
+      width: 1rem;
+    }
+    .time-map-marker-review {
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--pf-status-warning-text);
+      border-radius: 999px;
+      color: var(--pf-status-warning-text);
+      display: flex;
+      font-size: 0.65rem;
+      font-weight: 800;
+      height: 0.9rem;
+      justify-content: center;
+      position: absolute;
+      right: -0.28rem;
+      top: -0.18rem;
+      transform: rotate(45deg);
+      width: 0.9rem;
     }
     @media (min-width: 1024px) {
       :global(.time-mobile-summary) {
@@ -513,12 +555,15 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       const L = window.L;
       const isOut = event.type.includes('clock_out');
       const isFlagged = event.reviewRequired;
+      const glyph = isOut
+        ? '<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V7" /><path d="m7 12 5-5 5 5" /></svg>'
+        : '<svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v12" /><path d="m7 12 5 5 5-5" /></svg>';
       return L.divIcon({
-        className: '',
-        html: `<span class="time-map-pin ${isFlagged ? 'time-map-pin-flagged' : isOut ? 'time-map-pin-out' : 'time-map-pin-in'}">${isOut ? 'Out' : 'In'}</span>`,
-        iconSize: [29, 29],
-        iconAnchor: [14, 14],
-        popupAnchor: [0, -12],
+        className: 'time-map-marker-wrap',
+        html: `<span class="time-map-marker ${isFlagged ? 'time-map-marker-flagged' : isOut ? 'time-map-marker-out' : 'time-map-marker-in'}"><span class="time-map-marker-glyph">${glyph}</span>${isFlagged ? '<span class="time-map-marker-review">!</span>' : ''}</span>`,
+        iconSize: [34, 42],
+        iconAnchor: [17, 34],
+        popupAnchor: [0, -30],
       });
     }
 
