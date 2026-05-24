@@ -54,6 +54,33 @@ const isDev = import.meta.env.DEV;
       margin-top: 0.45rem;
     }
 
+    .dashboard-recommendation-card {
+      align-items: start;
+      background: color-mix(in srgb, var(--md-sys-color-tertiary-container) 18%, var(--md-sys-color-surface-container-lowest)) !important;
+      border: 1px solid color-mix(in srgb, var(--pf-primary) 20%, var(--md-sys-color-outline-variant)) !important;
+      border-radius: var(--pf-radius);
+      display: grid;
+      gap: 0.85rem;
+      padding: 0.9rem;
+    }
+
+    .dashboard-recommendation-icon {
+      align-items: center;
+      background: var(--md-sys-color-primary-container);
+      border-radius: var(--pf-radius-full);
+      color: var(--md-sys-color-on-primary-container);
+      display: inline-flex;
+      height: 2.25rem;
+      justify-content: center;
+      width: 2.25rem;
+    }
+
+    @media (min-width: 640px) {
+      .dashboard-recommendation-card {
+        grid-template-columns: auto 1fr auto;
+      }
+    }
+
     .dashboard-owner-link {
       display: flex;
       align-items: center;
@@ -142,6 +169,10 @@ const isDev = import.meta.env.DEV;
       .dashboard-activity-card {
         padding: 0.7rem;
       }
+
+      .dashboard-recommendation-card {
+        padding: 0.75rem;
+      }
     }
   </style>
   <main class="dashboard-shell mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
@@ -190,6 +221,19 @@ const isDev = import.meta.env.DEV;
           <a href="/materials" class="btn-tonal btn-sm justify-center"><Icon name="paint-bucket" />Add paint products</a>
         </div>
       </div>
+    </section>
+
+    <section id="recommendations-panel" class="dashboard-panel hidden mb-6 rounded-lg p-5 sm:p-6">
+      <div class="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 class="pf-section-title">Recommended actions</h3>
+          <p class="pf-meta mt-0.5">Auto-detected ways to keep leads, estimates, and jobs moving.</p>
+        </div>
+        <button type="button" id="refresh-recommendations" class="btn-icon-tonal" aria-label="Refresh recommendations" title="Refresh recommendations">
+          <Icon name="refresh" />
+        </button>
+      </div>
+      <div id="recommendations-list" class="grid gap-3"></div>
     </section>
 
     <section class="grid gap-6 lg:grid-cols-[1fr_340px]">
@@ -376,6 +420,107 @@ const isDev = import.meta.env.DEV;
       return `<svg class="pf-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
     }
 
+    function recommendationIcon(type) {
+      if (type === 'job_in_production') return quickActionIcon('briefcase');
+      if (type === 'estimate_follow_up') return quickActionIcon('file-text');
+      return quickActionIcon('mail');
+    }
+
+    function recommendationTone(type) {
+      if (type === 'job_in_production') return 'Operational';
+      if (type === 'estimate_follow_up') return 'Sales follow-up';
+      return 'Lead nurture';
+    }
+
+    function renderRecommendations(items = []) {
+      const panel = document.getElementById('recommendations-panel');
+      const list = document.getElementById('recommendations-list');
+      if (!panel || !list) return;
+
+      if (!items.length) {
+        panel.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+      }
+
+      panel.classList.remove('hidden');
+      list.innerHTML = items.map((item) => {
+        const primary = item.primaryAction;
+        const secondary = item.secondaryAction;
+        return `
+          <article class="dashboard-recommendation-card" data-recommendation-id="${escapeHtml(item.id)}">
+            <div class="dashboard-recommendation-icon">${recommendationIcon(item.type)}</div>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="pf-row-title">${escapeHtml(item.title)}</p>
+                <span class="pf-status pf-status-info">${escapeHtml(recommendationTone(item.type))}</span>
+              </div>
+              <p class="pf-copy mt-1">${escapeHtml(item.body)}</p>
+              ${item.impact ? `<p class="pf-meta mt-1">${escapeHtml(item.impact)}</p>` : ''}
+              ${item.evidence ? `<p class="pf-meta mt-1">${escapeHtml(item.evidence)}</p>` : ''}
+            </div>
+            <div class="flex flex-col gap-2 sm:min-w-[12rem]">
+              ${primary ? `<button type="button" class="btn-primary btn-sm justify-center" data-recommendation-action="${escapeHtml(item.id)}">${escapeHtml(primary.label)}</button>` : ''}
+              ${secondary?.href ? `<a href="${escapeHtml(secondary.href)}" class="btn-text btn-sm justify-center">${escapeHtml(secondary.label || 'Review')}</a>` : item.href ? `<a href="${escapeHtml(item.href)}" class="btn-text btn-sm justify-center">Review</a>` : ''}
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    let currentRecommendations = [];
+
+    async function loadRecommendations() {
+      const button = document.getElementById('refresh-recommendations');
+      button?.setAttribute('disabled', 'true');
+      try {
+        const res = await fetch(`${API_URL}/v1/dashboard/recommendations`, { credentials: 'include' });
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (!res.ok) throw new Error('Failed to load recommendations');
+        const payload = await res.json();
+        currentRecommendations = payload.data || [];
+        renderRecommendations(currentRecommendations);
+      } catch (err) {
+        console.error('Failed to load recommendations', err);
+        renderRecommendations([]);
+      } finally {
+        button?.removeAttribute('disabled');
+      }
+    }
+
+    async function applyRecommendation(id, button) {
+      const recommendation = currentRecommendations.find((item) => item.id === id);
+      const action = recommendation?.primaryAction;
+      if (!action) return;
+      const originalText = button?.textContent || action.label || 'Apply';
+      button?.setAttribute('disabled', 'true');
+      if (button) button.textContent = 'Applying...';
+      try {
+        const res = await fetch(`${API_URL}${action.path}`, {
+          method: action.method || 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': crypto.randomUUID(),
+          },
+          body: JSON.stringify(action.body || {}),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || payload.message || 'Action failed');
+        window.showToast?.(action.successMessage || 'Recommendation applied', 'success');
+        currentRecommendations = currentRecommendations.filter((item) => item.id !== id);
+        renderRecommendations(currentRecommendations);
+        loadRecommendations();
+      } catch (err) {
+        window.showToast?.(err.message || 'Action failed', 'error');
+        button?.removeAttribute('disabled');
+        if (button) button.textContent = originalText;
+      }
+    }
+
     function mergeQuickActionPreferences(actions) {
       const seen = new Set();
       const saved = Array.isArray(actions) ? actions : [];
@@ -510,6 +655,12 @@ const isDev = import.meta.env.DEV;
       const openTarget = event.target.closest?.('[data-open-quick-actions]');
       if (openTarget) openQuickActionsModal();
 
+      const recommendationAction = event.target.closest?.('[data-recommendation-action]');
+      if (recommendationAction) {
+        applyRecommendation(recommendationAction.dataset.recommendationAction, recommendationAction);
+        return;
+      }
+
       const moveTarget = event.target.closest?.('[data-move-action]');
       if (!moveTarget) return;
       const id = moveTarget.dataset.moveAction;
@@ -534,8 +685,10 @@ const isDev = import.meta.env.DEV;
       renderQuickActions();
     });
     document.getElementById('save-quick-actions')?.addEventListener('click', saveQuickActionPreferences);
+    document.getElementById('refresh-recommendations')?.addEventListener('click', loadRecommendations);
 
     loadQuickActionPreferences();
+    loadRecommendations();
 
     (async () => {
       try {
