@@ -25,5 +25,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Typography lint
+        run: pnpm lint:typography
+
       - name: Build
         run: pnpm -r build
