@@ -107,3 +107,352 @@ const ids = idPrefix === 'bulk'
     </form>
   </div>
 </div>
+
+<script is:inline>
+  window.PaintFlowBulkTimecard = window.PaintFlowBulkTimecard || {};
+
+  if (!window.PaintFlowBulkTimecard.create) {
+  window.PaintFlowBulkTimecard.idsFor = function idsFor(idPrefix = 'bulk') {
+    if (idPrefix === 'bulk') {
+      return {
+        modal: 'bulk-modal',
+        close: 'close-bulk-modal-btn',
+        form: 'bulk-time-form',
+        jobSelect: 'bulk-job-select',
+        defaultHours: 'bulk-default-hours',
+        selectVisible: 'bulk-select-visible',
+        roleFilters: 'bulk-role-filters',
+        summary: 'bulk-selection-summary',
+        members: 'bulk-members',
+        cancel: 'cancel-bulk-btn',
+        addSegment: 'bulk-add-segment-btn',
+        submit: 'submit-bulk-btn',
+      };
+    }
+    return {
+      modal: `${idPrefix}-modal`,
+      close: `close-${idPrefix}-modal-btn`,
+      form: `${idPrefix}-time-form`,
+      jobSelect: `${idPrefix}-job-select`,
+      defaultHours: `${idPrefix}-default-hours`,
+      selectVisible: `${idPrefix}-select-visible`,
+      roleFilters: `${idPrefix}-role-filters`,
+      summary: `${idPrefix}-selection-summary`,
+      members: `${idPrefix}-members`,
+      cancel: `cancel-${idPrefix}-btn`,
+      addSegment: `${idPrefix}-add-segment-btn`,
+      submit: `${idPrefix}-btn`,
+    };
+  };
+
+  window.PaintFlowBulkTimecard.create = function createBulkTimecardController(options = {}) {
+    const idPrefix = options.idPrefix || 'bulk';
+    const ids = window.PaintFlowBulkTimecard.idsFor(idPrefix);
+    ids.submit = idPrefix === 'bulk' ? 'submit-bulk-btn' : `submit-${idPrefix}-btn`;
+    const state = {
+      isSaving: false,
+      roleFilters: new Set(options.defaultRoles || ['crew_lead', 'painter', 'prep']),
+      selection: new Map(),
+      hours: new Map(),
+    };
+    const roleLabels = options.roleLabels || {};
+    const showJob = options.showJob !== false;
+
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function escapeHtml(value = '') {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    }
+
+    function formatDate(date) {
+      return date.toISOString().split('T')[0];
+    }
+
+    function activeMembers() {
+      return (options.membersProvider?.() || []).filter((member) => member.isActive !== false);
+    }
+
+    function jobs() {
+      return options.jobsProvider?.() || [];
+    }
+
+    function defaultHours() {
+      const value = Number($(ids.defaultHours)?.value || 8);
+      return Number.isFinite(value) && value >= 0 ? value : 8;
+    }
+
+    function selectedEntries() {
+      return activeMembers()
+        .filter((member) => state.selection.get(member.id))
+        .map((member) => ({
+          member,
+          hours: Number(state.hours.get(member.id) ?? defaultHours()),
+        }))
+        .filter((entry) => Number.isFinite(entry.hours) && entry.hours > 0);
+    }
+
+    function syncSelection() {
+      const members = activeMembers();
+      const memberIds = new Set(members.map((member) => member.id));
+      members.forEach((member) => {
+        if (!state.selection.has(member.id)) state.selection.set(member.id, true);
+        if (!state.hours.has(member.id)) state.hours.set(member.id, defaultHours());
+      });
+      Array.from(state.selection.keys()).forEach((id) => {
+        if (!memberIds.has(id)) state.selection.delete(id);
+      });
+      Array.from(state.hours.keys()).forEach((id) => {
+        if (!memberIds.has(id)) state.hours.delete(id);
+      });
+    }
+
+    function availableRoles() {
+      return Array.from(new Set(activeMembers().map((member) => member.role || 'crew'))).sort((a, b) => {
+        const order = ['crew_lead', 'painter', 'prep'];
+        const aIndex = order.indexOf(a);
+        const bIndex = order.indexOf(b);
+        if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+        return (roleLabels[a] || a).localeCompare(roleLabels[b] || b);
+      });
+    }
+
+    function updateSummary() {
+      const summary = $(ids.summary);
+      if (!summary) return;
+      const selected = selectedEntries();
+      const visibleIds = new Set(activeMembers().filter((member) => state.roleFilters.has(member.role || 'crew')).map((member) => member.id));
+      const hiddenSelected = selected.filter(({ member }) => !visibleIds.has(member.id)).length;
+      const totalHours = selected.reduce((sum, entry) => sum + entry.hours, 0);
+      const averageHours = selected.length ? totalHours / selected.length : 0;
+      const parts = [
+        `${selected.length} employee${selected.length === 1 ? '' : 's'} selected`,
+        `${averageHours.toFixed(2).replace(/\.00$/, '')} hr avg`,
+        `${totalHours.toFixed(2).replace(/\.00$/, '')} total hrs`,
+      ];
+      if (hiddenSelected) parts.push(`${hiddenSelected} hidden by filters`);
+      summary.textContent = parts.join(' - ');
+    }
+
+    function updateSelectionAction() {
+      const button = $(ids.selectVisible);
+      if (!button) return;
+      const visible = Array.from(document.querySelectorAll(`[data-${idPrefix}-member]`));
+      if (!visible.length) {
+        button.textContent = 'Select visible';
+        button.disabled = true;
+        updateSummary();
+        return;
+      }
+      button.disabled = false;
+      const checked = visible.filter((checkbox) => checkbox.checked).length;
+      button.textContent = checked === visible.length ? 'Clear visible' : 'Select visible';
+      updateSummary();
+    }
+
+    function renderRoleFilters() {
+      const container = $(ids.roleFilters);
+      if (!container) return;
+      const roles = availableRoles();
+      container.innerHTML = roles.length
+        ? roles.map((role) => `
+          <button type="button" class="pf-filter-chip ${state.roleFilters.has(role) ? 'pf-filter-chip-active' : ''}" data-${idPrefix}-role="${escapeHtml(role)}" aria-pressed="${state.roleFilters.has(role) ? 'true' : 'false'}">
+            ${escapeHtml(roleLabels[role] || role)}
+          </button>
+        `).join('')
+        : '<p class="pf-copy">No active crew members available.</p>';
+      container.querySelectorAll(`[data-${idPrefix}-role]`).forEach((filter) => {
+        filter.addEventListener('click', () => {
+          const role = filter.getAttribute(`data-${idPrefix}-role`);
+          if (state.roleFilters.has(role)) state.roleFilters.delete(role);
+          else state.roleFilters.add(role);
+          renderRoleFilters();
+          renderMembers();
+        });
+      });
+    }
+
+    function renderMembers() {
+      const container = $(ids.members);
+      if (!container) return;
+      const visibleMembers = activeMembers().filter((member) => state.roleFilters.has(member.role || 'crew'));
+      if (!visibleMembers.length) {
+        container.innerHTML = '<div class="p-4 pf-copy">No crew match the selected roles. Add another role filter to include more people.</div>';
+        updateSelectionAction();
+        updateSummary();
+        return;
+      }
+      container.innerHTML = visibleMembers.map((member) => `
+        <label class="bulk-member-row grid grid-cols-[minmax(0,1fr)_5.75rem] sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
+          <span class="flex items-center gap-3 min-w-0">
+            <input type="checkbox" data-${idPrefix}-member="${escapeHtml(member.id)}" class="h-5 w-5" ${state.selection.get(member.id) ? 'checked' : ''}>
+            <span class="min-w-0">
+              <span class="block pf-row-title truncate">${escapeHtml(member.name || 'Crew member')}</span>
+              <span class="block pf-meta">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
+            </span>
+          </span>
+          <input type="number" data-${idPrefix}-hours="${escapeHtml(member.id)}" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" enterkeyhint="done" aria-label="Hours for ${escapeHtml(member.name || 'Crew member')}" class="input text-right" value="${state.hours.get(member.id) ?? defaultHours()}">
+        </label>
+      `).join('');
+      container.querySelectorAll(`[data-${idPrefix}-member]`).forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+          state.selection.set(checkbox.getAttribute(`data-${idPrefix}-member`), checkbox.checked);
+          updateSelectionAction();
+          updateSummary();
+        });
+      });
+      container.querySelectorAll(`[data-${idPrefix}-hours]`).forEach((input) => {
+        input.addEventListener('focus', () => {
+          requestAnimationFrame(() => {
+            try {
+              input.select();
+            } catch {
+              // Some mobile browsers restrict selection APIs on numeric inputs.
+            }
+          });
+        });
+        input.addEventListener('input', () => {
+          state.hours.set(input.getAttribute(`data-${idPrefix}-hours`), Number(input.value || 0));
+          updateSummary();
+        });
+      });
+      updateSelectionAction();
+      updateSummary();
+    }
+
+    function populateJobs(selectedJobId = '') {
+      const select = $(ids.jobSelect);
+      if (!select || !showJob) return;
+      const labelForJob = options.jobLabel || ((job) => job.name || 'Job');
+      select.innerHTML = '<option value="">Select job...</option>' +
+        jobs().map((job) => `<option value="${escapeHtml(job.id)}">${escapeHtml(labelForJob(job))}</option>`).join('');
+      if (selectedJobId) select.value = selectedJobId;
+    }
+
+    function render() {
+      syncSelection();
+      renderRoleFilters();
+      renderMembers();
+    }
+
+    function open(openOptions = {}) {
+      const form = $(ids.form);
+      form?.reset();
+      if (form?.elements.date) form.elements.date.value = formatDate(new Date());
+      if ($(ids.defaultHours)) $(ids.defaultHours).value = '8';
+      if (!state.roleFilters.size) state.roleFilters = new Set(options.defaultRoles || ['crew_lead', 'painter', 'prep']);
+      activeMembers().forEach((member) => state.selection.set(member.id, true));
+      activeMembers().forEach((member) => state.hours.set(member.id, 8));
+      populateJobs(openOptions.jobId || '');
+      render();
+      $(ids.modal)?.classList.remove('hidden');
+    }
+
+    function close() {
+      $(ids.modal)?.classList.add('hidden');
+    }
+
+    async function submitTimecard(form, keepOpen = false) {
+      if (state.isSaving) return;
+      const submit = $(ids.submit);
+      const addSegment = $(ids.addSegment);
+      const formData = new FormData(form);
+      const selected = selectedEntries().map(({ member, hours }) => ({
+        teamMemberId: member.id,
+        hours,
+        description: formData.get('description') || 'Crew labor',
+      }));
+      if (showJob && !formData.get('jobId')) {
+        window.showToast?.('Select a job first', 'error');
+        return;
+      }
+      if (!selected.length) {
+        window.showToast?.('Select at least one crew member with hours', 'error');
+        return;
+      }
+      try {
+        state.isSaving = true;
+        if (submit) {
+          submit.disabled = true;
+          submit.textContent = 'Logging...';
+        }
+        if (addSegment) {
+          addSegment.disabled = true;
+          addSegment.textContent = 'Logging...';
+        }
+        await options.onSubmit?.({
+          jobId: showJob ? formData.get('jobId') : options.jobId,
+          date: formData.get('date'),
+          description: formData.get('description') || undefined,
+          entries: selected,
+        });
+        window.showToast?.(`Logged time for ${selected.length} crew members`, 'success');
+        await options.onSuccess?.();
+        if (keepOpen) {
+          if (showJob && form.elements.jobId) form.elements.jobId.value = '';
+          if (form.elements.description) form.elements.description.value = '';
+          render();
+        } else {
+          close();
+        }
+      } catch (error) {
+        window.showToast?.(error.message || 'Failed to submit timecard', 'error');
+      } finally {
+        state.isSaving = false;
+        if (submit) {
+          submit.disabled = false;
+          submit.textContent = 'Log crew time';
+        }
+        if (addSegment) {
+          addSegment.disabled = false;
+          addSegment.textContent = 'Log + add job';
+        }
+      }
+    }
+
+    function init() {
+      $(ids.cancel)?.addEventListener('click', close);
+      $(ids.close)?.addEventListener('click', close);
+      $(ids.defaultHours)?.addEventListener('input', () => {
+        const value = defaultHours();
+        activeMembers().forEach((member) => state.hours.set(member.id, value));
+        document.querySelectorAll(`[data-${idPrefix}-hours]`).forEach((input) => {
+          input.value = value;
+        });
+        updateSummary();
+      });
+      $(ids.selectVisible)?.addEventListener('click', () => {
+        const visible = Array.from(document.querySelectorAll(`[data-${idPrefix}-member]`));
+        const shouldSelect = visible.some((checkbox) => !checkbox.checked);
+        visible.forEach((checkbox) => {
+          checkbox.checked = shouldSelect;
+          state.selection.set(checkbox.getAttribute(`data-${idPrefix}-member`), shouldSelect);
+        });
+        updateSelectionAction();
+        updateSummary();
+      });
+      $(ids.addSegment)?.addEventListener('click', () => {
+        const form = $(ids.form);
+        if (!form?.reportValidity()) return;
+        submitTimecard(form, true);
+      });
+      $(ids.form)?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        submitTimecard(event.currentTarget);
+      });
+      populateJobs();
+      render();
+    }
+
+    init();
+    return { open, close, render, populateJobs };
+  };
+  }
+</script>

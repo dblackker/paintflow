@@ -70,10 +70,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let teamMembers = [];
     let jobs = [];
-    let isSavingBulkTime = false;
-    let bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
-    const bulkSelection = new Map();
-    const bulkHours = new Map();
+    let jobsBulkTimecard = null;
     const roleLabels = {
       admin: 'Admin',
       crew: 'Crew member',
@@ -276,244 +273,41 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
             </div>
           `;
         }).join('');
-        populateBulkJobSelect();
-        renderBulkTimecard();
+        jobsBulkTimecard?.render();
       } catch (err) {
         console.error(err);
       }
     }
 
-    function activeMembers() {
-      return teamMembers.filter((member) => member.isActive !== false);
-    }
-
-    function populateBulkJobSelect(selectedJobId = '') {
-      const select = document.getElementById('jobs-bulk-job-select');
-      if (!select) return;
-      select.innerHTML = '<option value="">Select job...</option>' +
-        jobs.map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`).join('');
-      if (selectedJobId) select.value = selectedJobId;
-    }
-
-    function availableBulkRoles() {
-      return Array.from(new Set(activeMembers().map((member) => member.role || 'crew'))).sort((a, b) => {
-        const order = ['crew_lead', 'painter', 'prep'];
-        const aIndex = order.indexOf(a);
-        const bIndex = order.indexOf(b);
-        if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
-        return (roleLabels[a] || a).localeCompare(roleLabels[b] || b);
-      });
-    }
-
-    function syncBulkSelection() {
-      const members = activeMembers();
-      const memberIds = new Set(members.map((member) => member.id));
-      members.forEach((member) => {
-        if (!bulkSelection.has(member.id)) bulkSelection.set(member.id, true);
-        if (!bulkHours.has(member.id)) bulkHours.set(member.id, getBulkDefaultHours());
-      });
-      Array.from(bulkSelection.keys()).forEach((id) => {
-        if (!memberIds.has(id)) bulkSelection.delete(id);
-      });
-      Array.from(bulkHours.keys()).forEach((id) => {
-        if (!memberIds.has(id)) bulkHours.delete(id);
-      });
-    }
-
-    function getBulkDefaultHours() {
-      const value = Number(document.getElementById('jobs-bulk-default-hours')?.value || 8);
-      return Number.isFinite(value) && value >= 0 ? value : 8;
-    }
-
-    function getBulkSelectedEntries() {
-      return activeMembers()
-        .filter((member) => bulkSelection.get(member.id))
-        .map((member) => ({
-          member,
-          hours: Number(bulkHours.get(member.id) ?? getBulkDefaultHours()),
-        }))
-        .filter((entry) => Number.isFinite(entry.hours) && entry.hours > 0);
-    }
-
-    function updateBulkSummary() {
-      const summary = document.getElementById('jobs-bulk-selection-summary');
-      if (!summary) return;
-      const selected = getBulkSelectedEntries();
-      const visibleIds = new Set(
-        activeMembers()
-          .filter((member) => bulkRoleFilters.has(member.role || 'crew'))
-          .map((member) => member.id)
-      );
-      const hiddenSelected = selected.filter(({ member }) => !visibleIds.has(member.id)).length;
-      const totalHours = selected.reduce((sum, entry) => sum + entry.hours, 0);
-      const averageHours = selected.length ? totalHours / selected.length : 0;
-      const parts = [
-        `${selected.length} employee${selected.length === 1 ? '' : 's'} selected`,
-        `${averageHours.toFixed(2).replace(/\.00$/, '')} hr avg`,
-        `${totalHours.toFixed(2).replace(/\.00$/, '')} total hrs`,
-      ];
-      if (hiddenSelected) parts.push(`${hiddenSelected} hidden by filters`);
-      summary.textContent = parts.join(' - ');
-    }
-
-    function renderBulkRoleFilters() {
-      const container = document.getElementById('jobs-bulk-role-filters');
-      if (!container) return;
-      const roles = availableBulkRoles();
-      container.innerHTML = roles.length
-        ? roles.map((role) => `
-          <button type="button" class="pf-filter-chip ${bulkRoleFilters.has(role) ? 'pf-filter-chip-active' : ''}" data-jobs-bulk-role="${escapeHtml(role)}" aria-pressed="${bulkRoleFilters.has(role) ? 'true' : 'false'}">
-            ${escapeHtml(roleLabels[role] || role)}
-          </button>
-        `).join('')
-        : '<p class="text-sm text-gray-500">No active crew members available.</p>';
-      container.querySelectorAll('[data-jobs-bulk-role]').forEach((filter) => {
-        filter.addEventListener('click', () => {
-          const role = filter.dataset.jobsBulkRole;
-          if (bulkRoleFilters.has(role)) bulkRoleFilters.delete(role);
-          else bulkRoleFilters.add(role);
-          renderBulkRoleFilters();
-          renderBulkMemberRows();
-        });
-      });
-    }
-
-    function renderBulkMemberRows() {
-      const container = document.getElementById('jobs-bulk-members');
-      if (!container) return;
-      const visibleMembers = activeMembers().filter((member) => bulkRoleFilters.has(member.role || 'crew'));
-      if (!visibleMembers.length) {
-        container.innerHTML = '<div class="p-4 text-sm text-gray-500">No crew match the selected roles. Add another role filter to include more people.</div>';
-        updateBulkSelectionAction();
-        updateBulkSummary();
+    function initJobsBulkTimecard(attempt = 0) {
+      if (!window.PaintFlowBulkTimecard?.create) {
+        if (attempt < 20) window.setTimeout(() => initJobsBulkTimecard(attempt + 1), 25);
+        else document.getElementById('jobs-list').innerHTML = '<div class="p-8 text-center text-red-600">Failed to initialize crew timecard tools.</div>';
         return;
       }
-      container.innerHTML = visibleMembers.map((member) => `
-        <label class="bulk-member-row grid sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
-          <span class="flex items-center gap-3 min-w-0">
-            <input type="checkbox" data-jobs-bulk-member="${member.id}" class="h-5 w-5" ${bulkSelection.get(member.id) ? 'checked' : ''}>
-            <span class="min-w-0">
-              <span class="block font-medium truncate">${escapeHtml(member.name)}</span>
-              <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
-            </span>
-          </span>
-          <input type="number" data-jobs-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${bulkHours.get(member.id) ?? getBulkDefaultHours()}">
-        </label>
-      `).join('');
-      container.querySelectorAll('[data-jobs-bulk-member]').forEach((checkbox) => {
-        checkbox.addEventListener('change', () => {
-          bulkSelection.set(checkbox.dataset.jobsBulkMember, checkbox.checked);
-          updateBulkSelectionAction();
-          updateBulkSummary();
-        });
+      jobsBulkTimecard = window.PaintFlowBulkTimecard.create({
+        idPrefix: 'jobs-bulk',
+        roleLabels,
+        membersProvider: () => teamMembers,
+        jobsProvider: () => jobs,
+        jobLabel: jobOptionLabel,
+        onSubmit: async ({ jobId, date, description, entries }) => {
+          await apiJson(`${API_URL}/v1/team/timecards`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({
+              jobId,
+              date: new Date(`${date}T12:00:00`).toISOString(),
+              notes: description || undefined,
+              entries,
+            }),
+          });
+        },
+        onSuccess: loadJobs,
       });
-      container.querySelectorAll('[data-jobs-bulk-hours]').forEach((input) => {
-        input.addEventListener('input', () => {
-          bulkHours.set(input.dataset.jobsBulkHours, Number(input.value || 0));
-          updateBulkSummary();
-        });
-      });
-      updateBulkSelectionAction();
-      updateBulkSummary();
+      window.openJobsBulkTimecard = (jobId) => jobsBulkTimecard.open({ jobId });
+      loadJobs();
     }
-
-    function updateBulkSelectionAction() {
-      const button = document.getElementById('jobs-bulk-select-visible');
-      if (!button) return;
-      const visible = Array.from(document.querySelectorAll('[data-jobs-bulk-member]'));
-      const allSelected = visible.length > 0 && visible.every((checkbox) => checkbox.checked);
-      button.textContent = allSelected ? 'Clear visible' : 'Select visible';
-    }
-
-    function renderBulkTimecard() {
-      syncBulkSelection();
-      renderBulkRoleFilters();
-      renderBulkMemberRows();
-    }
-
-    window.openJobsBulkTimecard = (jobId) => {
-      const form = document.getElementById('jobs-bulk-time-form');
-      form.reset();
-      document.getElementById('jobs-bulk-default-hours').value = '8';
-      form.querySelector('input[name="date"]').valueAsDate = new Date();
-      populateBulkJobSelect(jobId);
-      if (!bulkRoleFilters.size) bulkRoleFilters = new Set(['crew_lead', 'painter', 'prep']);
-      activeMembers().forEach((member) => bulkSelection.set(member.id, true));
-      activeMembers().forEach((member) => bulkHours.set(member.id, 8));
-      renderBulkTimecard();
-      document.getElementById('jobs-bulk-modal').classList.remove('hidden');
-    };
-
-    function closeBulkModal() {
-      document.getElementById('jobs-bulk-modal').classList.add('hidden');
-    }
-
-    document.getElementById('cancel-jobs-bulk-btn').addEventListener('click', closeBulkModal);
-    document.getElementById('close-jobs-bulk-modal-btn').addEventListener('click', closeBulkModal);
-    document.getElementById('jobs-bulk-default-hours').addEventListener('input', () => {
-      const defaultHours = getBulkDefaultHours();
-      activeMembers().forEach((member) => bulkHours.set(member.id, defaultHours));
-      document.querySelectorAll('[data-jobs-bulk-hours]').forEach((input) => {
-        input.value = defaultHours;
-      });
-      updateBulkSummary();
-    });
-    document.getElementById('jobs-bulk-select-visible').addEventListener('click', () => {
-      const visible = Array.from(document.querySelectorAll('[data-jobs-bulk-member]'));
-      const allSelected = visible.length > 0 && visible.every((checkbox) => checkbox.checked);
-      const shouldSelect = !allSelected;
-      visible.forEach((checkbox) => {
-        checkbox.checked = shouldSelect;
-        bulkSelection.set(checkbox.dataset.jobsBulkMember, shouldSelect);
-      });
-      updateBulkSelectionAction();
-      updateBulkSummary();
-    });
-    document.getElementById('jobs-bulk-time-form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      if (isSavingBulkTime) return;
-
-      const submit = document.getElementById('submit-jobs-bulk-btn');
-      const form = event.currentTarget;
-      const formData = new FormData(form);
-      const selected = getBulkSelectedEntries().map(({ member, hours }) => ({
-        teamMemberId: member.id,
-        hours,
-        description: formData.get('description') || undefined,
-      }));
-
-      if (!selected.length) {
-        window.showToast?.('Select at least one crew member', 'error');
-        return;
-      }
-
-      isSavingBulkTime = true;
-      submit.disabled = true;
-      submit.textContent = 'Logging crew time...';
-
-      try {
-        await apiJson(`${API_URL}/v1/team/timecards`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jobId: formData.get('jobId'),
-            date: new Date(`${formData.get('date')}T12:00:00`).toISOString(),
-            notes: formData.get('description') || undefined,
-            entries: selected,
-          }),
-        });
-        window.showToast?.('Crew time logged', 'success');
-        closeBulkModal();
-        loadJobs();
-      } catch (err) {
-        console.error(err);
-        window.showToast?.(err.message || 'Failed to submit timecard', 'error');
-      } finally {
-        isSavingBulkTime = false;
-        submit.disabled = false;
-        submit.textContent = 'Log crew time';
-      }
-    });
     
     window.markComplete = async (jobId) => {
       if (!confirm('Mark this job as completed?')) return;
@@ -652,6 +446,10 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
       loadChangeOrders(jobId);
     };
     
-    loadJobs();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initJobsBulkTimecard, { once: true });
+    } else {
+      initJobsBulkTimecard();
+    }
   </script>
 </Base>
