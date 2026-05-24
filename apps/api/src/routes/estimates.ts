@@ -11,6 +11,7 @@ import { estimatePaymentSchedule } from '../lib/payment-schedule';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
+const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
 
 const selectedOptionSchema = z.object({
   desc: z.string().trim().min(1).max(500),
@@ -156,6 +157,40 @@ function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, pack
     }));
 }
 
+async function recordPublicEstimateView(db: ReturnType<typeof createDb>, c: any, estimate: typeof estimates.$inferSelect) {
+  if (!['sent', 'accepted'].includes(estimate.status)) return;
+
+  const latestView = await db.query.auditLogs.findFirst({
+    where: and(
+      eq(auditLogs.orgId, estimate.orgId),
+      eq(auditLogs.entityType, 'estimate'),
+      eq(auditLogs.entityId, estimate.id),
+      eq(auditLogs.action, 'estimate.client_viewed'),
+    ),
+    orderBy: (auditLogs, { desc }) => [desc(auditLogs.createdAt)],
+  });
+
+  if (latestView && Date.now() - new Date(latestView.createdAt).getTime() < CLIENT_VIEW_THROTTLE_MS) {
+    return;
+  }
+
+  const ipAddress = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() || c.req.header('X-Real-IP') || '';
+  const userAgent = c.req.header('User-Agent') || '';
+  await db.insert(auditLogs).values({
+    orgId: estimate.orgId,
+    action: 'estimate.client_viewed',
+    entityType: 'estimate',
+    entityId: estimate.id,
+    metadata: {
+      leadId: estimate.leadId,
+      status: estimate.status,
+      source: 'public_estimate_preview',
+    },
+    ipAddress: ipAddress || null,
+    userAgent: userAgent || null,
+  });
+}
+
 estimatesApp.get('/:id/public', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
@@ -187,6 +222,7 @@ estimatesApp.get('/:id/public', async (c) => {
     .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
   const total = estimateContractValue(estimate);
   const paymentSchedule = estimatePaymentSchedule(settings || {}, total, paidAmount);
+  await recordPublicEstimateView(db, c, estimate);
   
   return c.json({ 
     data: {

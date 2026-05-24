@@ -40,6 +40,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
 
     const currency = (value, options = {}) => window.PaintFlowFormat?.money(value, options) ?? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : 'Not set';
+    const dateTimeLabel = (value) => value ? new Date(value).toLocaleString([], { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not set';
     const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     const formatAddress = (record) => window.PaintFlowFormat?.address(record) || [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
     const addressLink = (address, className = 'hover:text-blue-700 hover:underline') => window.PaintFlowFormat?.addressLink(address, { className }) || escapeHtml(address || 'No jobsite address');
@@ -114,9 +115,10 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
         ['Created', estimate.createdAt],
         ['Sent', estimate.sentAt],
         ['Accepted', estimate.signedAt],
+        ['Client viewed', estimate.clientViewedAt],
       ]
         .filter(([, value]) => value)
-        .map(([name, value]) => `<p>${name} ${dateLabel(value)}</p>`)
+        .map(([name, value]) => `<p>${name} ${dateTimeLabel(value)}</p>`)
         .join('');
       return estimates.map((estimate) => `
         <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 sm:p-4">

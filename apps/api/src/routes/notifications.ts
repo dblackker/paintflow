@@ -23,6 +23,7 @@ const importantAuditActions = [
   'estimate.updated',
   'estimate.email.sent',
   'estimate.email.updated',
+  'estimate.client_viewed',
   'estimate.revision.created',
   'estimate.agreement.superseded',
   'estimate.agreement.voided',
@@ -36,6 +37,7 @@ function estimateEventTitle(action: string) {
     'estimate.updated': 'Estimate updated',
     'estimate.email.sent': 'Estimate email sent',
     'estimate.email.updated': 'Estimate update emailed',
+    'estimate.client_viewed': 'Client viewed estimate',
     'estimate.revision.created': 'Estimate revision created',
     'estimate.agreement.superseded': 'Estimate agreement superseded',
     'estimate.agreement.voided': 'Estimate agreement voided',
@@ -158,11 +160,13 @@ notifications.get('/', async (c) => {
       title: event.leadName ? `${estimateEventTitle(event.action)} for ${event.leadName}` : estimateEventTitle(event.action),
       body: event.action === 'estimate.accepted'
         ? `Contract value ${event.estimateTotal ? `$${Number(event.estimateTotal).toLocaleString()}` : 'recorded'}${jobId ? ' and job created.' : '.'}`
-        : `Estimate ${event.entityId.slice(0, 8)} was updated.`,
+        : event.action === 'estimate.client_viewed'
+          ? `Estimate ${event.entityId.slice(0, 8)} was opened from the customer preview link.`
+          : `Estimate ${event.entityId.slice(0, 8)} was updated.`,
       createdAt: event.createdAt,
       read: false,
-      priority: event.action === 'estimate.accepted' ? 'high' : 'normal',
-      href: jobId ? `/jobs/${jobId}` : `/estimates/${event.entityId}`,
+      priority: ['estimate.accepted', 'estimate.client_viewed'].includes(event.action) ? 'high' : 'normal',
+      href: jobId ? `/jobs/${jobId}` : event.estimateLeadId ? `/leads/${event.estimateLeadId}#customer-estimates` : `/estimates/${event.entityId}`,
       customer: event.estimateLeadId ? {
         id: event.estimateLeadId,
         name: event.leadName || 'Customer',

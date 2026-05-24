@@ -198,7 +198,7 @@ leadsApp.get('/:id', async (c) => {
   const estimateIds = customerEstimates.map((estimate) => estimate.id);
   const jobIds = customerJobs.map((job) => job.id);
 
-  const [photosForEstimates, photosForJobs] = await Promise.all([
+  const [photosForEstimates, photosForJobs, estimateViewRows] = await Promise.all([
     estimateIds.length
       ? db.select().from(estimatePhotos)
         .where(inArray(estimatePhotos.estimateId, estimateIds))
@@ -209,13 +209,33 @@ leadsApp.get('/:id', async (c) => {
         .where(and(eq(jobPhotos.orgId, orgId), inArray(jobPhotos.jobId, jobIds)))
         .orderBy(desc(jobPhotos.createdAt))
       : Promise.resolve([]),
+    estimateIds.length
+      ? db.select().from(auditLogs)
+        .where(and(
+          eq(auditLogs.orgId, orgId),
+          eq(auditLogs.entityType, 'estimate'),
+          eq(auditLogs.action, 'estimate.client_viewed'),
+          inArray(auditLogs.entityId, estimateIds),
+        ))
+        .orderBy(desc(auditLogs.createdAt))
+      : Promise.resolve([]),
   ]);
+
+  const estimateViewsById = estimateViewRows.reduce((acc, row) => {
+    const current = acc.get(row.entityId) || { clientViewedAt: null as Date | null, clientViewCount: 0 };
+    acc.set(row.entityId, {
+      clientViewedAt: current.clientViewedAt || row.createdAt,
+      clientViewCount: current.clientViewCount + 1,
+    });
+    return acc;
+  }, new Map<string, { clientViewedAt: Date | null; clientViewCount: number }>());
 
   return c.json({
     data: {
       customer,
       estimates: customerEstimates.map((estimate) => ({
         ...estimate,
+        ...(estimateViewsById.get(estimate.id) || { clientViewedAt: null, clientViewCount: 0 }),
         publicUrl: publicEstimateUrl(baseUrl, estimate.id),
         customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id),
       })),
