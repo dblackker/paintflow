@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
@@ -157,8 +158,9 @@ function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, pack
     }));
 }
 
-async function recordPublicEstimateView(db: ReturnType<typeof createDb>, c: any, estimate: typeof estimates.$inferSelect) {
+async function recordPublicEstimateView(db: ReturnType<typeof createDb>, c: Context<{ Bindings: Env; Variables: Variables }>, estimate: typeof estimates.$inferSelect) {
   if (!['sent', 'accepted'].includes(estimate.status)) return;
+  if (c.get('userId')) return;
 
   const latestView = await db.query.auditLogs.findFirst({
     where: and(

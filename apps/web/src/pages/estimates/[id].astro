@@ -236,7 +236,7 @@ import '../../styles/design-system.css';
 
       async function loadEstimate() {
         try {
-          const res = await fetch(`${API_URL}/v1/estimates/${estimateId}/public`);
+          const res = await fetch(`${API_URL}/v1/estimates/${estimateId}/public`, { credentials: 'include' });
           if (!res.ok) {
             showError();
             return;
