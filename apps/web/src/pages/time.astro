@@ -39,6 +39,44 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       gap: 0.375rem;
       justify-content: flex-end;
     }
+    .time-audit-row {
+      background: var(--pf-surface-muted);
+      border: 1px solid var(--pf-border);
+      border-radius: var(--pf-radius-md);
+      color: var(--pf-text-muted);
+      font-size: 0.78rem;
+      margin-top: 0.15rem;
+      padding: 0.55rem 0.65rem;
+    }
+    .time-audit-row summary {
+      align-items: center;
+      cursor: pointer;
+      display: flex;
+      font-weight: 700;
+      gap: 0.4rem;
+      list-style: none;
+    }
+    .time-audit-row summary::-webkit-details-marker {
+      display: none;
+    }
+    .time-audit-grid {
+      display: grid;
+      gap: 0.35rem 0.75rem;
+      margin-top: 0.55rem;
+    }
+    @media (min-width: 640px) {
+      .time-audit-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .time-audit-label {
+      color: var(--pf-text-subtle);
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
     .time-clock-status {
       border-radius: var(--pf-radius-full);
       display: inline-flex;
@@ -561,6 +599,41 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       if (!latitude || !longitude) return '';
       const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
       return `<a class="text-xs font-medium text-brand-700" href="${href}" target="_blank" rel="noreferrer">${label}</a>`;
+    }
+
+    function formatClockTime(value) {
+      if (!value) return 'Missing';
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return 'Missing';
+      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+
+    function timeRange(start, end) {
+      return `${formatClockTime(start)} - ${formatClockTime(end)}`;
+    }
+
+    function punchAuditHtml(entry) {
+      if (!canManageTime || entry.source !== 'punch_clock') return '';
+      const actualRange = timeRange(entry.actualStartAt, entry.actualEndAt);
+      const roundedRange = timeRange(entry.roundedStartAt, entry.roundedEndAt);
+      const gpsLinks = [
+        mapLink(entry.startLatitude, entry.startLongitude, 'Start GPS'),
+        mapLink(entry.endLatitude, entry.endLongitude, 'End GPS'),
+      ].filter(Boolean).join(' ');
+      return `
+        <details class="time-audit-row col-span-2 lg:col-span-full">
+          <summary>
+            <span>Audit details</span>
+            <span class="font-normal text-gray-500">${escapeHtml(actualRange)}</span>
+          </summary>
+          <div class="time-audit-grid">
+            <p><span class="time-audit-label">Actual punch times</span>${escapeHtml(actualRange)}</p>
+            <p><span class="time-audit-label">Rounded for payroll</span>${escapeHtml(roundedRange)}</p>
+            ${gpsLinks ? `<p><span class="time-audit-label">GPS</span>${gpsLinks}</p>` : ''}
+            ${entry.reviewReason ? `<p><span class="time-audit-label">Review reason</span>${escapeHtml(reviewReasonText(entry.reviewReason))}</p>` : ''}
+          </div>
+        </details>
+      `;
     }
 
     function warningInfo(content) {
@@ -1364,6 +1437,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         employee: [date, `${Number(entry.hours).toFixed(2)} hrs`, displayDetailLine || null],
       }[mode];
       const mobileContext = mobileParts.filter(Boolean).join(' - ');
+      const auditHtml = punchAuditHtml(entry);
 
       return `
         <article class="mobile-card-row px-3 py-2 grid grid-cols-[minmax(0,1fr)_auto] ${gridClass} gap-2 lg:gap-3 lg:items-center text-sm hover:bg-gray-50">
@@ -1372,6 +1446,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             <p class="lg:hidden text-xs text-gray-500 truncate">${escapeHtml(mobileContext)}</p>
           </div>
           ${getColumns(mode).map((column) => desktopCells[column.key]).join('')}
+          ${auditHtml}
         </article>
       `;
     }
