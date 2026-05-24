@@ -48,9 +48,9 @@ import Base from '../layouts/Base.astro';
     </main>
   </div>
 
-  <div id="activity-modal" class="hidden fixed inset-0 z-40">
+  <div id="activity-modal" class="pipeline-modal hidden fixed inset-0">
     <div class="absolute inset-0 bg-black/35" data-close-activity></div>
-    <div class="absolute inset-x-3 top-8 mx-auto max-w-lg rounded-lg border bg-white shadow-xl">
+    <div class="pipeline-modal-panel absolute inset-x-3 mx-auto max-w-lg overflow-y-auto rounded-lg border bg-white shadow-xl">
       <form id="activity-form" class="p-4 sm:p-5 space-y-4">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -90,9 +90,9 @@ import Base from '../layouts/Base.astro';
     </div>
   </div>
 
-  <div id="transition-modal" class="hidden fixed inset-0 z-50">
+  <div id="transition-modal" class="pipeline-modal hidden fixed inset-0">
     <div class="absolute inset-0 bg-black/35" data-close-transition></div>
-    <div class="absolute inset-x-3 top-8 mx-auto max-w-lg rounded-lg border bg-white shadow-xl">
+    <div class="pipeline-modal-panel absolute inset-x-3 mx-auto max-w-lg overflow-y-auto rounded-lg border bg-white shadow-xl">
       <form id="transition-form" class="p-4 sm:p-5 space-y-4">
         <div class="flex items-start justify-between gap-3">
           <div>
@@ -129,6 +129,29 @@ import Base from '../layouts/Base.astro';
   </div>
 
   <style is:global>
+    .pipeline-modal {
+      z-index: 140;
+    }
+    .pipeline-modal-panel {
+      max-height: calc(100vh - 5.5rem);
+      top: calc(4rem + 0.75rem);
+    }
+    @supports (height: 100dvh) {
+      .pipeline-modal-panel {
+        max-height: calc(100dvh - 5.5rem);
+      }
+    }
+    @media (min-width: 640px) {
+      .pipeline-modal-panel {
+        max-height: calc(100vh - 7rem);
+        top: calc(4rem + 1.5rem);
+      }
+      @supports (height: 100dvh) {
+        .pipeline-modal-panel {
+          max-height: calc(100dvh - 7rem);
+        }
+      }
+    }
     .pipeline-filter {
       border: 1px solid var(--pf-border);
       border-radius: 999px;
