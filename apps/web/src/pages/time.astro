@@ -409,6 +409,31 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     </div>
   </div>
 
+  <div id="switch-job-modal" class="mobile-sheet hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 class="text-lg font-semibold">Change job</h2>
+          <p id="switch-job-current-copy" class="text-sm text-gray-600">Move the active clock session to another job.</p>
+        </div>
+        <button type="button" id="close-switch-job-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
+      </div>
+      <form id="switch-job-form" class="space-y-4">
+        <label class="block">
+          <span class="form-label">New job</span>
+          <select id="switch-job" class="input"></select>
+        </label>
+        <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3 text-sm text-gray-600">
+          This closes the current punch and starts a new punch on the selected job with GPS captured at the switch.
+        </div>
+        <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+          <button type="button" id="cancel-switch-job-btn" class="btn-secondary flex-1">Cancel</button>
+          <button type="submit" id="switch-job-btn" class="btn-primary flex-1">Change job</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
     let currentWeekStart = getWeekStart(new Date());
@@ -918,16 +943,11 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         `;
         controls.innerHTML = `
           <div class="grid punch-actions gap-3">
-            <div class="grid gap-2 max-w-xl">
-              <label class="block">
-                <span class="form-label">Switch to job</span>
-                <select id="switch-job" class="input">${switchJobOptions(active.jobId)}</select>
-              </label>
-              <div class="flex justify-start">
-                <button type="button" id="switch-job-btn" class="btn-secondary btn-sm">Switch job</button>
-              </div>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+              <button id="punch-out-btn" class="btn-primary time-danger-action w-full sm:w-auto">Clock out</button>
+              <button type="button" id="open-switch-job-btn" class="btn-text btn-sm w-full sm:w-auto">Change job</button>
             </div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
               <label class="inline-flex items-center gap-2 text-sm text-gray-700">
                 <input id="forgot-clock-out-toggle" type="checkbox" class="h-4 w-4">
                 <span>I forgot to clock out earlier</span>
@@ -942,9 +962,6 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                 <span class="form-label">Reason for lead review</span>
                 <input id="punch-out-note" class="input" placeholder="Finished at 4:30, forgot to clock out">
               </label>
-            </div>
-            <div class="flex justify-start">
-              <button id="punch-out-btn" class="btn-primary time-danger-action w-full sm:w-auto">Clock out</button>
             </div>
           </div>
         `;
@@ -973,7 +990,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       document.getElementById('bulk-time-btn').classList.toggle('hidden', !status.canManage);
       document.getElementById('punch-in-btn')?.addEventListener('click', () => punchIn(false));
       document.getElementById('forgot-in-btn')?.addEventListener('click', openForgotClockInModal);
-      document.getElementById('switch-job-btn')?.addEventListener('click', switchJob);
+      document.getElementById('open-switch-job-btn')?.addEventListener('click', openSwitchJobModal);
       document.getElementById('forgot-clock-out-toggle')?.addEventListener('change', toggleForgotClockOutFields);
       document.getElementById('punch-out-btn')?.addEventListener('click', punchOut);
     }
@@ -1167,6 +1184,20 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       document.getElementById('forgot-clock-in-modal').classList.add('hidden');
     }
 
+    function openSwitchJobModal() {
+      const active = punchStatus?.activeSession;
+      const select = document.getElementById('switch-job');
+      if (select) select.innerHTML = switchJobOptions(active?.jobId);
+      document.getElementById('switch-job-current-copy').textContent = active?.jobName
+        ? `Current job: ${active.jobName}`
+        : 'Move the active clock session to another job.';
+      document.getElementById('switch-job-modal').classList.remove('hidden');
+    }
+
+    function closeSwitchJobModal() {
+      document.getElementById('switch-job-modal').classList.add('hidden');
+    }
+
     function renderPunchReview() {
       const review = document.getElementById('punch-review');
       const rows = punchStatus?.reviewQueue || [];
@@ -1350,6 +1381,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             jobId,
           }),
         });
+        closeSwitchJobModal();
         window.showToast?.('Switched job', 'success');
         await refreshPunchStatus();
         await loadData();
@@ -1359,7 +1391,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         isPunching = false;
         if (button) {
           button.disabled = false;
-          button.textContent = 'Switch job';
+          button.textContent = 'Change job';
         }
       }
     }
@@ -1667,6 +1699,12 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     });
     document.getElementById('cancel-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
     document.getElementById('close-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
+    document.getElementById('cancel-switch-job-btn').addEventListener('click', closeSwitchJobModal);
+    document.getElementById('close-switch-job-btn').addEventListener('click', closeSwitchJobModal);
+    document.getElementById('switch-job-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      switchJob();
+    });
     document.getElementById('forgot-clock-in-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const submit = document.getElementById('submit-forgot-clock-in-btn');
