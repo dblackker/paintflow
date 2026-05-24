@@ -5,6 +5,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 ---
 
 <Base title="Time Tracking - PaintFlow">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
     @media (max-width: 640px) {
       .time-toolbar {
@@ -38,6 +39,31 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       gap: 0.375rem;
       justify-content: flex-end;
     }
+    #punch-map {
+      min-height: 22rem;
+    }
+    .time-map-pin {
+      align-items: center;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+      color: #fff;
+      display: flex;
+      font-size: 0.68rem;
+      font-weight: 700;
+      height: 1.8rem;
+      justify-content: center;
+      width: 1.8rem;
+    }
+    .time-map-pin-in {
+      background: var(--pf-color-primary);
+    }
+    .time-map-pin-out {
+      background: var(--pf-status-success-text);
+    }
+    .time-map-pin-flagged {
+      background: var(--pf-status-warning-text);
+    }
     @media (min-width: 1024px) {
       :global(.time-mobile-summary) {
         display: none;
@@ -70,6 +96,32 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       </div>
       <div id="punch-controls" class="mt-4 grid gap-3"></div>
       <div id="punch-review" class="mt-4 hidden"></div>
+    </section>
+
+    <section id="time-map-panel" class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6 hidden">
+      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+        <div>
+          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">GPS punch map</p>
+          <h2 class="text-lg font-semibold mt-1">Crew location snapshot</h2>
+          <p class="text-sm text-gray-600 mt-1">Shows GPS points captured at clock-in and clock-out. PaintFlow does not show off-clock locations.</p>
+        </div>
+        <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full lg:w-auto lg:min-w-[18rem]">
+          <button id="prev-map-day" class="btn-icon btn-icon-outlined" aria-label="Previous day"><Icon name="chevron-left" /></button>
+          <span id="map-day-label" class="text-center font-semibold text-sm"></span>
+          <button id="next-map-day" class="btn-icon btn-icon-outlined" aria-label="Next day"><Icon name="chevron-right" /></button>
+        </div>
+      </div>
+      <div id="map-summary" class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3"></div>
+      <div class="grid lg:grid-cols-[minmax(0,1fr)_21rem] gap-4">
+        <div id="punch-map" class="rounded-xl border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] overflow-hidden"></div>
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-2">
+            <h3 class="font-semibold text-sm">Punches</h3>
+            <button id="refresh-map-btn" class="btn-text btn-sm">Refresh</button>
+          </div>
+          <div id="map-events" class="space-y-2 max-h-[22rem] overflow-y-auto pr-1"></div>
+        </div>
+      </div>
     </section>
 
     <section class="time-toolbar surface-panel p-4 mb-4 sm:mb-6">
@@ -183,6 +235,10 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     let jobs = [];
     let punchStatus = null;
     let canManageTime = false;
+    let currentMapDate = new Date();
+    let punchMap = null;
+    let punchMapLayer = null;
+    let isMapReady = false;
     let isSavingTime = false;
     let isSavingBulkTime = false;
     let isPunching = false;
@@ -282,6 +338,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         renderPunchClock();
         renderBulkEntry();
         renderTimesheet();
+        renderMapVisibility();
+        if (canManageTime) loadMapData();
       } catch (e) {
         document.getElementById('loading').innerHTML = `<p class="text-red-600">${escapeHtml(e.message || 'Failed to load')}</p>`;
       }
@@ -296,6 +354,10 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       document.getElementById('time-view-controls').classList.toggle('hidden', isCrewOnly);
       document.getElementById('empty-log-time-btn').classList.toggle('hidden', isCrewOnly);
       if (isCrewOnly) viewMode = 'day';
+    }
+
+    function renderMapVisibility() {
+      document.getElementById('time-map-panel').classList.toggle('hidden', !canManageTime);
     }
 
     function populateSelects() {
@@ -391,6 +453,152 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       if (!latitude || !longitude) return '';
       const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
       return `<a class="text-xs font-medium text-brand-700" href="${href}" target="_blank" rel="noreferrer">${label}</a>`;
+    }
+
+    function localDateLabel(date) {
+      return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+
+    function localDayBounds(date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      return { start: start.toISOString(), end: end.toISOString() };
+    }
+
+    function punchTypeLabel(type = '') {
+      if (type.includes('clock_out')) return 'Clock out';
+      if (type.includes('clock_in')) return 'Clock in';
+      if (type.includes('reminder')) return 'Reminder';
+      return type.replace(/[_-]/g, ' ');
+    }
+
+    function eventAddress(event = {}) {
+      if (!event.address) return '';
+      return window.PaintFlowFormat?.address(event.address, '', { includePostalCode: false }) || [
+        event.address.streetAddress,
+        [event.address.city, event.address.state].filter(Boolean).join(', '),
+      ].filter(Boolean).join(' ');
+    }
+
+    async function ensureLeaflet() {
+      if (window.L) return window.L;
+      if (!window.__paintflowLeafletPromise) {
+        window.__paintflowLeafletPromise = new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+          script.onload = () => resolve(window.L);
+          script.onerror = () => reject(new Error('Failed to load map library'));
+          document.head.appendChild(script);
+        });
+      }
+      return window.__paintflowLeafletPromise;
+    }
+
+    async function initializePunchMap() {
+      if (isMapReady) return;
+      const L = await ensureLeaflet();
+      punchMap = L.map('punch-map', { scrollWheelZoom: false });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(punchMap);
+      punchMapLayer = L.layerGroup().addTo(punchMap);
+      punchMap.setView([39.8283, -98.5795], 4);
+      isMapReady = true;
+    }
+
+    function mapMarkerIcon(event) {
+      const L = window.L;
+      const isOut = event.type.includes('clock_out');
+      const isFlagged = event.reviewRequired;
+      return L.divIcon({
+        className: '',
+        html: `<span class="time-map-pin ${isFlagged ? 'time-map-pin-flagged' : isOut ? 'time-map-pin-out' : 'time-map-pin-in'}">${isOut ? 'Out' : 'In'}</span>`,
+        iconSize: [29, 29],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -12],
+      });
+    }
+
+    async function loadMapData() {
+      if (!canManageTime) return;
+      document.getElementById('map-day-label').textContent = localDateLabel(currentMapDate);
+      document.getElementById('map-events').innerHTML = '<p class="text-sm text-gray-500 p-3">Loading punch locations...</p>';
+      const { start, end } = localDayBounds(currentMapDate);
+      try {
+        const payload = await api(`/v1/team/time/map?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+        await renderPunchMap(payload.data || { events: [], summary: {} });
+      } catch (error) {
+        document.getElementById('map-events').innerHTML = `<p class="text-sm text-red-600 p-3">${escapeHtml(error.message || 'Failed to load map')}</p>`;
+      }
+    }
+
+    async function renderPunchMap(data) {
+      await initializePunchMap();
+      const L = window.L;
+      const events = data.events || [];
+      const summary = data.summary || {};
+      document.getElementById('map-summary').innerHTML = [
+        ['Clock-ins', summary.clockIns || 0],
+        ['Clock-outs', summary.clockOuts || 0],
+        ['Crew', summary.employees || 0],
+        ['Jobs', summary.jobs || 0],
+      ].map(([label, value]) => `
+        <div class="rounded-lg border border-[var(--pf-border)] bg-white px-3 py-2">
+          <p class="text-xs text-gray-500">${label}</p>
+          <p class="text-lg font-semibold">${value}</p>
+        </div>
+      `).join('');
+
+      punchMapLayer.clearLayers();
+      if (!events.length) {
+        document.getElementById('map-events').innerHTML = '<p class="text-sm text-gray-500 p-3">No GPS punch locations for this day.</p>';
+        punchMap.setView([39.8283, -98.5795], 4);
+        return;
+      }
+
+      const bounds = [];
+      events.forEach((event) => {
+        const latLng = [Number(event.latitude), Number(event.longitude)];
+        bounds.push(latLng);
+        const address = eventAddress(event);
+        L.marker(latLng, { icon: mapMarkerIcon(event) })
+          .bindPopup(`
+            <strong>${escapeHtml(event.teamMemberName)}</strong><br>
+            ${escapeHtml(punchTypeLabel(event.type))} at ${escapeHtml(new Date(event.occurredAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}<br>
+            ${escapeHtml(event.jobName || 'Unassigned job')}<br>
+            ${address ? escapeHtml(address) : ''}
+          `)
+          .addTo(punchMapLayer);
+      });
+      punchMap.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+
+      document.getElementById('map-events').innerHTML = events.map((event) => {
+        const address = eventAddress(event);
+        const time = new Date(event.occurredAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        return `
+          <button type="button" class="w-full rounded-lg border border-[var(--pf-border)] bg-white p-3 text-left hover:bg-[var(--pf-surface-muted)]" data-map-event="${event.id}">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-medium text-sm truncate">${escapeHtml(event.teamMemberName)}</p>
+                <p class="text-xs text-gray-600">${escapeHtml(punchTypeLabel(event.type))} - ${escapeHtml(time)}</p>
+              </div>
+              ${event.reviewRequired ? '<span class="chip pf-status-warning">Review</span>' : ''}
+            </div>
+            <p class="text-xs text-gray-600 mt-1 truncate">${escapeHtml(event.jobName || 'Unassigned job')}</p>
+            ${address ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(address)}</p>` : ''}
+          </button>
+        `;
+      }).join('');
+      document.querySelectorAll('[data-map-event]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const event = events.find((item) => item.id === button.dataset.mapEvent);
+          if (!event) return;
+          punchMap.setView([Number(event.latitude), Number(event.longitude)], 16);
+        });
+      });
     }
 
     function renderPunchClock() {
@@ -1196,6 +1404,18 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       currentWeekStart.setDate(currentWeekStart.getDate() + 7);
       renderTimesheet();
     });
+
+    document.getElementById('prev-map-day').addEventListener('click', () => {
+      currentMapDate.setDate(currentMapDate.getDate() - 1);
+      loadMapData();
+    });
+
+    document.getElementById('next-map-day').addEventListener('click', () => {
+      currentMapDate.setDate(currentMapDate.getDate() + 1);
+      loadMapData();
+    });
+
+    document.getElementById('refresh-map-btn').addEventListener('click', loadMapData);
 
     document.querySelectorAll('[data-view-mode]').forEach((button) => {
       button.addEventListener('click', () => {

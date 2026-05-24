@@ -31,6 +31,8 @@ import {
   serviceAreas,
   teamMembers,
   timeEntries,
+  timePunchEvents,
+  timePunchSessions,
   userRoles,
   users,
   materialPurchases,
@@ -69,6 +71,12 @@ function daysFromNow(days: number, hour = 8, minute = 0) {
   date.setHours(hour, minute, 0, 0);
   date.setDate(date.getDate() + days);
   return date;
+}
+
+function sameDayAt(date: Date, hour: number, minute = 0) {
+  const copy = new Date(date);
+  copy.setHours(hour, minute, 0, 0);
+  return copy;
 }
 
 function burdenedRate(member: { hourlyRate: string; burdenRate: string }) {
@@ -119,6 +127,8 @@ async function deleteOrgData(db: Db, orgId: string) {
   }
   if (jobIds.length) {
     await db.delete(jobAssignments).where(inArray(jobAssignments.jobId, jobIds));
+    await db.delete(timePunchEvents).where(eq(timePunchEvents.orgId, orgId));
+    await db.delete(timePunchSessions).where(eq(timePunchSessions.orgId, orgId));
     await db.delete(timeEntries).where(inArray(timeEntries.jobId, jobIds));
     await db.delete(jobCosts).where(inArray(jobCosts.jobId, jobIds));
     await db.delete(materialPurchases).where(inArray(materialPurchases.jobId, jobIds));
@@ -292,10 +302,10 @@ async function seed(db: Db) {
   ]);
 
   const timeRows = [
-    { jobId: robertJob.id, memberKey: 'nick', hours: 8, date: daysAgo(3), description: 'Pressure wash, scrape, spot prime' },
-    { jobId: robertJob.id, memberKey: 'maria', hours: 7.5, date: daysAgo(3), description: 'Mask windows and fixtures' },
-    { jobId: robertJob.id, memberKey: 'devon', hours: 8, date: daysAgo(2), description: 'Spray and back-roll north elevation' },
-    { jobId: harperJob.id, memberKey: 'sam', hours: 5, date: daysAgo(1), description: 'Site protection and patching' },
+    { jobId: robertJob.id, memberKey: 'nick', hours: 8, date: daysAgo(3), description: 'Pressure wash, scrape, spot prime', start: [47.6295, -122.3602], end: [47.6299, -122.3596] },
+    { jobId: robertJob.id, memberKey: 'maria', hours: 7.5, date: daysAgo(3), description: 'Mask windows and fixtures', start: [47.6293, -122.3604], end: [47.6297, -122.3598] },
+    { jobId: robertJob.id, memberKey: 'devon', hours: 8, date: daysAgo(2), description: 'Spray and back-roll north elevation', start: [47.6296, -122.3601], end: [47.63, -122.3597] },
+    { jobId: harperJob.id, memberKey: 'sam', hours: 5, date: daysAgo(1), description: 'Site protection and patching', start: [47.6068, -122.3351], end: [47.6071, -122.3346] },
   ];
   const insertedTimeRows = timeRows.map((row) => {
     const memberSeed = goldenSeed.teamMembers.find((member) => member.key === row.memberKey)!;
@@ -310,9 +320,59 @@ async function seed(db: Db) {
       description: row.description,
       hourlyRate: dollars(rate),
       totalCost: dollars(row.hours * rate),
+      source: 'punch_clock',
+      reviewStatus: 'approved',
+      actualStartAt: sameDayAt(row.date, 8),
+      actualEndAt: sameDayAt(row.date, 8 + Math.floor(row.hours), (row.hours % 1) * 60),
+      roundedStartAt: sameDayAt(row.date, 8),
+      roundedEndAt: sameDayAt(row.date, 8 + Math.floor(row.hours), (row.hours % 1) * 60),
+      startLatitude: row.start[0].toFixed(7),
+      startLongitude: row.start[1].toFixed(7),
+      startAccuracyMeters: '18.00',
+      endLatitude: row.end[0].toFixed(7),
+      endLongitude: row.end[1].toFixed(7),
+      endAccuracyMeters: '21.00',
     };
   });
-  await db.insert(timeEntries).values(insertedTimeRows);
+  const createdTimeEntries = await db.insert(timeEntries).values(insertedTimeRows).returning();
+  const createdPunchSessions = await db.insert(timePunchSessions).values(createdTimeEntries.map((entry, index) => ({
+    orgId: org.id,
+    jobId: entry.jobId,
+    teamMemberId: entry.teamMemberId,
+    timeEntryId: entry.id,
+    status: 'approved',
+    startedAtActual: entry.actualStartAt!,
+    endedAtActual: entry.actualEndAt,
+    startedAtRounded: entry.roundedStartAt!,
+    endedAtRounded: entry.roundedEndAt,
+    roundingIncrementMinutes: 15,
+    startLatitude: insertedTimeRows[index].startLatitude,
+    startLongitude: insertedTimeRows[index].startLongitude,
+    startAccuracyMeters: insertedTimeRows[index].startAccuracyMeters,
+    endLatitude: insertedTimeRows[index].endLatitude,
+    endLongitude: insertedTimeRows[index].endLongitude,
+    endAccuracyMeters: insertedTimeRows[index].endAccuracyMeters,
+  }))).returning();
+  await db.insert(timePunchEvents).values(createdPunchSessions.flatMap((session, index) => ([
+    {
+      orgId: org.id,
+      punchSessionId: session.id,
+      eventType: 'clock_in',
+      latitude: insertedTimeRows[index].startLatitude,
+      longitude: insertedTimeRows[index].startLongitude,
+      accuracyMeters: insertedTimeRows[index].startAccuracyMeters,
+      occurredAt: session.startedAtActual,
+    },
+    {
+      orgId: org.id,
+      punchSessionId: session.id,
+      eventType: 'clock_out',
+      latitude: insertedTimeRows[index].endLatitude,
+      longitude: insertedTimeRows[index].endLongitude,
+      accuracyMeters: insertedTimeRows[index].endAccuracyMeters,
+      occurredAt: session.endedAtActual!,
+    },
+  ])));
   await db.insert(jobCosts).values(insertedTimeRows.map((row) => ({
     orgId: org.id,
     jobId: row.jobId,

@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { teamMembers, timeEntries, jobCosts, userRoles, memberships, jobs, users, orgSettings, timePunchSessions, timePunchEvents, leads } from '@paintflow/db/schema';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, gte, inArray, lte } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -788,6 +788,105 @@ teamApp.get('/time', async (c) => {
       teamMemberName: membersById.get(entry.teamMemberId)?.name ?? 'Crew member',
       jobName: entry.jobId ? jobsById.get(entry.jobId)?.name ?? 'Job' : 'Unassigned job',
     })),
+  });
+});
+
+teamApp.get('/time/map', async (c) => {
+  const orgId = c.get('orgId');
+  const canViewMap = await hasPermission(c, 'view_all_time') || await hasPermission(c, 'log_time_for_others');
+  if (!canViewMap) return c.json({ error: 'Cannot view crew location history' }, 403);
+
+  const start = new Date(c.req.query('start') || '');
+  const end = new Date(c.req.query('end') || '');
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    return c.json({ error: 'Valid start and end query parameters are required' }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const events = await db.query.timePunchEvents.findMany({
+    where: and(
+      eq(timePunchEvents.orgId, orgId),
+      gte(timePunchEvents.occurredAt, start),
+      lte(timePunchEvents.occurredAt, end),
+    ),
+    orderBy: (timePunchEvents, { asc }) => [asc(timePunchEvents.occurredAt)],
+  });
+
+  const locatedEvents = events.filter((event) => event.latitude && event.longitude);
+  if (!locatedEvents.length) {
+    return c.json({ data: { events: [], summary: { clockIns: 0, clockOuts: 0, employees: 0, jobs: 0 } } });
+  }
+
+  const sessionIds = Array.from(new Set(locatedEvents.map((event) => event.punchSessionId)));
+  const sessions = await db.query.timePunchSessions.findMany({
+    where: and(eq(timePunchSessions.orgId, orgId), inArray(timePunchSessions.id, sessionIds)),
+  });
+  const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+  const memberIds = Array.from(new Set(sessions.map((session) => session.teamMemberId).filter(Boolean)));
+  const jobIds = Array.from(new Set(sessions.map((session) => session.jobId).filter(Boolean))) as string[];
+
+  const [members, jobList] = await Promise.all([
+    memberIds.length
+      ? db.query.teamMembers.findMany({ where: and(eq(teamMembers.orgId, orgId), inArray(teamMembers.id, memberIds)) })
+      : Promise.resolve([]),
+    jobIds.length
+      ? db.query.jobs.findMany({ where: and(eq(jobs.orgId, orgId), inArray(jobs.id, jobIds)) })
+      : Promise.resolve([]),
+  ]);
+
+  const leadIds = Array.from(new Set(jobList.map((job) => job.leadId)));
+  const leadList = leadIds.length
+    ? await db.query.leads.findMany({ where: and(eq(leads.orgId, orgId), inArray(leads.id, leadIds)) })
+    : [];
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const jobsById = new Map(jobList.map((job) => [job.id, job]));
+  const leadsById = new Map(leadList.map((lead) => [lead.id, lead]));
+  const employeeSet = new Set<string>();
+  const jobSet = new Set<string>();
+  let clockIns = 0;
+  let clockOuts = 0;
+
+  const data = locatedEvents.map((event) => {
+    const session = sessionsById.get(event.punchSessionId);
+    const member = session ? membersById.get(session.teamMemberId) : undefined;
+    const job = session?.jobId ? jobsById.get(session.jobId) : undefined;
+    const lead = job ? leadsById.get(job.leadId) : undefined;
+    if (member?.id) employeeSet.add(member.id);
+    if (job?.id) jobSet.add(job.id);
+    if (event.eventType.includes('clock_in')) clockIns += 1;
+    if (event.eventType.includes('clock_out')) clockOuts += 1;
+    return {
+      id: event.id,
+      type: event.eventType,
+      occurredAt: event.occurredAt,
+      latitude: Number(event.latitude),
+      longitude: Number(event.longitude),
+      accuracyMeters: event.accuracyMeters ? Number(event.accuracyMeters) : null,
+      teamMemberId: member?.id || session?.teamMemberId || null,
+      teamMemberName: member?.name || 'Crew member',
+      jobId: job?.id || session?.jobId || null,
+      jobName: job?.name || 'Unassigned job',
+      address: lead ? {
+        streetAddress: lead.streetAddress,
+        city: lead.city,
+        state: lead.state,
+        postalCode: lead.postalCode,
+      } : null,
+      reviewRequired: Boolean(session?.reviewRequired),
+      reviewReason: session?.reviewReason || null,
+    };
+  });
+
+  return c.json({
+    data: {
+      events: data,
+      summary: {
+        clockIns,
+        clockOuts,
+        employees: employeeSet.size,
+        jobs: jobSet.size,
+      },
+    },
   });
 });
 
