@@ -367,7 +367,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
       };
       return `<svg class="pf-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || ''}</svg>`;
     };
-    const formatAddress = (record) => [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+    const formatAddress = (record) => window.PaintFlowFormat?.address(record, 'lead', { multiline: true }) || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), String(record.leadPostalCode || '').match(/\d{5}/)?.[0] || record.leadPostalCode].filter(Boolean).join('\n');
     const mapsUrl = (address) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address || '')}`;
     const addressLink = (address) => address
       ? `

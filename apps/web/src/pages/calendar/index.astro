@@ -249,10 +249,9 @@ import Icon from '../../components/Icon.astro';
     }
 
     function address(job) {
-      return window.PaintFlowFormat?.address(job, 'lead') || [
+      return window.PaintFlowFormat?.address(job, 'lead', { includePostalCode: false }) || [
         job.leadStreetAddress,
         [job.leadCity, job.leadState].filter(Boolean).join(', '),
-        job.leadPostalCode,
       ].filter(Boolean).join(' ');
     }
 

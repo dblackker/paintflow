@@ -805,6 +805,23 @@ body.pf-nav-drawer-open {
   white-space: nowrap;
 }
 
+.pf-address-inline-stacked {
+  align-items: flex-start;
+}
+
+.pf-address-inline-stacked .pf-address-text {
+  display: grid;
+  gap: 0.1rem;
+  white-space: normal;
+}
+
+.pf-address-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pf-address-map-button {
   align-items: center;
   border-radius: var(--pf-radius-full);

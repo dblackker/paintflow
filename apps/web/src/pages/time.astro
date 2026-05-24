@@ -309,10 +309,14 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     }
 
     function jobAddress(job = {}) {
-      return [
+      return window.PaintFlowFormat?.address({
+        streetAddress: job.leadStreetAddress || job.streetAddress,
+        city: job.leadCity || job.city,
+        state: job.leadState || job.state,
+        postalCode: job.leadPostalCode || job.postalCode,
+      }, '', { includePostalCode: false }) || [
         job.leadStreetAddress || job.streetAddress,
         [job.leadCity || job.city, job.leadState || job.state].filter(Boolean).join(', '),
-        job.leadPostalCode || job.postalCode,
       ].filter(Boolean).join(' ');
     }
 

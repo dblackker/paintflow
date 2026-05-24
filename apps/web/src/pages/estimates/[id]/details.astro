@@ -92,7 +92,7 @@ import DetailBackButton from '../../../components/DetailBackButton.astro';
     }
 
     function customerAddress(customer = {}) {
-      return window.PaintFlowFormat?.address(customer) || [customer.streetAddress, [customer.city, customer.state].filter(Boolean).join(', '), customer.postalCode].filter(Boolean).join(' ');
+      return window.PaintFlowFormat?.address(customer, '', { multiline: true }) || [customer.streetAddress, [customer.city, customer.state].filter(Boolean).join(', '), customer.postalCode].filter(Boolean).join('\n');
     }
 
     function customerCard(customer) {

@@ -282,7 +282,7 @@ import Base from '../layouts/Base.astro';
     }
 
     function formatAddress(address = {}) {
-      return window.PaintFlowFormat?.address(address) || [address.street, [address.city, address.state].filter(Boolean).join(', '), address.postalCode].filter(Boolean).join(' ');
+      return window.PaintFlowFormat?.address(address, '', { includePostalCode: false }) || [address.street, [address.city, address.state].filter(Boolean).join(', ')].filter(Boolean).join(' ');
     }
 
     function stageCards(stageId) {

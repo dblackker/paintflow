@@ -42,7 +42,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
     const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : 'Not set';
     const dateTimeLabel = (value) => value ? new Date(value).toLocaleString([], { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not set';
     const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-    const formatAddress = (record) => window.PaintFlowFormat?.address(record) || [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
+    const formatAddress = (record, options = {}) => window.PaintFlowFormat?.address(record, '', options) || [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
     const addressLink = (address, className = 'hover:text-blue-700 hover:underline') => window.PaintFlowFormat?.addressLink(address, { className }) || escapeHtml(address || 'No jobsite address');
     const label = (value) => window.PaintFlowFormat?.label(value) ?? value;
     const phone = (value) => window.PaintFlowFormat?.phone(value) ?? value;
@@ -337,7 +337,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
                 ${statusBadge(customer.status, { label: statusLabels[customer.status] || customer.status })}
               </div>
               <p class="text-sm text-gray-600 mt-2">${escapeHtml(customer.source || 'No source')} &middot; Created ${dateLabel(customer.createdAt)}</p>
-              <div class="mt-3 text-base font-medium text-gray-950">${addressLink(formatAddress(customer), 'inline text-base font-medium text-gray-950 hover:text-blue-700 hover:underline') || 'No jobsite address on file'}</div>
+              <div class="mt-3 text-base font-medium text-gray-950">${addressLink(formatAddress(customer, { multiline: true }), 'inline text-base font-medium text-gray-950 hover:text-blue-700 hover:underline') || 'No jobsite address on file'}</div>
               <div class="flex flex-wrap gap-2 mt-4">
                 ${window.PaintFlowUI?.contactActions({ phone: customer.phone, email: customer.email, leadId: customer.id }) || ''}
                 <a class="btn-primary btn-sm" href="${action.href}">${action.label}</a>
@@ -346,7 +346,7 @@ import DetailBackButton from '../../components/DetailBackButton.astro';
             <div class="lg:text-right text-sm text-gray-700">
               <p>${escapeHtml(customer.phone ? phone(customer.phone) : 'No phone')}</p>
               <p>${escapeHtml(customer.email || 'No email')}</p>
-              <div class="mt-2 max-w-xs text-gray-600">${formatAddress(customer) ? addressLink(formatAddress(customer), 'inline text-gray-600 hover:text-blue-700 hover:underline') : ''}</div>
+              <div class="mt-2 max-w-xs text-gray-600">${formatAddress(customer) ? addressLink(formatAddress(customer, { multiline: true }), 'inline text-gray-600 hover:text-blue-700 hover:underline') : ''}</div>
               <p class="text-gray-500 mt-2">Updated ${dateLabel(customer.updatedAt)}</p>
             </div>
           </div>

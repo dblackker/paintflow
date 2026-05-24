@@ -343,7 +343,7 @@ const isDev = import.meta.env.DEV;
     }
 
     function formatAddress(record) {
-      return window.PaintFlowFormat?.address(record, 'lead') || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', '), record.leadPostalCode].filter(Boolean).join(' ');
+      return window.PaintFlowFormat?.address(record, 'lead', { includePostalCode: false }) || [record.leadStreetAddress, [record.leadCity, record.leadState].filter(Boolean).join(', ')].filter(Boolean).join(' ');
     }
 
     function relativeDate(value) {

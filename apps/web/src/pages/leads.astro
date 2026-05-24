@@ -121,7 +121,7 @@ import Base from '../layouts/Base.astro';
     }
 
     function formatAddress(record) {
-      return window.PaintFlowFormat?.address(record) || [record.streetAddress, [record.city, record.state].filter(Boolean).join(', '), record.postalCode].filter(Boolean).join(' ');
+      return window.PaintFlowFormat?.address(record, '', { includePostalCode: false }) || [record.streetAddress, [record.city, record.state].filter(Boolean).join(', ')].filter(Boolean).join(' ');
     }
 
     function contactSummary(lead) {
