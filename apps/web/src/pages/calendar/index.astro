@@ -76,7 +76,14 @@ import Icon from '../../components/Icon.astro';
       background: color-mix(in srgb, var(--md-sys-color-primary-container) 18%, white);
       padding: 0.65rem;
       text-decoration: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
+      user-select: none;
       transition: border-color 160ms ease, box-shadow 160ms ease, transform 120ms ease;
+    }
+
+    .schedule-job-card[draggable="true"] {
+      cursor: grab;
     }
 
     .schedule-job-card:hover {
@@ -84,6 +91,22 @@ import Icon from '../../components/Icon.astro';
       box-shadow: 0 1px 4px rgb(25 28 32 / 0.08);
       transform: translateY(-1px);
       text-decoration: none;
+    }
+
+    .schedule-job-card.is-dragging {
+      cursor: grabbing;
+      opacity: 0.68;
+    }
+
+    .schedule-job-card a,
+    .schedule-backlog-card a,
+    .schedule-backlog-card input,
+    .schedule-backlog-card select,
+    .schedule-backlog-card button,
+    .schedule-backlog-card summary {
+      -webkit-touch-callout: default;
+      touch-action: manipulation;
+      user-select: auto;
     }
 
     .schedule-google-card {
@@ -98,6 +121,9 @@ import Icon from '../../components/Icon.astro';
       border-radius: var(--pf-radius);
       padding: 0.8rem;
       background: var(--md-sys-color-surface-container-lowest);
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
+      user-select: none;
     }
 
     .schedule-backlog-card[draggable="true"] {
@@ -232,6 +258,8 @@ import Icon from '../../components/Icon.astro';
     let allJobs = [];
     let allGoogleEvents = [];
     let activeQuickScheduleDay = null;
+    let pointerScheduleDrag = null;
+    let suppressScheduleClick = false;
 
     function escapeHtml(value = '') {
       return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -252,6 +280,14 @@ import Icon from '../../components/Icon.astro';
         job.leadStreetAddress,
         [job.leadCity, job.leadState].filter(Boolean).join(', '),
       ].filter(Boolean).join(' ');
+    }
+
+    function clearDropTargets() {
+      document.querySelectorAll('.schedule-day.is-drop-target').forEach((day) => day.classList.remove('is-drop-target'));
+    }
+
+    function isInteractiveDragTarget(target) {
+      return target instanceof Element && Boolean(target.closest('a, button, input, select, textarea, summary, details, label'));
     }
 
     function money(value) {
@@ -342,6 +378,26 @@ import Icon from '../../components/Icon.astro';
       return Math.max(1, Math.ceil(estimatedHours / (AVERAGE_CREW_SIZE * CREW_HOURS_PER_PERSON_DAY)));
     }
 
+    function scheduledWorkDays(job) {
+      const start = jobStart(job);
+      const end = jobEnd(job) || start;
+      if (!start || !end) return estimatedWorkDays(job);
+
+      const cursor = new Date(start);
+      cursor.setHours(0, 0, 0, 0);
+      const last = new Date(end);
+      last.setHours(0, 0, 0, 0);
+      let days = 0;
+
+      while (cursor <= last && days < 30) {
+        const weekday = cursor.getDay();
+        if (weekday !== 0 && weekday !== 6) days += 1;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      return Math.max(1, days || estimatedWorkDays(job));
+    }
+
     function addWorkDays(date, daysToAdd) {
       const result = new Date(date);
       let added = 0;
@@ -395,6 +451,15 @@ import Icon from '../../components/Icon.astro';
       const { scheduledStartAt, scheduledEndAt } = scheduleDatesFromDuration(startDateValue, durationDays);
       const job = allJobs.find((item) => item.id === jobId);
       await scheduleJob(jobId, scheduledStartAt, scheduledEndAt, `${job?.name || 'Job'} added to the calendar.`);
+    }
+
+    async function scheduleDroppedJob(jobId, dayKey) {
+      const job = allJobs.find((item) => item.id === jobId);
+      if (!job || !dayKey) return;
+      const duration = jobHasSchedule(job) ? scheduledWorkDays(job) : estimatedWorkDays(job);
+      const message = jobHasSchedule(job) ? `${job.name || 'Job'} moved on the calendar.` : `${job.name || 'Job'} added to the calendar.`;
+      const { scheduledStartAt, scheduledEndAt } = scheduleDatesFromDuration(dayKey, duration);
+      await scheduleJob(job.id, scheduledStartAt, scheduledEndAt, message);
     }
 
     function autoPopulateEndDate(form) {
@@ -517,14 +582,15 @@ import Icon from '../../components/Icon.astro';
       const jobAddress = address(job);
       const scheduleRange = formatScheduleRange(job);
       return `
-        <a href="/jobs/${escapeHtml(job.id)}" class="schedule-job-card">
+        <div class="schedule-job-card" draggable="true" data-schedule-draggable-job-id="${escapeHtml(job.id)}" aria-label="Drag to reschedule ${escapeHtml(job.name || 'job')}">
           <div class="flex items-start justify-between gap-2">
             <p class="min-w-0 truncate text-xs font-semibold text-gray-950">${escapeHtml(job.name || 'Job')}</p>
             ${window.PaintFlowUI?.statusBadge({ value: job.status }) || `<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">${escapeHtml(label(job.status))}</span>`}
           </div>
           <p class="mt-1 text-[0.72rem] font-medium text-gray-700">${escapeHtml(scheduleRange)}</p>
           ${jobAddress ? `<p class="mt-1 line-clamp-2 text-[0.72rem] text-gray-600">${escapeHtml(jobAddress)}</p>` : ''}
-        </a>
+          <a href="/jobs/${escapeHtml(job.id)}" class="mt-2 inline-flex text-[0.72rem] font-semibold text-blue-700 hover:underline">Open job</a>
+        </div>
       `;
     }
 
@@ -581,12 +647,13 @@ import Icon from '../../components/Icon.astro';
         : 'No labor-hour estimate found. Defaults to 1 work day.';
 
       return `
-        <div class="schedule-backlog-card" draggable="true" data-unscheduled-job-id="${escapeHtml(job.id)}">
+        <div class="schedule-backlog-card" draggable="true" data-unscheduled-job-id="${escapeHtml(job.id)}" data-schedule-draggable-job-id="${escapeHtml(job.id)}">
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <a href="/jobs/${escapeHtml(job.id)}" class="font-semibold text-gray-950 hover:underline">${escapeHtml(job.name || 'Job')}</a>
+              <p class="font-semibold text-gray-950">${escapeHtml(job.name || 'Job')}</p>
               <p class="mt-1 text-xs text-gray-600">${escapeHtml(statusCopy)}${job.budget ? ` - ${money(job.budget)}` : ''}</p>
               ${jobAddress ? `<p class="mt-1 text-xs text-gray-600">${escapeHtml(jobAddress)}</p>` : ''}
+              <a href="/jobs/${escapeHtml(job.id)}" class="mt-2 inline-flex text-xs font-semibold text-blue-700 hover:underline">Open job</a>
             </div>
           </div>
           <details class="mt-3">
@@ -617,15 +684,17 @@ import Icon from '../../components/Icon.astro';
         });
       });
 
-      document.querySelectorAll('[data-unscheduled-job-id]').forEach((card) => {
+      document.querySelectorAll('[data-schedule-draggable-job-id]').forEach((card) => {
         card.addEventListener('dragstart', (event) => {
-          event.dataTransfer?.setData('text/plain', card.dataset.unscheduledJobId || '');
-          event.dataTransfer?.setData('application/x-paintflow-job-id', card.dataset.unscheduledJobId || '');
+          const jobId = card.dataset.scheduleDraggableJobId || '';
+          event.dataTransfer?.setData('text/plain', jobId);
+          event.dataTransfer?.setData('application/x-paintflow-job-id', jobId);
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
           card.classList.add('is-dragging');
         });
         card.addEventListener('dragend', () => {
           card.classList.remove('is-dragging');
-          document.querySelectorAll('.schedule-day.is-drop-target').forEach((day) => day.classList.remove('is-drop-target'));
+          clearDropTargets();
         });
       });
 
@@ -642,18 +711,97 @@ import Icon from '../../components/Icon.astro';
           event.preventDefault();
           day.classList.remove('is-drop-target');
           const jobId = event.dataTransfer?.getData('application/x-paintflow-job-id') || event.dataTransfer?.getData('text/plain');
-          const job = allJobs.find((item) => item.id === jobId);
-          if (!job || !day.dataset.calendarDay) return;
+          if (!jobId || !day.dataset.calendarDay) return;
 
           try {
-            await scheduleJobFromDuration(job.id, day.dataset.calendarDay, estimatedWorkDays(job));
+            await scheduleDroppedJob(jobId, day.dataset.calendarDay);
           } catch (error) {
             console.error(error);
             notify('Failed to schedule job.', 'error');
           }
         });
       });
+
+      wirePointerScheduleDrag();
     }
+
+    function wirePointerScheduleDrag() {
+      document.querySelectorAll('[data-schedule-draggable-job-id]').forEach((card) => {
+        card.addEventListener('pointerdown', (event) => {
+          if (event.pointerType === 'mouse' || event.button !== 0 || isInteractiveDragTarget(event.target)) return;
+          pointerScheduleDrag = {
+            card,
+            jobId: card.dataset.scheduleDraggableJobId || '',
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            active: false,
+            targetDay: null,
+          };
+          card.setPointerCapture?.(event.pointerId);
+        });
+
+        card.addEventListener('pointermove', (event) => {
+          if (!pointerScheduleDrag || pointerScheduleDrag.card !== card || pointerScheduleDrag.pointerId !== event.pointerId) return;
+          const distance = Math.hypot(event.clientX - pointerScheduleDrag.startX, event.clientY - pointerScheduleDrag.startY);
+          if (!pointerScheduleDrag.active && distance < 10) return;
+
+          event.preventDefault();
+          pointerScheduleDrag.active = true;
+          card.classList.add('is-dragging');
+          clearDropTargets();
+
+          const element = document.elementFromPoint(event.clientX, event.clientY);
+          const targetDay = element instanceof Element ? element.closest('[data-calendar-day]') : null;
+          if (targetDay) {
+            targetDay.classList.add('is-drop-target');
+            pointerScheduleDrag.targetDay = targetDay;
+          } else {
+            pointerScheduleDrag.targetDay = null;
+          }
+        });
+
+        card.addEventListener('pointerup', async (event) => {
+          if (!pointerScheduleDrag || pointerScheduleDrag.card !== card || pointerScheduleDrag.pointerId !== event.pointerId) return;
+          const drag = pointerScheduleDrag;
+          pointerScheduleDrag = null;
+          card.releasePointerCapture?.(event.pointerId);
+          card.classList.remove('is-dragging');
+          clearDropTargets();
+
+          if (!drag.active) return;
+          suppressScheduleClick = true;
+          window.setTimeout(() => {
+            suppressScheduleClick = false;
+          }, 0);
+
+          const dayKey = drag.targetDay?.dataset.calendarDay;
+          if (!drag.jobId || !dayKey) return;
+
+          try {
+            await scheduleDroppedJob(drag.jobId, dayKey);
+          } catch (error) {
+            console.error(error);
+            notify('Failed to schedule job.', 'error');
+          }
+        });
+
+        card.addEventListener('pointercancel', (event) => {
+          if (!pointerScheduleDrag || pointerScheduleDrag.card !== card || pointerScheduleDrag.pointerId !== event.pointerId) return;
+          pointerScheduleDrag = null;
+          card.releasePointerCapture?.(event.pointerId);
+          card.classList.remove('is-dragging');
+          clearDropTargets();
+        });
+      });
+    }
+
+    document.addEventListener('click', (event) => {
+      if (!suppressScheduleClick || !(event.target instanceof Element) || !event.target.closest('[data-schedule-draggable-job-id]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      suppressScheduleClick = false;
+    }, true);
 
     document.getElementById('sync-btn')?.addEventListener('click', () => {
       window.location.href = `${API_URL}/v1/calendar/connect`;
