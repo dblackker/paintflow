@@ -98,13 +98,14 @@ import UpsellCard from '../components/UpsellCard.astro';
         await apiJson('/v1/notifications/mark-read', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-          body: JSON.stringify({ allMessages: true }),
+          body: JSON.stringify({ allMessages: true, allNotifications: true }),
         });
         const auditRead = readAuditIds();
         notifications.filter((item) => item.source === 'audit').forEach((item) => auditRead.add(item.id));
         saveReadAuditIds(auditRead);
         notifications = notifications.map((item) => ({ ...item, read: true }));
         render();
+        window.dispatchEvent(new CustomEvent('paintflow:notifications-read'));
         window.showToast('Notifications marked read');
       } catch (err) {
         window.showToast(err.message || 'Failed to mark notifications read', 'error');
@@ -157,11 +158,27 @@ import UpsellCard from '../components/UpsellCard.astro';
     list.addEventListener('click', async (event) => {
       const row = event.target.closest('[data-id]');
       if (!row) return;
+      const href = row.getAttribute('href') || '/notifications';
+      const item = notifications.find((entry) => entry.id === row.dataset.id);
+      if (item && !item.read) {
+        event.preventDefault();
+        notifications = notifications.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry);
+        render();
+        window.dispatchEvent(new CustomEvent('paintflow:notifications-read', { detail: { items: [item] } }));
+      }
       if (row.dataset.source === 'audit') {
         const auditRead = readAuditIds();
         auditRead.add(row.dataset.id);
         saveReadAuditIds(auditRead);
+        if (item && !item.read) window.location.href = href;
         return;
+      }
+      if (row.dataset.source === 'notification') {
+        await apiJson('/v1/notifications/mark-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify({ notificationIds: [row.dataset.sourceId || row.dataset.id] }),
+        }).catch(() => {});
       }
       if (row.dataset.source === 'message') {
         await apiJson('/v1/notifications/mark-read', {
@@ -170,6 +187,7 @@ import UpsellCard from '../components/UpsellCard.astro';
           body: JSON.stringify({ messageIds: [row.dataset.sourceId] }),
         }).catch(() => {});
       }
+      if (item && !item.read) window.location.href = href;
     });
 
     document.getElementById('mark-all-read').addEventListener('click', markAllRead);

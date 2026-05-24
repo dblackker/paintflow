@@ -1,14 +1,10 @@
 ---
 import Base from '../../layouts/Base.astro';
-import DetailBackButton from '../../components/DetailBackButton.astro';
 ---
 
-<Base title="Customer Detail">
+<Base title="Customer Detail" backHref="/leads" backLabel="Back to leads">
   <div class="min-h-screen bg-gray-50">
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-      <div class="mb-4">
-        <DetailBackButton href="/leads" label="Back to leads" />
-      </div>
       <div id="customer-root" class="space-y-5">
         <div class="bg-white border rounded-lg p-8 text-center text-gray-500">Loading customer...</div>
       </div>

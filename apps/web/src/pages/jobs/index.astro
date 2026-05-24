@@ -21,6 +21,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
         display: flex;
         gap: 0.4rem;
         justify-content: space-between;
+        margin-top: 0.45rem;
         width: 100%;
       }
       .jobs-metrics {
@@ -50,7 +51,6 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
       <div class="mb-6">
         <h2 class="pf-page-title">Jobs</h2>
-        <p class="pf-page-copy mt-1">Manage active projects, crews, photos, time, and job costs.</p>
       </div>
 
       <div id="jobs-list" class="space-y-3 sm:space-y-4">
@@ -60,6 +60,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
 
   <BulkTimecardModal
     idPrefix="jobs-bulk"
+    showAddSegment={false}
     title="Crew Timecard"
     description="Fast end-of-day crew entry. The selected job is prefilled from the job card you opened."
   />
@@ -181,7 +182,32 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
         const container = document.getElementById('jobs-list');
         
         if (data.length === 0) {
-          container.innerHTML = '<div class="p-8 text-center text-gray-500">No jobs yet. Create an estimate first!</div>';
+          container.innerHTML = `
+            <div class="rounded-lg border bg-white p-5 sm:p-8">
+              <div class="mx-auto max-w-2xl text-center">
+                <p class="pf-section-title">No jobs yet</p>
+                <p class="pf-copy mt-2">Manage active projects, crews, photos, time, and job costs after a customer accepts a proposal. A signed estimate becomes production work here.</p>
+              </div>
+              <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                <div class="rounded-lg border bg-gray-50 p-3">
+                  <p class="pf-row-title">1. Send estimate</p>
+                  <p class="pf-copy mt-1">Build the scope and payment schedule from Estimates.</p>
+                </div>
+                <div class="rounded-lg border bg-gray-50 p-3">
+                  <p class="pf-row-title">2. Customer signs</p>
+                  <p class="pf-copy mt-1">Signing creates the job even if payment is due later.</p>
+                </div>
+                <div class="rounded-lg border bg-gray-50 p-3">
+                  <p class="pf-row-title">3. Run production</p>
+                  <p class="pf-copy mt-1">Schedule, log time, add photos, and track margin.</p>
+                </div>
+              </div>
+              <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                <a class="btn-primary justify-center" href="/estimates/production">Start estimate</a>
+                <a class="btn-secondary justify-center" href="/pipeline">View pipeline</a>
+              </div>
+            </div>
+          `;
           return;
         }
         

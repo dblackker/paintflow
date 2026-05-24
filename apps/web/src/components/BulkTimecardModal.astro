@@ -6,6 +6,7 @@ interface Props {
   title?: string;
   description?: string;
   showJob?: boolean;
+  showAddSegment?: boolean;
 }
 
 const {
@@ -13,6 +14,7 @@ const {
   title = 'Crew Timecard',
   description = 'Fast end-of-day entry for a whole crew. Default roles are crew lead, painter, and prep.',
   showJob = true,
+  showAddSegment = true,
 } = Astro.props;
 
 const ids = idPrefix === 'bulk'
@@ -99,7 +101,7 @@ const ids = idPrefix === 'bulk'
       <div id={ids.members} class="border border-[var(--pf-border)] rounded-xl overflow-hidden divide-y divide-[var(--pf-border)]"></div>
       <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
         <button type="button" id={ids.cancel} class="btn-secondary flex-1">Cancel</button>
-        {showJob && <button type="button" id={ids.addSegment} class="btn-secondary flex-1">Log + add job</button>}
+        {showJob && showAddSegment && <button type="button" id={ids.addSegment} class="btn-secondary flex-1">Log + add job</button>}
         <button type="submit" id={ids.submit} class="btn-primary flex-1">Log crew time</button>
       </div>
     </form>

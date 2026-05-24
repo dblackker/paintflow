@@ -7,7 +7,6 @@ import Base from '../../layouts/Base.astro';
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
         <h2 class="pf-page-title">Estimates</h2>
-        <p class="pf-page-copy mt-1">Track sent, accepted, and declined painting proposals.</p>
       </div>
       <a href="/estimates/production" class="btn-primary justify-center w-full sm:w-auto">Start estimate</a>
     </div>
@@ -167,7 +166,35 @@ import Base from '../../layouts/Base.astro';
       renderSummary(list);
       const container = document.getElementById('estimates-list');
       if (list.length === 0) {
-        container.innerHTML = '<div class="pf-copy bg-white border rounded-lg p-8 text-center">No estimates match this view.</div>';
+        const filtered = document.getElementById('search').value.trim() || document.getElementById('status-filter').value !== 'all';
+        container.innerHTML = filtered
+          ? '<div class="pf-copy bg-white border rounded-lg p-8 text-center">No estimates match this view.</div>'
+          : `
+            <div class="bg-white border rounded-lg p-5 sm:p-8">
+              <div class="mx-auto max-w-2xl text-center">
+                <p class="pf-section-title">Create your first painting proposal</p>
+                <p class="pf-copy mt-2">Track sent, accepted, and declined painting proposals once you have a customer ready for pricing.</p>
+              </div>
+              <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                <div class="rounded-lg border bg-gray-50 p-3">
+                  <p class="pf-row-title">1. Select a customer</p>
+                  <p class="pf-copy mt-1">Start from an existing lead or create one first.</p>
+                </div>
+                <div class="rounded-lg border bg-gray-50 p-3">
+                  <p class="pf-row-title">2. Build scope</p>
+                  <p class="pf-copy mt-1">Use production rates and paint products for accurate pricing.</p>
+                </div>
+                <div class="rounded-lg border bg-gray-50 p-3">
+                  <p class="pf-row-title">3. Send and follow up</p>
+                  <p class="pf-copy mt-1">The customer preview stays linked to the estimate activity.</p>
+                </div>
+              </div>
+              <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                <a class="btn-primary justify-center" href="/estimates/production">Start estimate</a>
+                <a class="btn-secondary justify-center" href="/leads?new=1">Add customer</a>
+              </div>
+            </div>
+          `;
         return;
       }
 

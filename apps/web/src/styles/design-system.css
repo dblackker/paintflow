@@ -88,6 +88,17 @@ body {
   overflow-x: hidden;
 }
 
+body.pf-modal-open {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.detail-back-button {
+  flex: 0 0 auto;
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
 .pf-kicker {
   color: var(--pf-primary);
   font-size: 0.75rem;

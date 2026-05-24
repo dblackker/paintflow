@@ -430,6 +430,16 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
       return name || [leadName || 'Customer', street].filter(Boolean).join(' - ');
     };
 
+    function syncModalScrollLock() {
+      const hasOpenModal = Array.from(document.querySelectorAll('.mobile-sheet, .fixed.inset-0')).some((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        return !node.classList.contains('hidden') && getComputedStyle(node).display !== 'none';
+      });
+      document.body.classList.toggle('pf-modal-open', hasOpenModal);
+    }
+    new MutationObserver(syncModalScrollLock).observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'style'] });
+    syncModalScrollLock();
+
     function customerProfileLink(job) {
       if (!job.leadId) return '<p class="text-gray-600">No customer linked</p>';
       const name = job.leadName || 'Customer';

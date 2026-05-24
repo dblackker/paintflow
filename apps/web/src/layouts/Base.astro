@@ -10,9 +10,11 @@ import '../styles/design-system.css';
 
 interface Props {
   title?: string;
+  backHref?: string;
+  backLabel?: string;
 }
 
-const { title = 'PaintFlow' } = Astro.props;
+const { title = 'PaintFlow', backHref = '', backLabel = 'Back' } = Astro.props;
 const shellTitle = title.replace(/\s+-\s+PaintFlow$/i, '');
 
 const navSections = [
@@ -149,9 +151,15 @@ const navSections = [
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
         <div class="flex items-center">
-          <button id="mobile-menu" type="button" class="pf-mobile-menu-button" aria-label="Open navigation" aria-controls="mobile-nav" aria-expanded="false" data-owner-nav>
-            <Icon name="menu" />
-          </button>
+          {backHref ? (
+            <a href={backHref} class="detail-back-button btn-icon btn-icon-tonal" aria-label={backLabel} title={backLabel}>
+              <Icon name="chevron-left" />
+            </a>
+          ) : (
+            <button id="mobile-menu" type="button" class="pf-mobile-menu-button" aria-label="Open navigation" aria-controls="mobile-nav" aria-expanded="false" data-owner-nav>
+              <Icon name="menu" />
+            </button>
+          )}
         </div>
         <div class="min-w-0">
           <p id="app-bar-title" class="truncate text-lg font-semibold text-gray-950 sm:text-xl">{shellTitle}</p>
@@ -298,7 +306,7 @@ const navSections = [
       }
 
       preview.innerHTML = items.map((item) => `
-        <a href="${escapeNotificationHtml(item.href || '/notifications')}" class="block border-b p-3 last:border-b-0 hover:bg-gray-50 ${item.read ? '' : 'bg-blue-50'}">
+        <a href="${escapeNotificationHtml(item.href || '/notifications')}" class="block border-b p-3 last:border-b-0 hover:bg-gray-50 ${item.read ? '' : 'bg-blue-50'}" data-notification-preview-id="${escapeNotificationHtml(item.id)}" data-notification-preview-source="${escapeNotificationHtml(item.source)}" data-notification-preview-source-id="${escapeNotificationHtml(item.sourceId)}">
           <div class="flex items-start gap-2">
             <span class="mt-1 h-2 w-2 shrink-0 rounded-full ${item.read ? 'bg-gray-300' : 'bg-blue-600'}"></span>
             <span class="min-w-0">
@@ -309,6 +317,33 @@ const navSections = [
           </div>
         </a>
       `).join('');
+    }
+
+    async function markNotificationsRead(items = []) {
+      const list = Array.isArray(items) ? items : [items];
+      if (!list.length) return;
+      const persistentIds = list.filter((item) => item.source === 'notification').map((item) => item.sourceId || item.id);
+      const messageIds = list.filter((item) => item.source === 'message').map((item) => item.sourceId);
+      const auditIds = list.filter((item) => item.source === 'audit').map((item) => item.id);
+      const auditRead = readAuditNotifications();
+      auditIds.forEach((id) => auditRead.add(id));
+      if (auditIds.length) {
+        localStorage.setItem(notificationState.auditReadKey, JSON.stringify(Array.from(auditRead).slice(-500)));
+      }
+      notificationState.items = notificationState.items.map((item) => list.some((readItem) => readItem.id === item.id) ? { ...item, read: true } : item);
+      renderNotificationsPreview();
+      const body = {};
+      if (persistentIds.length) body.notificationIds = persistentIds;
+      if (messageIds.length) body.messageIds = messageIds;
+      if (Object.keys(body).length) {
+        await fetch(`${API_URL}/v1/notifications/mark-read`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+          body: JSON.stringify(body),
+        }).catch(() => {});
+      }
+      window.dispatchEvent(new CustomEvent('paintflow:notifications-updated'));
     }
 
     async function loadNotificationsForNav({ notify = false } = {}) {
@@ -480,6 +515,18 @@ const navSections = [
       button?.setAttribute('aria-expanded', String(menu && !menu.classList.contains('hidden')));
     });
 
+    document.getElementById('notifications-preview')?.addEventListener('click', (event) => {
+      const row = event.target.closest?.('[data-notification-preview-id]');
+      if (!row) return;
+      const item = notificationState.items.find((entry) => entry.id === row.dataset.notificationPreviewId);
+      if (!item || item.read) return;
+      event.preventDefault();
+      const href = row.getAttribute('href') || '/notifications';
+      markNotificationsRead(item).finally(() => {
+        window.location.href = href;
+      });
+    });
+
     document.addEventListener('click', (event) => {
       const menu = document.getElementById('notifications-menu');
       const button = document.getElementById('notifications-button');
@@ -490,6 +537,20 @@ const navSections = [
     });
 
     document.getElementById('notifications-enable')?.addEventListener('click', enableBrowserNotifications);
+    window.addEventListener('paintflow:notifications-read', (event) => {
+      if (event.detail?.items) markNotificationsRead(event.detail.items);
+      else loadNotificationsForNav();
+    });
+
+    function syncModalScrollLock() {
+      const hasOpenModal = Array.from(document.querySelectorAll('.mobile-sheet, [role="dialog"], .fixed.inset-0')).some((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        return !node.classList.contains('hidden') && getComputedStyle(node).display !== 'none';
+      });
+      document.body.classList.toggle('pf-modal-open', hasOpenModal);
+    }
+    new MutationObserver(syncModalScrollLock).observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class', 'style'] });
+    syncModalScrollLock();
 
     document.querySelectorAll('[data-logout]').forEach((button) => {
       button.addEventListener('click', async () => {
