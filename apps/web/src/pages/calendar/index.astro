@@ -99,6 +99,7 @@ import Icon from '../../components/Icon.astro';
     }
 
     .schedule-job-card a,
+    .schedule-job-card button,
     .schedule-backlog-card a,
     .schedule-backlog-card input,
     .schedule-backlog-card select,
@@ -462,6 +463,20 @@ import Icon from '../../components/Icon.astro';
       await scheduleJob(job.id, scheduledStartAt, scheduledEndAt, message);
     }
 
+    async function unscheduleJob(jobId) {
+      const job = allJobs.find((item) => item.id === jobId);
+      if (!job) return;
+      const confirmed = window.confirm(`Remove ${job.name || 'this job'} from the calendar? It will move back to Needs scheduling.`);
+      if (!confirmed) return;
+
+      await api(`/v1/jobs/${job.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ scheduledStartAt: null, scheduledEndAt: null }),
+      });
+      notify(`${job.name || 'Job'} moved back to Needs scheduling.`);
+      await loadCalendar();
+    }
+
     function autoPopulateEndDate(form) {
       const startInput = form.querySelector('input[name="scheduledStartDate"]');
       const endInput = form.querySelector('input[name="scheduledEndDate"]');
@@ -581,6 +596,7 @@ import Icon from '../../components/Icon.astro';
     function jobCard(job) {
       const jobAddress = address(job);
       const scheduleRange = formatScheduleRange(job);
+      const canUnschedule = job.status === 'scheduled';
       return `
         <div class="schedule-job-card" draggable="true" data-schedule-draggable-job-id="${escapeHtml(job.id)}" aria-label="Drag to reschedule ${escapeHtml(job.name || 'job')}">
           <div class="flex items-start justify-between gap-2">
@@ -589,7 +605,10 @@ import Icon from '../../components/Icon.astro';
           </div>
           <p class="mt-1 text-[0.72rem] font-medium text-gray-700">${escapeHtml(scheduleRange)}</p>
           ${jobAddress ? `<p class="mt-1 line-clamp-2 text-[0.72rem] text-gray-600">${escapeHtml(jobAddress)}</p>` : ''}
-          <a href="/jobs/${escapeHtml(job.id)}" class="mt-2 inline-flex text-[0.72rem] font-semibold text-blue-700 hover:underline">Open job</a>
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <a href="/jobs/${escapeHtml(job.id)}" class="inline-flex text-[0.72rem] font-semibold text-blue-700 hover:underline">Open job</a>
+            ${canUnschedule ? `<button type="button" class="btn-text btn-sm px-0 text-[0.72rem]" data-unschedule-job-id="${escapeHtml(job.id)}">Unschedule</button>` : ''}
+          </div>
         </div>
       `;
     }
@@ -602,9 +621,10 @@ import Icon from '../../components/Icon.astro';
 
       if (!jobs.length) {
         return `
-          <div class="schedule-quick-form mb-3 text-xs text-gray-600">
-            <p class="font-medium text-gray-800">No jobs need scheduling.</p>
-            <p class="mt-1">Accepted jobs without dates will appear in this list.</p>
+          <div class="schedule-quick-form mb-3 grid gap-2 text-xs text-gray-600">
+            <p class="font-medium text-gray-800">No unscheduled jobs right now.</p>
+            <p>When an estimate becomes a job without work dates, it appears in Needs scheduling. Drag it onto a day or use this quick add panel.</p>
+            <p>To try the flow with existing data, use Unschedule on a scheduled job card and it will move back into Needs scheduling.</p>
           </div>
         `;
       }
@@ -695,6 +715,20 @@ import Icon from '../../components/Icon.astro';
         card.addEventListener('dragend', () => {
           card.classList.remove('is-dragging');
           clearDropTargets();
+        });
+      });
+
+      document.querySelectorAll('[data-unschedule-job-id]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            await unscheduleJob(button.dataset.unscheduleJobId);
+          } catch (error) {
+            console.error(error);
+            notify('Failed to unschedule job.', 'error');
+          } finally {
+            if (button.isConnected) button.disabled = false;
+          }
         });
       });
 
