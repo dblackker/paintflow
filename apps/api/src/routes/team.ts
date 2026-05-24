@@ -340,12 +340,21 @@ teamApp.patch('/punch/review/:id', async (c) => {
     where: and(eq(timePunchSessions.id, id), eq(timePunchSessions.orgId, orgId)),
   });
   if (!session) return c.json({ error: 'Punch session not found' }, 404);
-  if (parsed.data.reviewStatus === 'approved' && !session.jobId) {
+  const assignedJobId = parsed.data.jobId || session.jobId;
+  if (assignedJobId) {
+    const job = await db.query.jobs.findFirst({ where: and(eq(jobs.id, assignedJobId), eq(jobs.orgId, orgId)) });
+    if (!job) return c.json({ error: 'Job not found' }, 404);
+  }
+  if (parsed.data.reviewStatus === 'approved' && !assignedJobId) {
     return c.json({ error: 'Assign a job before approving this punch' }, 400);
+  }
+  if (parsed.data.reviewStatus === 'approved' && !session.endedAtActual) {
+    return c.json({ error: 'Crew member must clock out before this punch can be approved' }, 400);
   }
 
   const [updated] = await db.update(timePunchSessions)
     .set({
+      jobId: assignedJobId,
       reviewRequired: false,
       status: parsed.data.reviewStatus === 'approved' ? 'completed' : 'rejected',
       crewNote: parsed.data.note || session.crewNote,
@@ -355,16 +364,37 @@ teamApp.patch('/punch/review/:id', async (c) => {
     .returning();
 
   if (session.timeEntryId) {
+    const existingEntry = await db.query.timeEntries.findFirst({
+      where: and(eq(timeEntries.id, session.timeEntryId), eq(timeEntries.orgId, orgId)),
+    });
     await db.update(timeEntries)
       .set({
+        jobId: assignedJobId,
         reviewStatus: parsed.data.reviewStatus,
         reviewReason: parsed.data.note || session.reviewReason,
       })
       .where(and(eq(timeEntries.id, session.timeEntryId), eq(timeEntries.orgId, orgId)));
+
+    if (parsed.data.reviewStatus === 'approved' && assignedJobId && existingEntry && !existingEntry.jobId) {
+      const member = await db.query.teamMembers.findFirst({
+        where: and(eq(teamMembers.id, existingEntry.teamMemberId), eq(teamMembers.orgId, orgId)),
+      });
+      await createLaborCostForEntry(
+        db,
+        orgId,
+        assignedJobId,
+        member?.name || 'Crew member',
+        existingEntry.description || 'Punch clock labor',
+        Number(existingEntry.hours || 0),
+        Number(existingEntry.hourlyRate || 0),
+        Number(existingEntry.totalCost || 0),
+      );
+    }
   }
 
   await insertPunchEvent(c, id, parsed.data.reviewStatus === 'approved' ? 'approved' : 'rejected', undefined, {
     note: parsed.data.note,
+    jobId: assignedJobId,
   });
 
   return c.json({ data: updated });
@@ -420,6 +450,7 @@ const punchOutSchema = locationSchema.extend({
 
 const reviewPunchSchema = z.object({
   reviewStatus: z.enum(['approved', 'rejected']),
+  jobId: z.string().uuid().optional().nullable(),
   note: z.string().trim().max(500).optional(),
 });
 

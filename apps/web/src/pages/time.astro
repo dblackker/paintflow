@@ -481,6 +481,12 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       return `<option value="">No job selected - flag for review</option>${options}`;
     }
 
+    function reviewJobOptions(selectedId = '') {
+      return '<option value="">Assign job...</option>' + sortJobsByRecentTime(jobs)
+        .map((job) => `<option value="${job.id}" ${job.id === selectedId ? 'selected' : ''}>${escapeHtml(jobOptionLabel(job))}</option>`)
+        .join('');
+    }
+
     function punchMemberOptions() {
       return (punchStatus?.members || [])
         .map((member) => `<option value="${member.id}" ${member.id === punchStatus?.member?.id ? 'selected' : ''}>${escapeHtml(member.name)}</option>`)
@@ -933,7 +939,14 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                 <div>
                   <p class="font-semibold">${escapeHtml(row.teamMemberName)} • ${escapeHtml(row.jobName)}</p>
                   <p class="text-sm text-gray-600">${escapeHtml(row.reviewLabel)} • Started ${new Date(row.startedAtActual).toLocaleString()}</p>
-                  ${!row.jobId ? '<p class="text-xs font-medium text-red-700">Assign a job from the timesheet row before approval.</p>' : ''}
+                  ${!row.jobId ? `
+                    <label class="block mt-2 max-w-xl">
+                      <span class="form-label">Assign job before approval</span>
+                      <select class="input" data-review-job="${row.id}">
+                        ${reviewJobOptions(row.jobId)}
+                      </select>
+                    </label>
+                  ` : ''}
                   ${row.endedAtActual ? `<p class="text-xs text-gray-500">Ended ${new Date(row.endedAtActual).toLocaleString()}</p>` : '<p class="text-xs text-red-700">Still needs clock-out</p>'}
                   <p class="mt-1 flex flex-wrap gap-3">
                     ${mapLink(row.startLatitude, row.startLongitude, 'Start GPS')}
@@ -941,7 +954,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                   </p>
                 </div>
                 <div class="flex gap-2 justify-end">
-                  <button class="btn-secondary btn-sm" data-review-punch="${row.id}" data-review-status="approved" ${!row.jobId ? 'disabled title="Assign a job before approval"' : ''}>Approve</button>
+                  <button class="btn-secondary btn-sm" data-review-punch="${row.id}" data-review-status="approved" ${!row.endedAtActual ? 'disabled title="Crew member must clock out before approval"' : ''}>Approve</button>
                   <button class="btn-secondary btn-sm" data-review-punch="${row.id}" data-review-status="rejected">Reject</button>
                 </div>
               </article>
@@ -1046,9 +1059,17 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     }
 
     async function reviewPunch(id, reviewStatus) {
+      const jobId = document.querySelector(`[data-review-job="${id}"]`)?.value || undefined;
+      if (reviewStatus === 'approved') {
+        const row = punchStatus?.reviewQueue?.find((item) => item.id === id);
+        if (!row?.jobId && !jobId) {
+          window.showToast?.('Assign a job before approving this punch', 'error');
+          return;
+        }
+      }
       await api(`/v1/team/punch/review/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ reviewStatus }),
+        body: JSON.stringify({ reviewStatus, jobId }),
       });
       window.showToast?.(reviewStatus === 'approved' ? 'Punch approved' : 'Punch rejected', 'success');
       await refreshPunchStatus();

@@ -373,6 +373,76 @@ async function seed(db: Db) {
       occurredAt: session.endedAtActual!,
     },
   ])));
+
+  const missingJobMember = membersByKey.get('devon')!;
+  const missingJobRate = burdenedRate(goldenSeed.teamMembers.find((member) => member.key === 'devon')!);
+  const missingJobDate = daysAgo(0);
+  const [missingJobEntry] = await db.insert(timeEntries).values({
+    orgId: org.id,
+    jobId: null,
+    teamMemberId: missingJobMember.id,
+    hours: '2.00',
+    date: sameDayAt(missingJobDate, 8),
+    description: 'Clocked in before selecting the job',
+    hourlyRate: dollars(missingJobRate),
+    totalCost: dollars(2 * missingJobRate),
+    source: 'punch_clock',
+    reviewStatus: 'flagged',
+    reviewReason: 'missing_job_assignment',
+    actualStartAt: sameDayAt(missingJobDate, 8),
+    actualEndAt: sameDayAt(missingJobDate, 10),
+    roundedStartAt: sameDayAt(missingJobDate, 8),
+    roundedEndAt: sameDayAt(missingJobDate, 10),
+    startLatitude: '47.6245000',
+    startLongitude: '-122.3569000',
+    startAccuracyMeters: '24.00',
+    endLatitude: '47.6251000',
+    endLongitude: '-122.3561000',
+    endAccuracyMeters: '27.00',
+  }).returning();
+  const [missingJobSession] = await db.insert(timePunchSessions).values({
+    orgId: org.id,
+    jobId: null,
+    teamMemberId: missingJobMember.id,
+    timeEntryId: missingJobEntry.id,
+    status: 'manual_override',
+    startedAtActual: missingJobEntry.actualStartAt!,
+    endedAtActual: missingJobEntry.actualEndAt,
+    startedAtRounded: missingJobEntry.roundedStartAt!,
+    endedAtRounded: missingJobEntry.roundedEndAt,
+    roundingIncrementMinutes: 15,
+    startLatitude: missingJobEntry.startLatitude,
+    startLongitude: missingJobEntry.startLongitude,
+    startAccuracyMeters: missingJobEntry.startAccuracyMeters,
+    endLatitude: missingJobEntry.endLatitude,
+    endLongitude: missingJobEntry.endLongitude,
+    endAccuracyMeters: missingJobEntry.endAccuracyMeters,
+    reviewRequired: true,
+    reviewReason: 'missing_job_assignment',
+    crewNote: 'Crew forgot to choose the job from the field.',
+  }).returning();
+  await db.insert(timePunchEvents).values([
+    {
+      orgId: org.id,
+      punchSessionId: missingJobSession.id,
+      eventType: 'forgot_clock_in',
+      latitude: missingJobEntry.startLatitude,
+      longitude: missingJobEntry.startLongitude,
+      accuracyMeters: missingJobEntry.startAccuracyMeters,
+      occurredAt: missingJobEntry.actualStartAt!,
+      metadata: { reviewReason: 'missing_job_assignment' },
+    },
+    {
+      orgId: org.id,
+      punchSessionId: missingJobSession.id,
+      eventType: 'manual_clock_out',
+      latitude: missingJobEntry.endLatitude,
+      longitude: missingJobEntry.endLongitude,
+      accuracyMeters: missingJobEntry.endAccuracyMeters,
+      occurredAt: missingJobEntry.actualEndAt!,
+      metadata: { reviewReason: 'missing_job_assignment' },
+    },
+  ]);
   await db.insert(jobCosts).values(insertedTimeRows.map((row) => ({
     orgId: org.id,
     jobId: row.jobId,
