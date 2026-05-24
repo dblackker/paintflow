@@ -44,7 +44,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       border: 1px solid var(--pf-border);
       border-radius: var(--pf-radius-md);
       color: var(--pf-text-muted);
-      font-size: 0.78rem;
+      font-size: 0.8125rem;
+      line-height: 1.4;
       margin-top: 0.15rem;
       padding: 0.55rem 0.65rem;
     }
@@ -72,18 +73,77 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     :global(.time-audit-label) {
       color: var(--pf-text-subtle);
       display: block;
-      font-size: 0.68rem;
+      font-size: 0.6875rem;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
+    :global(.time-kicker) {
+      color: var(--pf-text-muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.055em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    :global(.time-section-title) {
+      color: var(--pf-text);
+      font-size: 1rem;
+      font-weight: 650;
+      line-height: 1.3;
+    }
+    :global(.time-copy) {
+      color: var(--pf-text-muted);
+      font-size: 0.875rem;
+      line-height: 1.45;
+    }
+    :global(.time-meta) {
+      color: var(--pf-text-muted);
+      font-size: 0.8125rem;
+      line-height: 1.35;
+    }
+    :global(.time-primary-text) {
+      color: var(--pf-text);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    :global(.time-row-title) {
+      color: var(--pf-text);
+      font-size: 0.875rem;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    :global(.time-table-heading) {
+      color: var(--pf-text-muted);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.055em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    :global(.time-metric-label) {
+      color: var(--pf-text-muted);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.055em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    :global(.time-metric-value) {
+      color: var(--pf-text);
+      font-size: 1.45rem;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-top: 0.25rem;
+    }
     :global(.time-clock-status) {
       border-radius: var(--pf-radius-full);
       display: inline-flex;
-      font-size: 0.85rem;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      padding: 0.45rem 0.8rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.055em;
+      padding: 0.4rem 0.7rem;
       text-transform: uppercase;
     }
     :global(.time-clock-status-in) {
@@ -254,9 +314,9 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
       <div>
-        <p class="text-sm font-semibold text-brand-700">Field Operations</p>
+        <p class="time-kicker text-brand-700">Field operations</p>
         <h1 class="text-2xl sm:text-3xl font-bold">Time Tracking</h1>
-        <p id="time-page-copy" class="text-gray-600 max-w-2xl">Review daily timecards, drill into individual entries, and correct job hours without touching pay rates.</p>
+        <p id="time-page-copy" class="time-copy max-w-2xl mt-1">Review daily timecards, drill into individual entries, and correct job hours without touching pay rates.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
         <button id="bulk-time-btn" class="btn-primary w-full sm:w-auto hidden">Log crew time</button>
@@ -266,10 +326,10 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     <section id="punch-clock" class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6">
       <div class="grid gap-3">
         <div>
-          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Mobile time clock</p>
-          <p id="punch-status-copy" class="text-sm text-gray-600 mt-1">Loading punch status...</p>
+          <p class="time-kicker">Mobile time clock</p>
+          <p id="punch-status-copy" class="time-copy mt-1">Loading punch status...</p>
         </div>
-        <div id="punch-current" class="text-sm max-w-xl"></div>
+        <div id="punch-current" class="max-w-xl"></div>
       </div>
       <div id="punch-controls" class="mt-4 grid gap-3"></div>
       <div id="punch-review" class="mt-4 hidden"></div>
@@ -278,15 +338,15 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     <section id="time-map-panel" class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6 hidden">
       <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
         <div>
-          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">GPS punch map</p>
-          <h2 class="text-lg font-semibold mt-1">Crew location snapshot</h2>
-          <p class="text-sm text-gray-600 mt-1">Shows GPS points captured at clock-in and clock-out. PaintFlow does not show off-clock locations.</p>
+          <p class="time-kicker">GPS punch map</p>
+          <h2 class="time-section-title mt-1">Crew location snapshot</h2>
+          <p class="time-copy mt-1">Shows GPS points captured at clock-in and clock-out. PaintFlow does not show off-clock locations.</p>
         </div>
         <div class="flex flex-col sm:flex-row lg:flex-col gap-2 w-full lg:w-auto lg:min-w-[18rem]">
           <button id="toggle-map-panel" class="btn-secondary btn-sm w-full sm:w-auto lg:self-end" aria-expanded="true">Hide map</button>
           <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full">
             <button id="prev-map-day" class="btn-icon btn-icon-outlined" aria-label="Previous day"><Icon name="chevron-left" /></button>
-            <span id="map-day-label" class="text-center font-semibold text-sm"></span>
+            <span id="map-day-label" class="text-center time-row-title"></span>
             <button id="next-map-day" class="btn-icon btn-icon-outlined" aria-label="Next day"><Icon name="chevron-right" /></button>
           </div>
         </div>
@@ -297,7 +357,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           <div id="punch-map" class="rounded-xl border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] overflow-hidden"></div>
           <div>
             <div class="flex items-center justify-between gap-3 mb-2">
-              <h3 class="font-semibold text-sm">Punches</h3>
+              <h3 class="time-row-title">Punches</h3>
               <button id="refresh-map-btn" class="btn-text btn-sm">Refresh</button>
             </div>
             <div id="map-events" class="space-y-2 max-h-[22rem] overflow-y-auto pr-1"></div>
@@ -310,7 +370,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full lg:w-auto lg:min-w-[22rem]">
           <button id="prev-week" class="btn-icon btn-icon-outlined" aria-label="Previous week"><Icon name="chevron-left" /></button>
-          <span id="week-range" class="text-center font-semibold text-sm sm:text-base"></span>
+          <span id="week-range" class="text-center time-row-title"></span>
           <button id="next-week" class="btn-icon btn-icon-outlined" aria-label="Next week"><Icon name="chevron-right" /></button>
         </div>
         <div id="time-view-controls" class="pf-segmented-group justify-center lg:justify-end" aria-label="Time grouping">
@@ -325,13 +385,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
     <div id="loading" class="text-center py-12">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-      <p class="mt-4 text-gray-600">Loading timesheet...</p>
+        <p class="time-copy mt-4">Loading timesheet...</p>
     </div>
 
     <div id="timesheet" class="space-y-4 hidden"></div>
 
     <div id="empty" class="hidden surface-panel p-12 text-center">
-      <p class="text-gray-500">No time entries this week</p>
+      <p class="time-copy">No time entries this week</p>
       <button id="empty-log-time-btn" onclick="document.getElementById('bulk-time-btn')?.click()" class="btn-primary btn-sm mt-4">Log crew time</button>
     </div>
   </main>
@@ -340,8 +400,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     <div class="bg-white rounded-xl max-w-lg w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h2 id="modal-title" class="text-lg font-semibold">Log Time</h2>
-          <p class="text-sm text-gray-600">Labor cost is calculated from the team member's burdened rate.</p>
+          <h2 id="modal-title" class="time-section-title">Log Time</h2>
+          <p class="time-copy">Labor cost is calculated from the team member's burdened rate.</p>
         </div>
         <button type="button" id="close-modal-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
       </div>
@@ -387,8 +447,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h2 class="text-lg font-semibold">Forgot clock-in</h2>
-          <p class="text-sm text-gray-600">Enter the actual start time and a note for lead review.</p>
+          <h2 class="time-section-title">Forgot clock-in</h2>
+          <p class="time-copy">Enter the actual start time and a note for lead review.</p>
         </div>
         <button type="button" id="close-forgot-clock-in-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
       </div>
@@ -413,8 +473,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     <div class="bg-white rounded-xl max-w-md w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h2 class="text-lg font-semibold">Change job</h2>
-          <p id="switch-job-current-copy" class="text-sm text-gray-600">Move the active clock session to another job.</p>
+          <h2 class="time-section-title">Change job</h2>
+          <p id="switch-job-current-copy" class="time-copy">Move the active clock session to another job.</p>
         </div>
         <button type="button" id="close-switch-job-btn" class="btn-icon" aria-label="Close"><Icon name="close" /></button>
       </div>
@@ -423,7 +483,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           <span class="form-label">New job</span>
           <select id="switch-job" class="input"></select>
         </label>
-        <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3 text-sm text-gray-600">
+        <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3 time-copy">
           This closes the current punch and starts a new punch on the selected job with GPS captured at the switch.
         </div>
         <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
@@ -564,7 +624,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         renderMapVisibility();
         if (canManageTime && !isMapCollapsed) loadMapData();
       } catch (e) {
-        document.getElementById('loading').innerHTML = `<p class="text-red-600">${escapeHtml(e.message || 'Failed to load')}</p>`;
+        document.getElementById('loading').innerHTML = `<p class="time-copy text-red-600">${escapeHtml(e.message || 'Failed to load')}</p>`;
       }
     }
 
@@ -839,13 +899,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     async function loadMapData() {
       if (!canManageTime) return;
       document.getElementById('map-day-label').textContent = localDateLabel(currentMapDate);
-      document.getElementById('map-events').innerHTML = '<p class="text-sm text-gray-500 p-3">Loading punch locations...</p>';
+      document.getElementById('map-events').innerHTML = '<p class="time-copy p-3">Loading punch locations...</p>';
       const { start, end } = localDayBounds(currentMapDate);
       try {
         const payload = await api(`/v1/team/time/map?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
         await renderPunchMap(payload.data || { events: [], summary: {} });
       } catch (error) {
-        document.getElementById('map-events').innerHTML = `<p class="text-sm text-red-600 p-3">${escapeHtml(error.message || 'Failed to load map')}</p>`;
+        document.getElementById('map-events').innerHTML = `<p class="time-copy text-red-600 p-3">${escapeHtml(error.message || 'Failed to load map')}</p>`;
       }
     }
 
@@ -861,14 +921,14 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         ['Jobs', summary.jobs || 0],
       ].map(([label, value]) => `
         <div class="rounded-lg border border-[var(--pf-border)] bg-white px-3 py-2">
-          <p class="text-xs text-gray-500">${label}</p>
-          <p class="text-lg font-semibold">${value}</p>
+          <p class="time-metric-label">${label}</p>
+          <p class="time-metric-value">${value}</p>
         </div>
       `).join('');
 
       punchMapLayer.clearLayers();
       if (!events.length) {
-        document.getElementById('map-events').innerHTML = '<p class="text-sm text-gray-500 p-3">No GPS punch locations for this day.</p>';
+        document.getElementById('map-events').innerHTML = '<p class="time-copy p-3">No GPS punch locations for this day.</p>';
         punchMap.setView([39.8283, -98.5795], 4);
         return;
       }
@@ -896,13 +956,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           <button type="button" class="w-full rounded-lg border border-[var(--pf-border)] bg-white p-3 text-left hover:bg-[var(--pf-surface-muted)]" data-map-event="${event.id}">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="font-medium text-sm truncate">${escapeHtml(event.teamMemberName)}</p>
-                <p class="text-xs text-gray-600">${escapeHtml(punchTypeLabel(event.type))} - ${escapeHtml(time)}</p>
+                <p class="time-row-title truncate">${escapeHtml(event.teamMemberName)}</p>
+                <p class="time-meta">${escapeHtml(punchTypeLabel(event.type))} - ${escapeHtml(time)}</p>
               </div>
               ${event.reviewRequired ? '<span class="chip pf-status-warning">Review</span>' : ''}
             </div>
-            <p class="text-xs text-gray-600 mt-1 truncate">${escapeHtml(event.jobName || 'Unassigned job')}</p>
-            ${address ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(address)}</p>` : ''}
+            <p class="time-meta mt-1 truncate">${escapeHtml(event.jobName || 'Unassigned job')}</p>
+            ${address ? `<p class="time-meta truncate">${escapeHtml(address)}</p>` : ''}
           </button>
         `;
       }).join('');
@@ -928,7 +988,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         copy.classList.remove('hidden');
         copy.textContent = status.memberResolutionError;
         current.innerHTML = '';
-        controls.innerHTML = '<p class="text-sm text-gray-600">Ask an owner to link your login email to an active crew member on the Team page.</p>';
+        controls.innerHTML = '<p class="time-copy">Ask an owner to link your login email to an active crew member on the Team page.</p>';
         review.classList.add('hidden');
         return;
       }
@@ -937,9 +997,9 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         copy.textContent = '';
         current.innerHTML = `
           <span class="time-clock-status time-clock-status-in">Clocked in</span>
-          <p class="font-semibold mt-1">${escapeHtml(active.jobName || 'Job')}</p>
-          <p class="text-gray-600">Started ${new Date(active.startedAtActual).toLocaleString()} • ${activePunchHours(active)} hrs</p>
-          ${active.status === 'missed_clock_out' ? `<p class="mt-1 inline-flex items-center gap-2 text-red-700 font-medium">${warningInfo('This shift is past the configured maximum length. If the actual end time was earlier, use the forgotten clock-out option so a lead can review it.')} Long shift</p>` : ''}
+          <p class="time-primary-text mt-2">${escapeHtml(active.jobName || 'Job')}</p>
+          <p class="time-meta">Started ${new Date(active.startedAtActual).toLocaleString()} - ${activePunchHours(active)} hrs</p>
+          ${active.status === 'missed_clock_out' ? `<p class="time-meta mt-1 inline-flex items-center gap-2 text-red-700">${warningInfo('This shift is past the configured maximum length. If the actual end time was earlier, use the forgotten clock-out option so a lead can review it.')} Long shift</p>` : ''}
         `;
         controls.innerHTML = `
           <div class="grid punch-actions gap-3">
@@ -948,7 +1008,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
               <button type="button" id="open-switch-job-btn" class="btn-text btn-sm w-full sm:w-auto">Change job</button>
             </div>
             <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+              <label class="inline-flex items-center gap-2 time-copy">
                 <input id="forgot-clock-out-toggle" type="checkbox" class="h-4 w-4">
                 <span>I forgot to clock out earlier</span>
               </label>
@@ -1067,7 +1127,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       if (hiddenSelected) {
         parts.push(`${hiddenSelected} hidden by filters`);
       }
-      summary.textContent = parts.join(' • ');
+      summary.textContent = parts.join(' - ');
     }
 
     function renderBulkRoleFilters() {
@@ -1080,7 +1140,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             ${escapeHtml(roleLabels[role] || role)}
           </button>
         `).join('')
-        : '<p class="text-sm text-gray-500">No active crew members available.</p>';
+        : '<p class="time-copy">No active crew members available.</p>';
       container.querySelectorAll('[data-bulk-role]').forEach((filter) => {
         filter.addEventListener('click', () => {
           const role = filter.dataset.bulkRole;
@@ -1097,7 +1157,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       if (!container) return;
       const visibleMembers = members.filter((member) => bulkRoleFilters.has(member.role || 'crew'));
       if (!visibleMembers.length) {
-        container.innerHTML = '<div class="p-4 text-sm text-gray-500">No crew match the selected roles. Add another role filter to include more people.</div>';
+        container.innerHTML = '<div class="p-4 time-copy">No crew match the selected roles. Add another role filter to include more people.</div>';
         updateBulkSelectionAction();
         updateBulkSummary();
         return;
@@ -1107,8 +1167,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           <span class="flex items-center gap-3 min-w-0">
             <input type="checkbox" data-bulk-member="${member.id}" class="h-5 w-5" ${bulkSelection.get(member.id) ? 'checked' : ''}>
             <span class="min-w-0">
-              <span class="block font-medium truncate">${escapeHtml(member.name)}</span>
-              <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
+              <span class="block time-row-title truncate">${escapeHtml(member.name)}</span>
+              <span class="block time-meta">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
             </span>
           </span>
           <input type="number" data-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" enterkeyhint="done" aria-label="Hours for ${escapeHtml(member.name)}" class="input text-right" value="${bulkHours.get(member.id) ?? getBulkDefaultHours()}">
@@ -1211,8 +1271,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         <div class="border-t border-[var(--pf-border)] pt-4">
           <div class="flex items-center justify-between gap-3 mb-3">
             <div>
-              <h3 class="font-semibold">Time approvals</h3>
-              <p class="text-sm text-gray-600">Crew leads review missed punches, late clock-outs, long shifts, missing job assignments, and manual punch overrides here.</p>
+              <h3 class="time-section-title">Time approvals</h3>
+              <p class="time-copy">Crew leads review missed punches, late clock-outs, long shifts, missing job assignments, and manual punch overrides here.</p>
             </div>
             <span class="chip">${rows.length}</span>
           </div>
@@ -1220,8 +1280,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             ${rows.length ? rows.map((row) => `
               <article class="rounded-lg border border-[var(--pf-border)] p-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center" data-review-row="${row.id}">
                 <div>
-                  <p class="font-semibold">${escapeHtml(row.teamMemberName)} • ${escapeHtml(row.jobName)}</p>
-                  <p class="text-sm text-gray-600">${escapeHtml(row.reviewLabel)} • Started ${new Date(row.startedAtActual).toLocaleString()}</p>
+                  <p class="time-row-title">${escapeHtml(row.teamMemberName)} - ${escapeHtml(row.jobName)}</p>
+                  <p class="time-meta">${escapeHtml(row.reviewLabel)} - Started ${new Date(row.startedAtActual).toLocaleString()}</p>
                   ${!row.jobId ? `
                     <label class="block mt-2 max-w-xl">
                       <span class="form-label">Assign job before approval</span>
@@ -1230,7 +1290,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                       </select>
                     </label>
                   ` : ''}
-                  ${row.endedAtActual ? `<p class="text-xs text-gray-500">Ended ${new Date(row.endedAtActual).toLocaleString()}</p>` : '<p class="text-xs text-red-700">Still needs clock-out</p>'}
+                  ${row.endedAtActual ? `<p class="time-meta">Ended ${new Date(row.endedAtActual).toLocaleString()}</p>` : '<p class="time-meta text-red-700">Still needs clock-out</p>'}
                   <p class="mt-1 flex flex-wrap gap-3">
                     ${mapLink(row.startLatitude, row.startLongitude, 'Start GPS')}
                     ${mapLink(row.endLatitude, row.endLongitude, 'End GPS')}
@@ -1242,7 +1302,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                 </div>
               </article>
             `).join('') : `
-              <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-4 text-sm text-gray-600">
+              <div class="rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-4 time-copy">
                 No time entries need approval right now. Approved overrides remain labeled in the timesheet rows below.
               </div>
             `}
@@ -1260,7 +1320,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             <div class="time-approval-meta">
               <span class="chip pf-status-danger">${escapeHtml(row.reviewLabel)}</span>
               <span>Started ${escapeHtml(compactDateTime(row.startedAtActual))}</span>
-              <span>${row.endedAtActual ? `Ended ${escapeHtml(compactDateTime(row.endedAtActual))}` : '<span class="text-red-700 font-medium">Still needs clock-out</span>'}</span>
+              <span>${row.endedAtActual ? `Ended ${escapeHtml(compactDateTime(row.endedAtActual))}` : '<span class="text-red-700">Still needs clock-out</span>'}</span>
             </div>
           `;
         }
@@ -1475,9 +1535,9 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       summary.classList.toggle('lg:grid-cols-4', !canManageTime);
       summary.innerHTML = cards.map(([label, value, help]) => `
         <div class="surface-panel p-4">
-          <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">${label}</p>
-          <p class="text-2xl font-bold mt-1">${value}</p>
-          <p class="text-xs text-gray-500 mt-1">${help}</p>
+          <p class="time-metric-label">${label}</p>
+          <p class="time-metric-value">${value}</p>
+          <p class="time-meta mt-1">${help}</p>
         </div>
       `).join('');
     }
@@ -1536,17 +1596,17 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             <div class="flex items-center gap-3">
               <span class="btn-icon h-7 w-7" aria-hidden="true">${collapsed ? iconSvg('plus') : '<span class="text-lg leading-none">-</span>'}</span>
               <div>
-                <h2 class="font-semibold text-sm sm:text-base">${escapeHtml(title)}</h2>
-                <p class="text-xs text-gray-600">${escapeHtml(subtitle)}</p>
+                <h2 class="time-row-title">${escapeHtml(title)}</h2>
+                <p class="time-meta">${escapeHtml(subtitle)}</p>
               </div>
             </div>
             <div class="text-right shrink-0">
-              <p class="font-semibold text-sm">${totalHours.toFixed(2)} hrs</p>
-              ${canManageTime ? `<p class="text-xs text-gray-600">${currency(totalCost)}</p>` : ''}
+              <p class="time-row-title">${totalHours.toFixed(2)} hrs</p>
+              ${canManageTime ? `<p class="time-meta">${currency(totalCost)}</p>` : ''}
             </div>
           </button>
           ${collapsed ? '' : `
-            <div class="hidden lg:grid ${gridClass} gap-3 px-3 py-1.5 bg-white text-[0.7rem] font-semibold uppercase tracking-wide text-gray-500 border-b border-[var(--pf-border)]">
+            <div class="hidden lg:grid ${gridClass} gap-3 px-3 py-1.5 bg-white time-table-heading border-b border-[var(--pf-border)]">
               ${columns.map((column) => `<span class="${column.align === 'right' ? 'text-right' : ''}">${column.label}</span>`).join('')}
             </div>
             <div class="divide-y divide-[var(--pf-border)]">
@@ -1606,14 +1666,14 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         sourceLabel,
         flagged ? reviewReasonText(entry.reviewReason || 'Needs review') : null,
         approvedOverride ? `Approved override: ${reviewReasonText(entry.reviewReason)}` : null,
-      ].filter(Boolean).join(' • ');
+      ].filter(Boolean).join(' - ');
       const displayDetailLine = detailLine.replace(/[^\x00-\x7F]+/g, '-');
       const desktopCells = {
-        date: `<p class="time-desktop-cell text-gray-700 truncate">${date}</p>`,
-        job: `<div class="time-desktop-cell min-w-0"><p class="text-gray-700 truncate">${escapeHtml(entry.jobName || 'Job')} ${flagged ? '<span class="chip pf-status-danger ml-1">Review</span>' : ''}${approvedOverride ? '<span class="chip ml-1">Override approved</span>' : ''}</p>${displayDetailLine ? `<p class="text-xs text-gray-500 truncate">${escapeHtml(displayDetailLine)}</p>` : ''}</div>`,
-        employee: `<p class="time-desktop-cell text-gray-700 truncate">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>`,
-        hours: `<p class="time-desktop-cell text-right font-medium">${Number(entry.hours).toFixed(2)}</p>`,
-        cost: `<p class="time-desktop-cell text-right font-medium">${currency(entry.totalCost)}</p>`,
+        date: `<p class="time-desktop-cell time-meta truncate">${date}</p>`,
+        job: `<div class="time-desktop-cell min-w-0"><p class="time-row-title truncate">${escapeHtml(entry.jobName || 'Job')} ${flagged ? '<span class="chip pf-status-danger ml-1">Review</span>' : ''}${approvedOverride ? '<span class="chip ml-1">Override approved</span>' : ''}</p>${displayDetailLine ? `<p class="time-meta truncate">${escapeHtml(displayDetailLine)}</p>` : ''}</div>`,
+        employee: `<p class="time-desktop-cell time-row-title truncate">${escapeHtml(entry.teamMemberName || 'Crew member')}</p>`,
+        hours: `<p class="time-desktop-cell text-right time-row-title">${Number(entry.hours).toFixed(2)}</p>`,
+        cost: `<p class="time-desktop-cell text-right time-row-title">${currency(entry.totalCost)}</p>`,
         actions: `
           <div class="time-entry-actions">
             <button type="button" onclick="editEntry('${entry.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit time entry" title="Edit time entry">${iconSvg('edit')}</button>
@@ -1635,10 +1695,10 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       const auditHtml = punchAuditHtml(entry);
 
       return `
-        <article class="mobile-card-row px-3 py-2 grid grid-cols-[minmax(0,1fr)_auto] ${gridClass} gap-2 lg:gap-3 lg:items-center text-sm hover:bg-gray-50">
+        <article class="mobile-card-row px-3 py-2 grid grid-cols-[minmax(0,1fr)_auto] ${gridClass} gap-2 lg:gap-3 lg:items-center hover:bg-gray-50">
           <div class="time-mobile-summary min-w-0">
-            <p class="font-medium truncate">${escapeHtml(mobileTitle)}</p>
-            <p class="lg:hidden text-xs text-gray-500 truncate">${escapeHtml(mobileContext)}</p>
+            <p class="time-row-title truncate">${escapeHtml(mobileTitle)}</p>
+            <p class="lg:hidden time-meta truncate">${escapeHtml(mobileContext)}</p>
           </div>
           ${getColumns(mode).map((column) => desktopCells[column.key]).join('')}
           ${auditHtml}
