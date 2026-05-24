@@ -26,7 +26,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         grid-template-columns: 1fr;
       }
       .bulk-member-row {
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) 5.75rem;
       }
     }
     :global(.time-desktop-cell) {
@@ -571,7 +571,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         return;
       }
       container.innerHTML = visibleMembers.map((member) => `
-        <label class="bulk-member-row grid sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
+        <label class="bulk-member-row grid grid-cols-[minmax(0,1fr)_5.75rem] sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-center p-3 hover:bg-gray-50">
           <span class="flex items-center gap-3 min-w-0">
             <input type="checkbox" data-bulk-member="${member.id}" class="h-5 w-5" ${bulkSelection.get(member.id) ? 'checked' : ''}>
             <span class="min-w-0">
@@ -579,7 +579,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
               <span class="block text-xs text-gray-500">${escapeHtml(roleLabels[member.role] || member.role || 'Crew')}</span>
             </span>
           </span>
-          <input type="number" data-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" class="input" value="${bulkHours.get(member.id) ?? getBulkDefaultHours()}">
+          <input type="number" data-bulk-hours="${member.id}" min="0" max="24" step="0.25" inputmode="decimal" autocomplete="off" enterkeyhint="done" aria-label="Hours for ${escapeHtml(member.name)}" class="input text-right" value="${bulkHours.get(member.id) ?? getBulkDefaultHours()}">
         </label>
       `).join('');
       container.querySelectorAll('[data-bulk-member]').forEach((checkbox) => {
@@ -590,6 +590,15 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         });
       });
       container.querySelectorAll('[data-bulk-hours]').forEach((input) => {
+        input.addEventListener('focus', () => {
+          requestAnimationFrame(() => {
+            try {
+              input.select();
+            } catch {
+              // Some mobile browsers restrict selection APIs on numeric inputs.
+            }
+          });
+        });
         input.addEventListener('input', () => {
           bulkHours.set(input.dataset.bulkHours, Number(input.value || 0));
           updateBulkSummary();
