@@ -336,15 +336,17 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     </section>
 
     <section id="time-map-panel" class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6 hidden">
-      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+      <div id="time-map-header" class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
         <div>
           <p class="time-kicker">GPS punch map</p>
-          <h2 class="time-section-title mt-1">Crew location snapshot</h2>
-          <p class="time-copy mt-1">Shows GPS points captured at clock-in and clock-out. PaintFlow does not show off-clock locations.</p>
+          <div id="time-map-expanded-copy">
+            <h2 class="time-section-title mt-1">Crew location snapshot</h2>
+            <p class="time-copy mt-1">Shows GPS points captured at clock-in and clock-out. PaintFlow does not show off-clock locations.</p>
+          </div>
         </div>
         <div class="flex flex-col sm:flex-row lg:flex-col gap-2 w-full lg:w-auto lg:min-w-[18rem]">
           <button id="toggle-map-panel" class="btn-secondary btn-sm w-full sm:w-auto lg:self-end" aria-expanded="true">Hide map</button>
-          <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full">
+          <div id="time-map-date-controls" class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full">
             <button id="prev-map-day" class="btn-icon btn-icon-outlined" aria-label="Previous day"><Icon name="chevron-left" /></button>
             <span id="map-day-label" class="text-center time-row-title"></span>
             <button id="next-map-day" class="btn-icon btn-icon-outlined" aria-label="Next day"><Icon name="chevron-right" /></button>
@@ -656,7 +658,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     function renderMapCollapseState() {
       const content = document.getElementById('time-map-content');
       const button = document.getElementById('toggle-map-panel');
+      const copy = document.getElementById('time-map-expanded-copy');
+      const dateControls = document.getElementById('time-map-date-controls');
+      const header = document.getElementById('time-map-header');
       content?.classList.toggle('hidden', isMapCollapsed);
+      copy?.classList.toggle('hidden', isMapCollapsed);
+      dateControls?.classList.toggle('hidden', isMapCollapsed);
+      header?.classList.toggle('mb-4', !isMapCollapsed);
       if (button) {
         button.textContent = isMapCollapsed ? 'Show map' : 'Hide map';
         button.setAttribute('aria-expanded', String(!isMapCollapsed));
