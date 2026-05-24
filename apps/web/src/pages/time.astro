@@ -39,6 +39,66 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       gap: 0.375rem;
       justify-content: flex-end;
     }
+    .time-clock-status {
+      border-radius: var(--pf-radius-full);
+      display: inline-flex;
+      font-size: 0.85rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      padding: 0.45rem 0.8rem;
+      text-transform: uppercase;
+    }
+    .time-clock-status-in {
+      background: var(--pf-status-success-bg);
+      color: var(--pf-status-success-text);
+    }
+    .time-clock-status-out {
+      background: var(--pf-surface-muted);
+      color: var(--pf-text-muted);
+    }
+    .time-info-popover {
+      display: inline-flex;
+      position: relative;
+    }
+    .time-info-popover summary {
+      align-items: center;
+      border: 1px solid var(--pf-border);
+      border-radius: var(--pf-radius-full);
+      color: var(--pf-status-warning-text);
+      cursor: pointer;
+      display: inline-flex;
+      height: 1.75rem;
+      justify-content: center;
+      list-style: none;
+      width: 1.75rem;
+    }
+    .time-info-popover summary::-webkit-details-marker {
+      display: none;
+    }
+    .time-info-popover svg {
+      height: 1rem;
+      width: 1rem;
+    }
+    .time-info-popover[open] .time-info-card {
+      display: block;
+    }
+    .time-info-card {
+      background: #fff;
+      border: 1px solid var(--pf-border);
+      border-radius: var(--pf-radius-md);
+      box-shadow: var(--pf-shadow-lg);
+      color: var(--pf-text);
+      display: none;
+      font-size: 0.82rem;
+      font-weight: 400;
+      line-height: 1.35;
+      padding: 0.75rem;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 0.45rem);
+      width: min(18rem, calc(100vw - 2rem));
+      z-index: 20;
+    }
     #punch-map {
       min-height: 22rem;
     }
@@ -478,7 +538,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       const options = sourceJobs
         .map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`)
         .join('');
-      return `<option value="">No job selected - flag for review</option>${options}`;
+      return `<option value="">No job selected</option>${options}`;
     }
 
     function reviewJobOptions(selectedId = '') {
@@ -501,6 +561,21 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       if (!latitude || !longitude) return '';
       const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
       return `<a class="text-xs font-medium text-brand-700" href="${href}" target="_blank" rel="noreferrer">${label}</a>`;
+    }
+
+    function warningInfo(content) {
+      return `
+        <details class="time-info-popover">
+          <summary aria-label="Why this may need review" title="Why this may need review">
+            <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+            </svg>
+          </summary>
+          <span class="time-info-card">${escapeHtml(content)}</span>
+        </details>
+      `;
     }
 
     function localDateLabel(date) {
@@ -659,9 +734,10 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       const review = document.getElementById('punch-review');
       const status = punchStatus || {};
       const active = status.activeSession;
-      const memberName = status.member?.name || 'Crew member';
+      copy.classList.add('hidden');
 
       if (status.memberResolutionError && !status.canManage) {
+        copy.classList.remove('hidden');
         copy.textContent = status.memberResolutionError;
         current.innerHTML = '';
         controls.innerHTML = '<p class="text-sm text-gray-600">Ask an owner to link your login email to an active crew member on the Team page.</p>';
@@ -670,12 +746,12 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       }
 
       if (active) {
-        copy.textContent = `${memberName} is punched in. GPS is captured again when clocking out.`;
+        copy.textContent = '';
         current.innerHTML = `
-          <span class="chip">Clocked in</span>
+          <span class="time-clock-status time-clock-status-in">Clocked in</span>
           <p class="font-semibold mt-1">${escapeHtml(active.jobName || 'Job')}</p>
           <p class="text-gray-600">Started ${new Date(active.startedAtActual).toLocaleString()} • ${activePunchHours(active)} hrs</p>
-          ${active.status === 'missed_clock_out' ? '<p class="text-red-700 font-medium mt-1">Past the max shift window. Check the forgotten clock-out option if the actual end time was earlier.</p>' : ''}
+          ${active.status === 'missed_clock_out' ? `<p class="mt-1 inline-flex items-center gap-2 text-red-700 font-medium">${warningInfo('This shift is past the configured maximum length. If the actual end time was earlier, use the forgotten clock-out option so a lead can review it.')} Long shift</p>` : ''}
         `;
         controls.innerHTML = `
           <div class="grid punch-actions gap-3">
@@ -697,16 +773,18 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
               </label>
             </div>
           </div>
-          <p class="text-xs text-gray-500">Normal clock-out uses the current time. Check the forgotten clock-out option only when the actual end time was earlier.</p>
         `;
       } else {
-        copy.textContent = `${memberName} is not punched in. Start a job timer from the field with location permission enabled.`;
-        current.innerHTML = '<span class="chip">Not clocked in</span>';
+        copy.textContent = '';
+        current.innerHTML = '<span class="time-clock-status time-clock-status-out">Clocked out</span>';
         controls.innerHTML = `
           <div class="grid punch-actions ${status.canManage ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]' : 'sm:grid-cols-[minmax(0,1fr)_auto]'} gap-3 items-end">
             ${status.canManage ? `<label class="block"><span class="form-label">Crew member</span><select id="punch-member" class="input">${punchMemberOptions()}</select></label>` : ''}
             <label class="block">
-              <span class="form-label">Job / location</span>
+              <div class="form-label inline-flex items-center gap-2">
+                Job
+                ${warningInfo('If no job is selected, the shift is saved but flagged for crew lead review before approval.')}
+              </div>
               <select id="punch-job" class="input">${punchJobOptions()}</select>
             </label>
             <div class="flex flex-col sm:flex-row gap-2">
@@ -714,7 +792,6 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
               <button type="button" id="forgot-in-btn" class="btn-text btn-sm">Forgot clock-in</button>
             </div>
           </div>
-          <p class="text-xs text-gray-500">Street address is shown first when available. Leaving job blank flags the shift for lead review.</p>
         `;
       }
 
