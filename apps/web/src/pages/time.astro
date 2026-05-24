@@ -87,12 +87,45 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       text-transform: uppercase;
     }
     :global(.time-clock-status-in) {
-      background: var(--pf-status-success-bg);
+      background: #dff7e8;
+      border: 1px solid #8fd6aa;
       color: var(--pf-status-success-text);
     }
     :global(.time-clock-status-out) {
       background: var(--pf-surface-muted);
+      border: 1px solid var(--pf-border);
       color: var(--pf-text-muted);
+    }
+    :global(.time-danger-action) {
+      background: var(--md-sys-color-error);
+      border-color: var(--md-sys-color-error);
+      color: var(--md-sys-color-on-error);
+    }
+    :global(.time-danger-action:hover) {
+      background: #a43328;
+      border-color: #a43328;
+    }
+    :global(.time-danger-subtle) {
+      background: color-mix(in srgb, var(--md-sys-color-error-container) 72%, white);
+      border-color: #e6b8b2;
+      color: var(--md-sys-color-on-error-container);
+    }
+    :global(.time-danger-subtle:hover) {
+      background: var(--md-sys-color-error-container);
+      border-color: #d69a93;
+    }
+    :global(.time-approval-meta) {
+      align-items: center;
+      color: var(--pf-text-muted);
+      display: flex;
+      flex-wrap: wrap;
+      font-size: 0.8rem;
+      gap: 0.4rem 0.6rem;
+      margin-top: 0.3rem;
+    }
+    :global(.time-map-action) {
+      min-height: 1.8rem;
+      padding: 0.25rem 0.55rem;
     }
     :global(.time-info-popover) {
       display: inline-flex;
@@ -231,13 +264,12 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     </div>
 
     <section id="punch-clock" class="surface-panel p-4 sm:p-5 mb-4 sm:mb-6">
-      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+      <div class="grid gap-3">
         <div>
           <p class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Mobile time clock</p>
-          <h2 class="text-lg font-semibold mt-1">Punch in / out</h2>
           <p id="punch-status-copy" class="text-sm text-gray-600 mt-1">Loading punch status...</p>
         </div>
-        <div id="punch-current" class="text-sm lg:text-right"></div>
+        <div id="punch-current" class="text-sm max-w-xl"></div>
       </div>
       <div id="punch-controls" class="mt-4 grid gap-3"></div>
       <div id="punch-review" class="mt-4 hidden"></div>
@@ -250,21 +282,26 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           <h2 class="text-lg font-semibold mt-1">Crew location snapshot</h2>
           <p class="text-sm text-gray-600 mt-1">Shows GPS points captured at clock-in and clock-out. PaintFlow does not show off-clock locations.</p>
         </div>
-        <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full lg:w-auto lg:min-w-[18rem]">
-          <button id="prev-map-day" class="btn-icon btn-icon-outlined" aria-label="Previous day"><Icon name="chevron-left" /></button>
-          <span id="map-day-label" class="text-center font-semibold text-sm"></span>
-          <button id="next-map-day" class="btn-icon btn-icon-outlined" aria-label="Next day"><Icon name="chevron-right" /></button>
+        <div class="flex flex-col sm:flex-row lg:flex-col gap-2 w-full lg:w-auto lg:min-w-[18rem]">
+          <button id="toggle-map-panel" class="btn-secondary btn-sm w-full sm:w-auto lg:self-end" aria-expanded="true">Hide map</button>
+          <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center w-full">
+            <button id="prev-map-day" class="btn-icon btn-icon-outlined" aria-label="Previous day"><Icon name="chevron-left" /></button>
+            <span id="map-day-label" class="text-center font-semibold text-sm"></span>
+            <button id="next-map-day" class="btn-icon btn-icon-outlined" aria-label="Next day"><Icon name="chevron-right" /></button>
+          </div>
         </div>
       </div>
-      <div id="map-summary" class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3"></div>
-      <div class="grid lg:grid-cols-[minmax(0,1fr)_21rem] gap-4">
-        <div id="punch-map" class="rounded-xl border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] overflow-hidden"></div>
-        <div>
-          <div class="flex items-center justify-between gap-3 mb-2">
-            <h3 class="font-semibold text-sm">Punches</h3>
-            <button id="refresh-map-btn" class="btn-text btn-sm">Refresh</button>
+      <div id="time-map-content">
+        <div id="map-summary" class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3"></div>
+        <div class="grid lg:grid-cols-[minmax(0,1fr)_21rem] gap-4">
+          <div id="punch-map" class="rounded-xl border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] overflow-hidden"></div>
+          <div>
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <h3 class="font-semibold text-sm">Punches</h3>
+              <button id="refresh-map-btn" class="btn-text btn-sm">Refresh</button>
+            </div>
+            <div id="map-events" class="space-y-2 max-h-[22rem] overflow-y-auto pr-1"></div>
           </div>
-          <div id="map-events" class="space-y-2 max-h-[22rem] overflow-y-auto pr-1"></div>
         </div>
       </div>
     </section>
@@ -384,6 +421,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     let punchMap = null;
     let punchMapLayer = null;
     let isMapReady = false;
+    const savedMapCollapsed = localStorage.getItem('paintflow.time.mapCollapsed');
+    let isMapCollapsed = savedMapCollapsed === null ? true : savedMapCollapsed === 'true';
     let isSavingTime = false;
     let isSavingBulkTime = false;
     let isPunching = false;
@@ -435,6 +474,20 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       return formatDate(new Date(value));
     }
 
+    function getWeekEndExclusive() {
+      const weekEnd = new Date(currentWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      return weekEnd;
+    }
+
+    function timeRangeQuery() {
+      const params = new URLSearchParams({
+        start: currentWeekStart.toISOString(),
+        end: getWeekEndExclusive().toISOString(),
+      });
+      return `?${params.toString()}`;
+    }
+
     function toDateTimeLocal(date = new Date()) {
       const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
       return local.toISOString().slice(0, 16);
@@ -462,7 +515,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
       try {
         const [timePayload, punchPayload] = await Promise.all([
-          api('/v1/team/time'),
+          api(`/v1/team/time${timeRangeQuery()}`),
           api('/v1/team/punch/status').catch((err) => ({ data: { memberResolutionError: err.message } })),
         ]);
 
@@ -484,10 +537,19 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         renderBulkEntry();
         renderTimesheet();
         renderMapVisibility();
-        if (canManageTime) loadMapData();
+        if (canManageTime && !isMapCollapsed) loadMapData();
       } catch (e) {
         document.getElementById('loading').innerHTML = `<p class="text-red-600">${escapeHtml(e.message || 'Failed to load')}</p>`;
       }
+    }
+
+    async function loadTimeEntries() {
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('timesheet').classList.add('hidden');
+      document.getElementById('empty').classList.add('hidden');
+      const timePayload = await api(`/v1/team/time${timeRangeQuery()}`);
+      allEntries = timePayload.data || [];
+      renderTimesheet();
     }
 
     function applyTimeAccessMode() {
@@ -503,6 +565,17 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
 
     function renderMapVisibility() {
       document.getElementById('time-map-panel').classList.toggle('hidden', !canManageTime);
+      renderMapCollapseState();
+    }
+
+    function renderMapCollapseState() {
+      const content = document.getElementById('time-map-content');
+      const button = document.getElementById('toggle-map-panel');
+      content?.classList.toggle('hidden', isMapCollapsed);
+      if (button) {
+        button.textContent = isMapCollapsed ? 'Show map' : 'Hide map';
+        button.setAttribute('aria-expanded', String(!isMapCollapsed));
+      }
     }
 
     function populateSelects() {
@@ -615,7 +688,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     function mapLink(latitude, longitude, label) {
       if (!latitude || !longitude) return '';
       const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
-      return `<a class="text-xs font-medium text-brand-700" href="${href}" target="_blank" rel="noreferrer">${label}</a>`;
+      return `<a class="btn-outlined btn-sm time-map-action" href="${href}" target="_blank" rel="noreferrer">${label}</a>`;
     }
 
     function formatClockTime(value) {
@@ -845,12 +918,14 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         `;
         controls.innerHTML = `
           <div class="grid punch-actions gap-3">
-            <div class="grid sm:grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
+            <div class="grid gap-2 max-w-xl">
               <label class="block">
                 <span class="form-label">Switch to job</span>
                 <select id="switch-job" class="input">${switchJobOptions(active.jobId)}</select>
               </label>
-              <button type="button" id="switch-job-btn" class="btn-secondary">Switch job</button>
+              <div class="flex justify-start">
+                <button type="button" id="switch-job-btn" class="btn-secondary btn-sm">Switch job</button>
+              </div>
             </div>
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <label class="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -868,8 +943,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                 <input id="punch-out-note" class="input" placeholder="Finished at 4:30, forgot to clock out">
               </label>
             </div>
-            <div class="flex justify-end">
-              <button id="punch-out-btn" class="btn-primary w-full sm:w-auto">Clock out</button>
+            <div class="flex justify-start">
+              <button id="punch-out-btn" class="btn-primary time-danger-action w-full sm:w-auto">Clock out</button>
             </div>
           </div>
         `;
@@ -1112,7 +1187,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           </div>
           <div class="space-y-2">
             ${rows.length ? rows.map((row) => `
-              <article class="rounded-lg border border-[var(--pf-border)] p-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+              <article class="rounded-lg border border-[var(--pf-border)] p-3 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center" data-review-row="${row.id}">
                 <div>
                   <p class="font-semibold">${escapeHtml(row.teamMemberName)} • ${escapeHtml(row.jobName)}</p>
                   <p class="text-sm text-gray-600">${escapeHtml(row.reviewLabel)} • Started ${new Date(row.startedAtActual).toLocaleString()}</p>
@@ -1132,7 +1207,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                 </div>
                 <div class="flex gap-2 justify-end">
                   <button class="btn-secondary btn-sm" data-review-punch="${row.id}" data-review-status="approved" ${!row.endedAtActual ? 'disabled title="Crew member must clock out before approval"' : ''}>Approve</button>
-                  <button class="btn-secondary btn-sm" data-review-punch="${row.id}" data-review-status="rejected">Reject</button>
+                  <button class="btn-secondary btn-sm time-danger-subtle" data-review-punch="${row.id}" data-review-status="rejected">Reject</button>
                 </div>
               </article>
             `).join('') : `
@@ -1143,6 +1218,23 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
           </div>
         </div>
       `;
+      rows.forEach((row) => {
+        const article = review.querySelector(`[data-review-row="${row.id}"]`);
+        if (!article) return;
+        const paragraphs = article.querySelectorAll('p');
+        const reviewLine = paragraphs[1];
+        const endedLine = Array.from(paragraphs).find((item) => item.textContent?.trim().startsWith('Ended') || item.textContent?.trim().startsWith('Still needs'));
+        if (reviewLine) {
+          reviewLine.outerHTML = `
+            <div class="time-approval-meta">
+              <span class="chip pf-status-danger">${escapeHtml(row.reviewLabel)}</span>
+              <span>Started ${escapeHtml(compactDateTime(row.startedAtActual))}</span>
+              <span>${row.endedAtActual ? `Ended ${escapeHtml(compactDateTime(row.endedAtActual))}` : '<span class="text-red-700 font-medium">Still needs clock-out</span>'}</span>
+            </div>
+          `;
+        }
+        endedLine?.remove();
+      });
       review.querySelectorAll('[data-review-punch]').forEach((button) => {
         button.addEventListener('click', () => reviewPunch(button.dataset.reviewPunch, button.dataset.reviewStatus));
       });
@@ -1461,6 +1553,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       return labels[value] || value.replace(/[_-]/g, ' ');
     }
 
+    function compactDateTime(value) {
+      if (!value) return 'Missing';
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) return 'Missing';
+      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
     function renderEntry(entry, mode) {
       const hasDescription = Boolean(entry.description);
       const flagged = entry.reviewStatus === 'flagged' || entry.reviewStatus === 'rejected';
@@ -1693,27 +1792,45 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       }
     });
 
-    document.getElementById('prev-week').addEventListener('click', () => {
+    document.getElementById('prev-week').addEventListener('click', async () => {
       currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-      renderTimesheet();
+      try {
+        await loadTimeEntries();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to load time entries', 'error');
+      }
     });
 
-    document.getElementById('next-week').addEventListener('click', () => {
+    document.getElementById('next-week').addEventListener('click', async () => {
       currentWeekStart.setDate(currentWeekStart.getDate() + 7);
-      renderTimesheet();
+      try {
+        await loadTimeEntries();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to load time entries', 'error');
+      }
     });
 
     document.getElementById('prev-map-day').addEventListener('click', () => {
       currentMapDate.setDate(currentMapDate.getDate() - 1);
-      loadMapData();
+      if (!isMapCollapsed) loadMapData();
     });
 
     document.getElementById('next-map-day').addEventListener('click', () => {
       currentMapDate.setDate(currentMapDate.getDate() + 1);
-      loadMapData();
+      if (!isMapCollapsed) loadMapData();
     });
 
     document.getElementById('refresh-map-btn').addEventListener('click', loadMapData);
+
+    document.getElementById('toggle-map-panel').addEventListener('click', async () => {
+      isMapCollapsed = !isMapCollapsed;
+      localStorage.setItem('paintflow.time.mapCollapsed', String(isMapCollapsed));
+      renderMapCollapseState();
+      if (!isMapCollapsed) {
+        await loadMapData();
+        setTimeout(() => punchMap?.invalidateSize?.(), 50);
+      }
+    });
 
     document.querySelectorAll('[data-view-mode]').forEach((button) => {
       button.addEventListener('click', () => {

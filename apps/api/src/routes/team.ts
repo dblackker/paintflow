@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { teamMembers, timeEntries, jobCosts, userRoles, memberships, jobs, users, orgSettings, timePunchSessions, timePunchEvents, leads } from '@paintflow/db/schema';
-import { eq, and, desc, gte, inArray, lte } from 'drizzle-orm';
+import { eq, and, desc, gte, inArray, lte, lt } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -904,27 +904,45 @@ teamApp.post('/timecards', async (c) => {
 teamApp.get('/time', async (c) => {
   const orgId = c.get('orgId');
   const jobId = c.req.query('jobId');
+  const startParam = c.req.query('start');
+  const endParam = c.req.query('end');
   const db = createDb(c.env.DATABASE_URL);
   
   const canViewAll = await hasPermission(c, 'view_all_time');
+  const dateFilters = [];
+  if (startParam || endParam) {
+    if (!startParam || !endParam) {
+      return c.json({ error: 'Both start and end query parameters are required for time range filtering' }, 400);
+    }
+    const start = new Date(startParam);
+    const end = new Date(endParam);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return c.json({ error: 'Valid start and end query parameters are required' }, 400);
+    }
+    const maxRangeMs = 370 * 24 * 60 * 60 * 1000;
+    if (end.getTime() - start.getTime() > maxRangeMs) {
+      return c.json({ error: 'Time range cannot exceed 370 days' }, 400);
+    }
+    dateFilters.push(gte(timeEntries.date, start), lt(timeEntries.date, end));
+  }
   
   let where;
   if (!canViewAll) {
     const resolved = await resolvePunchMember(c);
     if ('error' in resolved) return c.json({ data: [] });
     where = jobId
-      ? and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, resolved.member.id), eq(timeEntries.jobId, jobId))
-      : and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, resolved.member.id));
+      ? and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, resolved.member.id), eq(timeEntries.jobId, jobId), ...dateFilters)
+      : and(eq(timeEntries.orgId, orgId), eq(timeEntries.teamMemberId, resolved.member.id), ...dateFilters);
   } else if (jobId) {
-    where = and(eq(timeEntries.orgId, orgId), eq(timeEntries.jobId, jobId));
+    where = and(eq(timeEntries.orgId, orgId), eq(timeEntries.jobId, jobId), ...dateFilters);
   } else {
-    where = eq(timeEntries.orgId, orgId);
+    where = dateFilters.length ? and(eq(timeEntries.orgId, orgId), ...dateFilters) : eq(timeEntries.orgId, orgId);
   }
   
   const entries = await db.query.timeEntries.findMany({
     where,
     orderBy: (timeEntries, { desc }) => [desc(timeEntries.date)],
-    limit: 100,
+    limit: dateFilters.length ? 500 : 100,
   });
   
   const [members, jobList] = await Promise.all([
