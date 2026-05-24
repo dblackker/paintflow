@@ -1815,11 +1815,6 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     document.getElementById('bulk-time-btn').addEventListener('click', openBulkModal);
     document.getElementById('cancel-bulk-btn').addEventListener('click', closeBulkModal);
     document.getElementById('close-bulk-modal-btn').addEventListener('click', closeBulkModal);
-    document.getElementById('bulk-add-segment-btn')?.addEventListener('click', () => {
-      const form = document.getElementById('bulk-time-form');
-      form.dataset.addSegment = 'true';
-      form.requestSubmit();
-    });
     document.getElementById('cancel-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
     document.getElementById('close-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
     document.getElementById('cancel-switch-job-btn').addEventListener('click', closeSwitchJobModal);
@@ -1911,8 +1906,6 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       if (isSavingBulkTime) return;
       const form = event.currentTarget;
       const submit = document.getElementById('submit-bulk-btn');
-      const addSegment = document.getElementById('bulk-add-segment-btn');
-      const shouldAddSegment = form.dataset.addSegment === 'true';
       const data = Object.fromEntries(new FormData(form));
       const selected = getBulkSelectedEntries().map(({ member, hours }) => ({
         teamMemberId: member.id,
@@ -1932,8 +1925,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       try {
         isSavingBulkTime = true;
         submit.disabled = true;
-        if (addSegment) addSegment.disabled = true;
-        submit.textContent = shouldAddSegment ? 'Logging segment...' : 'Logging...';
+        submit.textContent = 'Logging...';
         await api('/v1/team/timecards', {
           method: 'POST',
           body: JSON.stringify({
@@ -1943,22 +1935,14 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             entries: selected,
           }),
         });
-        if (shouldAddSegment) {
-          form.elements.jobId.value = '';
-          form.elements.description.value = '';
-          window.showToast(`Logged segment for ${selected.length} crew members`, 'success');
-        } else {
-          closeBulkModal();
-          window.showToast(`Logged time for ${selected.length} crew members`, 'success');
-        }
+        closeBulkModal();
+        window.showToast(`Logged time for ${selected.length} crew members`, 'success');
         await loadData();
       } catch (err) {
         window.showToast?.(err.message || 'Failed to log crew time', 'error');
       } finally {
-        form.dataset.addSegment = '';
         isSavingBulkTime = false;
         submit.disabled = false;
-        if (addSegment) addSegment.disabled = false;
         submit.textContent = 'Log crew time';
       }
     });
