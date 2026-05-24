@@ -9,7 +9,7 @@ import Base from '../layouts/Base.astro';
         <h2 class="pf-page-title">Activity</h2>
         <p class="pf-page-copy mt-1">A chronological record of customer, estimate, job, and message activity.</p>
       </div>
-      <a href="/dashboard" class="text-sm font-medium text-blue-700 hover:underline">Back to dashboard</a>
+      <a href="/dashboard" class="pf-row-title text-blue-700 hover:underline">Back to dashboard</a>
     </div>
 
     <section class="mb-4 rounded-lg border bg-white p-3 shadow-sm sm:p-4">
@@ -87,7 +87,7 @@ import Base from '../layouts/Base.astro';
         address: formatAddress(event),
         phone: event.leadPhone,
         email: event.leadEmail,
-      }) || `<p class="text-sm font-medium text-gray-950">${escapeHtml(event.clientName || 'Customer')}</p>`;
+      }) || `<p class="pf-row-title">${escapeHtml(event.clientName || 'Customer')}</p>`;
     }
 
     function eventTypeLabel(event) {
@@ -105,7 +105,7 @@ import Base from '../layouts/Base.astro';
       const feed = document.getElementById('activity-feed');
       const loadMore = document.getElementById('load-more-activity');
       if (!loadedActivity.length) {
-        feed.innerHTML = '<div class="rounded-lg border border-dashed bg-white p-8 text-center text-gray-500">No activity matches this view.</div>';
+        feed.innerHTML = '<div class="pf-copy rounded-lg border border-dashed bg-white p-8 text-center">No activity matches this view.</div>';
         loadMore.classList.add('hidden');
         return;
       }
@@ -115,12 +115,12 @@ import Base from '../layouts/Base.astro';
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <p class="font-medium text-gray-950">${escapeHtml(event.title || 'Activity recorded')}</p>
+                <p class="pf-row-title">${escapeHtml(event.title || 'Activity recorded')}</p>
                 ${statusBadge(event.source, { label: eventTypeLabel(event), tone: 'neutral' })}
                 ${event.status ? statusBadge(event.status) : ''}
               </div>
-              <p class="mt-1 text-xs text-gray-500">${escapeHtml(relativeDate(event.occurredAt))}</p>
-              ${event.body ? `<p class="mt-2 line-clamp-2 text-sm text-gray-600">${escapeHtml(event.body)}</p>` : ''}
+              <p class="pf-meta mt-1">${escapeHtml(relativeDate(event.occurredAt))}</p>
+              ${event.body ? `<p class="pf-copy mt-2 line-clamp-2">${escapeHtml(event.body)}</p>` : ''}
               <div class="mt-3">${contactSummary(event)}</div>
             </div>
           </div>

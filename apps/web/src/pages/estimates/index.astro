@@ -47,7 +47,7 @@ import Base from '../../layouts/Base.astro';
           <option value="draft">Draft</option>
         </select>
       </div>
-      <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm"></div>
+      <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4"></div>
     </section>
 
     <div id="estimates-list" class="grid gap-3">
@@ -70,15 +70,15 @@ import Base from '../../layouts/Base.astro';
 
     function customerProfileLink(customer) {
       if (!customer?.leadId) {
-        return `<div class="font-semibold text-gray-950 truncate">${escapeHtml(customer?.name || 'Customer')}</div>`;
+        return `<div class="pf-row-title truncate">${escapeHtml(customer?.name || 'Customer')}</div>`;
       }
       const address = customer.address || 'No jobsite address';
       const contact = customer.contact || '';
       return `
         <div class="min-w-0 rounded-lg pr-2">
-          <a href="/leads/${customer.leadId}" class="block truncate font-semibold text-gray-950 hover:text-blue-700">${escapeHtml(customer.name || 'Customer')}</a>
-          ${window.PaintFlowFormat?.addressLink(address) || `<span class="block truncate text-sm text-gray-700">${escapeHtml(address)}</span>`}
-          ${contact ? `<span class="block truncate text-xs text-gray-500">${escapeHtml(contact)}</span>` : ''}
+          <a href="/leads/${customer.leadId}" class="pf-row-title block truncate hover:text-blue-700">${escapeHtml(customer.name || 'Customer')}</a>
+          ${window.PaintFlowFormat?.addressLink(address) || `<span class="pf-copy block truncate">${escapeHtml(address)}</span>`}
+          ${contact ? `<span class="pf-meta block truncate">${escapeHtml(contact)}</span>` : ''}
         </div>
       `;
     }
@@ -129,8 +129,8 @@ import Base from '../../layouts/Base.astro';
         document.getElementById('summary').innerHTML = '';
         document.getElementById('estimates-list').innerHTML = `
           <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-red-800">
-            <p class="font-medium">Estimates could not be loaded</p>
-            <p class="text-sm mt-1">${escapeHtml(err.message || 'Check that the API server is running and try again.')}</p>
+            <p class="pf-row-title">Estimates could not be loaded</p>
+            <p class="pf-copy mt-1">${escapeHtml(err.message || 'Check that the API server is running and try again.')}</p>
             <button id="retry-estimates" type="button" class="btn-primary btn-sm mt-4">Retry</button>
           </div>
         `;
@@ -155,10 +155,10 @@ import Base from '../../layouts/Base.astro';
       }, {});
       const totalValue = list.reduce((sum, estimate) => sum + Number(estimate.total || 0), 0);
       document.getElementById('summary').innerHTML = `
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Sent</p><p class="pf-section-title">${counts.sent || 0}</p></div>
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Accepted</p><p class="pf-section-title">${counts.accepted || 0}</p></div>
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Total Value</p><p class="pf-section-title">${money(totalValue)}</p></div>
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Win Rate</p><p class="pf-section-title">${list.length ? Math.round(((counts.accepted || 0) / list.length) * 100) : 0}%</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="pf-meta">Sent</p><p class="pf-section-title">${counts.sent || 0}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="pf-meta">Accepted</p><p class="pf-section-title">${counts.accepted || 0}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="pf-meta">Total Value</p><p class="pf-section-title">${money(totalValue)}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="pf-meta">Win Rate</p><p class="pf-section-title">${list.length ? Math.round(((counts.accepted || 0) / list.length) * 100) : 0}%</p></div>
       `;
     }
 
@@ -167,7 +167,7 @@ import Base from '../../layouts/Base.astro';
       renderSummary(list);
       const container = document.getElementById('estimates-list');
       if (list.length === 0) {
-        container.innerHTML = '<div class="bg-white border rounded-lg p-8 text-center text-gray-500">No estimates match this view.</div>';
+        container.innerHTML = '<div class="pf-copy bg-white border rounded-lg p-8 text-center">No estimates match this view.</div>';
         return;
       }
 
@@ -183,7 +183,7 @@ import Base from '../../layouts/Base.astro';
             </div>
             <div class="sm:text-right flex items-center justify-between gap-3 sm:block">
               <div>
-                <p class="text-lg sm:text-xl font-bold">${money(estimate.total)}</p>
+                <p class="pf-section-title text-blue-700">${money(estimate.total)}</p>
                 ${paymentSummary(estimate.payments || [])}
               </div>
               <div class="mt-2">${estimateActions(estimate)}</div>

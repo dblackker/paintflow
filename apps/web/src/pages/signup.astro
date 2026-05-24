@@ -42,12 +42,12 @@ const selectedPlan = plans[plan];
   <body class="min-h-screen bg-slate-50 text-slate-950">
     <header class="border-b bg-white">
       <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <a href="/" class="flex items-center gap-2 font-semibold text-slate-950" aria-label="PaintFlow home">
-          <span class="flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-sm font-bold text-white">P</span>
-          <span class="text-lg">PaintFlow</span>
+        <a href="/" class="flex items-center gap-2 pf-row-title" aria-label="PaintFlow home">
+          <span class="flex h-8 w-8 items-center justify-center rounded bg-blue-600 pf-row-title text-white">P</span>
+          <span>PaintFlow</span>
         </a>
         <nav class="flex items-center gap-3 text-sm">
-          <a href="/login" class="hidden text-slate-600 hover:text-slate-950 sm:inline">Sign in</a>
+          <a href="/login" class="hidden pf-copy hover:text-slate-950 sm:inline">Sign in</a>
           <a href="/#pricing" class="btn-secondary btn-sm">Plans</a>
         </nav>
       </div>
@@ -55,36 +55,36 @@ const selectedPlan = plans[plan];
 
     <main class="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 sm:py-10 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-8">
       <section class="rounded-lg border bg-white p-5 shadow-sm sm:p-8">
-        <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Owner setup</p>
-        <h1 class="mt-3 max-w-2xl text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+        <p class="pf-kicker">Owner setup</p>
+        <h1 class="pf-page-title mt-3 max-w-2xl">
           Start with the settings painting contractors actually tune.
         </h1>
-        <p class="mt-4 max-w-2xl text-base leading-7 text-slate-700 sm:text-lg">
+        <p class="pf-page-copy mt-4 max-w-2xl">
           Build your workspace around service areas, production rates, labor burden, material markup,
           deposits, approvals, and job costing from day one.
         </p>
 
         <div class="mt-7 grid gap-3 sm:grid-cols-3">
           <div class="rounded-lg border bg-slate-50 p-4">
-            <p class="font-semibold">Lead intake</p>
-            <p class="mt-1 text-sm text-slate-600">Capture web, call, referral, and repeat-customer sources.</p>
+            <p class="pf-row-title">Lead intake</p>
+            <p class="pf-copy mt-1">Capture web, call, referral, and repeat-customer sources.</p>
           </div>
           <div class="rounded-lg border bg-slate-50 p-4">
-            <p class="font-semibold">Estimating</p>
-            <p class="mt-1 text-sm text-slate-600">Use production rates and Good/Better/Best options.</p>
+            <p class="pf-row-title">Estimating</p>
+            <p class="pf-copy mt-1">Use production rates and proposal options.</p>
           </div>
           <div class="rounded-lg border bg-slate-50 p-4">
-            <p class="font-semibold">Job costing</p>
-            <p class="mt-1 text-sm text-slate-600">Track labor, materials, expenses, change orders, and margins.</p>
+            <p class="pf-row-title">Job costing</p>
+            <p class="pf-copy mt-1">Track labor, materials, expenses, change orders, and margins.</p>
           </div>
         </div>
 
         <div class="mt-7 rounded-lg border border-blue-200 bg-blue-50 p-4">
-          <p class="text-sm font-semibold text-blue-950">What happens next</p>
+          <p class="pf-row-title text-blue-950">What happens next</p>
           <ol class="mt-3 space-y-2 text-sm text-blue-950">
-            <li class="flex gap-2"><span class="font-semibold">1.</span><span>We send a secure sign-in link.</span></li>
-            <li class="flex gap-2"><span class="font-semibold">2.</span><span>You set company defaults and service areas.</span></li>
-            <li class="flex gap-2"><span class="font-semibold">3.</span><span>Your team can start adding leads and estimates.</span></li>
+            <li class="flex gap-2"><span class="pf-row-title text-blue-950">1.</span><span>We send a secure sign-in link.</span></li>
+            <li class="flex gap-2"><span class="pf-row-title text-blue-950">2.</span><span>You set company defaults and service areas.</span></li>
+            <li class="flex gap-2"><span class="pf-row-title text-blue-950">3.</span><span>Your team can start adding leads and estimates.</span></li>
           </ol>
         </div>
       </section>
@@ -93,21 +93,21 @@ const selectedPlan = plans[plan];
         <section class="rounded-lg border bg-white p-5 shadow-sm sm:p-6">
           <div class="flex items-start justify-between gap-4">
             <div>
-              <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">14-day trial</p>
-              <h2 class="mt-2 text-2xl font-bold">Create your workspace</h2>
+              <p class="pf-kicker">14-day trial</p>
+              <h2 class="pf-section-title mt-2">Create your workspace</h2>
             </div>
             <div class="rounded-lg bg-slate-100 px-3 py-2 text-right">
-              <p class="text-sm font-semibold">{selectedPlan.name}</p>
-              <p class="text-xs text-slate-600">{selectedPlan.price}</p>
+              <p class="pf-row-title">{selectedPlan.name}</p>
+              <p class="pf-meta">{selectedPlan.price}</p>
             </div>
           </div>
-          <p class="mt-3 text-sm text-slate-600">{selectedPlan.fit}. {selectedPlan.limit}.</p>
+          <p class="pf-copy mt-3">{selectedPlan.fit}. {selectedPlan.limit}.</p>
 
           <form id="signup-form" class="mt-6 space-y-4">
             <input type="hidden" name="plan" value={plan} />
 
             <div>
-              <label for="companyName" class="mb-1 block text-sm font-medium text-slate-700">Company name</label>
+              <label for="companyName" class="form-label">Company name</label>
               <input
                 id="companyName"
                 name="companyName"
@@ -121,7 +121,7 @@ const selectedPlan = plans[plan];
             </div>
 
             <div>
-              <label for="name" class="mb-1 block text-sm font-medium text-slate-700">Your name</label>
+              <label for="name" class="form-label">Your name</label>
               <input
                 id="name"
                 name="name"
@@ -134,7 +134,7 @@ const selectedPlan = plans[plan];
             </div>
 
             <div>
-              <label for="email" class="mb-1 block text-sm font-medium text-slate-700">Work email</label>
+              <label for="email" class="form-label">Work email</label>
               <input
                 id="email"
                 name="email"
@@ -157,11 +157,11 @@ const selectedPlan = plans[plan];
             </button>
           </form>
 
-          <div id="message" class="hidden mt-4 rounded-lg border p-3 text-sm"></div>
+          <div id="message" class="pf-copy hidden mt-4 rounded-lg border p-3"></div>
 
-          <div class="mt-5 flex items-center justify-between gap-3 text-xs text-slate-500">
+          <div class="pf-meta mt-5 flex items-center justify-between gap-3">
             <span>No credit card required</span>
-            <a href="/#pricing" class="font-medium text-slate-700 hover:text-slate-950">Change plan</a>
+            <a href="/#pricing" class="pf-row-title hover:text-slate-950">Change plan</a>
           </div>
         </section>
       </aside>

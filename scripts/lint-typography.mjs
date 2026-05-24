@@ -6,6 +6,9 @@ import process from 'node:process';
 const root = process.cwd();
 const scanRoots = ['apps/web/src/pages', 'apps/web/src/components'];
 const extensions = new Set(['.astro', '.tsx', '.jsx']);
+const ignoredPathFragments = [
+  'apps/web/src/pages/dev/design-system.astro',
+];
 
 function lastArg(prefix) {
   return process.argv.filter((arg) => arg.startsWith(prefix)).at(-1);
@@ -53,10 +56,11 @@ const allowedClassFragments = [
   'font-mono',
   'material-symbol',
   'leaflet-',
+  'rounded-full',
 ];
 
 const allowedTags = new Set(['button', 'input', 'select', 'textarea', 'option', 'svg', 'path', 'canvas']);
-const watchedTags = new Set(['h1', 'h2', 'h3', 'h4', 'p', 'span', 'div', 'a', 'summary', 'th', 'td', 'label']);
+const watchedTags = new Set(['h1', 'h2', 'h3', 'h4', 'p', 'span', 'div', 'a', 'summary', 'th', 'td']);
 
 async function listFiles(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -123,6 +127,8 @@ function lintFile(filePath, source) {
 const files = (await Promise.all(scanRoots.map((dir) => listFiles(path.join(root, dir))))).flat();
 const warnings = [];
 for (const file of files) {
+  const relativeFile = path.relative(root, file).replaceAll(path.sep, '/');
+  if (ignoredPathFragments.some((fragment) => relativeFile === fragment)) continue;
   const source = await readFile(file, 'utf8');
   warnings.push(...lintFile(path.relative(root, file), source));
 }

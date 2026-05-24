@@ -68,8 +68,8 @@ import Base from '../../layouts/Base.astro';
     </div>
 
     <div id="setup-error" class="hidden bg-red-50 border border-red-200 text-red-800 rounded-lg p-4 mb-5">
-      <p class="font-medium">Estimator setup could not load</p>
-      <p class="text-sm mt-1" id="setup-error-message"></p>
+      <p class="pf-row-title">Estimator setup could not load</p>
+      <p class="pf-copy mt-1" id="setup-error-message"></p>
       <div class="flex flex-wrap gap-3 mt-3">
         <button id="retry-setup" type="button" class="btn-primary btn-sm">Retry</button>
         <a href="/settings" class="btn-secondary btn-sm">Check settings</a>
@@ -81,13 +81,13 @@ import Base from '../../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="setup">
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="block">
-              <span class="block text-sm font-medium text-gray-700 mb-2">Customer</span>
+              <span class="form-label block mb-2">Customer</span>
               <select id="lead-select" class="min-w-0 w-full px-3 py-3 border rounded-lg text-base">
                 <option>Loading...</option>
               </select>
             </label>
             <label class="block">
-              <span class="block text-sm font-medium text-gray-700 mb-2">Estimate type</span>
+              <span class="form-label block mb-2">Estimate type</span>
               <select id="estimate-type" class="min-w-0 w-full px-3 py-3 border rounded-lg text-base">
                 <option value="interior">Interior repaint</option>
                 <option value="exterior">Exterior repaint</option>
@@ -107,15 +107,15 @@ import Base from '../../layouts/Base.astro';
             </div>
           </div>
           <div id="quick-scope-builder" class="hidden space-y-3">
-            <div id="quick-scope-summary" class="hidden rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm text-blue-950">
+            <div id="quick-scope-summary" class="pf-copy hidden rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2 text-blue-950">
               <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p id="quick-scope-summary-text" class="text-gray-700">Starter scope added. Refine the generated substrates below.</p>
+                <p id="quick-scope-summary-text">Starter scope added. Refine the generated substrates below.</p>
                 <button id="edit-quick-scope" type="button" class="btn-text btn-sm justify-center">Review</button>
               </div>
             </div>
-            <div id="quick-scope-skip-summary" class="hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
+            <div id="quick-scope-skip-summary" class="pf-copy hidden rounded-lg border border-gray-200 bg-white px-3 py-2">
               <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p class="text-gray-700">Starter scope skipped. Add rooms, spaces, and substrates manually below.</p>
+                <p>Starter scope skipped. Add rooms, spaces, and substrates manually below.</p>
                 <button id="restore-quick-scope" type="button" class="btn-text btn-sm justify-center">Use starter scope</button>
               </div>
             </div>
@@ -137,9 +137,9 @@ import Base from '../../layouts/Base.astro';
               <h2 class="pf-section-title">Paint Schedule</h2>
               <p class="pf-copy">Production handoff by substrate: product, color, status, and order units.</p>
             </div>
-            <span id="paint-schedule-count" class="text-sm font-medium text-gray-700">0 substrates</span>
+            <span id="paint-schedule-count" class="pf-row-title">0 substrates</span>
           </div>
-          <div id="paint-schedule" class="mt-3 space-y-2 text-sm text-gray-700"></div>
+          <div id="paint-schedule" class="pf-copy mt-3 space-y-2"></div>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="review">
@@ -157,33 +157,33 @@ import Base from '../../layouts/Base.astro';
       <aside class="min-w-0 space-y-4 lg:sticky lg:top-20 self-start">
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <h2 class="pf-section-title mb-3">Estimate Summary</h2>
-          <div class="space-y-2 text-sm">
-            <div class="flex justify-between"><span class="text-gray-600">Labor hours</span><span id="total-hours" class="font-medium">0.0</span></div>
-            <div class="flex justify-between"><span class="text-gray-600">Labor</span><span id="labor-total" class="font-medium">$0.00</span></div>
-            <div class="flex justify-between"><span class="text-gray-600">Materials</span><span id="materials-total" class="font-medium">$0.00</span></div>
-            <div class="flex justify-between"><span class="text-gray-600">Adjustments</span><span id="adjustments-total" class="font-medium">$0.00</span></div>
-            <div class="flex justify-between"><span class="text-gray-600">Customer options</span><span id="optional-total" class="font-medium">$0.00</span></div>
+          <div class="space-y-2">
+            <div class="flex justify-between"><span class="pf-meta">Labor hours</span><span id="total-hours" class="pf-row-title">0.0</span></div>
+            <div class="flex justify-between"><span class="pf-meta">Labor</span><span id="labor-total" class="pf-row-title">$0.00</span></div>
+            <div class="flex justify-between"><span class="pf-meta">Materials</span><span id="materials-total" class="pf-row-title">$0.00</span></div>
+            <div class="flex justify-between"><span class="pf-meta">Adjustments</span><span id="adjustments-total" class="pf-row-title">$0.00</span></div>
+            <div class="flex justify-between"><span class="pf-meta">Customer options</span><span id="optional-total" class="pf-row-title">$0.00</span></div>
             <label class="flex items-center justify-between gap-3 border-t pt-2">
-              <span class="text-gray-600">Discount</span>
+              <span class="pf-meta">Discount</span>
               <input id="discount" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="0" class="w-28 px-2 py-1 border rounded text-right">
             </label>
-            <div class="flex justify-between"><span class="text-gray-600">Tax</span><span id="tax-total" class="font-medium">$0.00</span></div>
-            <div class="flex justify-between border-t pt-2 text-base"><span class="font-semibold">Base proposal total</span><span id="total-cost" class="font-bold text-blue-600">$0.00</span></div>
+            <div class="flex justify-between"><span class="pf-meta">Tax</span><span id="tax-total" class="pf-row-title">$0.00</span></div>
+            <div class="flex justify-between border-t pt-2"><span class="pf-section-title">Base proposal total</span><span id="total-cost" class="pf-section-title text-blue-600">$0.00</span></div>
           </div>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <h2 class="pf-section-title mb-3">Paint Products</h2>
-          <div class="space-y-3 text-sm">
+          <div class="space-y-3">
             <label class="block">
-              <span class="text-gray-600">Wall/finish paint</span>
+              <span class="form-label">Wall/finish paint</span>
               <select id="paint-material" class="mt-1 w-full px-3 py-2 border rounded-lg"></select>
             </label>
             <label class="block">
-              <span class="text-gray-600">Primer</span>
+              <span class="form-label">Primer</span>
               <select id="primer-material" class="mt-1 w-full px-3 py-2 border rounded-lg"></select>
             </label>
-            <p id="material-note" class="text-xs text-gray-500"></p>
+            <p id="material-note" class="pf-meta"></p>
           </div>
           <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
             <button id="save-draft" class="btn-secondary w-full justify-center">
@@ -193,13 +193,13 @@ import Base from '../../layouts/Base.astro';
               Send Estimate
             </button>
           </div>
-          <p id="estimate-edit-note" class="hidden mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-950"></p>
-          <p id="save-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
+          <p id="estimate-edit-note" class="pf-meta hidden mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-blue-950"></p>
+          <p id="save-status" class="pf-copy hidden mt-3" aria-live="polite"></p>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <h2 class="pf-section-title mb-3">Production Readiness</h2>
-          <div id="production-readiness" class="space-y-2 text-sm text-gray-700"></div>
+          <div id="production-readiness" class="pf-copy space-y-2"></div>
         </div>
       </aside>
     </div>

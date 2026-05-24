@@ -17,7 +17,7 @@ import Base from '../../layouts/Base.astro';
     <form id="estimate-form" class="grid lg:grid-cols-[1fr_340px] gap-5">
       <section class="space-y-4">
         <div class="bg-white rounded-lg shadow-sm border p-4 sm:p-5">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Customer</label>
+          <label class="form-label block mb-2">Customer</label>
           <select name="leadId" id="lead-select" required class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
             <option value="">Loading leads...</option>
           </select>
@@ -32,7 +32,7 @@ import Base from '../../layouts/Base.astro';
             <button type="button" id="add-item" class="btn-primary btn-sm">Add Item</button>
           </div>
           <div id="items" class="space-y-3"></div>
-          <div class="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+          <div class="pf-meta mt-3 rounded-lg bg-gray-50 p-3">
             Qty is the multiplier for the row. Scope type is descriptive only and helps the customer understand the scope.
           </div>
         </div>
@@ -41,21 +41,21 @@ import Base from '../../layouts/Base.astro';
       <aside class="space-y-4 lg:sticky lg:top-20 self-start">
         <div class="bg-white rounded-lg shadow-sm border p-4">
           <h3 class="pf-section-title mb-3">Owner Defaults</h3>
-          <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="grid grid-cols-2 gap-3">
             <label>
-              <span class="text-gray-600">Labor rate</span>
+              <span class="form-label">Labor rate</span>
               <input id="labor-rate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label>
-              <span class="text-gray-600">Material markup %</span>
+              <span class="form-label">Material markup %</span>
               <input id="markup" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label>
-              <span class="text-gray-600">Sales tax %</span>
+              <span class="form-label">Sales tax %</span>
               <input id="tax-rate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
             <label>
-              <span class="text-gray-600">Deposit %</span>
+              <span class="form-label">Deposit %</span>
               <input id="deposit-percent" type="number" min="0" max="100" step="0.01" inputmode="decimal" autocomplete="off" class="mt-1 w-full px-3 py-2 border rounded-lg">
             </label>
           </div>
@@ -65,7 +65,7 @@ import Base from '../../layouts/Base.astro';
           <h3 class="pf-section-title mb-3">Proposal Preview</h3>
           <div id="package-preview" class="space-y-3"></div>
           <button id="create-estimate-btn" type="submit" class="btn-primary w-full justify-center mt-4">Create Estimate</button>
-          <p id="create-estimate-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>
+          <p id="create-estimate-status" class="pf-copy hidden mt-3" aria-live="polite"></p>
         </div>
       </aside>
     </form>
@@ -133,23 +133,23 @@ import Base from '../../layouts/Base.astro';
       div.className = 'grid gap-2 sm:grid-cols-[1fr_90px_110px_120px_120px_auto] items-end border rounded-lg p-3';
       div.innerHTML = `
         <label class="block sm:col-span-1">
-          <span class="text-xs text-gray-600">Description</span>
+          <span class="form-label">Description</span>
           <input data-field="desc" autocomplete="off" value="${escapeHtml(item.desc || '')}" placeholder="Scope item" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
-          <span class="text-xs text-gray-600">Qty</span>
+          <span class="form-label">Qty</span>
           <input data-field="qty" type="number" min="0" step="0.25" inputmode="decimal" autocomplete="off" value="${item.qty ?? 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
-          <span class="text-xs text-gray-600">Scope type</span>
+          <span class="form-label">Scope type</span>
           <input data-field="unit" autocomplete="off" value="${escapeHtml(item.unit || 'item')}" placeholder="room, wall, door" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
-          <span class="text-xs text-gray-600">Labor hours</span>
+          <span class="form-label">Labor hours</span>
           <input data-field="laborHours" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.laborHours || 0}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <label class="block">
-          <span class="text-xs text-gray-600">Materials cost</span>
+          <span class="form-label">Materials cost</span>
           <input data-field="materialCost" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" value="${item.materialCost ?? 1}" class="mt-1 w-full px-3 py-2 border rounded-lg">
         </label>
         <button type="button" class="remove-item btn-secondary btn-sm">Remove</button>
@@ -199,12 +199,12 @@ import Base from '../../layouts/Base.astro';
       const total = pkg?.total || 0;
       document.getElementById('package-preview').innerHTML = `
         <div class="border rounded-lg p-3">
-          <div class="space-y-2 text-sm">
-            <div class="flex items-center justify-between"><span class="text-gray-600">Scope rows</span><span class="font-medium">${pkg?.items.length || 0}</span></div>
-            <div class="flex items-center justify-between"><span class="text-gray-600">Subtotal</span><span class="font-medium">${money(subtotal)}</span></div>
-            <div class="flex items-center justify-between"><span class="text-gray-600">Estimated tax</span><span class="font-medium">${money(tax)}</span></div>
-            <div class="flex items-center justify-between border-t pt-2 text-base"><span class="font-semibold">Proposal total</span><span class="font-bold text-blue-700">${money(total)}</span></div>
-            <div class="flex items-center justify-between"><span class="text-gray-600">Deposit</span><span class="font-medium">${money(total * depositPercent)}</span></div>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between"><span class="pf-meta">Scope rows</span><span class="pf-row-title">${pkg?.items.length || 0}</span></div>
+            <div class="flex items-center justify-between"><span class="pf-meta">Subtotal</span><span class="pf-row-title">${money(subtotal)}</span></div>
+            <div class="flex items-center justify-between"><span class="pf-meta">Tax</span><span class="pf-row-title">${money(tax)}</span></div>
+            <div class="flex items-center justify-between border-t pt-2"><span class="pf-section-title">Proposal total</span><span class="pf-section-title text-blue-700">${money(total)}</span></div>
+            <div class="flex items-center justify-between"><span class="pf-meta">Deposit</span><span class="pf-row-title">${money(total * depositPercent)}</span></div>
           </div>
         </div>
       `;
