@@ -48,6 +48,8 @@ const allowedClassFragments = [
   'time-',
   'btn-',
   'form-label',
+  'form-helper',
+  'form-hint',
   'input',
   'chip',
   'status',

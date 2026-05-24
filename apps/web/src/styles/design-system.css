@@ -297,7 +297,8 @@ textarea {
 
 input::placeholder,
 textarea::placeholder {
-  color: #8a948d;
+  color: color-mix(in srgb, var(--pf-text-muted) 74%, transparent);
+  font-weight: 400;
 }
 
 input:focus,
@@ -1033,6 +1034,15 @@ body.pf-nav-drawer-open {
   font-size: 0.8rem;
   font-weight: 700;
   margin-bottom: 0.35rem;
+}
+
+.form-helper,
+.form-hint {
+  color: var(--pf-text-muted);
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .chip {

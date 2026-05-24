@@ -152,8 +152,9 @@ const { defineOnly = false } = Astro.props;
             <form id="agreement-action-form" class="mt-4 space-y-4">
               <input type="hidden" name="estimateId">
               <input type="hidden" name="action">
-              <label class="form-label block">Reason
-                <textarea name="reason" rows="3" maxlength="500" required class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Customer requested a different scope, job postponed, agreement rescinded..."></textarea>
+              <label class="block">
+                <span class="form-label">Reason</span>
+                <textarea name="reason" rows="3" maxlength="500" required class="input min-h-24 resize-none" placeholder="Customer requested a different scope, job postponed, agreement rescinded..."></textarea>
               </label>
               <div class="pf-copy rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950">
                 Signed agreements remain in the customer record for audit history. Use revisions for changed scope; use void only when the agreement should not proceed.
@@ -268,28 +269,33 @@ const { defineOnly = false } = Astro.props;
                 </span>
               </label>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label class="form-label block">Payment type
-                  <select name="source" class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
+                <label class="block">
+                  <span class="form-label">Payment type</span>
+                  <select name="source" class="input">
                     <option value="check">Check</option>
                     <option value="cash">Cash</option>
                     <option value="ach">ACH / bank transfer</option>
                     <option value="other">Other</option>
                   </select>
                 </label>
-                <label class="form-label block">Amount
-                  <input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
+                <label class="block">
+                  <span class="form-label">Amount</span>
+                  <input name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required class="input">
                 </label>
               </div>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label class="form-label block">Received date
-                  <input name="receivedAt" type="date" class="mt-1 w-full rounded-md border px-3 py-2 text-sm">
+                <label class="block">
+                  <span class="form-label">Received date</span>
+                  <input name="receivedAt" type="date" class="input">
                 </label>
-                <label class="form-label block">Check / reference #
-                  <input name="reference" maxlength="120" autocomplete="off" class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Optional">
+                <label class="block">
+                  <span class="form-label">Check / reference #</span>
+                  <input name="reference" maxlength="120" autocomplete="off" class="input" placeholder="Optional">
                 </label>
               </div>
-              <label class="form-label block">Description
-                <input name="description" maxlength="255" autocomplete="off" class="mt-1 w-full rounded-md border px-3 py-2 text-sm" placeholder="Deposit, progress payment, final payment">
+              <label class="block">
+                <span class="form-label">Description</span>
+                <input name="description" maxlength="255" autocomplete="off" class="input" placeholder="Deposit, progress payment, final payment">
               </label>
               <div class="flex justify-end gap-2">
                 <button type="button" class="btn-secondary btn-sm" data-close-manual-payment>Cancel</button>

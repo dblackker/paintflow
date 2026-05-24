@@ -42,44 +42,44 @@ import Base from '../layouts/Base.astro';
           <button id="cancel" class="btn-text btn-sm">Close</button>
         </div>
         <form id="lead-form" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input name="name" autocomplete="name" enterkeyhint="next" required class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-          </div>
+          <label class="block">
+            <span class="form-label">Name *</span>
+            <input name="name" autocomplete="name" enterkeyhint="next" required class="input" />
+          </label>
           <div class="grid sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-              <input name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="14" pattern="[0-9() -]{10,14}" placeholder="(555) 123-4567" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="customer@example.com" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
+            <label class="block">
+              <span class="form-label">Phone</span>
+              <input name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="14" pattern="[0-9() -]{10,14}" placeholder="(555) 123-4567" enterkeyhint="next" class="input" />
+            </label>
+            <label class="block">
+              <span class="form-label">Email</span>
+              <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="customer@example.com" enterkeyhint="next" class="input" />
+            </label>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Jobsite street address</label>
-            <input name="streetAddress" autocomplete="street-address" enterkeyhint="next" placeholder="123 Main St" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-          </div>
+          <label class="block">
+            <span class="form-label">Jobsite street address</span>
+            <input name="streetAddress" autocomplete="street-address" enterkeyhint="next" placeholder="123 Main St" class="input" />
+          </label>
           <div class="grid grid-cols-1 sm:grid-cols-[1fr_96px_120px] gap-3">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
-              <input name="city" autocomplete="address-level2" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">State</label>
-              <input name="state" autocomplete="address-level1" maxlength="2" autocapitalize="characters" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">ZIP</label>
-              <input name="postalCode" autocomplete="postal-code" inputmode="numeric" enterkeyhint="next" class="w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-            </div>
+            <label class="block">
+              <span class="form-label">City</span>
+              <input name="city" autocomplete="address-level2" enterkeyhint="next" class="input" />
+            </label>
+            <label class="block">
+              <span class="form-label">State</span>
+              <input name="state" autocomplete="address-level1" maxlength="2" autocapitalize="characters" enterkeyhint="next" class="input" />
+            </label>
+            <label class="block">
+              <span class="form-label">ZIP</span>
+              <input name="postalCode" autocomplete="postal-code" inputmode="numeric" enterkeyhint="next" class="input" />
+            </label>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Source</label>
-            <select name="source" id="lead-source" class="w-full px-3 py-3 border rounded-lg">
+          <label class="block">
+            <span class="form-label">Source</span>
+            <select name="source" id="lead-source" class="input">
               <option value="">Select source...</option>
             </select>
-          </div>
+          </label>
           <div class="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
             <button type="button" id="cancel-bottom" class="btn-secondary flex-1 justify-center">Cancel</button>
             <button type="submit" class="btn-primary flex-1 justify-center">Save Lead</button>
