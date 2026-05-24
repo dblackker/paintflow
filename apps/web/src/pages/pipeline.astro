@@ -168,6 +168,7 @@ import Base from '../layouts/Base.astro';
     }
     .pipeline-board {
       display: grid;
+      align-items: start;
       gap: 1rem;
       grid-auto-columns: minmax(16rem, 18rem);
       grid-auto-flow: column;
@@ -184,6 +185,9 @@ import Base from '../layouts/Base.astro';
       overflow-x: visible;
     }
     .pipeline-stage {
+      align-self: start;
+      display: flex;
+      flex-direction: column;
       min-height: 18rem;
       transition: border-color 150ms ease, background-color 150ms ease;
     }
@@ -200,8 +204,7 @@ import Base from '../layouts/Base.astro';
       box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.22), 0 10px 24px rgba(37, 99, 235, 0.12);
     }
     .pipeline-stage-header {
-      position: sticky;
-      top: calc(var(--pf-app-nav-height, 4rem) + 0.5rem);
+      position: static;
       z-index: 2;
     }
     .pipeline-card[draggable="true"] {
@@ -329,7 +332,7 @@ import Base from '../layouts/Base.astro';
         data.openActivities || 0,
         data.staleCount || 0,
       ];
-      [...summary.querySelectorAll('p.text-xl')].forEach((node, index) => {
+      [...summary.querySelectorAll('.pf-metric-value')].forEach((node, index) => {
         node.textContent = values[index];
       });
     }
@@ -488,7 +491,7 @@ import Base from '../layouts/Base.astro';
       form.elements.leadId.value = leadId;
       select.value = targetStage || currentStage || 'contacted';
       pendingTransition = { leadId, fromStage: currentStage, name };
-      document.getElementById('transition-customer').textContent = `${name} · ${stageLabel(currentStage)} to ${stageLabel(select.value)}`;
+      document.getElementById('transition-customer').textContent = `${name} - ${stageLabel(currentStage)} to ${stageLabel(select.value)}`;
       document.getElementById('transition-helper').textContent = transitionHelper(select.value);
       modal.classList.remove('hidden');
       select.focus();
@@ -570,7 +573,7 @@ import Base from '../layouts/Base.astro';
 
     document.getElementById('transition-form').addEventListener('change', (event) => {
       if (event.target.name !== 'targetStage' || !pendingTransition) return;
-      document.getElementById('transition-customer').textContent = `${pendingTransition.name} · ${stageLabel(pendingTransition.fromStage)} to ${stageLabel(event.target.value)}`;
+      document.getElementById('transition-customer').textContent = `${pendingTransition.name} - ${stageLabel(pendingTransition.fromStage)} to ${stageLabel(event.target.value)}`;
       document.getElementById('transition-helper').textContent = transitionHelper(event.target.value);
     });
 
