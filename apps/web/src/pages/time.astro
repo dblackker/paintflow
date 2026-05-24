@@ -857,7 +857,6 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                 <input id="forgot-clock-out-toggle" type="checkbox" class="h-4 w-4">
                 <span>I forgot to clock out earlier</span>
               </label>
-              <button id="punch-out-btn" class="btn-primary">Clock out</button>
             </div>
             <div id="forgot-clock-out-fields" class="hidden grid sm:grid-cols-2 gap-3 rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface-muted)] p-3">
               <label class="block">
@@ -868,6 +867,9 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
                 <span class="form-label">Reason for lead review</span>
                 <input id="punch-out-note" class="input" placeholder="Finished at 4:30, forgot to clock out">
               </label>
+            </div>
+            <div class="flex justify-end">
+              <button id="punch-out-btn" class="btn-primary w-full sm:w-auto">Clock out</button>
             </div>
           </div>
         `;
