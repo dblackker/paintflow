@@ -28,5 +28,8 @@ jobs:
       - name: Typography lint
         run: pnpm lint:typography
 
+      - name: Button hierarchy lint
+        run: pnpm lint:buttons
+
       - name: Build
         run: pnpm -r build
