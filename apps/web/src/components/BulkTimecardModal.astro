@@ -27,6 +27,7 @@ const ids = idPrefix === 'bulk'
       summary: 'bulk-selection-summary',
       members: 'bulk-members',
       cancel: 'cancel-bulk-btn',
+      addSegment: 'bulk-add-segment-btn',
       submit: 'submit-bulk-btn',
     }
   : {
@@ -40,6 +41,7 @@ const ids = idPrefix === 'bulk'
       summary: `${idPrefix}-selection-summary`,
       members: `${idPrefix}-members`,
       cancel: `cancel-${idPrefix}-btn`,
+      addSegment: `${idPrefix}-add-segment-btn`,
       submit: `submit-${idPrefix}-btn`,
     };
 ---
@@ -97,6 +99,7 @@ const ids = idPrefix === 'bulk'
       <div id={ids.members} class="border border-[var(--pf-border)] rounded-xl overflow-hidden divide-y divide-[var(--pf-border)]"></div>
       <div class="mobile-sticky-actions flex flex-col sm:flex-row gap-3 pt-2 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
         <button type="button" id={ids.cancel} class="btn-secondary flex-1">Cancel</button>
+        {showJob && <button type="button" id={ids.addSegment} class="btn-secondary flex-1">Log + add job</button>}
         <button type="submit" id={ids.submit} class="btn-primary flex-1">Log crew time</button>
       </div>
     </form>

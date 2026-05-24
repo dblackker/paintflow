@@ -584,6 +584,18 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       return `<option value="">No job selected</option>${options}`;
     }
 
+    function switchJobOptions(activeJobId = '') {
+      const jobsById = new Map(jobs.map((job) => [job.id, job]));
+      const sourceJobs = sortJobsByRecentTime(
+        (punchStatus?.jobs?.length ? punchStatus.jobs : jobs)
+          .map((job) => ({ ...jobsById.get(job.id), ...job }))
+          .filter((job) => job.id && job.id !== activeJobId)
+      );
+      return `<option value="">Select next job...</option>${sourceJobs
+        .map((job) => `<option value="${job.id}">${escapeHtml(jobOptionLabel(job))}</option>`)
+        .join('')}`;
+    }
+
     function reviewJobOptions(selectedId = '') {
       return '<option value="">Assign job...</option>' + sortJobsByRecentTime(jobs)
         .map((job) => `<option value="${job.id}" ${job.id === selectedId ? 'selected' : ''}>${escapeHtml(jobOptionLabel(job))}</option>`)
@@ -833,6 +845,13 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
         `;
         controls.innerHTML = `
           <div class="grid punch-actions gap-3">
+            <div class="grid sm:grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
+              <label class="block">
+                <span class="form-label">Switch to job</span>
+                <select id="switch-job" class="input">${switchJobOptions(active.jobId)}</select>
+              </label>
+              <button type="button" id="switch-job-btn" class="btn-secondary">Switch job</button>
+            </div>
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <label class="inline-flex items-center gap-2 text-sm text-gray-700">
                 <input id="forgot-clock-out-toggle" type="checkbox" class="h-4 w-4">
@@ -877,6 +896,7 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       document.getElementById('bulk-time-btn').classList.toggle('hidden', !status.canManage);
       document.getElementById('punch-in-btn')?.addEventListener('click', () => punchIn(false));
       document.getElementById('forgot-in-btn')?.addEventListener('click', openForgotClockInModal);
+      document.getElementById('switch-job-btn')?.addEventListener('click', switchJob);
       document.getElementById('forgot-clock-out-toggle')?.addEventListener('change', toggleForgotClockOutFields);
       document.getElementById('punch-out-btn')?.addEventListener('click', punchOut);
     }
@@ -1213,6 +1233,43 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       }
     }
 
+    async function switchJob() {
+      if (isPunching) return;
+      const jobId = document.getElementById('switch-job')?.value;
+      if (!jobId) {
+        window.showToast?.('Select the next job first', 'error');
+        return;
+      }
+      const button = document.getElementById('switch-job-btn');
+      try {
+        isPunching = true;
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'Switching...';
+        }
+        const location = await requireLocation();
+        await api('/v1/team/punch/switch-job', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...location,
+            teamMemberId: getSelectedPunchMemberId(),
+            jobId,
+          }),
+        });
+        window.showToast?.('Switched job', 'success');
+        await refreshPunchStatus();
+        await loadData();
+      } catch (err) {
+        window.showToast?.(err.message || 'Failed to switch job', 'error');
+      } finally {
+        isPunching = false;
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'Switch job';
+        }
+      }
+    }
+
     async function reviewPunch(id, reviewStatus) {
       const jobId = document.querySelector(`[data-review-job="${id}"]`)?.value || undefined;
       if (reviewStatus === 'approved') {
@@ -1502,6 +1559,11 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
     document.getElementById('bulk-time-btn').addEventListener('click', openBulkModal);
     document.getElementById('cancel-bulk-btn').addEventListener('click', closeBulkModal);
     document.getElementById('close-bulk-modal-btn').addEventListener('click', closeBulkModal);
+    document.getElementById('bulk-add-segment-btn')?.addEventListener('click', () => {
+      const form = document.getElementById('bulk-time-form');
+      form.dataset.addSegment = 'true';
+      form.requestSubmit();
+    });
     document.getElementById('cancel-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
     document.getElementById('close-forgot-clock-in-btn').addEventListener('click', closeForgotClockInModal);
     document.getElementById('forgot-clock-in-form').addEventListener('submit', async (event) => {
@@ -1577,6 +1639,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       if (isSavingBulkTime) return;
       const form = event.currentTarget;
       const submit = document.getElementById('submit-bulk-btn');
+      const addSegment = document.getElementById('bulk-add-segment-btn');
+      const shouldAddSegment = form.dataset.addSegment === 'true';
       const data = Object.fromEntries(new FormData(form));
       const selected = getBulkSelectedEntries().map(({ member, hours }) => ({
         teamMemberId: member.id,
@@ -1596,7 +1660,8 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
       try {
         isSavingBulkTime = true;
         submit.disabled = true;
-        submit.textContent = 'Logging...';
+        if (addSegment) addSegment.disabled = true;
+        submit.textContent = shouldAddSegment ? 'Logging segment...' : 'Logging...';
         await api('/v1/team/timecards', {
           method: 'POST',
           body: JSON.stringify({
@@ -1606,14 +1671,22 @@ import BulkTimecardModal from '../components/BulkTimecardModal.astro';
             entries: selected,
           }),
         });
-        closeBulkModal();
-        window.showToast(`Logged time for ${selected.length} crew members`, 'success');
+        if (shouldAddSegment) {
+          form.elements.jobId.value = '';
+          form.elements.description.value = '';
+          window.showToast(`Logged segment for ${selected.length} crew members`, 'success');
+        } else {
+          closeBulkModal();
+          window.showToast(`Logged time for ${selected.length} crew members`, 'success');
+        }
         await loadData();
       } catch (err) {
         window.showToast?.(err.message || 'Failed to log crew time', 'error');
       } finally {
+        form.dataset.addSegment = '';
         isSavingBulkTime = false;
         submit.disabled = false;
+        if (addSegment) addSegment.disabled = false;
         submit.textContent = 'Log crew time';
       }
     });

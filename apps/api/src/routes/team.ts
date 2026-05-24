@@ -325,6 +325,121 @@ teamApp.post('/punch/out', async (c) => {
   return c.json({ data: { session: updated, entry } });
 });
 
+teamApp.post('/punch/switch-job', async (c) => {
+  const orgId = c.get('orgId');
+  const parsed = switchJobSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const data = parsed.data;
+  const resolved = await resolvePunchMember(c, data.teamMemberId);
+  if ('error' in resolved) return c.json({ error: resolved.error }, resolved.status);
+
+  const db = createDb(c.env.DATABASE_URL);
+  const nextJob = await db.query.jobs.findFirst({ where: and(eq(jobs.id, data.jobId), eq(jobs.orgId, orgId)) });
+  if (!nextJob) return c.json({ error: 'Job not found' }, 404);
+
+  const session = await db.query.timePunchSessions.findFirst({
+    where: and(
+      eq(timePunchSessions.orgId, orgId),
+      eq(timePunchSessions.teamMemberId, resolved.member.id),
+      inArray(timePunchSessions.status, ['active', 'missed_clock_out']),
+    ),
+  });
+  if (!session) return c.json({ error: 'No active punch session found' }, 404);
+  if (session.jobId === data.jobId) return c.json({ error: 'Select a different job before switching' }, 400);
+
+  const settings = await getTimeClockSettings(c);
+  const switchedAt = new Date();
+  if (switchedAt <= session.startedAtActual) {
+    return c.json({ error: 'Switch time must be after clock-in time' }, 400);
+  }
+
+  const elapsedActualHours = hoursBetween(session.startedAtActual, switchedAt);
+  const longShift = elapsedActualHours > settings.maxShiftHours;
+  const reviewRequired = session.reviewRequired || longShift || !session.jobId;
+  const reviewReason = session.reviewReason || (longShift ? 'long_shift' : !session.jobId ? 'missing_job_assignment' : null);
+  const roundedStart = session.startedAtRounded;
+  const roundedEnd = roundToNearest(switchedAt, session.roundingIncrementMinutes || settings.roundingIncrementMinutes);
+  const roundedHours = Math.max(0.25, hoursBetween(roundedStart, roundedEnd));
+  const burdenRate = parseFloat(resolved.member.burdenRate || '30');
+  const baseRate = parseFloat(resolved.member.hourlyRate);
+  const burdenedRate = baseRate * (1 + burdenRate / 100);
+  const totalCost = roundedHours * burdenedRate;
+  const description = data.note || 'Punch clock labor';
+
+  const [entry] = await db.insert(timeEntries).values({
+    orgId,
+    jobId: session.jobId,
+    teamMemberId: resolved.member.id,
+    hours: roundedHours.toFixed(2),
+    description,
+    hourlyRate: burdenedRate.toFixed(2),
+    totalCost: totalCost.toFixed(2),
+    date: roundedStart,
+    source: 'punch_clock',
+    reviewStatus: reviewRequired ? 'flagged' : 'approved',
+    reviewReason,
+    actualStartAt: session.startedAtActual,
+    actualEndAt: switchedAt,
+    roundedStartAt: roundedStart,
+    roundedEndAt: roundedEnd,
+    startLatitude: session.startLatitude,
+    startLongitude: session.startLongitude,
+    startAccuracyMeters: session.startAccuracyMeters,
+    endLatitude: decimal(data.latitude),
+    endLongitude: decimal(data.longitude),
+    endAccuracyMeters: meters(data.accuracyMeters),
+  }).returning();
+
+  await createLaborCostForEntry(db, orgId, session.jobId, resolved.member.name, description, roundedHours, burdenedRate, totalCost);
+
+  await db.update(timePunchSessions)
+    .set({
+      timeEntryId: entry.id,
+      status: reviewRequired ? 'manual_override' : 'switched',
+      endedAtActual: switchedAt,
+      endedAtRounded: roundedEnd,
+      endLatitude: decimal(data.latitude),
+      endLongitude: decimal(data.longitude),
+      endAccuracyMeters: meters(data.accuracyMeters),
+      reviewRequired,
+      reviewReason,
+      crewNote: data.note || session.crewNote,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(timePunchSessions.id, session.id), eq(timePunchSessions.orgId, orgId)));
+
+  await insertPunchEvent(c, session.id, reviewRequired ? 'manual_job_switch' : 'job_switch', data, {
+    timeEntryId: entry.id,
+    fromJobId: session.jobId,
+    toJobId: data.jobId,
+  });
+
+  const [nextSession] = await db.insert(timePunchSessions).values({
+    orgId,
+    jobId: data.jobId,
+    teamMemberId: resolved.member.id,
+    status: 'active',
+    startedAtActual: switchedAt,
+    startedAtRounded: roundedEnd,
+    roundingIncrementMinutes: session.roundingIncrementMinutes || settings.roundingIncrementMinutes,
+    startLatitude: decimal(data.latitude)!,
+    startLongitude: decimal(data.longitude)!,
+    startAccuracyMeters: meters(data.accuracyMeters),
+    createdByUserId: c.get('userId'),
+  }).returning();
+
+  await insertPunchEvent(c, nextSession.id, 'clock_in', data, {
+    jobId: data.jobId,
+    teamMemberId: resolved.member.id,
+    switchedFromJobId: session.jobId,
+  });
+
+  return c.json({ data: { closedSessionId: session.id, session: nextSession, entry } });
+});
+
 teamApp.patch('/punch/review/:id', async (c) => {
   if (!await hasPermission(c, 'view_all_time') && !await hasPermission(c, 'log_time_for_others')) {
     return c.json({ error: 'Cannot review crew time' }, 403);
@@ -446,6 +561,12 @@ const punchOutSchema = locationSchema.extend({
   endedAt: z.string().datetime().optional(),
   note: z.string().trim().max(500).optional(),
   overrideReason: z.string().trim().max(500).optional(),
+});
+
+const switchJobSchema = locationSchema.extend({
+  jobId: z.string().uuid(),
+  teamMemberId: z.string().uuid().optional(),
+  note: z.string().trim().max(500).optional(),
 });
 
 const reviewPunchSchema = z.object({
