@@ -6,8 +6,8 @@ import Base from '../../layouts/Base.astro';
   <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
-        <h2 class="text-2xl font-bold text-gray-900">Estimates</h2>
-        <p class="text-sm text-gray-600 mt-1">Track sent, accepted, and declined painting proposals.</p>
+        <h2 class="pf-page-title">Estimates</h2>
+        <p class="pf-page-copy mt-1">Track sent, accepted, and declined painting proposals.</p>
       </div>
       <a href="/estimates/production" class="btn-primary justify-center w-full sm:w-auto">Start estimate</a>
     </div>
@@ -16,8 +16,8 @@ import Base from '../../layouts/Base.astro';
       <a href="/estimates/production" class="block bg-white border rounded-lg shadow-sm p-4 hover:border-blue-300 hover:shadow-md">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <h3 class="font-semibold text-gray-950">Production estimate</h3>
-            <p class="mobile-hide-copy text-sm text-gray-600 mt-1 sm:block">Use measured surfaces, prep levels, production rates, labor, paint products, and templates.</p>
+            <h3 class="pf-section-title">Production estimate</h3>
+            <p class="mobile-hide-copy pf-copy mt-1 sm:block">Use measured surfaces, prep levels, production rates, labor, paint products, and templates.</p>
           </div>
           <span class="shrink-0 rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-xs font-medium">Default</span>
         </div>
@@ -25,8 +25,8 @@ import Base from '../../layouts/Base.astro';
       <a href="/estimates/new" class="block bg-white border rounded-lg shadow-sm p-4 hover:border-blue-300 hover:shadow-md">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <h3 class="font-semibold text-gray-950">Quick line-item estimate</h3>
-            <p class="mobile-hide-copy text-sm text-gray-600 mt-1 sm:block">Build a simple estimate from manually entered scope items when takeoff detail is not needed.</p>
+            <h3 class="pf-section-title">Quick line-item estimate</h3>
+            <p class="mobile-hide-copy pf-copy mt-1 sm:block">Build a simple estimate from manually entered scope items when takeoff detail is not needed.</p>
           </div>
           <span class="shrink-0 rounded-full bg-gray-100 text-gray-700 px-3 py-1 text-xs font-medium">Simple</span>
         </div>
@@ -104,8 +104,8 @@ import Base from '../../layouts/Base.astro';
       const paid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
       const refunded = payments.reduce((sum, payment) => sum + Number(payment.refundedAmount || 0), 0);
       const net = Math.max(paid - refunded, 0);
-      if (!payments.length) return '<p class="text-xs text-gray-500">No payments recorded</p>';
-      return `<p class="text-xs text-gray-600">${money(net)} paid${refunded > 0 ? ` · ${money(refunded)} refunded` : ''}</p>`;
+      if (!payments.length) return '<p class="pf-meta">No payments recorded</p>';
+      return `<p class="pf-meta">${money(net)} paid${refunded > 0 ? ` · ${money(refunded)} refunded` : ''}</p>`;
     }
 
     async function apiJson(url, options = {}) {
@@ -155,10 +155,10 @@ import Base from '../../layouts/Base.astro';
       }, {});
       const totalValue = list.reduce((sum, estimate) => sum + Number(estimate.total || 0), 0);
       document.getElementById('summary').innerHTML = `
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Sent</p><p class="font-semibold">${counts.sent || 0}</p></div>
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Accepted</p><p class="font-semibold">${counts.accepted || 0}</p></div>
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Total Value</p><p class="font-semibold">${money(totalValue)}</p></div>
-        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Win Rate</p><p class="font-semibold">${list.length ? Math.round(((counts.accepted || 0) / list.length) * 100) : 0}%</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Sent</p><p class="pf-section-title">${counts.sent || 0}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Accepted</p><p class="pf-section-title">${counts.accepted || 0}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Total Value</p><p class="pf-section-title">${money(totalValue)}</p></div>
+        <div class="rounded-lg bg-gray-50 border px-3 py-2"><p class="text-gray-500">Win Rate</p><p class="pf-section-title">${list.length ? Math.round(((counts.accepted || 0) / list.length) * 100) : 0}%</p></div>
       `;
     }
 
@@ -177,7 +177,7 @@ import Base from '../../layouts/Base.astro';
             <div class="min-w-0">
               ${customerProfileLink({ leadId: estimate.leadId, name: estimate.leadName, address: formatAddress(estimate), contact: estimate.leadPhone ? phone(estimate.leadPhone) : estimate.leadEmail || 'No contact' })}
               <div class="mt-2 flex flex-wrap items-center gap-2">
-                <span class="text-xs text-gray-500">${new Date(estimate.createdAt).toLocaleDateString()}</span>
+                <span class="pf-meta">${new Date(estimate.createdAt).toLocaleDateString()}</span>
                 ${statusBadge(estimate.status)}
               </div>
             </div>

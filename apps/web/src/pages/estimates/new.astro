@@ -6,8 +6,8 @@ import Base from '../../layouts/Base.astro';
   <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
-        <h2 class="text-2xl font-bold text-gray-900">Quick Estimate</h2>
-        <p class="text-sm text-gray-600 mt-1">Build one simple proposal from a few priced scope rows.</p>
+        <h2 class="pf-page-title">Quick Estimate</h2>
+        <p class="pf-page-copy mt-1">Build one simple proposal from a few priced scope rows.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-2">
         <a href="/estimates/production" class="btn-secondary btn-sm justify-center">Use production estimator</a>
@@ -26,8 +26,8 @@ import Base from '../../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-4 sm:p-5">
           <div class="flex items-start justify-between gap-3 mb-4">
             <div>
-              <h3 class="font-semibold text-gray-900">Scope Items</h3>
-              <p class="text-sm text-gray-600">Each row calculates: Qty x ((labor hours x labor rate) + materials with markup).</p>
+              <h3 class="pf-section-title">Scope Items</h3>
+              <p class="pf-copy">Each row calculates: Qty x ((labor hours x labor rate) + materials with markup).</p>
             </div>
             <button type="button" id="add-item" class="btn-primary btn-sm">Add Item</button>
           </div>
@@ -40,7 +40,7 @@ import Base from '../../layouts/Base.astro';
 
       <aside class="space-y-4 lg:sticky lg:top-20 self-start">
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <h3 class="font-semibold text-gray-900 mb-3">Owner Defaults</h3>
+          <h3 class="pf-section-title mb-3">Owner Defaults</h3>
           <div class="grid grid-cols-2 gap-3 text-sm">
             <label>
               <span class="text-gray-600">Labor rate</span>
@@ -62,7 +62,7 @@ import Base from '../../layouts/Base.astro';
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <h3 class="font-semibold text-gray-900 mb-3">Proposal Preview</h3>
+          <h3 class="pf-section-title mb-3">Proposal Preview</h3>
           <div id="package-preview" class="space-y-3"></div>
           <button id="create-estimate-btn" type="submit" class="btn-primary w-full justify-center mt-4">Create Estimate</button>
           <p id="create-estimate-status" class="hidden mt-3 text-sm text-gray-600" aria-live="polite"></p>

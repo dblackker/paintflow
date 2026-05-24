@@ -49,8 +49,8 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
   </style>
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
       <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">Jobs</h2>
-        <p class="text-gray-600">Manage active projects, crews, photos, time, and job costs.</p>
+        <h2 class="pf-page-title">Jobs</h2>
+        <p class="pf-page-copy mt-1">Manage active projects, crews, photos, time, and job costs.</p>
       </div>
 
       <div id="jobs-list" class="space-y-3 sm:space-y-4">
@@ -199,7 +199,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
             <div class="jobs-card bg-white rounded-lg shadow-sm border p-6">
               <div class="jobs-card-header flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4">
                 <div class="min-w-0">
-                  <h3 class="text-lg font-semibold">${escapeHtml(displayJobName(job))}</h3>
+                  <h3 class="pf-section-title">${escapeHtml(displayJobName(job))}</h3>
                   <div class="mt-1">${statusBadge(job.status)}</div>
                   ${customerProfileLink(job)}
                 </div>
@@ -215,16 +215,16 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
               
               <div class="jobs-metrics grid grid-cols-3 gap-4 text-sm mb-4">
                 <div>
-                  <p class="text-gray-600">Revenue</p>
-                  <p class="font-semibold">${money(job.costing.revenue.total)}</p>
+                  <p class="pf-page-copy">Revenue</p>
+                  <p class="pf-section-title">${money(job.costing.revenue.total)}</p>
                 </div>
                 <div>
-                  <p class="text-gray-600">Actual Cost</p>
-                  <p class="font-semibold">${money(job.costing.costs.total)}</p>
+                  <p class="pf-page-copy">Actual Cost</p>
+                  <p class="pf-section-title">${money(job.costing.costs.total)}</p>
                 </div>
                 <div>
-                  <p class="text-gray-600">Profit</p>
-                  <p class="font-semibold">${money(job.costing.profitability.grossProfit)}</p>
+                  <p class="pf-page-copy">Profit</p>
+                  <p class="pf-section-title">${money(job.costing.profitability.grossProfit)}</p>
                 </div>
               </div>
               
@@ -583,7 +583,7 @@ import BulkTimecardModal from '../../components/BulkTimecardModal.astro';
         const { data } = await res.json();
         const container = document.getElementById(`change-orders-${jobId}`);
         if (data.length === 0) {
-          container.innerHTML = '<p class="text-xs text-gray-500">No change orders</p>';
+          container.innerHTML = '<p class="pf-meta">No change orders</p>';
           return;
         }
         container.innerHTML = data.map(co => `

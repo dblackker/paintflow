@@ -147,8 +147,8 @@ const isDev = import.meta.env.DEV;
   <main class="dashboard-shell mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="dashboard-hero flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-6">
       <div>
-        <h2 class="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h2>
-        <p class="text-sm sm:text-base text-gray-600 mt-1">Run today’s lead, estimate, and job workflow from one place.</p>
+        <h2 class="pf-page-title">Dashboard</h2>
+        <p class="pf-page-copy mt-1">Run today’s lead, estimate, and job workflow from one place.</p>
       </div>
       <div id="dashboard-primary-actions" class="dashboard-primary-actions grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         <a href="/leads?new=1" class="btn-primary btn-sm justify-center"><Icon name="plus" />Add lead</a>
@@ -162,27 +162,27 @@ const isDev = import.meta.env.DEV;
 
     <section class="dashboard-metrics grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
       <a href="/leads" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
-        <p class="text-sm text-gray-600">Active leads</p>
-        <p class="text-3xl font-bold mt-2" id="active-leads">-</p>
-        <p class="mt-3 text-sm font-medium text-blue-700">Open leads</p>
+        <p class="pf-metric-label">Active leads</p>
+        <p class="pf-metric-value mt-2" id="active-leads">-</p>
+        <p class="pf-meta mt-3 text-blue-700">Open leads</p>
       </a>
       <a href="/estimates" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
-        <p class="text-sm text-gray-600">Estimates sent</p>
-        <p class="text-3xl font-bold mt-2" id="estimates-sent">-</p>
-        <p class="mt-3 text-sm font-medium text-blue-700">Review estimates</p>
+        <p class="pf-metric-label">Estimates sent</p>
+        <p class="pf-metric-value mt-2" id="estimates-sent">-</p>
+        <p class="pf-meta mt-3 text-blue-700">Review estimates</p>
       </a>
       <a href="/jobs" class="dashboard-metric-card p-5 sm:p-6 rounded-lg">
-        <p class="text-sm text-gray-600">Jobs this month</p>
-        <p class="text-3xl font-bold mt-2" id="jobs-month">-</p>
-        <p class="mt-3 text-sm font-medium text-blue-700">Open schedule</p>
+        <p class="pf-metric-label">Jobs this month</p>
+        <p class="pf-metric-value mt-2" id="jobs-month">-</p>
+        <p class="pf-meta mt-3 text-blue-700">Open schedule</p>
       </a>
     </section>
 
     <section id="empty-start" class="hidden mb-6 rounded-lg border border-blue-200 bg-blue-50 p-5 sm:p-6">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p class="font-semibold text-blue-950">Start with your first lead</p>
-          <p class="mt-1 text-sm text-blue-900">Capture the customer, then build an estimate from production rates when you are ready.</p>
+          <p class="pf-section-title text-blue-950">Start with your first lead</p>
+          <p class="pf-copy mt-1 text-blue-900">Capture the customer, then build an estimate from production rates when you are ready.</p>
         </div>
         <div class="flex flex-col gap-2 sm:flex-row">
           <a href="/leads?new=1" class="btn-primary btn-sm justify-center"><Icon name="plus" />Add first lead</a>
@@ -195,7 +195,7 @@ const isDev = import.meta.env.DEV;
     <section class="grid gap-6 lg:grid-cols-[1fr_340px]">
       <div class="dashboard-panel rounded-lg p-5 sm:p-6">
         <div class="flex items-center justify-between gap-3 mb-4">
-          <h3 class="text-lg font-semibold">Recent Activity</h3>
+          <h3 class="pf-section-title">Recent Activity</h3>
           <a href="/activity" class="btn-text btn-sm">View all</a>
         </div>
         <div id="recent-activity" class="text-gray-600">Loading...</div>
@@ -205,8 +205,8 @@ const isDev = import.meta.env.DEV;
         <div class="dashboard-panel rounded-lg p-5">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="font-semibold text-gray-900">Quick actions</p>
-              <p class="mt-0.5 text-xs text-gray-500">Configure the shortcuts your team uses daily.</p>
+              <p class="pf-section-title">Quick actions</p>
+              <p class="pf-meta mt-0.5">Configure the shortcuts your team uses daily.</p>
             </div>
             <button type="button" id="edit-quick-actions" class="btn-icon-tonal" aria-label="Customize quick actions" title="Customize quick actions">
               <Icon name="edit" />
@@ -220,7 +220,7 @@ const isDev = import.meta.env.DEV;
           </div>
         </div>
         <div class="dashboard-panel rounded-lg p-5">
-          <p class="font-semibold text-gray-900">Owner tools</p>
+          <p class="pf-section-title">Owner tools</p>
           <div class="mt-3 grid gap-1 text-sm">
             <a href="/production-rates" class="dashboard-owner-link">Production rates</a>
             <a href="/materials" class="dashboard-owner-link">Paint products and costs</a>
@@ -610,7 +610,7 @@ const isDev = import.meta.env.DEV;
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div class="min-w-0">
                     <p class="text-sm font-semibold leading-5 text-gray-950">${escapeHtml(activityText(e))}</p>
-                    <p class="mt-0.5 text-xs text-gray-500">${escapeHtml(relativeDate(e.occurredAt || e.activityAt || e.sentAt || e.createdAt))}</p>
+                    <p class="pf-meta mt-0.5">${escapeHtml(relativeDate(e.occurredAt || e.activityAt || e.sentAt || e.createdAt))}</p>
                     <div class="mt-2">${customerProfileLink(e)}</div>
                   </div>
                   <span class="shrink-0">${statusBadge(e.status || e.source || 'activity')}</span>

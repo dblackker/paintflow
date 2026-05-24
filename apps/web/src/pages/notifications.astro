@@ -8,8 +8,8 @@ import UpsellCard from '../components/UpsellCard.astro';
     <main class="mx-auto max-w-4xl px-4 py-5 sm:px-6 lg:px-8">
       <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 class="text-2xl font-semibold text-gray-950">Notifications</h1>
-          <p class="mt-1 text-sm text-gray-600">New messages, accepted estimates, and important customer activity.</p>
+          <h1 class="pf-page-title">Notifications</h1>
+          <p class="pf-page-copy mt-1">New messages, accepted estimates, and important customer activity.</p>
         </div>
         <div class="flex gap-2">
           <button id="mark-all-read" class="btn-primary btn-sm" type="button">Mark read</button>
@@ -74,11 +74,11 @@ import UpsellCard from '../components/UpsellCard.astro';
             <div class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${item.read ? 'bg-gray-300' : item.priority === 'high' ? 'bg-blue-600' : 'bg-green-600'}"></div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <p class="font-medium text-gray-950">${escapeHtml(item.title)}</p>
-                <p class="shrink-0 text-xs text-gray-500">${timeLabel(item.createdAt)}</p>
+                <p class="pf-row-title">${escapeHtml(item.title)}</p>
+                <p class="pf-meta shrink-0">${timeLabel(item.createdAt)}</p>
               </div>
-              <p class="mt-1 line-clamp-2 text-sm text-gray-600">${escapeHtml(item.body)}</p>
-              ${item.customer ? `<p class="mt-2 text-xs text-gray-500">${escapeHtml(item.customer.name || 'Customer')}</p>` : ''}
+              <p class="pf-copy mt-1 line-clamp-2">${escapeHtml(item.body)}</p>
+              ${item.customer ? `<p class="pf-meta mt-2">${escapeHtml(item.customer.name || 'Customer')}</p>` : ''}
             </div>
           </div>
         </a>

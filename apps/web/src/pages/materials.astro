@@ -28,9 +28,9 @@ import Icon from '../components/Icon.astro';
   <section class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
     <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Estimator setup</p>
-        <h1 class="text-2xl font-semibold text-gray-950">Paint Products</h1>
-        <p class="mt-1 text-sm text-gray-600">Track product cost, coverage, supplier, and markup for production estimates.</p>
+        <p class="pf-kicker">Estimator setup</p>
+        <h1 class="pf-page-title">Paint Products</h1>
+        <p class="pf-page-copy mt-1">Track product cost, coverage, supplier, and markup for production estimates.</p>
       </div>
       <div class="materials-actions flex flex-wrap gap-2">
         <a href="/production-rates" class="btn-secondary btn-sm">Production rates</a>
@@ -51,8 +51,8 @@ import Icon from '../components/Icon.astro';
     <div class="bg-white rounded-lg max-w-2xl w-full p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 id="material-modal-title" class="text-lg font-semibold text-gray-950">Add Paint Product</h2>
-          <p class="text-sm text-gray-600">These costs feed estimate material pricing and production ordering.</p>
+          <h2 id="material-modal-title" class="pf-section-title">Add Paint Product</h2>
+          <p class="pf-copy">These costs feed estimate material pricing and production ordering.</p>
         </div>
         <button type="button" id="close-material" class="btn-icon" aria-label="Close paint product form"><Icon name="close" /></button>
       </div>
@@ -179,13 +179,13 @@ import Icon from '../components/Icon.astro';
               <div class="mobile-card-row p-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center hover:bg-gray-50">
                 <div class="min-w-0">
                   <p class="font-medium truncate">${escapeHtml(title || material.name)}</p>
-                  <p class="text-sm text-gray-600">${escapeHtml(label(material.category))} &bull; ${escapeHtml(material.unit)}${material.coverageSqFt ? ` &bull; ${Number(material.coverageSqFt).toLocaleString('en-US')} sq ft/${escapeHtml(material.unit)}` : ''}</p>
+                  <p class="pf-copy">${escapeHtml(label(material.category))} &bull; ${escapeHtml(material.unit)}${material.coverageSqFt ? ` &bull; ${Number(material.coverageSqFt).toLocaleString('en-US')} sq ft/${escapeHtml(material.unit)}` : ''}</p>
                   <p class="text-xs text-gray-500 mt-1">${escapeHtml([material.supplier, material.sku].filter(Boolean).join(' - ') || 'No supplier details')}</p>
                 </div>
                 <div class="material-price flex items-center gap-3">
                   <div class="text-right">
-                    <p class="font-semibold">${money(price)}/${escapeHtml(material.unit)}</p>
-                    <p class="text-xs text-gray-500">Cost: ${money(material.costPerUnit)} &bull; ${Number(material.markupPercent || 0).toFixed(1)}% markup</p>
+                    <p class="pf-section-title">${money(price)}/${escapeHtml(material.unit)}</p>
+                    <p class="pf-meta">Cost: ${money(material.costPerUnit)} &bull; ${Number(material.markupPercent || 0).toFixed(1)}% markup</p>
                   </div>
                   <div class="flex gap-1.5">
                     <button type="button" onclick="editMaterial('${material.id}')" class="btn-icon btn-icon-tonal" aria-label="Edit ${escapeHtml(title || material.name)}">${iconSvg('edit')}</button>

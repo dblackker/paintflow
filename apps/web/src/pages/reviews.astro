@@ -6,9 +6,9 @@ import Base from '../layouts/Base.astro';
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
     <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p class="text-sm font-semibold text-blue-700">Reputation marketing</p>
-        <h1 class="mt-1 text-2xl font-bold text-gray-950 sm:text-3xl">Review analytics</h1>
-        <p class="mt-2 max-w-2xl text-sm text-gray-600">
+        <p class="pf-kicker">Reputation marketing</p>
+        <h1 class="pf-page-title mt-1">Review analytics</h1>
+        <p class="pf-page-copy mt-2 max-w-2xl">
           Track review requests, customer feedback, and the closeout flow that can later feed testimonials, before/after posts, and referral campaigns.
         </p>
       </div>
@@ -16,7 +16,7 @@ import Base from '../layouts/Base.astro';
     </div>
 
     <section class="mb-6 rounded-lg border bg-blue-50 p-4 text-sm text-blue-950">
-      <p class="font-semibold">Why this lives under Reports</p>
+      <p class="pf-section-title text-blue-950">Why this lives under Reports</p>
       <p class="mt-1 text-blue-900">
         Reviews are not a daily dispatch workflow. They are a reputation and marketing metric tied to completed jobs, so this page should remain a focused reporting drill-in until the marketing suite grows.
       </p>
@@ -24,28 +24,28 @@ import Base from '../layouts/Base.astro';
 
     <div class="grid grid-cols-2 gap-3 md:grid-cols-4 sm:gap-4 mb-6" id="review-stats">
       <div class="bg-white rounded-lg shadow-sm border p-4">
-        <p class="text-sm text-gray-600">Total requests</p>
-        <p class="mt-1 text-2xl font-bold" id="total-requests">-</p>
+        <p class="pf-metric-label">Total requests</p>
+        <p class="pf-metric-value mt-1" id="total-requests">-</p>
       </div>
       <div class="bg-white rounded-lg shadow-sm border p-4">
-        <p class="text-sm text-gray-600">Response rate</p>
-        <p class="mt-1 text-2xl font-bold" id="response-rate">-</p>
+        <p class="pf-metric-label">Response rate</p>
+        <p class="pf-metric-value mt-1" id="response-rate">-</p>
       </div>
       <div class="bg-white rounded-lg shadow-sm border p-4">
-        <p class="text-sm text-gray-600">Avg rating</p>
-        <p class="mt-1 text-2xl font-bold" id="avg-rating">-</p>
+        <p class="pf-metric-label">Avg rating</p>
+        <p class="pf-metric-value mt-1" id="avg-rating">-</p>
       </div>
       <div class="bg-white rounded-lg shadow-sm border p-4">
-        <p class="text-sm text-gray-600">5-star reviews</p>
-        <p class="mt-1 text-2xl font-bold" id="five-star">-</p>
+        <p class="pf-metric-label">5-star reviews</p>
+        <p class="pf-metric-value mt-1" id="five-star">-</p>
       </div>
     </div>
 
     <section class="bg-white rounded-lg shadow-sm border overflow-hidden">
       <div class="p-4 border-b flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 class="font-semibold">Recent review requests</h2>
-          <p class="text-sm text-gray-600">Customer feedback and Google/Yelp handoff status.</p>
+          <h2 class="pf-section-title">Recent review requests</h2>
+          <p class="pf-copy">Customer feedback and Google/Yelp handoff status.</p>
         </div>
         <a href="/settings#business-settings" class="btn-text btn-sm justify-center">Review links</a>
       </div>
@@ -113,10 +113,10 @@ import Base from '../layouts/Base.astro';
             <div class="min-w-0">
               ${customerProfileLink(req)}
               <p class="mt-1 text-sm text-gray-600">${escapeHtml(req.jobName || 'Job')}</p>
-              <p class="text-xs text-gray-500">Requested ${dateLabel(req.sentAt || req.createdAt)}${req.respondedAt ? ` · Responded ${dateLabel(req.respondedAt)}` : ''}</p>
+              <p class="pf-meta">Requested ${dateLabel(req.sentAt || req.createdAt)}${req.respondedAt ? ` &middot; Responded ${dateLabel(req.respondedAt)}` : ''}</p>
             </div>
             <div class="flex items-center justify-between gap-3 sm:justify-end">
-              ${req.rating ? `<div class="text-sm font-semibold text-yellow-700" aria-label="${escapeHtml(req.rating)} star rating">${'★'.repeat(Number(req.rating))}</div>` : '<span class="text-sm text-gray-500">No rating</span>'}
+              ${req.rating ? `<div class="text-sm font-semibold text-yellow-700" aria-label="${escapeHtml(req.rating)} star rating">${Array.from({ length: Number(req.rating) }, () => '&#9733;').join('')}</div>` : '<span class="text-sm text-gray-500">No rating</span>'}
               ${statusBadge(req.status)}
             </div>
           </div>

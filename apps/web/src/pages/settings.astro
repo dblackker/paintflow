@@ -266,11 +266,11 @@ import Icon from '../components/Icon.astro';
     </style>
     <main class="settings-shell mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
       <section class="settings-hero mb-5 p-4 sm:p-6">
-        <p class="text-sm font-semibold text-blue-700">Owner setup</p>
+        <p class="pf-kicker">Owner setup</p>
         <div class="mt-1 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 class="text-2xl font-bold text-gray-950 sm:text-3xl">Settings</h1>
-            <p class="mt-2 max-w-3xl text-sm text-gray-700">
+            <h1 class="pf-page-title">Settings</h1>
+            <p class="pf-page-copy mt-2 max-w-3xl">
               Configure the business defaults that make PaintFlow usable in the field: pricing, production rates, materials, team roles, payments, and customer-facing branding.
             </p>
           </div>
@@ -281,16 +281,16 @@ import Icon from '../components/Icon.astro';
       <section class="mb-6">
         <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 class="text-lg font-semibold text-gray-950">Setup checklist</h2>
-            <p class="text-sm text-gray-600">Use these sections to get a contractor workspace ready before sending live estimates or scheduling crews.</p>
+            <h2 class="pf-section-title">Setup checklist</h2>
+            <p class="pf-copy">Use these sections to get a contractor workspace ready before sending live estimates or scheduling crews.</p>
           </div>
         </div>
         <div class="settings-setup-grid">
           <a href="#business-settings" class="settings-setup-card">
             <span class="settings-setup-pill">Company</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Business profile</h3>
-              <p class="mt-1 text-sm text-gray-600">Company name, phone, email, address, proposal branding, and review links.</p>
+              <h3 class="pf-section-title">Business profile</h3>
+              <p class="pf-copy mt-1">Company name, phone, email, address, proposal branding, and review links.</p>
             </div>
             <ul>
               <li>Customer-facing identity</li>
@@ -300,8 +300,8 @@ import Icon from '../components/Icon.astro';
           <a href="#pricing-settings" class="settings-setup-card">
             <span class="settings-setup-pill">Estimating</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Pricing defaults</h3>
-              <p class="mt-1 text-sm text-gray-600">Labor rate, material markup, tax, deposit, paint products, and production rates.</p>
+              <h3 class="pf-section-title">Pricing defaults</h3>
+              <p class="pf-copy mt-1">Labor rate, material markup, tax, deposit, paint products, and production rates.</p>
             </div>
             <ul>
               <li>Required before live estimates</li>
@@ -311,8 +311,8 @@ import Icon from '../components/Icon.astro';
           <a href="#operations-settings" class="settings-setup-card">
             <span class="settings-setup-pill">Operations</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Team and field setup</h3>
-              <p class="mt-1 text-sm text-gray-600">Crew roles, time clock policies, scheduling, notifications, and reusable templates.</p>
+              <h3 class="pf-section-title">Team and field setup</h3>
+              <p class="pf-copy mt-1">Crew roles, time clock policies, scheduling, notifications, and reusable templates.</p>
             </div>
             <ul>
               <li>Controls field workflows</li>
@@ -322,7 +322,7 @@ import Icon from '../components/Icon.astro';
           <a href="#integrations-settings" class="settings-setup-card">
             <span class="settings-setup-pill">Connectors</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Payments and integrations</h3>
+              <h3 class="pf-section-title">Payments and integrations</h3>
               <p class="mt-1 text-sm text-gray-600">Stripe deposits, Google Calendar, QuickBooks status, billing, and browser notifications.</p>
             </div>
             <ul>
@@ -333,7 +333,7 @@ import Icon from '../components/Icon.astro';
           <a href="/reports" class="settings-setup-card">
             <span class="settings-setup-pill">Insights</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Reports</h3>
+              <h3 class="pf-section-title">Reports</h3>
               <p class="mt-1 text-sm text-gray-600">Review sales, revenue, jobs, and operating metrics from one reporting surface.</p>
             </div>
             <ul>
@@ -344,7 +344,7 @@ import Icon from '../components/Icon.astro';
           <a href="/activity" class="settings-setup-card">
             <span class="settings-setup-pill">Audit</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Activity log</h3>
+              <h3 class="pf-section-title">Activity log</h3>
               <p class="mt-1 text-sm text-gray-600">See customer events and operational changes across leads, estimates, and jobs.</p>
             </div>
             <ul>
@@ -355,7 +355,7 @@ import Icon from '../components/Icon.astro';
           <a href="/email-templates" class="settings-setup-card">
             <span class="settings-setup-pill">Email</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Email templates</h3>
+              <h3 class="pf-section-title">Email templates</h3>
               <p class="mt-1 text-sm text-gray-600">Customize estimate emails and build toward drip follow-ups, thank-yous, and change-order communication.</p>
             </div>
             <ul>
@@ -366,7 +366,7 @@ import Icon from '../components/Icon.astro';
           <a href="#legal-settings" class="settings-setup-card">
             <span class="settings-setup-pill">Legal</span>
             <div>
-              <h3 class="font-semibold text-gray-950">Contract terms</h3>
+              <h3 class="pf-section-title">Contract terms</h3>
               <p class="mt-1 text-sm text-gray-600">Set company-reviewed proposal terms, required disclosures, and registration details.</p>
             </div>
             <ul>
@@ -434,22 +434,22 @@ import Icon from '../components/Icon.astro';
           <form id="pricing-form" class="space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="text-sm text-gray-600">Labor Rate ($/hr)</label>
+                <label class="pf-copy">Labor Rate ($/hr)</label>
                 <input name="defaultLaborRate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
               <div>
-                <label class="text-sm text-gray-600">Material Markup (%)</label>
+                <label class="pf-copy">Material Markup (%)</label>
                 <input name="materialMarkupPercent" type="number" min="0" step="0.1" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
               <div>
-                <label class="text-sm text-gray-600">Sales Tax (%)</label>
+                <label class="pf-copy">Sales Tax (%)</label>
                 <input name="salesTaxRate" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" class="w-full px-3 py-2 border rounded-lg">
               </div>
             </div>
             <label class="settings-field">
               <span>Payment terms summary</span>
               <input name="paymentTerms" type="text" maxlength="255" autocomplete="off" placeholder="40% deposit, 30% before production, balance due on completion" class="w-full px-3 py-2 border rounded-lg">
-              <span class="text-xs text-gray-500">Shown on proposals as the short summary. The milestone schedule below controls deposit and payment amounts.</span>
+              <span class="pf-meta">Shown on proposals as the short summary. The milestone schedule below controls deposit and payment amounts.</span>
             </label>
             <button type="submit" class="btn-primary">Save</button>
           </form>
@@ -457,7 +457,7 @@ import Icon from '../components/Icon.astro';
           <form id="payment-schedule-form" class="mt-6 space-y-4 border-t pt-5">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h4 class="font-semibold text-gray-950">Deposit & Payment Schedule</h4>
+                <h4 class="pf-section-title">Deposit & Payment Schedule</h4>
                 <p class="mt-1 text-sm text-gray-600">Define the payment milestones customers see on proposals. Percentages must total 100%.</p>
               </div>
               <button type="button" id="add-payment-milestone" class="btn-secondary btn-sm justify-center">Add Payment</button>
@@ -470,7 +470,7 @@ import Icon from '../components/Icon.astro';
 
         <div class="settings-card bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-2">Estimator Setup</h3>
-          <p class="text-sm text-gray-600">Keep labor production and paint product costs current before sending live estimates.</p>
+          <p class="pf-copy">Keep labor production and paint product costs current before sending live estimates.</p>
           <div class="settings-link-grid mt-4">
             <a href="/materials" class="settings-action-card">
               <span>
@@ -489,7 +489,7 @@ import Icon from '../components/Icon.astro';
 
         <div id="legal-settings" class="settings-card settings-anchor-card bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-2">Contract Terms & Disclosures</h3>
-          <p class="text-sm text-gray-600">Configure company-reviewed language shown to customers before they sign a proposal. PaintFlow stores the accepted snapshot in estimate activity.</p>
+          <p class="pf-copy">Configure company-reviewed language shown to customers before they sign a proposal. PaintFlow stores the accepted snapshot in estimate activity.</p>
           <form id="legal-form" class="mt-4 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label class="settings-field">
@@ -543,7 +543,7 @@ import Icon from '../components/Icon.astro';
 
         <div id="operations-settings" class="settings-card settings-anchor-card bg-white rounded-lg shadow-sm border p-6">
           <h3 class="font-semibold mb-2">Operations Setup</h3>
-          <p class="text-sm text-gray-600">Configure the workflows that crew leads and office admins use every day.</p>
+          <p class="pf-copy">Configure the workflows that crew leads and office admins use every day.</p>
           <div class="settings-link-grid mt-4">
             <a href="/team" class="settings-action-card">
               <span>
@@ -584,15 +584,15 @@ import Icon from '../components/Icon.astro';
           <div class="settings-connectors space-y-3" id="connectors">
             <div class="flex justify-between items-center p-3 border rounded-lg">
               <span>Stripe</span>
-              <span class="text-sm text-gray-600" id="stripe-status">Checking...</span>
+              <span class="pf-copy" id="stripe-status">Checking...</span>
             </div>
             <div class="flex justify-between items-center p-3 border rounded-lg">
               <span>QuickBooks</span>
-              <span class="text-sm text-gray-600" id="qb-status">Checking...</span>
+              <span class="pf-copy" id="qb-status">Checking...</span>
             </div>
             <div class="flex justify-between items-center p-3 border rounded-lg">
               <span>Google Calendar</span>
-              <span class="text-sm text-gray-600" id="calendar-status">Checking...</span>
+              <span class="pf-copy" id="calendar-status">Checking...</span>
             </div>
           </div>
           <div class="settings-link-grid mt-4">

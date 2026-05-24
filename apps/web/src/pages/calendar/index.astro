@@ -168,9 +168,9 @@ import Icon from '../../components/Icon.astro';
   <main class="schedule-shell mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
     <div class="mb-4">
       <div>
-        <p class="text-sm font-semibold text-blue-700">Operations calendar</p>
-        <h1 class="mt-1 text-2xl font-bold text-gray-950 sm:text-3xl">Schedule</h1>
-        <p class="mt-2 max-w-2xl text-sm text-gray-600">
+        <p class="pf-kicker">Operations calendar</p>
+        <h1 class="pf-page-title mt-1">Schedule</h1>
+        <p class="pf-page-copy mt-2 max-w-2xl">
           Put accepted jobs on the production calendar, spot jobs missing dates, and keep Google Calendar as an optional external sync.
         </p>
       </div>
@@ -185,16 +185,16 @@ import Icon from '../../components/Icon.astro';
 
     <section id="schedule-stats" class="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
       <div class="schedule-stat">
-        <p class="text-xs font-medium text-gray-600">This week</p>
-        <p id="stat-week" class="mt-1 text-xl font-bold text-gray-950">-</p>
+        <p class="pf-metric-label">This week</p>
+        <p id="stat-week" class="pf-metric-value mt-1">-</p>
       </div>
       <div class="schedule-stat">
-        <p class="text-xs font-medium text-gray-600">Needs date</p>
-        <p id="stat-needs-date" class="mt-1 text-xl font-bold text-gray-950">-</p>
+        <p class="pf-metric-label">Needs date</p>
+        <p id="stat-needs-date" class="pf-metric-value mt-1">-</p>
       </div>
       <div class="schedule-stat">
-        <p class="text-xs font-medium text-gray-600">In progress</p>
-        <p id="stat-progress" class="mt-1 text-xl font-bold text-gray-950">-</p>
+        <p class="pf-metric-label">In progress</p>
+        <p id="stat-progress" class="pf-metric-value mt-1">-</p>
       </div>
     </section>
 
@@ -202,8 +202,8 @@ import Icon from '../../components/Icon.astro';
       <section class="schedule-panel lg:col-span-8">
         <div class="flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 class="font-semibold text-gray-950" id="week-title">Week view</h2>
-            <p class="text-xs text-gray-500">Jobs render here only when they have scheduled dates.</p>
+            <h2 class="pf-section-title" id="week-title">Week view</h2>
+            <p class="pf-meta">Jobs render here only when they have scheduled dates.</p>
           </div>
           <a href="/jobs" class="btn-text btn-sm justify-center">Open jobs</a>
         </div>
@@ -214,8 +214,8 @@ import Icon from '../../components/Icon.astro';
 
       <aside class="schedule-panel lg:col-span-4">
         <div class="border-b px-4 py-3">
-          <h2 class="font-semibold text-gray-950">Needs scheduling</h2>
-          <p class="mt-1 text-xs text-gray-500">These jobs are active, but do not have a calendar date yet.</p>
+          <h2 class="pf-section-title">Needs scheduling</h2>
+          <p class="pf-meta mt-1">These jobs are active, but do not have a calendar date yet.</p>
         </div>
         <div id="unscheduled-jobs" class="grid gap-3 p-3 sm:p-4">
           <div class="py-8 text-center text-gray-500">Loading jobs...</div>
@@ -487,7 +487,7 @@ import Icon from '../../components/Icon.astro';
             <div class="mb-3 flex items-start justify-between gap-2">
               <div>
                 <p class="text-sm font-semibold text-gray-950">${date.toLocaleDateString(undefined, { weekday: 'short' })}</p>
-                <p class="text-xs text-gray-500">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
+                <p class="pf-meta">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
               </div>
               ${key === todayKey ? '<span class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800">Today</span>' : ''}
             </div>
@@ -495,7 +495,7 @@ import Icon from '../../components/Icon.astro';
               ${dayJobs.map(jobCard).join('')}
               ${dayEvents.map((event) => `
                 <div class="schedule-google-card text-xs">
-                  <p class="font-semibold">${escapeHtml(event.summary || 'Google event')}</p>
+                  <p class="pf-section-title">${escapeHtml(event.summary || 'Google event')}</p>
                   <p class="mt-0.5 opacity-80">${escapeHtml(formatTime(event.start?.dateTime || event.start?.date))}</p>
                 </div>
               `).join('')}

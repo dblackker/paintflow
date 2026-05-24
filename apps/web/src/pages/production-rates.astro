@@ -26,15 +26,15 @@ import Icon from '../components/Icon.astro';
   <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
     <div class="rates-header mb-6 flex items-center justify-between gap-4">
       <div>
-        <p class="text-sm font-semibold uppercase tracking-wide text-blue-600">Settings</p>
-        <h1 class="text-2xl font-semibold text-gray-950">Production Rates</h1>
+        <p class="pf-kicker">Settings</p>
+        <h1 class="pf-page-title">Production Rates</h1>
       </div>
       <div class="rates-actions flex flex-wrap gap-2">
         <a href="/materials" class="btn-secondary btn-sm">Paint products</a>
         <a href="/settings" class="btn-secondary btn-sm">Back</a>
       </div>
     </div>
-    <p class="text-gray-600 mb-6">Set your production rates for accurate estimates. Rates are how much your crew can complete per labor hour.</p>
+    <p class="pf-page-copy mb-6">Set your production rates for accurate estimates. Rates are how much your crew can complete per labor hour.</p>
 
     <div class="bg-white rounded-lg shadow-sm border divide-y" id="rates-list">
       <div class="p-4 text-center text-gray-500">Loading...</div>
@@ -50,8 +50,8 @@ import Icon from '../components/Icon.astro';
     <div class="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl sm:p-6">
       <div class="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 id="rate-modal-title" class="text-lg font-semibold text-gray-950">Add Production Rate</h2>
-          <p class="text-sm text-gray-600">Rates power production estimates and job costing assumptions.</p>
+          <h2 id="rate-modal-title" class="pf-section-title">Add Production Rate</h2>
+          <p class="pf-copy">Rates power production estimates and job costing assumptions.</p>
         </div>
         <button type="button" id="close-rate-modal" class="btn-icon" aria-label="Close production rate form"><Icon name="close" /></button>
       </div>
@@ -146,7 +146,7 @@ import Icon from '../components/Icon.astro';
         <div class="rate-row mobile-card-row p-4 flex items-center justify-between gap-3" data-id="${rate.id}">
           <div class="min-w-0 flex-1">
             <p class="font-medium">${escapeHtml(label(rate.category))} &bull; ${escapeHtml(label(rate.surfaceType))}</p>
-            <p class="text-sm text-gray-600">${Number(rate.ratePerHour).toLocaleString('en-US')} ${escapeHtml(label(rate.unit))}/hr @ ${money(rate.hourlyRate, { cents: false })}/hr</p>
+            <p class="pf-copy">${Number(rate.ratePerHour).toLocaleString('en-US')} ${escapeHtml(label(rate.unit))}/hr @ ${money(rate.hourlyRate, { cents: false })}/hr</p>
             ${rate.description ? `<p class="text-xs text-gray-500 mt-1">${escapeHtml(rate.description)}</p>` : ''}
           </div>
           <div class="flex shrink-0 gap-1.5">

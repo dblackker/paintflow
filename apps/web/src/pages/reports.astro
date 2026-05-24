@@ -29,9 +29,9 @@ import Base from '../layouts/Base.astro';
     <div id="content" class="hidden">
       <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p class="text-sm font-semibold text-blue-700">Reporting suite</p>
-          <h1 class="mt-1 text-2xl font-bold text-gray-950 sm:text-3xl">Business performance</h1>
-          <p class="mt-2 max-w-2xl text-sm text-gray-600">
+          <p class="pf-kicker">Reporting suite</p>
+          <h1 class="pf-page-title mt-1">Business performance</h1>
+          <p class="pf-page-copy mt-2 max-w-2xl">
             One reporting surface for sales, crew performance, and job profitability. Lead source ROI and revenue by city should build into this page instead of separate reporting routes.
           </p>
         </div>
@@ -44,9 +44,9 @@ import Base from '../layouts/Base.astro';
         <a href="/reviews" class="reports-panel bg-white rounded-lg shadow-sm border p-4 hover:border-blue-300 hover:shadow-md">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p class="text-sm font-semibold text-blue-700">Reputation</p>
-              <h2 class="mt-1 font-semibold text-gray-950">Review analytics</h2>
-              <p class="mt-1 text-sm text-gray-600">Track review requests, response rate, ratings, and closeout feedback that can feed future marketing campaigns.</p>
+              <p class="pf-kicker">Reputation</p>
+              <h2 class="pf-section-title mt-1">Review analytics</h2>
+              <p class="pf-copy mt-1">Track review requests, response rate, ratings, and closeout feedback that can feed future marketing campaigns.</p>
             </div>
             <span class="btn-text btn-sm pointer-events-none">Open</span>
           </div>
@@ -54,21 +54,21 @@ import Base from '../layouts/Base.astro';
 
         <div class="reports-panel bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b">
-            <h2 class="font-semibold">Win Rate by Source</h2>
+            <h2 class="pf-section-title">Win Rate by Source</h2>
           </div>
           <div id="win-rate" class="p-4 min-h-[100px]"></div>
         </div>
 
         <div class="reports-panel bg-white rounded-lg shadow-sm border">
           <div class="p-4 border-b">
-            <h2 class="font-semibold">Crew Performance</h2>
+            <h2 class="pf-section-title">Crew Performance</h2>
           </div>
           <div id="crew" class="p-4 min-h-[100px]"></div>
         </div>
 
         <div class="reports-panel bg-white rounded-lg shadow-sm border lg:col-span-2">
           <div class="p-4 border-b">
-            <h2 class="font-semibold">Profit Margins</h2>
+            <h2 class="pf-section-title">Profit Margins</h2>
           </div>
           <div id="margins" class="p-4 min-h-[100px]"></div>
         </div>
@@ -115,19 +115,19 @@ import Base from '../layouts/Base.astro';
     function renderStats(stats) {
       document.getElementById('stats').innerHTML = `
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <p class="text-sm text-gray-600">Win Rate</p>
+          <p class="pf-copy">Win Rate</p>
           <p class="text-2xl font-bold">${stats.winRate || 0}%</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <p class="text-sm text-gray-600">Revenue</p>
+          <p class="pf-copy">Revenue</p>
           <p class="text-2xl font-bold">${currency(stats.totalRevenue)}</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <p class="text-sm text-gray-600">Profit</p>
+          <p class="pf-copy">Profit</p>
           <p class="text-2xl font-bold">${currency(stats.profit)}</p>
         </div>
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <p class="text-sm text-gray-600">Margin</p>
+          <p class="pf-copy">Margin</p>
           <p class="text-2xl font-bold">${stats.margin || 0}%</p>
         </div>
       `;
@@ -170,11 +170,11 @@ import Base from '../layouts/Base.astro';
             <div class="report-row flex justify-between py-2 border-b last:border-0">
               <div class="min-w-0 flex-1">
                 <p class="font-medium text-sm truncate">${r.title}</p>
-                <p class="text-xs text-gray-600">${currency(r.revenue)} revenue</p>
+                <p class="pf-meta">${currency(r.revenue)} revenue</p>
               </div>
               <div class="text-right ml-4">
                 <p class="font-semibold text-sm ${r.margin >= 30 ? 'text-green-600' : r.margin >= 15 ? 'text-yellow-600' : 'text-red-600'}">${r.margin}%</p>
-                <p class="text-xs text-gray-600">${currency(r.profit)}</p>
+                <p class="pf-meta">${currency(r.profit)}</p>
               </div>
             </div>
           `).join('')}

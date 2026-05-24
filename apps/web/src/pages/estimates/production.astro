@@ -58,8 +58,8 @@ import Base from '../../layouts/Base.astro';
   <main class="production-estimator max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
       <div>
-        <h2 class="text-2xl font-bold text-gray-900">Production Estimate</h2>
-        <p class="text-sm text-gray-600 mt-1">Build pricing from measured substrates, prep level, production rates, labor, and materials.</p>
+        <h2 class="pf-page-title">Production Estimate</h2>
+        <p class="pf-page-copy mt-1">Build pricing from measured substrates, prep level, production rates, labor, and materials.</p>
       </div>
       <div class="production-top-actions flex flex-col sm:flex-row gap-2">
         <a href="/templates" class="btn-secondary btn-sm justify-center">Templates</a>
@@ -96,14 +96,14 @@ import Base from '../../layouts/Base.astro';
               </select>
             </label>
           </div>
-          <p class="mobile-hide-copy mt-3 text-sm text-gray-600">Choose the estimate type first. The quick-scope builder appears once, then substrates become editable production lines.</p>
+          <p class="mobile-hide-copy pf-copy mt-3">Choose the estimate type first. The quick-scope builder appears once, then substrates become editable production lines.</p>
         </div>
 
         <div class="scroll-mt-24 space-y-4" data-stage="scope">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 class="text-lg font-semibold text-gray-900">Rooms & Scope</h2>
-              <p id="scope-builder-helper" class="text-sm text-gray-600">Add rooms, elevations, or work spaces, then define the substrates in each one.</p>
+              <h2 class="pf-section-title">Rooms & Scope</h2>
+              <p id="scope-builder-helper" class="pf-copy">Add rooms, elevations, or work spaces, then define the substrates in each one.</p>
             </div>
           </div>
           <div id="quick-scope-builder" class="hidden space-y-3">
@@ -122,8 +122,8 @@ import Base from '../../layouts/Base.astro';
           </div>
           <div id="rooms-container" class="space-y-4"></div>
           <div id="empty-scope-state" class="rounded-lg border border-dashed border-gray-300 bg-white p-4 text-center">
-            <p class="text-sm text-gray-700">Start with a room, exterior elevation, or work space.</p>
-            <p class="mt-1 text-xs text-gray-500">Use starter scope for a generated first pass, or add a space manually.</p>
+            <p class="pf-row-title">Start with a room, exterior elevation, or work space.</p>
+            <p class="pf-meta mt-1">Use starter scope for a generated first pass, or add a space manually.</p>
             <button id="start-with-starter-scope" type="button" class="btn-text btn-sm mt-2 justify-center">Use starter scope</button>
           </div>
           <button id="add-room" class="btn-secondary w-full justify-center">
@@ -134,8 +134,8 @@ import Base from '../../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="paint">
           <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 class="font-semibold text-gray-900">Paint Schedule</h2>
-              <p class="text-sm text-gray-600">Production handoff by substrate: product, color, status, and order units.</p>
+              <h2 class="pf-section-title">Paint Schedule</h2>
+              <p class="pf-copy">Production handoff by substrate: product, color, status, and order units.</p>
             </div>
             <span id="paint-schedule-count" class="text-sm font-medium text-gray-700">0 substrates</span>
           </div>
@@ -145,8 +145,8 @@ import Base from '../../layouts/Base.astro';
         <div class="bg-white rounded-lg shadow-sm border p-4 scroll-mt-24" data-stage="review">
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
-              <h2 class="font-semibold text-gray-900">Add-ons & Adjustments</h2>
-              <p class="text-sm text-gray-600">Add trip charges, prep allowances, repairs, discounts, or other estimate-specific line items.</p>
+              <h2 class="pf-section-title">Add-ons & Adjustments</h2>
+              <p class="pf-copy">Add trip charges, prep allowances, repairs, discounts, or other estimate-specific line items.</p>
             </div>
             <button id="add-line-item" type="button" class="btn-primary btn-sm">Add Line</button>
           </div>
@@ -156,7 +156,7 @@ import Base from '../../layouts/Base.astro';
 
       <aside class="min-w-0 space-y-4 lg:sticky lg:top-20 self-start">
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <h2 class="font-semibold text-gray-900 mb-3">Estimate Summary</h2>
+          <h2 class="pf-section-title mb-3">Estimate Summary</h2>
           <div class="space-y-2 text-sm">
             <div class="flex justify-between"><span class="text-gray-600">Labor hours</span><span id="total-hours" class="font-medium">0.0</span></div>
             <div class="flex justify-between"><span class="text-gray-600">Labor</span><span id="labor-total" class="font-medium">$0.00</span></div>
@@ -173,7 +173,7 @@ import Base from '../../layouts/Base.astro';
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <h2 class="font-semibold text-gray-900 mb-3">Paint Products</h2>
+          <h2 class="pf-section-title mb-3">Paint Products</h2>
           <div class="space-y-3 text-sm">
             <label class="block">
               <span class="text-gray-600">Wall/finish paint</span>
@@ -198,7 +198,7 @@ import Base from '../../layouts/Base.astro';
         </div>
 
         <div class="bg-white rounded-lg shadow-sm border p-4">
-          <h2 class="font-semibold text-gray-900 mb-3">Production Readiness</h2>
+          <h2 class="pf-section-title mb-3">Production Readiness</h2>
           <div id="production-readiness" class="space-y-2 text-sm text-gray-700"></div>
         </div>
       </aside>
@@ -211,8 +211,8 @@ import Base from '../../layouts/Base.astro';
         <div class="sticky top-0 z-10 border-b bg-white px-4 py-3 sm:px-5">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <h2 class="text-lg font-semibold text-gray-950">Review Before Sending</h2>
-              <p class="text-sm text-gray-600">This is the customer-facing summary that will be emailed with the proposal link.</p>
+              <h2 class="pf-section-title">Review Before Sending</h2>
+              <p class="pf-copy">This is the customer-facing summary that will be emailed with the proposal link.</p>
             </div>
             <button id="close-send-preview" type="button" class="btn-icon" aria-label="Close preview">X</button>
           </div>
