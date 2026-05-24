@@ -10,7 +10,7 @@ interface Props {
 const { href, label, class: className = '' } = Astro.props;
 ---
 
-<a href={href} class={`detail-back-button btn-icon btn-icon-tonal ${className}`} aria-label={label} title={label}>
+<a href={href} class={`detail-back-button btn-icon btn-icon-tonal ${className}`} aria-label={label} title={label} data-history-back>
   <Icon name="chevron-left" />
 </a>
 
@@ -21,3 +21,32 @@ const { href, label, class: className = '' } = Astro.props;
     flex: 0 0 auto;
   }
 </style>
+
+<script>
+  window.PaintFlowBack = window.PaintFlowBack || {
+    shouldUseHistory(fallbackHref = '') {
+      if (!document.referrer || window.history.length <= 1) return false;
+      try {
+        const referrer = new URL(document.referrer);
+        if (referrer.origin !== window.location.origin) return false;
+        if (['/login', '/signup'].includes(referrer.pathname)) return false;
+        if (referrer.pathname === window.location.pathname && referrer.search === window.location.search) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    go(event) {
+      const trigger = event.target?.closest?.('[data-history-back]');
+      if (!trigger) return;
+      const fallbackHref = trigger.getAttribute('href') || trigger.dataset.backFallback || '/dashboard';
+      if (!this.shouldUseHistory(fallbackHref)) return;
+      event.preventDefault();
+      window.history.back();
+    },
+  };
+  if (!window.PaintFlowBackInstalled) {
+    window.PaintFlowBackInstalled = true;
+    document.addEventListener('click', (event) => window.PaintFlowBack.go(event));
+  }
+</script>
