@@ -42,7 +42,14 @@ import pipelineRoutes from './routes/pipeline';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-const defaultOrigins = ['http://localhost:4321', 'http://127.0.0.1:4321', 'https://app.paintflow.app', 'https://paintflow.app'];
+const defaultOrigins = [
+  'http://localhost:4321',
+  'http://127.0.0.1:4321',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://app.paintflow.app',
+  'https://paintflow.app',
+];
 
 function isAllowedOrigin(origin: string | undefined, configuredOrigins: string[], environment?: string) {
   if (!origin) return null;
@@ -53,7 +60,7 @@ function isAllowedOrigin(origin: string | undefined, configuredOrigins: string[]
       const url = new URL(origin);
       const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
       const port = Number(url.port || 0);
-      if (isLocalHost && port >= 4321 && port <= 4399) {
+      if (isLocalHost && port >= 3000 && port <= 5999) {
         return origin;
       }
     } catch {

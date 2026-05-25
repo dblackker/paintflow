@@ -1,21 +1,51 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent } from '@/components/Card';
+import { Badge, StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { Input, Select } from '@/components/Input';
-import { StatusBadge } from '@/components/Badge';
+import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
+import { Input, Select } from '@/components/Input';
+import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
+
+interface EstimatePackage {
+  name?: string;
+  total?: number | string;
+  subtotal?: number | string;
+}
 
 interface Estimate {
   id: string;
-  customerName: string;
-  address: string;
-  contact: string;
-  status: string;
-  totalCents: number;
-  sentAt?: string;
-  leadId?: string;
+  leadId?: string | null;
+  leadName?: string | null;
+  leadPhone?: string | null;
+  leadEmail?: string | null;
+  leadStreetAddress?: string | null;
+  leadCity?: string | null;
+  leadState?: string | null;
+  leadPostalCode?: string | null;
+  status?: string | null;
+  total?: number | string | null;
+  packages?: EstimatePackage[] | null;
+  createdAt?: string | null;
+  sentAt?: string | null;
+  signedAt?: string | null;
+  customerPreviewUrl?: string | null;
+  publicUrl?: string | null;
+}
+
+interface EstimatesResponse {
+  data: Estimate[];
+}
+
+function estimateTotal(estimate: Estimate) {
+  const proposal = estimate.packages?.find((item) => item.name === 'proposal') || estimate.packages?.[0];
+  return Number(proposal?.total ?? proposal?.subtotal ?? estimate.total ?? 0);
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return null;
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
 }
 
 export function EstimatesList() {
@@ -23,67 +53,73 @@ export function EstimatesList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    // TODO: Fetch from API
-    setTimeout(() => {
-      setEstimates([
-        {
-          id: '1',
-          customerName: 'John Smith',
-          address: '123 Main St, Seattle, WA',
-          contact: '(206) 555-0100',
-          status: 'sent',
-          totalCents: 450000,
-          sentAt: '2024-01-15',
-          leadId: 'lead-1',
-        },
-        {
-          id: '2',
-          customerName: 'Jane Doe',
-          address: '456 Oak Ave, Bellevue, WA',
-          contact: '(425) 555-0200',
-          status: 'approved',
-          totalCents: 720000,
-          sentAt: '2024-01-10',
-          leadId: 'lead-2',
-        },
-      ]);
-      setIsLoading(false);
-    }, 500);
+    let mounted = true;
+    setIsLoading(true);
+    apiJson<EstimatesResponse>('/v1/estimates')
+      .then((response) => {
+        if (!mounted) return;
+        setEstimates(response.data || []);
+        setError('');
+      })
+      .catch((err: Error) => {
+        if (!mounted) return;
+        setError(err.message || 'Failed to load estimates');
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const filteredEstimates = estimates.filter(estimate => {
-    const matchesSearch = !searchQuery || 
-      estimate.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      estimate.contact.includes(searchQuery);
-    
-    const matchesStatus = statusFilter === 'all' || estimate.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  const filteredEstimates = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return estimates.filter((estimate) => {
+      const haystack = [
+        estimate.leadName,
+        estimate.leadPhone,
+        estimate.leadEmail,
+        formatAddress(estimate),
+        estimate.status,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      const matchesSearch = !query || haystack.includes(query);
+      const matchesStatus = statusFilter === 'all' || estimate.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [estimates, searchQuery, statusFilter]);
 
-  const stats = {
+  const statusOptions = useMemo(() => {
+    const statuses = Array.from(new Set(estimates.map((estimate) => estimate.status).filter(Boolean))) as string[];
+    return [
+      { value: 'all', label: 'All statuses' },
+      ...statuses.sort().map((status) => ({ value: status, label: labelize(status) })),
+    ];
+  }, [estimates]);
+
+  const stats = useMemo(() => ({
     total: estimates.length,
-    sent: estimates.filter(e => e.status === 'sent').length,
-    approved: estimates.filter(e => e.status === 'approved').length,
-    draft: estimates.filter(e => e.status === 'draft').length,
-  };
-
-  const formatMoney = (cents: number) => {
-    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-  };
+    sent: estimates.filter((estimate) => estimate.status === 'sent').length,
+    approved: estimates.filter((estimate) => ['approved', 'accepted', 'signed'].includes(String(estimate.status))).length,
+    draft: estimates.filter((estimate) => estimate.status === 'draft').length,
+  }), [estimates]);
 
   if (isLoading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4" />
-          <div className="h-4 bg-gray-200 rounded w-96 mb-8" />
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-gray-200 rounded" />
-            ))}
+      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-48 rounded bg-gray-200" />
+          <div className="h-11 rounded bg-gray-200" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="h-28 rounded-xl bg-gray-200" />
+            <div className="h-28 rounded-xl bg-gray-200" />
           </div>
         </div>
       </div>
@@ -91,143 +127,134 @@ export function EstimatesList() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Estimates</h2>
-          <p className="text-gray-600 mt-1">Track sent, accepted, and declined painting proposals.</p>
+          <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Estimates</h2>
+          <p className="mt-1 text-sm text-gray-600">Track sent, accepted, and declined painting proposals.</p>
         </div>
         <Link to="/estimates/production">
           <Button>Start estimate</Button>
         </Link>
       </div>
 
-      {/* Estimate Type Cards */}
-      <div className="grid md:grid-cols-2 gap-3 mb-4">
-        <Link to="/estimates/production">
+      <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <Link to="/estimates/production" className="block">
           <Card hoverable padding="md" className="h-full">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex-1">
-                <h3 className="text-base font-semibold text-gray-900">Production estimate</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Use measured surfaces, prep levels, production rates, labor, paint products, and templates.
-                </p>
+              <div>
+                <h3 className="text-base font-semibold text-gray-950">Production estimate</h3>
+                <p className="mt-1 text-sm text-gray-600">Measured scope, prep, labor, paint products, payment terms, and client preview.</p>
               </div>
-              <span className="shrink-0 rounded-full bg-blue-50 text-blue-700 px-3 py-1 text-xs font-medium">
-                Default
-              </span>
+              <Badge variant="info">Default</Badge>
             </div>
           </Card>
         </Link>
-        
-        <Link to="/estimates/new">
+        <Link to="/estimates/new" className="block">
           <Card hoverable padding="md" className="h-full">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex-1">
-                <h3 className="text-base font-semibold text-gray-900">Quick line-item estimate</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Build a simple estimate from manually entered scope items when takeoff detail is not needed.
-                </p>
+              <div>
+                <h3 className="text-base font-semibold text-gray-950">Quick estimate</h3>
+                <p className="mt-1 text-sm text-gray-600">Simple line items for small jobs or early ballpark pricing.</p>
               </div>
-              <span className="shrink-0 rounded-full bg-gray-100 text-gray-700 px-3 py-1 text-xs font-medium">
-                Simple
-              </span>
+              <Badge>Simple</Badge>
             </div>
           </Card>
         </Link>
       </div>
 
-      {/* Filters */}
       <Card padding="md" className="mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
+        <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
           <Input
             type="search"
-            placeholder="Search customer, phone, or email"
+            placeholder="Search customer, phone, email, or address"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
           />
-          <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            options={[
-              { value: 'all', label: 'All statuses' },
-              { value: 'sent', label: 'Sent' },
-              { value: 'approved', label: 'Approved' },
-              { value: 'declined', label: 'Declined' },
-              { value: 'draft', label: 'Draft' },
-            ]}
-          />
+          <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} options={statusOptions} />
         </div>
-        
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-sm text-gray-600">Total</div>
-          </div>
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="text-2xl font-bold text-blue-600">{stats.sent}</div>
-            <div className="text-sm text-gray-600">Sent</div>
-          </div>
-          <div className="bg-green-50 rounded-lg p-3">
-            <div className="text-2xl font-bold text-green-600">{stats.approved}</div>
-            <div className="text-sm text-gray-600">Approved</div>
-          </div>
-          <div className="bg-yellow-50 rounded-lg p-3">
-            <div className="text-2xl font-bold text-yellow-600">{stats.draft}</div>
-            <div className="text-sm text-gray-600">Draft</div>
-          </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            ['Total', stats.total],
+            ['Sent', stats.sent],
+            ['Approved', stats.approved],
+            ['Draft', stats.draft],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-gray-50 px-3 py-2">
+              <div className="text-xl font-semibold text-gray-950">{value}</div>
+              <div className="text-xs font-medium text-gray-500">{label}</div>
+            </div>
+          ))}
         </div>
       </Card>
 
-      {/* Estimates List */}
+      {error && (
+        <Card padding="md" className="mb-4 border-red-200 bg-red-50 text-sm text-red-800">
+          {error}
+        </Card>
+      )}
+
       {filteredEstimates.length === 0 ? (
         <EmptyState
-          icon={<Icon name="file-text" className="w-8 h-8" />}
+          icon={<Icon name="file-text" className="h-8 w-8" />}
           title="No estimates found"
-          description="Get started by creating your first estimate."
+          description="Start with a production estimate when you need a client-ready proposal with scope, terms, and payment schedule."
           action={{
             label: 'Start estimate',
-            onClick: () => window.location.href = '/estimates/production'
+            onClick: () => {
+              window.location.href = '/estimates/production';
+            },
           }}
         />
       ) : (
         <div className="grid gap-3">
-          {filteredEstimates.map((estimate) => (
-            <Card key={estimate.id} hoverable padding="md">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-base font-semibold text-gray-900 truncate">
-                      {estimate.customerName}
-                    </h3>
-                    <StatusBadge status={estimate.status} />
-                  </div>
-                  <p className="text-sm text-gray-600 truncate">{estimate.address}</p>
-                  <p className="text-sm text-gray-500 mt-1">{estimate.contact}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-gray-900">
-                    {formatMoney(estimate.totalCents)}
-                  </div>
-                  {estimate.sentAt && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      Sent {new Date(estimate.sentAt).toLocaleDateString()}
+          {filteredEstimates.map((estimate) => {
+            const address = formatAddress(estimate);
+            const previewUrl = estimate.customerPreviewUrl || estimate.publicUrl;
+            return (
+              <Card key={estimate.id} hoverable padding="md">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <Link to={estimate.leadId ? `/leads/${estimate.leadId}` : `/estimates/${estimate.id}`} className="truncate text-base font-semibold text-gray-950 hover:text-blue-700">
+                        {estimate.leadName || 'Unnamed customer'}
+                      </Link>
+                      <StatusBadge status={String(estimate.status || 'draft')} />
                     </div>
-                  )}
-                  <div className="flex gap-2 mt-3">
-                    <Link to={`/estimates/${estimate.id}`}>
-                      <Button variant="secondary" size="sm">View</Button>
-                    </Link>
-                    <Link to={`/estimates/production?estimateId=${estimate.id}`}>
-                      <Button variant="ghost" size="sm">Edit</Button>
-                    </Link>
+                    {address && <p className="truncate text-sm text-gray-600">{address}</p>}
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500">
+                      {estimate.leadPhone && <span>{formatPhone(estimate.leadPhone)}</span>}
+                      {estimate.leadEmail && <span className="truncate">{estimate.leadEmail}</span>}
+                    </div>
+                    <div className="mt-2 space-y-0.5 text-xs text-gray-500">
+                      <div>Created {formatDate(estimate.createdAt) || 'not recorded'}</div>
+                      {estimate.sentAt && <div>Sent {formatDate(estimate.sentAt)}</div>}
+                      {estimate.signedAt && <div>Signed {formatDate(estimate.signedAt)}</div>}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-3 sm:items-end">
+                    <div className="text-left sm:text-right">
+                      <div className="text-lg font-semibold text-gray-950">{formatMoney(estimateTotal(estimate))}</div>
+                      <div className="text-xs font-medium text-gray-500">Proposal total</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 sm:justify-end">
+                      <Link to={`/estimates/${estimate.id}`}>
+                        <Button variant="secondary" size="sm">Details</Button>
+                      </Link>
+                      <Link to={`/estimates/production?estimateId=${estimate.id}`}>
+                        <Button variant="ghost" size="sm">Edit</Button>
+                      </Link>
+                      {previewUrl && (
+                        <a href={previewUrl} target="_blank" rel="noreferrer">
+                          <Button as="span" variant="ghost" size="sm">Preview link</Button>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

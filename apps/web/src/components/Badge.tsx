@@ -45,10 +45,15 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
     sent: { variant: 'info', label: 'Sent' },
     viewed: { variant: 'info', label: 'Viewed' },
     approved: { variant: 'success', label: 'Approved' },
+    accepted: { variant: 'success', label: 'Accepted' },
+    signed: { variant: 'success', label: 'Signed' },
     rejected: { variant: 'danger', label: 'Rejected' },
+    declined: { variant: 'danger', label: 'Declined' },
+    voided: { variant: 'danger', label: 'Voided' },
     in_progress: { variant: 'warning', label: 'In Progress' },
     completed: { variant: 'success', label: 'Completed' },
     cancelled: { variant: 'default', label: 'Cancelled' },
+    canceled: { variant: 'default', label: 'Canceled' },
     on_hold: { variant: 'warning', label: 'On Hold' },
     scheduled: { variant: 'info', label: 'Scheduled' },
     active: { variant: 'success', label: 'Active' },
@@ -58,9 +63,13 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
     new: { variant: 'info', label: 'New' },
     contacted: { variant: 'warning', label: 'Contacted' },
     qualified: { variant: 'success', label: 'Qualified' },
+    estimate_sent: { variant: 'info', label: 'Estimate Sent' },
   };
   
-  const config = statusConfig[status.toLowerCase()] || { variant: 'default', label: status };
+  const config = statusConfig[status.toLowerCase()] || {
+    variant: 'default',
+    label: status.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+  };
   
   return (
     <Badge variant={config.variant} className={className}>
