@@ -9,8 +9,9 @@ interface Column<T> {
 }
 
 interface TableProps<T> {
-  columns: Column<T>[];
-  data: T[];
+  columns?: Column<T>[];
+  data?: T[];
+  children?: ReactNode;
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
   isLoading?: boolean;
@@ -18,13 +19,24 @@ interface TableProps<T> {
 }
 
 export function Table<T extends Record<string, any>>({
-  columns,
-  data,
+  columns = [],
+  data = [],
+  children,
   onRowClick,
   emptyMessage = 'No data available',
   isLoading = false,
   className = '',
 }: TableProps<T>) {
+  if (children) {
+    return (
+      <div className={`overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg ${className}`}>
+        <table className="min-w-full divide-y divide-gray-300">
+          {children}
+        </table>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">

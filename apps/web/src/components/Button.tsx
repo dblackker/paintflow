@@ -1,6 +1,10 @@
-import { ButtonHTMLAttributes, ReactNode } from 'react';
+import { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
+
+type ButtonAs = 'button' | 'a' | 'span';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  as?: ButtonAs;
+  href?: string;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
@@ -10,6 +14,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({
+  as = 'button',
+  href,
   variant = 'primary',
   size = 'md',
   isLoading = false,
@@ -37,10 +43,32 @@ export function Button({
   };
   
   const width = fullWidth ? 'w-full' : '';
+  const classes = `${baseStyles} ${variants[variant]} ${sizes[size]} ${width} ${className}`;
+
+  if (as === 'a') {
+    const anchorProps = props as AnchorHTMLAttributes<HTMLAnchorElement>;
+    return (
+      <a className={classes} href={href} {...anchorProps}>
+        {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+        {children}
+        {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+      </a>
+    );
+  }
+
+  if (as === 'span') {
+    return (
+      <span className={classes}>
+        {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+        {children}
+        {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+      </span>
+    );
+  }
   
   return (
     <button
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${width} ${className}`}
+      className={classes}
       disabled={disabled || isLoading}
       {...props}
     >

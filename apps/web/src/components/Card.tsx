@@ -41,13 +41,17 @@ export function Card({
 }
 
 interface CardHeaderProps {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
+  title?: ReactNode;
+  description?: ReactNode;
 }
 
-export function CardHeader({ children, className = '' }: CardHeaderProps) {
+export function CardHeader({ children, className = '', title, description }: CardHeaderProps) {
   return (
     <div className={`mb-4 ${className}`}>
+      {title && <CardTitle>{title}</CardTitle>}
+      {description && <CardDescription>{description}</CardDescription>}
       {children}
     </div>
   );

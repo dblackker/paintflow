@@ -10,9 +10,10 @@ interface StatCardProps {
   };
   icon?: ReactNode;
   className?: string;
+  subtitle?: string;
 }
 
-export function StatCard({ title, value, change, icon, className = '' }: StatCardProps) {
+export function StatCard({ title, value, change, icon, className = '', subtitle }: StatCardProps) {
   const trendColors = {
     up: 'text-green-600',
     down: 'text-red-600',
@@ -29,6 +30,9 @@ export function StatCard({ title, value, change, icon, className = '' }: StatCar
             <p className={`mt-2 text-sm ${trendColors[change.trend]}`}>
               {change.value}
             </p>
+          )}
+          {subtitle && !change && (
+            <p className="mt-2 text-sm text-gray-500">{subtitle}</p>
           )}
         </div>
         {icon && (

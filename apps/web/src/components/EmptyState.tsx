@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { isValidElement, ReactNode } from 'react';
 import { Button } from './Button';
 
 interface EmptyStateProps {
@@ -8,7 +8,7 @@ interface EmptyStateProps {
   action?: {
     label: string;
     onClick: () => void;
-  };
+  } | ReactNode;
   className?: string;
 }
 
@@ -19,6 +19,10 @@ export function EmptyState({
   action,
   className = '' 
 }: EmptyStateProps) {
+  const actionConfig = action && !isValidElement(action) && typeof action === 'object' && 'label' in action
+    ? action as { label: string; onClick: () => void }
+    : null;
+
   return (
     <div className={`text-center py-12 ${className}`}>
       {icon && (
@@ -34,10 +38,15 @@ export function EmptyState({
           {description}
         </p>
       )}
-      {action && (
+      {action && !actionConfig && (
         <div className="mt-6">
-          <Button onClick={action.onClick}>
-            {action.label}
+          {action as ReactNode}
+        </div>
+      )}
+      {actionConfig && (
+        <div className="mt-6">
+          <Button onClick={actionConfig.onClick}>
+            {actionConfig.label}
           </Button>
         </div>
       )}
