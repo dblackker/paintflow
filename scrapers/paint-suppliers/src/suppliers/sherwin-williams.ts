@@ -300,37 +300,154 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
     const errors: Error[] = [];
 
     try {
-      // For Sherwin-Williams, most products can be tinted to most colors
-      // with base restrictions
-      // Strategy: Scrape product pages to see available bases, then
-      // map colors based on base requirements
+      this.logger.info('Scraping product-color relationships for Sherwin-Williams');
 
-      // Get all active products from DB (or scrape them first)
-      // For now, we'll create mappings based on common patterns:
-      // - Interior products: all colors, recommended for interior
-      // - Exterior products: all colors, recommended for exterior  
-      // - Deep base colors: only available in products with deep/ultra-deep bases
+      // Scrape key products
+      const productPaths = [
+        { name: 'SuperPaint Interior', path: '/homeowners/products/superpaint-interior', type: 'interior' },
+        { name: 'Duration Exterior', path: '/homeowners/products/duration-exterior', type: 'exterior' },
+        { name: 'Emerald Interior', path: '/homeowners/products/emerald-interior', type: 'interior' },
+      ];
 
-      // In a real implementation, we'd:
-      // 1. Visit each product page
-      // 2. Check "Color Options" or "Tinting" section
-      // 3. Extract which color collections are supported
-      // 4. Check base availability (extra white, deep, ultra deep)
+      const products = [];
 
-      this.logger.info('Product-color mappings use heuristic rules for SW');
-      this.logger.info('Most SW products can be tinted to most colors');
+      for (const productInfo of productPaths.slice(0, options?.limit || 3)) {
+        try {
+          await this.navigate(`${this.baseUrl}${productInfo.path}`);
+          await this.page!.waitForSelector('h1, [data-testid="product-title"]', { timeout: 10000 });
 
-      // For now, return empty - would need actual product page scraping
-      // to determine specific color availability
+          const productData = await this.page!.$eval('body', () => {
+            const name = document.querySelector('h1, [data-testid="product-title"]')?.textContent?.trim() || '';
+            const sku = document.querySelector('[data-testid="product-sku"], .sku')?.textContent?.trim() || '';
+            
+            // Extract bases
+            const baseElements = document.querySelectorAll('.base-option, [data-base], [class*="base"]');
+            const bases = Array.from(baseElements)
+              .map(el => el.textContent?.trim())
+              .filter(Boolean)
+              .filter(text => text && text.toLowerCase().includes('base')) as string[];
+            
+            // Check for color information
+            const colorInfo = document.body.textContent || '';
+            const hasColorSystem = colorInfo.toLowerCase().includes('color') && 
+                                  (colorInfo.toLowerCase().includes('tint') || 
+                                   colorInfo.toLowerCase().includes('thousand'));
+            
+            return { name, sku, bases, hasColorSystem };
+          });
+
+          if (productData.name) {
+            const productId = this.generateId(this.supplierId, productData.sku || productData.name);
+            products.push({
+              id: productId,
+              name: productData.name,
+              type: productInfo.type,
+              bases: productData.bases,
+            });
+            this.logger.info(`Product: ${productData.name}, bases: ${productData.bases.length}`);
+          }
+
+          await this.rateLimit();
+        } catch (error) {
+          errors.push(error as Error);
+        }
+      }
+
+      // Scrape colors - get from color collections
+      await this.navigate(`${this.baseUrl}/homeowners/color`);
+      await this.page!.waitForSelector('.color-collection', { timeout: 10000 });
+
+      const colors = [];
+      const collectionLinks = await this.page!.$$eval(
+        '.color-collection a',
+        links => links.slice(0, 2).map(a => (a as HTMLAnchorElement).href)
+      );
+
+      for (const link of collectionLinks) {
+        try {
+          await this.navigate(link);
+          await this.page!.waitForSelector('.color-swatch', { timeout: 5000 });
+
+          const collectionColors = await this.page!.$$eval(
+            '.color-swatch',
+            swatches => swatches.slice(0, 30).map(swatch => {
+              const name = swatch.querySelector('.color-name')?.textContent?.trim() || '';
+              const code = swatch.querySelector('.color-code')?.textContent?.trim() || '';
+              const hex = swatch.getAttribute('data-hex') || '';
+              
+              // Estimate LRV from hex (rough approximation)
+              let lrv = null;
+              if (hex && hex.startsWith('#')) {
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                // Simple luminance formula
+                lrv = Math.round((0.299 * r + 0.587 * g + 0.114 * b) / 2.55);
+              }
+              
+              return { name, code, hex, lrv };
+            }).filter(c => c.name)
+          );
+
+          colors.push(...collectionColors);
+          await this.rateLimit();
+        } catch (error) {
+          errors.push(error as Error);
+        }
+      }
+
+      this.logger.info(`Scraped ${colors.length} colors`);
+
+      // Create mappings
+      for (const product of products) {
+        for (const color of colors) {
+          // Determine base required from LRV
+          let baseRequired = 'extra-white';
+          if (color.lrv !== null) {
+            if (color.lrv < 20) baseRequired = 'ultra-deep';
+            else if (color.lrv < 50) baseRequired = 'deep-base';
+            else baseRequired = 'extra-white';
+          }
+
+          // Recommended use based on product type
+          const recommendedUse = [product.type];
+          
+          // Most SW colors work for both if product is suitable
+          // Add both if it's a popular neutral
+          if (color.lrv !== null && color.lrv > 50 && color.lrv < 85) {
+            if (!recommendedUse.includes('interior')) recommendedUse.push('interior');
+            if (!recommendedUse.includes('exterior')) recommendedUse.push('exterior');
+          }
+
+          const productId = product.id;
+          const colorId = this.generateId(this.supplierId, color.code || color.name);
+
+          mappings.push({
+            productId,
+            colorId,
+            isAvailable: true,
+            baseRequired,
+            recommendedUse,
+          });
+        }
+      }
+
+      this.logger.info(`Created ${mappings.length} mappings`);
 
       const duration = Date.now() - startTime;
       this.logScrapeComplete('product-color mappings', mappings.length, duration);
 
       return {
-        success: true,
+        success: errors.length === 0,
         data: mappings,
         errors,
-        stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 }
+        stats: {
+          total: mappings.length,
+          created: mappings.length,
+          updated: 0,
+          unchanged: 0,
+          failed: errors.length
+        }
       };
     } catch (error) {
       return {

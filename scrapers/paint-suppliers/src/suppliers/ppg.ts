@@ -226,17 +226,114 @@ export class PPGScraper extends BaseSupplierScraper {
   async scrapeProductColorMappings(options?: ScrapeOptions): Promise<ScrapeResult<ProductColorMapping>> {
     this.logScrapeStart('product-color mappings');
     const startTime = Date.now();
+    const mappings: ProductColorMapping[] = [];
+    const errors: Error[] = [];
 
-    this.logger.info('PPG product-color mappings use heuristic rules');
+    try {
+      this.logger.info('Scraping product-color relationships for PPG');
 
-    const duration = Date.now() - startTime;
-    this.logScrapeComplete('product-color mappings', 0, duration);
+      // Scrape key products
+      const products = [];
+      const productPaths = [
+        { path: '/products/manor-hall-interior', type: 'interior' },
+        { path: '/products/timeless-exterior', type: 'exterior' },
+      ];
 
-    return {
-      success: true,
-      data: [],
-      errors: [],
-      stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 }
-    };
+      for (const productInfo of productPaths) {
+        try {
+          await this.navigate(`${this.baseUrl}${productInfo.path}`);
+          await this.page!.waitForSelector('h1, .product-title', { timeout: 10000 });
+
+          const productData = await this.page!.$eval('body', () => {
+            const name = document.querySelector('h1, .product-title')?.textContent?.trim() || '';
+            const bases = Array.from(document.querySelectorAll('[data-base], .base'))
+              .map(el => el.textContent?.trim())
+              .filter(Boolean) as string[];
+            return { name, bases };
+          });
+
+          if (productData.name) {
+            const productId = this.generateId(this.supplierId, productData.name);
+            products.push({
+              id: productId,
+              name: productData.name,
+              type: productInfo.type,
+              bases: productData.bases,
+            });
+          }
+          await this.rateLimit();
+        } catch (error) {
+          errors.push(error as Error);
+        }
+      }
+
+      // Scrape colors
+      await this.navigate(`${this.baseUrl}/color`);
+      await this.page!.waitForSelector('.color-swatch', { timeout: 10000 });
+
+      const colors = await this.page!.$$eval(
+        '.color-swatch',
+        swatches => swatches.slice(0, 30).map(swatch => {
+          const name = swatch.querySelector('.color-name')?.textContent?.trim() || '';
+          const code = swatch.querySelector('.color-code')?.textContent?.trim() || '';
+          const hex = swatch.getAttribute('data-color') || '';
+          
+          let lrv = null;
+          if (hex && hex.startsWith('#')) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            lrv = Math.round((0.299 * r + 0.587 * g + 0.114 * b) / 2.55);
+          }
+          
+          return { name, code, hex, lrv };
+        }).filter(c => c.name)
+      );
+
+      // Create mappings
+      for (const product of products) {
+        for (const color of colors) {
+          let baseRequired = 'extra-white';
+          if (color.lrv !== null) {
+            if (color.lrv < 20) baseRequired = 'ultra-deep';
+            else if (color.lrv < 50) baseRequired = 'deep-base';
+          }
+
+          const productId = product.id;
+          const colorId = this.generateId(this.supplierId, color.code || color.name);
+
+          mappings.push({
+            productId,
+            colorId,
+            isAvailable: true,
+            baseRequired,
+            recommendedUse: [product.type],
+          });
+        }
+      }
+
+      const duration = Date.now() - startTime;
+      this.logScrapeComplete('product-color mappings', mappings.length, duration);
+
+      return {
+        success: true,
+        data: mappings,
+        errors,
+        stats: {
+          total: mappings.length,
+          created: mappings.length,
+          updated: 0,
+          unchanged: 0,
+          failed: errors.length
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: mappings,
+        errors: [...errors, error as Error],
+        stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 1 }
+      };
+    }
   }
 }

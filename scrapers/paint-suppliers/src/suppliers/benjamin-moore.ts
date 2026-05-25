@@ -293,27 +293,214 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
     this.logScrapeStart('product-color mappings');
     const startTime = Date.now();
     const mappings: ProductColorMapping[] = [];
+    const errors: Error[] = [];
 
-    // Benjamin Moore has a "Color Portfolio" app and color matching
-    // Most products can be tinted to 3,500+ colors
-    // Base requirements: White/Pastel (light colors), Medium (mid-tone), Deep (dark colors)
+    try {
+      // Benjamin Moore strategy:
+      // 1. Scrape product pages to get available bases
+      // 2. Scrape colors to get LRV and collections
+      // 3. Create mappings based on base requirements
 
-    this.logger.info('BM product-color mappings use base-requirement heuristics');
+      this.logger.info('Scraping product-color relationships for Benjamin Moore');
 
-    // In practice, we'd scrape:
-    // 1. Product pages for base availability
-    // 2. Color pages for recommended use (interior/exterior/both)
-    // 3. Create mappings with base requirements
+      // First, get products (we need their base info)
+      // We'll scrape a few key products to demonstrate
+      const productSlugs = [
+        { name: 'Regal Select Interior', path: '/en-us/interior-paints-stains/regal-select', type: 'interior' },
+        { name: 'Aura Interior', path: '/en-us/interior-paints-stains/aura', type: 'interior' },
+        { name: 'Regal Select Exterior', path: '/en-us/exterior-paints-stains/regal-select', type: 'exterior' },
+      ];
 
-    const duration = Date.now() - startTime;
-    this.logScrapeComplete('product-color mappings', mappings.length, duration);
+      const products = [];
 
-    return {
-      success: true,
-      data: mappings,
-      errors: [],
-      stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 }
-    };
+      for (const productInfo of productSlugs.slice(0, options?.limit || 3)) {
+        try {
+          await this.navigate(`${this.baseUrl}${productInfo.path}`);
+          await this.page!.waitForSelector('h1, [data-testid="product-name"]', { timeout: 10000 });
+
+          const productData = await this.page!.$eval('body', () => {
+            const name = document.querySelector('h1, [data-testid="product-name"]')?.textContent?.trim() || '';
+            
+            // Look for base information
+            const baseElements = Array.from(document.querySelectorAll('[data-base], .base-option, [class*="base"]'));
+            const bases = baseElements
+              .map(el => el.textContent?.trim())
+              .filter(Boolean)
+              .filter(text => text && (text.toLowerCase().includes('base') || text.toLowerCase().includes('white')));
+            
+            // Look for color count or system info
+            const colorInfo = document.querySelector('[class*="color"], [data-color-count]')?.textContent?.trim() || '';
+            const hasColorSystem = colorInfo.toLowerCase().includes('color') || colorInfo.toLowerCase().includes('tint');
+            
+            // Extract product ID/sku
+            const sku = document.querySelector('[data-sku], .sku')?.textContent?.trim() || name;
+            
+            return { name, sku, bases, hasColorSystem, colorInfo };
+          });
+
+          if (productData.name) {
+            const productId = this.generateId(this.supplierId, productData.sku || productData.name);
+            products.push({
+              id: productId,
+              name: productData.name,
+              type: productInfo.type,
+              bases: productData.bases,
+              hasColorSystem: productData.hasColorSystem
+            });
+
+            this.logger.info(`Found product: ${productData.name}, bases: ${productData.bases.join(', ')}`);
+          }
+
+          await this.rateLimit();
+        } catch (error) {
+          errors.push(error as Error);
+          this.logger.warn(`Failed to scrape product ${productInfo.name}:`, error);
+        }
+      }
+
+      // Now scrape colors to understand their characteristics
+      // We'll get a sample of colors with different LRVs
+      await this.navigate(`${this.baseUrl}/en-us/color-overview`);
+      await this.page!.waitForSelector('[href*="/color/"]', { timeout: 10000 });
+
+      // Get a color family page
+      const colorFamilyLinks = await this.page!.$$eval(
+        'a[href*="/color/"]',
+        links => [...new Set(links
+          .map(a => (a as HTMLAnchorElement).href)
+          .filter(href => href.includes('/color/') && !href.includes('collection'))
+        )].slice(0, 2)
+      );
+
+      const colors = [];
+
+      for (const familyUrl of colorFamilyLinks) {
+        try {
+          await this.navigate(familyUrl);
+          await this.page!.waitForSelector('[data-color], .color-swatch', { timeout: 10000 });
+
+          // Extract colors with LRV info
+          const familyColors = await this.page!.$$eval(
+            '[data-color], .color-swatch, [data-testid="color-card"]',
+            (swatches) => {
+              return swatches.slice(0, 20).map(swatch => {
+                const el = swatch as HTMLElement;
+                const name = el.querySelector('.color-name, [data-color-name]')?.textContent?.trim() || '';
+                const code = el.getAttribute('data-color-code') || 
+                            el.querySelector('.color-code')?.textContent?.trim() || '';
+                
+                // Try to get LRV
+                const lrvText = el.querySelector('[class*="lrv"], [data-lrv]')?.textContent?.trim() || '';
+                const lrvMatch = lrvText.match(/(\d+\.?\d*)/);
+                const lrv = lrvMatch ? parseFloat(lrvMatch[1]) : null;
+                
+                // Collections
+                const collection = el.getAttribute('data-collection') || 
+                                 el.closest('[data-collection]')?.getAttribute('data-collection') || '';
+                
+                return { name, code, lrv, collection };
+              }).filter(c => c.name);
+            }
+          );
+
+          colors.push(...familyColors);
+          await this.rateLimit();
+        } catch (error) {
+          errors.push(error as Error);
+        }
+      }
+
+      this.logger.info(`Scraped ${colors.length} colors for mapping`);
+
+      // Create mappings: Product × Color
+      // Determine base requirement from LRV
+      // Determine recommended use from product type and color collection
+
+      for (const product of products) {
+        for (const color of colors) {
+          // Determine base required based on LRV
+          let baseRequired = 'extra-white';
+          if (color.lrv !== null) {
+            if (color.lrv < 20) baseRequired = 'ultra-deep';
+            else if (color.lrv < 50) baseRequired = 'deep-base';
+            else if (color.lrv < 75) baseRequired = 'medium-base';
+            else baseRequired = 'extra-white';
+          }
+
+          // Check if product has this base
+          const hasBase = product.bases.length === 0 || // Assume all bases if not specified
+                         product.bases.some(b => 
+                           b.toLowerCase().includes(baseRequired.replace('-', ' ')) ||
+                           b.toLowerCase().includes('all') ||
+                           b.toLowerCase().includes('tint')
+                         );
+
+          if (!hasBase && product.bases.length > 0) {
+            continue; // Skip if product doesn't have required base
+          }
+
+          // Determine recommended use
+          const recommendedUse = [];
+          
+          // Product type determines primary recommendation
+          if (product.type === 'interior') recommendedUse.push('interior');
+          if (product.type === 'exterior') recommendedUse.push('exterior');
+          
+          // Colors in exterior collections are good for exterior
+          if (color.collection && color.collection.toLowerCase().includes('exterior')) {
+            if (!recommendedUse.includes('exterior')) recommendedUse.push('exterior');
+          }
+
+          // Very dark colors (LRV < 10) may not be recommended for exterior due to heat
+          if (color.lrv !== null && color.lrv < 10 && product.type === 'exterior') {
+            // Still available but maybe not recommended
+            // We'll keep it available but note it
+          }
+
+          // Most colors work for both if product is suitable
+          if (recommendedUse.length === 0) {
+            recommendedUse.push('interior', 'exterior');
+          }
+
+          const productId = product.id;
+          const colorId = this.generateId(this.supplierId, color.code || color.name);
+
+          mappings.push({
+            productId,
+            colorId,
+            isAvailable: true,
+            baseRequired,
+            recommendedUse,
+            notes: color.lrv !== null ? `LRV: ${color.lrv}` : undefined
+          });
+        }
+      }
+
+      this.logger.info(`Created ${mappings.length} product-color mappings`);
+
+      const duration = Date.now() - startTime;
+      this.logScrapeComplete('product-color mappings', mappings.length, duration);
+
+      return {
+        success: errors.length === 0,
+        data: mappings,
+        errors,
+        stats: {
+          total: mappings.length,
+          created: mappings.length,
+          updated: 0,
+          unchanged: 0,
+          failed: errors.length
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: mappings,
+        errors: [...errors, error as Error],
+        stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 1 }
+      };
+    }
   }
 
   async scrapeSundries(options?: ScrapeOptions): Promise<ScrapeResult<any>> {
