@@ -629,7 +629,7 @@ function StatTile({ href, label, value, help }: { href: string; label: string; v
 
 function SectionCard({ id, title, eyebrow, action, children }: { id?: string; title: string; eyebrow?: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section id={id} className="scroll-mt-24 overflow-hidden rounded-lg border bg-white shadow-sm">
+    <section id={id} className="scroll-mt-24 rounded-lg border bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b p-4">
         <h3 className="pf-section-title">{title}</h3>
         {action || (eyebrow ? <span className="pf-meta">{eyebrow}</span> : null)}
@@ -650,6 +650,8 @@ function EstimatesList({ estimates, payments, onCancel, onAgreementAction, onRec
   onAgreementAction: (estimate: Estimate, actionName: 'revise' | 'void') => void;
   onRecordPayment: (estimate: Estimate) => void;
 }) {
+  const [openEstimateMenuId, setOpenEstimateMenuId] = useState<string | null>(null);
+
   if (!estimates.length) return <EmptySection>No estimates yet.</EmptySection>;
   return (
     <div className="divide-y">
@@ -675,14 +677,30 @@ function EstimatesList({ estimates, payments, onCancel, onAgreementAction, onRec
                 {estimate.clientViewedAt && <p>Client viewed {formatDate(estimate.clientViewedAt, true)}{estimate.clientViewCount ? ` (${estimate.clientViewCount} views)` : ''}</p>}
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+            <div className="flex shrink-0 items-center justify-end gap-1">
               <Link to={`/estimates/${estimate.id}/details`} className="btn-text btn-sm">View details</Link>
-              {canEdit && <Link to={`/estimates/production?estimateId=${estimate.id}`} className="btn-text btn-sm">{status === 'sent' ? 'Edit sent' : 'Edit draft'}</Link>}
-              <a href={estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`} target="_blank" rel="noreferrer" className="btn-text btn-sm">Preview link</a>
-              {!inactive && balance > 0.005 && <button type="button" className="btn-text btn-sm" onClick={() => onRecordPayment(estimate)}>Record payment</button>}
-              {signed && status !== 'voided' && status !== 'superseded' && <button type="button" className="btn-text btn-sm" onClick={() => onAgreementAction(estimate, 'revise')}>Create revision</button>}
-              {signed && status !== 'voided' && status !== 'superseded' && <button type="button" className="btn-text btn-sm text-red-700" onClick={() => onAgreementAction(estimate, 'void')}>Void agreement</button>}
-              {canCancel && <button type="button" className="btn-text btn-sm text-red-700" onClick={() => onCancel(estimate)}>Cancel</button>}
+              <div className="relative">
+                <button
+                  type="button"
+                  className="btn-icon btn-icon-tonal"
+                  aria-label="More estimate actions"
+                  aria-expanded={openEstimateMenuId === estimate.id}
+                  title="More actions"
+                  onClick={() => setOpenEstimateMenuId(openEstimateMenuId === estimate.id ? null : estimate.id)}
+                >
+                  <Icon name="more-horizontal" className="pf-icon" />
+                </button>
+                {openEstimateMenuId === estimate.id && (
+                  <div className="absolute right-0 z-30 mt-2 w-48 rounded-lg border bg-white p-1 shadow-lg" role="menu">
+                    <a href={estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`} target="_blank" rel="noreferrer" className="btn-text btn-sm w-full justify-start" onClick={() => setOpenEstimateMenuId(null)}>Preview link</a>
+                    {canEdit && <Link to={`/estimates/production?estimateId=${estimate.id}`} className="btn-text btn-sm w-full justify-start" onClick={() => setOpenEstimateMenuId(null)}>{status === 'sent' ? 'Edit sent' : 'Edit draft'}</Link>}
+                    {!inactive && balance > 0.005 && <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => { setOpenEstimateMenuId(null); onRecordPayment(estimate); }}>Record payment</button>}
+                    {signed && status !== 'voided' && status !== 'superseded' && <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => { setOpenEstimateMenuId(null); onAgreementAction(estimate, 'revise'); }}>Create revision</button>}
+                    {signed && status !== 'voided' && status !== 'superseded' && <button type="button" className="btn-text btn-sm w-full justify-start text-red-700" onClick={() => { setOpenEstimateMenuId(null); onAgreementAction(estimate, 'void'); }}>Void agreement</button>}
+                    {canCancel && <button type="button" className="btn-text btn-sm w-full justify-start text-red-700" onClick={() => { setOpenEstimateMenuId(null); onCancel(estimate); }}>Cancel</button>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
