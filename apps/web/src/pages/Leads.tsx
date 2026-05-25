@@ -1,4 +1,4 @@
-import { FormEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, MouseEvent, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -215,11 +215,6 @@ export function Leads() {
     }
   }
 
-  const summary = useMemo(() => leadStatuses.map((status) => ({
-    ...status,
-    count: leads.filter((lead) => lead.status === status.value).length,
-  })), [leads]);
-
   const isFiltered = statusFilter !== 'all' || sourceFilter !== 'all' || Boolean(debouncedSearch);
   const canSaveLead = Boolean(form.name.trim() && (form.phone.trim() || form.email.trim()));
 
@@ -262,19 +257,6 @@ export function Leads() {
               ...sources.map((source) => ({ value: source.name, label: source.name })),
             ]}
           />
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {summary.slice(0, 4).map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              className={`rounded-lg border px-3 py-2 text-left transition hover:border-blue-300 ${statusFilter === item.value ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'}`}
-              onClick={() => setStatusFilter(statusFilter === item.value ? 'all' : item.value)}
-            >
-              <p className="pf-metric-label">{item.label}</p>
-              <p className="pf-metric-value">{item.count}</p>
-            </button>
-          ))}
         </div>
       </Card>
 
