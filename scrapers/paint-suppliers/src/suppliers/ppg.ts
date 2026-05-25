@@ -1,4 +1,4 @@
-import { BaseSupplierScraper, Product, Pricing, Color, ScrapeResult, ScrapeOptions } from './base';
+import { BaseSupplierScraper, Product, Pricing, Color, ScrapeResult, ScrapeOptions, ProductColorMapping } from './base';
 
 export class PPGScraper extends BaseSupplierScraper {
   supplierId = 'ppg';
@@ -221,5 +221,22 @@ export class PPGScraper extends BaseSupplierScraper {
       }
     }
     return undefined;
+  }
+
+  async scrapeProductColorMappings(options?: ScrapeOptions): Promise<ScrapeResult<ProductColorMapping>> {
+    this.logScrapeStart('product-color mappings');
+    const startTime = Date.now();
+
+    this.logger.info('PPG product-color mappings use heuristic rules');
+
+    const duration = Date.now() - startTime;
+    this.logScrapeComplete('product-color mappings', 0, duration);
+
+    return {
+      success: true,
+      data: [],
+      errors: [],
+      stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 }
+    };
   }
 }

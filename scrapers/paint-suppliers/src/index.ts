@@ -86,6 +86,18 @@ program
         }
         logger.info(`Colors: ${colorsResult.stats.created} created`);
 
+        // Scrape product-color mappings
+        const mappingsResult = await scraper.scrapeProductColorMappings({
+          dryRun: options.dryRun,
+          force: options.force,
+          limit: options.limit,
+        });
+        
+        if (!options.dryRun && mappingsResult.success) {
+          await db.saveProductColors(mappingsResult.data);
+        }
+        logger.info(`Product-Color Mappings: ${mappingsResult.stats.created} created`);
+
         // Scrape sundries
         const sundriesResult = await scraper.scrapeSundries({
           dryRun: options.dryRun,

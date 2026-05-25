@@ -171,6 +171,63 @@ export class DatabaseClient {
     this.logger.info(`Saved ${colors.length} colors`);
   }
 
+  async saveProductColors(productColorMappings: Array<{
+    productId: string;
+    colorId: string;
+    isAvailable?: boolean;
+    baseRequired?: string;
+    recommendedUse?: string[];
+  }>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    for (const mapping of productColorMappings) {
+      await this.db.run(
+        `INSERT OR REPLACE INTO product_colors (
+          product_id, color_id, is_available, base_required, recommended_use
+        ) VALUES (?, ?, ?, ?, ?)`,
+        [
+          mapping.productId,
+          mapping.colorId,
+          mapping.isAvailable !== false ? 1 : 0,
+          mapping.baseRequired || null,
+          mapping.recommendedUse ? JSON.stringify(mapping.recommendedUse) : null,
+        ]
+      );
+    }
+
+    this.logger.info(`Saved ${productColorMappings.length} product-color relationships`);
+  }
+
+  async getColorsForProduct(productId: string): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const colors = await this.db.all(
+      `SELECT c.*, pc.base_required, pc.recommended_use, pc.is_available
+       FROM colors c
+       JOIN product_colors pc ON c.id = pc.color_id
+       WHERE pc.product_id = ? AND pc.is_available = 1
+       ORDER BY c.family, c.name`,
+      [productId]
+    );
+
+    return colors;
+  }
+
+  async getProductsForColor(colorId: string): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const products = await this.db.all(
+      `SELECT p.*, pc.base_required, pc.recommended_use
+       FROM products p
+       JOIN product_colors pc ON p.id = pc.product_id
+       WHERE pc.color_id = ? AND pc.is_available = 1 AND p.is_active = 1
+       ORDER BY p.product_line, p.name`,
+      [colorId]
+    );
+
+    return products;
+  }
+
   async saveSundries(sundries: any[]): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 

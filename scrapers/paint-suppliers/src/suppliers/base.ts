@@ -61,11 +61,21 @@ export interface ScrapeResult<T> {
   };
 }
 
+export interface ProductColorMapping {
+  productId: string;
+  colorId: string;
+  isAvailable?: boolean;
+  baseRequired?: string;
+  recommendedUse?: string[]; // ['interior', 'exterior']
+  notes?: string;
+}
+
 export interface ScrapeOptions {
   force?: boolean; // Force re-scrape even if recently scraped
   dryRun?: boolean; // Don't save to DB
   limit?: number; // Limit number of items
   types?: string[]; // Filter by product types
+  includeColorMappings?: boolean; // Also scrape product-color relationships
 }
 
 export abstract class BaseSupplierScraper {
@@ -85,6 +95,16 @@ export abstract class BaseSupplierScraper {
   abstract scrapeProducts(options?: ScrapeOptions): Promise<ScrapeResult<Product>>;
   abstract scrapePricing(options?: ScrapeOptions): Promise<ScrapeResult<Pricing>>;
   abstract scrapeColors(options?: ScrapeOptions): Promise<ScrapeResult<Color>>;
+  
+  // Optional: Override to scrape product-color relationships
+  async scrapeProductColorMappings(options?: ScrapeOptions): Promise<ScrapeResult<ProductColorMapping>> {
+    return {
+      success: true,
+      data: [],
+      errors: [],
+      stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 }
+    };
+  }
   
   // Optional: Override if supplier has sundries
   async scrapeSundries(options?: ScrapeOptions): Promise<ScrapeResult<any>> {

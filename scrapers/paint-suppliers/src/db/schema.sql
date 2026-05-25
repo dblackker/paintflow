@@ -90,11 +90,19 @@ CREATE TABLE IF NOT EXISTS product_colors (
     product_id TEXT NOT NULL,
     color_id TEXT NOT NULL,
     is_available BOOLEAN DEFAULT 1,
+    base_required TEXT, -- extra-white, deep-base, ultra-deep, etc.
+    recommended_use TEXT, -- JSON array: ["interior", "exterior", "both"]
+    notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (product_id, color_id),
     FOREIGN KEY (product_id) REFERENCES products(id),
     FOREIGN KEY (color_id) REFERENCES colors(id)
 );
+
+CREATE INDEX idx_product_colors_product ON product_colors(product_id);
+CREATE INDEX idx_product_colors_color ON product_colors(color_id);
+CREATE INDEX idx_product_colors_available ON product_colors(is_available);
 
 -- Specifications table
 CREATE TABLE IF NOT EXISTS specifications (
