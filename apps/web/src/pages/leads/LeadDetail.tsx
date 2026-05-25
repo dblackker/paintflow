@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { Card, CardHeader } from '@/components/Card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/Tabs';
-import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
+import { Card } from '@/components/Card';
+import { Icon } from '@/components/Icon';
+import { Input, Select, Textarea } from '@/components/Input';
+import { API_URL, apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface Lead {
   id: string;
@@ -18,6 +19,7 @@ interface Lead {
   status?: string | null;
   source?: string | null;
   createdAt?: string | null;
+  updatedAt?: string | null;
   notes?: string | null;
 }
 
@@ -28,7 +30,11 @@ interface Estimate {
   createdAt?: string | null;
   sentAt?: string | null;
   signedAt?: string | null;
+  clientViewedAt?: string | null;
+  clientViewCount?: number | null;
   customerPreviewUrl?: string | null;
+  publicUrl?: string | null;
+  packages?: Array<{ selected?: boolean; total?: number | string | null }>;
 }
 
 interface Job {
@@ -36,15 +42,22 @@ interface Job {
   name?: string | null;
   status?: string | null;
   budget?: number | string | null;
+  createdAt?: string | null;
+  completedAt?: string | null;
   scheduledStartAt?: string | null;
   scheduledEndAt?: string | null;
+  estimateId?: string | null;
 }
 
 interface Activity {
   id: string;
   action?: string | null;
   type?: string | null;
+  title?: string | null;
+  notes?: string | null;
   description?: string | null;
+  status?: string | null;
+  dueAt?: string | null;
   createdAt?: string | null;
 }
 
@@ -55,12 +68,34 @@ interface Message {
   createdAt?: string | null;
 }
 
+interface EmailSend {
+  id: string;
+  subject?: string | null;
+  status?: string | null;
+  templateName?: string | null;
+  toEmail?: string | null;
+  previewText?: string | null;
+  renderedHtml?: string | null;
+  sentAt?: string | null;
+}
+
 interface Payment {
   id: string;
+  estimateId?: string | null;
   amount?: number | string | null;
+  refundedAmount?: number | string | null;
   status?: string | null;
   method?: string | null;
+  source?: string | null;
+  description?: string | null;
+  reference?: string | null;
   receivedAt?: string | null;
+}
+
+interface Photo {
+  id?: string;
+  url?: string | null;
+  createdAt?: string | null;
 }
 
 interface LeadDetailResponse {
@@ -69,18 +104,45 @@ interface LeadDetailResponse {
     estimates: Estimate[];
     jobs: Job[];
     messages: Message[];
+    emailSends?: EmailSend[];
     payments: Payment[];
     activities?: Activity[];
     activity?: Activity[];
     photos?: {
-      estimates?: unknown[];
-      jobs?: unknown[];
+      estimates?: Photo[];
+      jobs?: Photo[];
     };
   };
 }
 
+interface PaymentForm {
+  estimate: Estimate;
+  amount: string;
+  source: 'cash' | 'check' | 'ach' | 'other';
+  reference: string;
+  description: string;
+  receivedAt: string;
+  confirmAdditionalPayment: boolean;
+}
+
+interface RefundForm {
+  payment: Payment;
+  amount: string;
+  reason: string;
+}
+
+const activityTypeOptions = [
+  { value: 'follow_up', label: 'Follow-up' },
+  { value: 'call', label: 'Call' },
+  { value: 'text', label: 'Text' },
+  { value: 'email', label: 'Email' },
+  { value: 'site_visit', label: 'Site visit' },
+  { value: 'task', label: 'Task' },
+  { value: 'note', label: 'Note' },
+];
+
 function formatDate(value?: string | null, withTime = false) {
-  if (!value) return 'Not recorded';
+  if (!value) return 'Not set';
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
@@ -89,40 +151,92 @@ function formatDate(value?: string | null, withTime = false) {
   }).format(new Date(value));
 }
 
-function estimateTotal(estimate: Estimate) {
-  return Number(estimate.total || 0);
+function dateTimeLocalValue(value = new Date()) {
+  const offset = value.getTimezoneOffset() * 60000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function estimateContractTotal(estimate: Estimate) {
+  const selectedPackage = estimate.packages?.find((pkg) => pkg.selected);
+  return Number(selectedPackage?.total ?? estimate.total ?? 0);
+}
+
+function paymentNet(payment: Payment) {
+  return Math.max(Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+}
+
+function photoSrc(photo: Photo, source: 'Estimate' | 'Job') {
+  if (source === 'Job' && photo.id) return `${API_URL}/v1/uploads/photos/file/${encodeURIComponent(photo.id)}`;
+  return photo.url || '';
+}
+
+function nextAction(data: LeadDetailResponse['data']) {
+  const activeJob = data.jobs.find((job) => !['completed', 'cancelled', 'canceled'].includes(String(job.status || '')));
+  if (activeJob) return { label: 'Open active job', href: `/jobs/${activeJob.id}` };
+  const sent = data.estimates.find((estimate) => estimate.status === 'sent');
+  if (sent) return { label: 'Follow up on estimate', href: `/estimates/${sent.id}` };
+  const draft = data.estimates.find((estimate) => estimate.status === 'draft');
+  if (draft) return { label: 'Edit draft estimate', href: `/estimates/production?estimateId=${draft.id}` };
+  return { label: 'Create estimate', href: `/estimates/production?leadId=${data.customer.id}` };
+}
+
+function followUps(data: LeadDetailResponse['data']) {
+  const items: string[] = [];
+  const sent = data.estimates.find((estimate) => estimate.status === 'sent');
+  const accepted = data.estimates.find((estimate) => estimate.status === 'accepted');
+  const completed = data.jobs.find((job) => job.status === 'completed');
+  if (sent) items.push(`Follow up on estimate sent ${formatDate(sent.sentAt || sent.createdAt)}.`);
+  if (accepted && !data.jobs.some((job) => job.estimateId === accepted.id)) items.push('Accepted estimate needs a scheduled job.');
+  if (completed) items.push('Completed job is ready for a review request and before/after photo selection.');
+  return items.length ? items : ['No urgent follow-up detected. Keep contact details current and create the next estimate when ready.'];
 }
 
 export function LeadDetail() {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<LeadDetailResponse['data'] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingActivity, setIsSavingActivity] = useState(false);
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
+  const [isSavingRefund, setIsSavingRefund] = useState(false);
   const [error, setError] = useState('');
+  const [activityForm, setActivityForm] = useState({
+    type: 'follow_up',
+    title: '',
+    dueAt: '',
+    notes: '',
+  });
+  const [paymentForm, setPaymentForm] = useState<PaymentForm | null>(null);
+  const [refundForm, setRefundForm] = useState<RefundForm | null>(null);
+
+  async function loadDetail() {
+    if (!id) return;
+    setIsLoading(true);
+    try {
+      const response = await apiJson<LeadDetailResponse>(`/v1/leads/${id}`);
+      setDetail(response.data);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load customer');
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    if (!id) return;
-    let mounted = true;
-    setIsLoading(true);
-    apiJson<LeadDetailResponse>(`/v1/leads/${id}`)
-      .then((response) => {
-        if (!mounted) return;
-        setDetail(response.data);
-        setError('');
-      })
-      .catch((err: Error) => {
-        if (!mounted) return;
-        setError(err.message || 'Failed to load customer');
-      })
-      .finally(() => {
-        if (mounted) setIsLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
+    loadDetail();
   }, [id]);
 
-  const activity = useMemo(() => [...(detail?.activities || []), ...(detail?.activity || [])]
+  useEffect(() => {
+    if (!detail || !window.location.hash) return;
+    window.requestAnimationFrame(() => document.querySelector(window.location.hash)?.scrollIntoView({ block: 'start' }));
+  }, [detail]);
+
+  useEffect(() => {
+    document.body.classList.toggle('pf-modal-open', Boolean(paymentForm || refundForm));
+    return () => document.body.classList.remove('pf-modal-open');
+  }, [paymentForm, refundForm]);
+
+  const auditActivity = useMemo(() => [...(detail?.activity || [])]
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
     .slice(0, 20), [detail]);
 
@@ -130,8 +244,10 @@ export function LeadDetail() {
     return (
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 w-56 rounded bg-gray-200" />
-          <div className="h-32 rounded-xl bg-gray-200" />
+          <div className="h-36 rounded-lg bg-gray-200" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((item) => <div key={item} className="h-24 rounded-lg bg-gray-200" />)}
+          </div>
         </div>
       </div>
     );
@@ -147,154 +263,571 @@ export function LeadDetail() {
 
   const lead = detail.customer;
   const address = formatAddress(lead);
+  const action = nextAction(detail);
+  const recentEstimate = [...detail.estimates].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+  const estimatePhotos = detail.photos?.estimates || [];
+  const jobPhotos = detail.photos?.jobs || [];
+  const allPhotos = [
+    ...estimatePhotos.map((photo) => ({ ...photo, source: 'Estimate' as const })),
+    ...jobPhotos.map((photo) => ({ ...photo, source: 'Job' as const })),
+  ];
+  const netPaid = detail.payments.reduce((sum, payment) => sum + paymentNet(payment), 0);
+  const messagesCount = detail.messages.length + (detail.emailSends?.length || 0);
+
+  async function submitActivity(event: FormEvent) {
+    event.preventDefault();
+    if (!id || isSavingActivity || !activityForm.title.trim()) return;
+    setIsSavingActivity(true);
+    try {
+      await apiJson('/v1/activities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({
+          leadId: id,
+          type: activityForm.type,
+          title: activityForm.title.trim(),
+          notes: activityForm.notes.trim() || null,
+          dueAt: activityForm.dueAt ? new Date(activityForm.dueAt).toISOString() : null,
+        }),
+      });
+      window.showToast?.('Activity saved', 'success');
+      setActivityForm({ type: 'follow_up', title: '', dueAt: '', notes: '' });
+      await loadDetail();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save activity', 'error');
+    } finally {
+      setIsSavingActivity(false);
+    }
+  }
+
+  async function completeActivity(activityId: string) {
+    try {
+      await apiJson(`/v1/activities/${activityId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'done' }),
+      });
+      window.showToast?.('Activity completed', 'success');
+      await loadDetail();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to update activity', 'error');
+    }
+  }
+
+  async function cancelEstimate(estimate: Estimate) {
+    if (!window.confirm('Cancel this estimate? The customer preview will no longer be approvable.')) return;
+    try {
+      await apiJson(`/v1/estimates/${estimate.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({ reason: 'Canceled from customer detail' }),
+      });
+      window.showToast?.('Estimate canceled', 'success');
+      await loadDetail();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to cancel estimate', 'error');
+    }
+  }
+
+  async function agreementAction(estimate: Estimate, actionName: 'revise' | 'void') {
+    const copy = actionName === 'revise'
+      ? 'Create a draft revision from this signed agreement?'
+      : 'Void this signed agreement? This should be used only when both parties agree the contract is no longer valid.';
+    if (!window.confirm(copy)) return;
+    try {
+      const response = await apiJson<{ data?: { id?: string; editUrl?: string } }>(`/v1/estimates/${estimate.id}/${actionName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({ reason: `${labelize(actionName)} from customer detail` }),
+      });
+      window.showToast?.(actionName === 'revise' ? 'Revision created' : 'Agreement voided', 'success');
+      if (actionName === 'revise') {
+        window.location.href = response.data?.editUrl || `/estimates/production?estimateId=${response.data?.id || estimate.id}`;
+        return;
+      }
+      await loadDetail();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : `Failed to ${actionName} estimate`, 'error');
+    }
+  }
+
+  function openPaymentModal(estimate: Estimate) {
+    const paid = (detail?.payments || [])
+      .filter((payment) => payment.estimateId === estimate.id)
+      .reduce((sum, payment) => sum + paymentNet(payment), 0);
+    const remaining = Math.max(estimateContractTotal(estimate) - paid, 0);
+    setPaymentForm({
+      estimate,
+      amount: remaining.toFixed(2),
+      source: 'check',
+      reference: '',
+      description: '',
+      receivedAt: dateTimeLocalValue(),
+      confirmAdditionalPayment: paid <= 0.005,
+    });
+  }
+
+  async function submitPayment(event: FormEvent) {
+    event.preventDefault();
+    if (!paymentForm || isSavingPayment) return;
+    setIsSavingPayment(true);
+    try {
+      await apiJson('/v1/payments/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({
+          estimateId: paymentForm.estimate.id,
+          amount: Number(paymentForm.amount),
+          source: paymentForm.source,
+          reference: paymentForm.reference || null,
+          description: paymentForm.description || null,
+          receivedAt: paymentForm.receivedAt ? new Date(paymentForm.receivedAt).toISOString() : null,
+          confirmAdditionalPayment: paymentForm.confirmAdditionalPayment,
+        }),
+      });
+      window.showToast?.('Payment recorded', 'success');
+      setPaymentForm(null);
+      await loadDetail();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to record payment', 'error');
+    } finally {
+      setIsSavingPayment(false);
+    }
+  }
+
+  async function submitRefund(event: FormEvent) {
+    event.preventDefault();
+    if (!refundForm || isSavingRefund) return;
+    setIsSavingRefund(true);
+    try {
+      await apiJson(`/v1/payments/${refundForm.payment.id}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({
+          amount: Number(refundForm.amount),
+          reason: refundForm.reason || undefined,
+        }),
+      });
+      window.showToast?.('Refund submitted', 'success');
+      setRefundForm(null);
+      await loadDetail();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to issue refund', 'error');
+    } finally {
+      setIsSavingRefund(false);
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-2xl font-semibold tracking-tight text-gray-950">{lead.name}</h2>
-            <StatusBadge status={String(lead.status || 'new')} />
-          </div>
-          <div className="space-y-1 text-sm text-gray-600">
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {lead.phone && <span>{formatPhone(lead.phone)}</span>}
-              {lead.email && <span>{lead.email}</span>}
+    <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+      <section className="rounded-lg border bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h2 className="pf-page-title truncate">{lead.name}</h2>
+              <StatusBadge status={String(lead.status || 'new')} />
             </div>
-            {address && <div>{address}</div>}
-            <div>{[lead.source && `Source: ${labelize(lead.source)}`, `Created ${formatDate(lead.createdAt)}`].filter(Boolean).join(' · ')}</div>
+            <p className="pf-page-copy mt-2">{[lead.source && labelize(lead.source), `Created ${formatDate(lead.createdAt)}`].filter(Boolean).join(' - ')}</p>
+            {address && <p className="pf-row-title mt-3">{address}</p>}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {lead.phone && <a href={`tel:${lead.phone}`} className="btn-icon btn-icon-outlined" aria-label={`Call ${lead.name}`} title="Call"><Icon name="phone" className="pf-icon" /></a>}
+              {lead.email && <a href={`mailto:${lead.email}`} className="btn-icon btn-icon-outlined" aria-label={`Email ${lead.name}`} title="Email"><Icon name="mail" className="pf-icon" /></a>}
+              <Link to={`/sms?leadId=${lead.id}`} className="btn-icon btn-icon-outlined" aria-label={`Text ${lead.name}`} title="Text"><Icon name="message" className="pf-icon" /></Link>
+              <Link to={action.href} className="btn-primary btn-sm">{action.label}</Link>
+            </div>
+          </div>
+          <div className="space-y-1 lg:text-right">
+            <p className="pf-copy">{lead.phone ? formatPhone(lead.phone) : 'No phone'}</p>
+            <p className="pf-copy">{lead.email || 'No email'}</p>
+            <p className="pf-meta pt-1">Updated {formatDate(lead.updatedAt)}</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link to={`/estimates/production?leadId=${lead.id}`}>
-            <Button>Create estimate</Button>
-          </Link>
-          <Link to={`/sms?leadId=${lead.id}`}>
-            <Button variant="secondary">Message</Button>
-          </Link>
-        </div>
-      </div>
+      </section>
 
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="estimates">Estimates</TabsTrigger>
-          <TabsTrigger value="jobs">Jobs</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="messages">Messages</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
-        </TabsList>
+      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <StatTile href="#customer-estimates" label="Estimates" value={detail.estimates.length} help={recentEstimate ? `${formatMoney(estimateContractTotal(recentEstimate))} latest` : 'No estimate yet'} />
+        <StatTile href="#customer-jobs" label="Jobs" value={detail.jobs.length} help={detail.jobs.some((job) => job.status !== 'completed') ? 'Active production' : 'No active job'} />
+        <StatTile href="#customer-payments" label="Payments" value={formatMoney(netPaid)} help={`${detail.payments.length} recorded`} />
+        <StatTile href={lead.phone ? `/sms?leadId=${lead.id}` : '#customer-messages'} label="Messages" value={messagesCount} help="Text and email history" />
+        <StatTile href="#customer-photos" label="Photos" value={allPhotos.length} help="Estimate and job media" />
+      </section>
 
-        <TabsContent value="overview">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card>
-              <CardHeader title="Contact" />
-              <dl className="space-y-3 text-sm">
-                <div><dt className="text-gray-500">Phone</dt><dd className="font-medium text-gray-950">{lead.phone ? formatPhone(lead.phone) : 'Not recorded'}</dd></div>
-                <div><dt className="text-gray-500">Email</dt><dd className="font-medium text-gray-950">{lead.email || 'Not recorded'}</dd></div>
-                <div><dt className="text-gray-500">Address</dt><dd className="font-medium text-gray-950">{address || 'Not recorded'}</dd></div>
-              </dl>
-            </Card>
-            <Card>
-              <CardHeader title="Customer history" />
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><p className="text-2xl font-semibold text-gray-950">{detail.estimates.length}</p><p className="text-gray-500">Estimates</p></div>
-                <div><p className="text-2xl font-semibold text-gray-950">{detail.jobs.length}</p><p className="text-gray-500">Jobs</p></div>
-                <div><p className="text-2xl font-semibold text-gray-950">{detail.payments.length}</p><p className="text-gray-500">Payments</p></div>
-                <div><p className="text-2xl font-semibold text-gray-950">{detail.messages.length}</p><p className="text-gray-500">Messages</p></div>
+      <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)]">
+        <div className="space-y-5">
+          <SectionCard id="customer-estimates" title="Estimates">
+            <EstimatesList
+              estimates={detail.estimates}
+              payments={detail.payments}
+              onCancel={cancelEstimate}
+              onAgreementAction={agreementAction}
+              onRecordPayment={openPaymentModal}
+            />
+          </SectionCard>
+
+          <SectionCard id="customer-jobs" title="Jobs">
+            {detail.jobs.length === 0 ? (
+              <EmptySection>No jobs yet. Accepted estimates will become production work here.</EmptySection>
+            ) : detail.jobs.map((job) => (
+              <Link key={job.id} to={`/jobs/${job.id}`} className="block border-b p-4 last:border-b-0 hover:bg-gray-50">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="pf-row-title truncate">{job.name || 'Job'}</p>
+                    <p className="pf-meta mt-1">Created {formatDate(job.createdAt)}{job.completedAt ? ` - Completed ${formatDate(job.completedAt)}` : ''}</p>
+                  </div>
+                  <div className="sm:text-right">
+                    <StatusBadge status={String(job.status || 'scheduled')} />
+                    <p className="pf-row-title mt-1">{job.budget == null ? 'No budget' : formatMoney(job.budget)}</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </SectionCard>
+
+          <SectionCard id="customer-photos" title="Photos">
+            {allPhotos.length === 0 ? (
+              <EmptySection>No site or job photos yet.</EmptySection>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
+                {allPhotos.slice(0, 12).map((photo, index) => {
+                  const src = photoSrc(photo, photo.source);
+                  return (
+                    <a key={`${photo.source}-${photo.id || index}`} href={src} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg border bg-gray-50">
+                      <div className="aspect-[4/3] bg-gray-100">
+                        {src ? <img src={src} alt={`${photo.source} photo`} className="h-full w-full object-cover" loading="lazy" /> : <div className="pf-meta flex h-full items-center justify-center p-3 text-center">Photo preview unavailable</div>}
+                      </div>
+                      <div className="p-2">
+                        <p className="pf-meta">{photo.source} photo</p>
+                        <p className="pf-meta">{formatDate(photo.createdAt)}</p>
+                      </div>
+                    </a>
+                  );
+                })}
               </div>
-            </Card>
-            <Card>
-              <CardHeader title="Photos" />
-              <p className="text-sm text-gray-600">
-                {(detail.photos?.estimates?.length || 0) + (detail.photos?.jobs?.length || 0)} photos attached across estimates and jobs.
-              </p>
-            </Card>
-          </div>
-        </TabsContent>
+            )}
+          </SectionCard>
+        </div>
 
-        <TabsContent value="estimates">
-          <div className="grid gap-3">
-            {detail.estimates.length === 0 ? <Card>No estimates yet.</Card> : detail.estimates.map((estimate) => (
-              <Card key={estimate.id} padding="md">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link to={`/estimates/${estimate.id}`} className="font-semibold text-gray-950 hover:text-blue-700">Estimate</Link>
-                      <StatusBadge status={String(estimate.status || 'draft')} />
-                    </div>
-                    <p className="mt-1 text-sm text-gray-500">Created {formatDate(estimate.createdAt)} · Sent {formatDate(estimate.sentAt)} · Signed {formatDate(estimate.signedAt)}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <span className="text-sm font-semibold text-gray-950">{formatMoney(estimateTotal(estimate))}</span>
-                    <Link to={`/estimates/${estimate.id}`}><Button variant="secondary" size="sm">Details</Button></Link>
-                    {estimate.customerPreviewUrl && <a href={estimate.customerPreviewUrl} target="_blank" rel="noreferrer"><Button as="span" variant="ghost" size="sm">Preview link</Button></a>}
-                  </div>
+        <aside className="space-y-5">
+          <SectionCard title="Follow-Up">
+            <ul className="space-y-2 p-4">
+              {followUps(detail).map((item) => <li key={item} className="pf-copy">{item}</li>)}
+            </ul>
+          </SectionCard>
+
+          <SectionCard title="Activities">
+            <form className="space-y-3 border-b p-4" onSubmit={submitActivity}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Select
+                  aria-label="Activity type"
+                  value={activityForm.type}
+                  onChange={(event) => setActivityForm({ ...activityForm, type: event.target.value })}
+                  options={activityTypeOptions}
+                />
+                <Input
+                  aria-label="Due date"
+                  type="datetime-local"
+                  value={activityForm.dueAt}
+                  onChange={(event) => setActivityForm({ ...activityForm, dueAt: event.target.value })}
+                />
+              </div>
+              <Input
+                aria-label="Next action"
+                placeholder="Next action"
+                required
+                maxLength={255}
+                value={activityForm.title}
+                onChange={(event) => setActivityForm({ ...activityForm, title: event.target.value })}
+              />
+              <Textarea
+                aria-label="Activity notes"
+                placeholder="Notes"
+                rows={2}
+                value={activityForm.notes}
+                onChange={(event) => setActivityForm({ ...activityForm, notes: event.target.value })}
+              />
+              <div className="flex justify-end">
+                <Button size="sm" type="submit" isLoading={isSavingActivity} disabled={!activityForm.title.trim()}>Save activity</Button>
+              </div>
+            </form>
+            <ActivityList activities={detail.activities || []} onComplete={completeActivity} />
+          </SectionCard>
+
+          <SectionCard id="customer-emails" title="Emails" eyebrow={`${detail.emailSends?.length || 0} sent`}>
+            <EmailList emails={detail.emailSends || []} />
+          </SectionCard>
+
+          <SectionCard id="customer-payments" title="Payments" eyebrow={`${detail.payments.length} recorded`}>
+            <PaymentList payments={detail.payments} onRefund={(payment) => setRefundForm({ payment, amount: paymentNet(payment).toFixed(2), reason: '' })} />
+          </SectionCard>
+
+          <SectionCard id="customer-messages" title="Messages" action={lead.phone ? <Link to={`/sms?leadId=${lead.id}`} className="btn-secondary btn-sm">Open thread</Link> : undefined}>
+            <MessageList messages={detail.messages} />
+          </SectionCard>
+
+          <SectionCard title="Activity Log">
+            <AuditActivityList activity={auditActivity} lead={lead} />
+          </SectionCard>
+        </aside>
+      </section>
+
+      {paymentForm && (
+        <Modal title="Record payment" onClose={() => setPaymentForm(null)}>
+          <form className="space-y-4" onSubmit={submitPayment}>
+            <p className="pf-copy">Record cash, check, ACH, or other offline payment. This will not create a Stripe charge.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input label="Amount" type="number" min="0.01" step="0.01" inputMode="decimal" value={paymentForm.amount} onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })} />
+              <Select label="Source" value={paymentForm.source} onChange={(event) => setPaymentForm({ ...paymentForm, source: event.target.value as PaymentForm['source'] })} options={[
+                { value: 'check', label: 'Check' },
+                { value: 'cash', label: 'Cash' },
+                { value: 'ach', label: 'ACH' },
+                { value: 'other', label: 'Other' },
+              ]} />
+            </div>
+            <Input label="Reference" value={paymentForm.reference} onChange={(event) => setPaymentForm({ ...paymentForm, reference: event.target.value })} placeholder="Check number or note" />
+            <Input label="Received" type="datetime-local" value={paymentForm.receivedAt} onChange={(event) => setPaymentForm({ ...paymentForm, receivedAt: event.target.value })} />
+            <Textarea label="Description" rows={2} value={paymentForm.description} onChange={(event) => setPaymentForm({ ...paymentForm, description: event.target.value })} />
+            {!paymentForm.confirmAdditionalPayment && (
+              <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <input type="checkbox" className="mt-1" checked={paymentForm.confirmAdditionalPayment} onChange={(event) => setPaymentForm({ ...paymentForm, confirmAdditionalPayment: event.target.checked })} />
+                <span>This estimate already has payment history. I confirm this is an additional payment and not a duplicate entry.</span>
+              </label>
+            )}
+            <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+              <Button type="button" variant="secondary" fullWidth onClick={() => setPaymentForm(null)}>Cancel</Button>
+              <Button type="submit" fullWidth isLoading={isSavingPayment} disabled={!paymentForm.amount || !paymentForm.confirmAdditionalPayment}>Record payment</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {refundForm && (
+        <Modal title="Issue refund" onClose={() => setRefundForm(null)}>
+          <form className="space-y-4" onSubmit={submitRefund}>
+            <p className="pf-copy">Refunds use Stripe only when the payment has a Stripe reference. Manual payments are recorded as manual credits.</p>
+            <Input label="Amount" type="number" min="0.01" max={paymentNet(refundForm.payment).toFixed(2)} step="0.01" inputMode="decimal" value={refundForm.amount} onChange={(event) => setRefundForm({ ...refundForm, amount: event.target.value })} />
+            <Textarea label="Reason" rows={3} value={refundForm.reason} onChange={(event) => setRefundForm({ ...refundForm, reason: event.target.value })} placeholder="Reason, credit, or damage note" />
+            <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+              <Button type="button" variant="secondary" fullWidth onClick={() => setRefundForm(null)}>Cancel</Button>
+              <Button type="submit" variant="danger" fullWidth isLoading={isSavingRefund} disabled={!refundForm.amount}>Issue refund</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function StatTile({ href, label, value, help }: { href: string; label: string; value: string | number; help: string }) {
+  return (
+    <a href={href} className="block rounded-lg border bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <p className="pf-metric-label">{label}</p>
+      <p className="pf-metric-value mt-1">{value}</p>
+      <p className="pf-meta mt-1">{help}</p>
+    </a>
+  );
+}
+
+function SectionCard({ id, title, eyebrow, action, children }: { id?: string; title: string; eyebrow?: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-24 overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b p-4">
+        <h3 className="pf-section-title">{title}</h3>
+        {action || (eyebrow ? <span className="pf-meta">{eyebrow}</span> : null)}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function EmptySection({ children }: { children: React.ReactNode }) {
+  return <div className="p-5"><p className="pf-copy">{children}</p></div>;
+}
+
+function EstimatesList({ estimates, payments, onCancel, onAgreementAction, onRecordPayment }: {
+  estimates: Estimate[];
+  payments: Payment[];
+  onCancel: (estimate: Estimate) => void;
+  onAgreementAction: (estimate: Estimate, actionName: 'revise' | 'void') => void;
+  onRecordPayment: (estimate: Estimate) => void;
+}) {
+  if (!estimates.length) return <EmptySection>No estimates yet.</EmptySection>;
+  return (
+    <div className="divide-y">
+      {estimates.map((estimate) => {
+        const status = String(estimate.status || 'draft');
+        const signed = Boolean(estimate.signedAt) || status === 'accepted';
+        const canEdit = ['draft', 'sent'].includes(status) && !signed;
+        const canCancel = ['draft', 'sent', 'declined'].includes(status) && !signed;
+        const inactive = ['draft', 'canceled', 'voided', 'superseded'].includes(status);
+        const paid = payments.filter((payment) => payment.estimateId === estimate.id).reduce((sum, payment) => sum + paymentNet(payment), 0);
+        const balance = Math.max(estimateContractTotal(estimate) - paid, 0);
+        return (
+          <div key={estimate.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 sm:p-4">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="pf-row-title shrink-0">{formatMoney(estimateContractTotal(estimate))}</p>
+                <StatusBadge status={status} />
+              </div>
+              <div className="pf-meta mt-1 space-y-0.5 leading-5">
+                {estimate.createdAt && <p>Created {formatDate(estimate.createdAt, true)}</p>}
+                {estimate.sentAt && <p>Sent {formatDate(estimate.sentAt, true)}</p>}
+                {estimate.signedAt && <p>Accepted {formatDate(estimate.signedAt, true)}</p>}
+                {estimate.clientViewedAt && <p>Client viewed {formatDate(estimate.clientViewedAt, true)}{estimate.clientViewCount ? ` (${estimate.clientViewCount} views)` : ''}</p>}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+              <Link to={`/estimates/${estimate.id}/details`} className="btn-text btn-sm">View details</Link>
+              {canEdit && <Link to={`/estimates/production?estimateId=${estimate.id}`} className="btn-text btn-sm">{status === 'sent' ? 'Edit sent' : 'Edit draft'}</Link>}
+              <a href={estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`} target="_blank" rel="noreferrer" className="btn-text btn-sm">Preview link</a>
+              {!inactive && balance > 0.005 && <button type="button" className="btn-text btn-sm" onClick={() => onRecordPayment(estimate)}>Record payment</button>}
+              {signed && status !== 'voided' && status !== 'superseded' && <button type="button" className="btn-text btn-sm" onClick={() => onAgreementAction(estimate, 'revise')}>Create revision</button>}
+              {signed && status !== 'voided' && status !== 'superseded' && <button type="button" className="btn-text btn-sm text-red-700" onClick={() => onAgreementAction(estimate, 'void')}>Void agreement</button>}
+              {canCancel && <button type="button" className="btn-text btn-sm text-red-700" onClick={() => onCancel(estimate)}>Cancel</button>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActivityList({ activities, onComplete }: { activities: Activity[]; onComplete: (id: string) => void }) {
+  if (!activities.length) return <EmptySection>No planned activities yet.</EmptySection>;
+  return (
+    <div className="divide-y">
+      {activities.map((activity) => (
+        <div key={activity.id} className="flex items-start justify-between gap-3 p-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="pf-row-title">{activity.title || labelize(activity.type)}</p>
+              <StatusBadge status={String(activity.status || 'open')} />
+            </div>
+            <p className="pf-meta mt-1">{labelize(activity.type)} - {activity.dueAt ? `Due ${formatDate(activity.dueAt, true)}` : 'No due date'}</p>
+            {activity.notes && <p className="pf-copy mt-2">{activity.notes}</p>}
+          </div>
+          {activity.status === 'open' && <Button type="button" variant="secondary" size="sm" onClick={() => onComplete(activity.id)}>Done</Button>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmailList({ emails }: { emails: EmailSend[] }) {
+  if (!emails.length) return <EmptySection>No email history yet.</EmptySection>;
+  return (
+    <div className="max-h-[520px] divide-y overflow-auto">
+      {emails.map((email) => (
+        <details key={email.id} className="p-4">
+          <summary className="cursor-pointer list-none">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="pf-row-title">{email.subject || 'Email'}</p>
+                  <StatusBadge status={String(email.status || 'sent')} />
                 </div>
-              </Card>
-            ))}
+                <p className="pf-meta mt-1">{email.templateName || 'Email'} - Sent {formatDate(email.sentAt)} to {email.toEmail}</p>
+                {email.previewText && <p className="pf-copy mt-1">{email.previewText}</p>}
+              </div>
+              <span className="btn-text btn-sm pointer-events-none">View email</span>
+            </div>
+          </summary>
+          <div className="mt-3 rounded-lg border bg-gray-50 p-2">
+            <iframe title="Sent email preview" className="h-80 w-full rounded-md bg-white" sandbox="" srcDoc={email.renderedHtml || '<p>Email preview unavailable.</p>'} />
           </div>
-        </TabsContent>
+        </details>
+      ))}
+    </div>
+  );
+}
 
-        <TabsContent value="jobs">
-          <div className="grid gap-3">
-            {detail.jobs.length === 0 ? <Card>No jobs yet.</Card> : detail.jobs.map((job) => (
-              <Card key={job.id} padding="md">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link to={`/jobs/${job.id}`} className="font-semibold text-gray-950 hover:text-blue-700">{job.name || 'Job'}</Link>
-                      <StatusBadge status={String(job.status || 'scheduled')} />
-                    </div>
-                    <p className="mt-1 text-sm text-gray-500">Starts {formatDate(job.scheduledStartAt)} · Ends {formatDate(job.scheduledEndAt)}</p>
+function PaymentList({ payments, onRefund }: { payments: Payment[]; onRefund: (payment: Payment) => void }) {
+  if (!payments.length) return <EmptySection>No payment history yet.</EmptySection>;
+  return (
+    <div className="max-h-[520px] divide-y overflow-auto">
+      {payments.map((payment) => {
+        const amount = Number(payment.amount || 0);
+        const refunded = Number(payment.refundedAmount || 0);
+        const refundable = paymentNet(payment);
+        return (
+          <details key={payment.id} className="p-4">
+            <summary className="cursor-pointer list-none">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="pf-row-title">{formatMoney(amount)}</p>
+                    <StatusBadge status={String(payment.status || 'succeeded')} />
                   </div>
-                  <span className="text-sm font-semibold text-gray-950">{formatMoney(job.budget || 0)}</span>
+                  <p className="pf-meta mt-1">{payment.description || 'Customer payment'} - {formatDate(payment.receivedAt)}</p>
+                  {refunded > 0 && <p className="pf-copy mt-1 text-red-700">{formatMoney(refunded)} refunded</p>}
                 </div>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
+                <span className="btn-text btn-sm pointer-events-none">{refundable > 0 ? 'Refund' : 'View'}</span>
+              </div>
+            </summary>
+            <div className="mt-3 rounded-lg border bg-gray-50 p-3">
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div><dt className="pf-meta">Paid</dt><dd className="pf-row-title">{formatMoney(amount)}</dd></div>
+                <div><dt className="pf-meta">Refundable</dt><dd className="pf-row-title">{formatMoney(refundable)}</dd></div>
+                <div><dt className="pf-meta">Source</dt><dd className="pf-row-title">{labelize(payment.source || payment.method || 'stripe')}</dd></div>
+                <div><dt className="pf-meta">Payment ID</dt><dd className="font-mono text-xs">{payment.id.slice(0, 8)}</dd></div>
+              </dl>
+              {refundable > 0 && <Button variant="secondary" size="sm" className="mt-4 text-red-700" onClick={() => onRefund(payment)}>Issue refund</Button>}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
 
-        <TabsContent value="payments">
-          <div className="grid gap-3">
-            {detail.payments.length === 0 ? <Card>No payments recorded.</Card> : detail.payments.map((payment) => (
-              <Card key={payment.id} padding="md">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-gray-950">{formatMoney(payment.amount || 0)}</p>
-                    <p className="text-sm text-gray-500">{labelize(payment.method)} · {formatDate(payment.receivedAt, true)}</p>
-                  </div>
-                  <StatusBadge status={String(payment.status || 'recorded')} />
-                </div>
-              </Card>
-            ))}
+function MessageList({ messages }: { messages: Message[] }) {
+  if (!messages.length) return <EmptySection>No message history yet.</EmptySection>;
+  return (
+    <div className="max-h-[420px] divide-y overflow-auto">
+      {messages.map((message) => (
+        <div key={message.id} className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="pf-row-title">{message.direction === 'inbound' ? 'Customer' : 'Team'} message</p>
+            <p className="pf-meta">{formatDate(message.createdAt)}</p>
           </div>
-        </TabsContent>
+          <p className="pf-copy mt-1">{message.body || 'No body'}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-        <TabsContent value="messages">
-          <div className="grid gap-3">
-            {detail.messages.length === 0 ? <Card>No messages yet.</Card> : detail.messages.slice(0, 20).map((message) => (
-              <Card key={message.id} padding="md">
-                <p className="text-sm font-semibold text-gray-950">{labelize(message.direction)} message</p>
-                <p className="mt-1 text-sm text-gray-600">{message.body || 'No body'}</p>
-                <p className="mt-2 text-xs text-gray-500">{formatDate(message.createdAt, true)}</p>
-              </Card>
-            ))}
+function AuditActivityList({ activity, lead }: { activity: Activity[]; lead: Lead }) {
+  const items = activity.length ? activity : [
+    { id: 'created', action: 'lead.created', createdAt: lead.createdAt },
+    ...(lead.updatedAt && lead.updatedAt !== lead.createdAt ? [{ id: 'updated', action: 'lead.updated', createdAt: lead.updatedAt }] : []),
+  ];
+  return (
+    <div className="divide-y">
+      {items.map((item) => (
+        <div key={item.id} className="flex items-start gap-3 p-4">
+          <div className="mt-1 h-2 w-2 rounded-full bg-blue-600" />
+          <div>
+            <p className="pf-row-title">{labelize(String(item.action || item.type || 'Activity').replace(/\./g, ' '))}</p>
+            <p className="pf-meta">{formatDate(item.createdAt)}</p>
           </div>
-        </TabsContent>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-        <TabsContent value="activity">
-          <div className="grid gap-3">
-            {activity.length === 0 ? <Card>No activity yet.</Card> : activity.map((item) => (
-              <Card key={item.id} padding="md">
-                <p className="text-sm font-semibold text-gray-950">{labelize(item.action || item.type || 'Activity')}</p>
-                {item.description && <p className="mt-1 text-sm text-gray-600">{item.description}</p>}
-                <p className="mt-2 text-xs text-gray-500">{formatDate(item.createdAt, true)}</p>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-lg bg-white p-5 shadow-xl sm:rounded-lg sm:p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 id="customer-modal-title" className="pf-section-title">{title}</h3>
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
