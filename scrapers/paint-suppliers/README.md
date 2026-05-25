@@ -82,6 +82,8 @@ SQLite database with the following tables:
 
 ## Installation
 
+### Local Installation
+
 ```bash
 cd scrapers/paint-suppliers
 npm install
@@ -90,6 +92,19 @@ cp .env.example .env
 # Edit .env with your config
 npm run build
 ```
+
+### Docker Installation
+
+```bash
+cd scrapers/paint-suppliers
+./scripts/docker-setup.sh
+
+# Or manually:
+docker compose build
+docker compose run --rm scraper npm run scrape
+```
+
+See [Docker section](#docker-deployment) below for more details.
 
 ## Usage
 
@@ -114,6 +129,66 @@ npm run export -- --format csv --supplier sherwin-williams
 ### Validate data
 ```bash
 npm run validate
+```
+
+## Docker Deployment
+
+### Quick Start
+
+```bash
+# Setup (builds image, creates directories, validates)
+./scripts/docker-setup.sh
+
+# Run scraper
+docker compose run --rm scraper npm run scrape
+
+# List stats
+docker compose run --rm scraper npm run list
+
+# Export data
+docker compose run --rm scraper npm run export -- --format json --output /app/exports/data.json
+```
+
+### Docker Compose Profiles
+
+**Basic scraping:**
+```bash
+docker compose up scraper
+```
+
+**With web monitor (http://localhost:8080):**
+```bash
+docker compose --profile monitor up
+```
+
+**With weekly cron scheduler:**
+```bash
+docker compose --profile cron up -d
+```
+
+### Volumes
+
+- `./data` → `/app/data` (SQLite database)
+- `./logs` → `/app/logs` (scraper logs)
+- `./exports` → `/app/exports` (exported data)
+
+### Environment Variables
+
+Configure via `.env` file or `docker-compose.yml`:
+
+```env
+DATABASE_PATH=/app/data/suppliers.db
+LOG_LEVEL=info
+RATE_LIMIT_MS=1000
+MAX_RETRIES=3
+HEADLESS=true
+```
+
+### Building Image
+
+```bash
+docker build -t paint-supplier-scraper .
+docker run -v $(pwd)/data:/app/data paint-supplier-scraper
 ```
 
 ## Cron Setup
