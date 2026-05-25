@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { FormEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { EmptyState } from '@/components/EmptyState';
-import { Input } from '@/components/Input';
+import { Icon } from '@/components/Icon';
+import { Input, Select } from '@/components/Input';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
+
+const leadStatuses = [
+  { value: 'new', label: 'New' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'estimate_sent', label: 'Estimate sent' },
+  { value: 'won', label: 'Won' },
+  { value: 'lost', label: 'Lost' },
+];
 
 interface Lead {
   id: string;
@@ -20,85 +28,254 @@ interface Lead {
   source?: string | null;
   createdAt?: string | null;
   estimatedValue?: number | string | null;
+  qboCustomerId?: string | null;
 }
 
-interface LeadsResponse {
-  data: Lead[];
+interface LeadSource {
+  id: string;
+  name: string;
+  isActive?: boolean | null;
 }
+
+interface LeadForm {
+  name: string;
+  phone: string;
+  email: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  source: string;
+}
+
+const emptyForm: LeadForm = {
+  name: '',
+  phone: '',
+  email: '',
+  streetAddress: '',
+  city: '',
+  state: '',
+  postalCode: '',
+  source: '',
+};
 
 function formatDate(value?: string | null) {
   if (!value) return null;
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
 }
 
+function phoneDigits(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits.slice(0, 10);
+}
+
+function maskPhone(value: string) {
+  const digits = phoneDigits(value);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function cleanZip(value: string) {
+  return value.replace(/\D/g, '').slice(0, 5);
+}
+
 export function Leads() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [sources, setSources] = useState<LeadSource[]>([]);
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('q') || '');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
+  const [sourceFilter, setSourceFilter] = useState(searchParams.get('source') || 'all');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(searchParams.get('new') === '1');
+  const [form, setForm] = useState<LeadForm>(emptyForm);
 
   useEffect(() => {
-    let mounted = true;
-    setIsLoading(true);
-    apiJson<LeadsResponse>('/v1/leads?limit=100')
-      .then((response) => {
-        if (!mounted) return;
-        setLeads(response.data || []);
-        setError('');
-      })
-      .catch((err: Error) => {
-        if (!mounted) return;
-        setError(err.message || 'Failed to load leads');
-      })
-      .finally(() => {
-        if (mounted) setIsLoading(false);
-      });
+    const timer = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
-    return () => {
-      mounted = false;
-    };
+  useEffect(() => {
+    document.body.classList.toggle('pf-modal-open', isModalOpen);
+    return () => document.body.classList.remove('pf-modal-open');
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    if (searchParams.get('new') === '1') setIsModalOpen(true);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (statusFilter !== 'all') next.set('status', statusFilter);
+    if (sourceFilter !== 'all') next.set('source', sourceFilter);
+    if (debouncedSearch) next.set('q', debouncedSearch);
+    setSearchParams(next, { replace: true });
+  }, [debouncedSearch, setSearchParams, sourceFilter, statusFilter]);
+
+  useEffect(() => {
+    loadSources();
   }, []);
 
-  const filteredLeads = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return leads.filter((lead) => {
-      const haystack = [lead.name, lead.phone, lead.email, formatAddress(lead), lead.source, lead.status]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return !query || haystack.includes(query);
-    });
-  }, [leads, searchQuery]);
+  useEffect(() => {
+    loadLeads();
+  }, [debouncedSearch, sourceFilter, statusFilter]);
 
-  if (isLoading) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 w-40 rounded bg-gray-200" />
-          <div className="h-11 rounded bg-gray-200" />
-          <div className="h-24 rounded-xl bg-gray-200" />
-        </div>
-      </div>
-    );
+  async function loadSources() {
+    try {
+      const response = await apiJson<{ data: LeadSource[] }>('/v1/lead-sources');
+      setSources((response.data || []).filter((source) => source.isActive !== false));
+    } catch {
+      setSources([]);
+    }
   }
+
+  async function loadLeads() {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', '200');
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+      if (sourceFilter !== 'all') params.set('source', sourceFilter);
+      if (debouncedSearch) params.set('q', debouncedSearch);
+      const response = await apiJson<{ data: Lead[] }>(`/v1/leads?${params.toString()}`);
+      setLeads(response.data || []);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load leads');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function updateLeadStatus(id: string, status: string) {
+    const previous = leads;
+    setLeads((current) => current.map((lead) => lead.id === id ? { ...lead, status } : lead));
+    try {
+      await apiJson(`/v1/leads/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      window.showToast?.('Lead updated', 'success');
+      loadLeads();
+    } catch (err) {
+      setLeads(previous);
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to update lead', 'error');
+    }
+  }
+
+  async function submitLead(event: FormEvent) {
+    event.preventDefault();
+    if (isSaving) return;
+
+    const payload = {
+      ...form,
+      name: form.name.trim(),
+      phone: form.phone.trim() || undefined,
+      email: form.email.trim() || undefined,
+      streetAddress: form.streetAddress.trim() || undefined,
+      city: form.city.trim() || undefined,
+      state: form.state.trim().toUpperCase() || undefined,
+      postalCode: cleanZip(form.postalCode) || undefined,
+      source: form.source || undefined,
+    };
+
+    if (!payload.phone && !payload.email) {
+      window.showToast?.('Add a phone number or email', 'error');
+      return;
+    }
+    if (payload.phone && phoneDigits(payload.phone).length !== 10) {
+      window.showToast?.('Enter a 10-digit phone number', 'error');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await apiJson<{ data: Lead }>('/v1/leads', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify(payload),
+      });
+      window.showToast?.('Lead created', 'success');
+      setForm(emptyForm);
+      setIsModalOpen(false);
+      setSearchParams(new URLSearchParams(), { replace: true });
+      loadLeads();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to create lead', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const summary = useMemo(() => leadStatuses.map((status) => ({
+    ...status,
+    count: leads.filter((lead) => lead.status === status.value).length,
+  })), [leads]);
+
+  const isFiltered = statusFilter !== 'all' || sourceFilter !== 'all' || Boolean(debouncedSearch);
+  const canSaveLead = Boolean(form.name.trim() && (form.phone.trim() || form.email.trim()));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-gray-950">Leads</h2>
-          <p className="mt-1 text-sm text-gray-600">Capture inquiries, qualify them, and keep follow-up moving.</p>
+          <h2 className="pf-page-title">Leads</h2>
+          <p className="pf-page-copy mt-1">Capture inquiries, qualify them, and keep follow-up moving.</p>
         </div>
-        <Button onClick={() => window.dispatchEvent(new CustomEvent('paintflow:add-lead'))}>Add lead</Button>
+        <Button fullWidth className="sm:w-auto" onClick={() => setIsModalOpen(true)}>
+          <Icon name="plus" className="pf-icon" />
+          Add lead
+        </Button>
       </div>
 
       <Card padding="md" className="mb-4">
-        <Input
-          type="search"
-          placeholder="Search name, phone, email, address, or source"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px_180px]">
+          <Input
+            aria-label="Search leads"
+            type="search"
+            autoComplete="off"
+            enterKeyHint="search"
+            placeholder="Search name, phone, email, or address"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          <Select
+            aria-label="Filter leads by status"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            options={[{ value: 'all', label: 'All statuses' }, ...leadStatuses]}
+          />
+          <Select
+            aria-label="Filter leads by source"
+            value={sourceFilter}
+            onChange={(event) => setSourceFilter(event.target.value)}
+            options={[
+              { value: 'all', label: 'All sources' },
+              ...sources.map((source) => ({ value: source.name, label: source.name })),
+            ]}
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {summary.slice(0, 4).map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={`rounded-lg border px-3 py-2 text-left transition hover:border-blue-300 ${statusFilter === item.value ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'}`}
+              onClick={() => setStatusFilter(statusFilter === item.value ? 'all' : item.value)}
+            >
+              <p className="pf-metric-label">{item.label}</p>
+              <p className="pf-metric-value">{item.count}</p>
+            </button>
+          ))}
+        </div>
       </Card>
 
       {error && (
@@ -107,52 +284,219 @@ export function Leads() {
         </Card>
       )}
 
-      {filteredLeads.length === 0 ? (
-        <EmptyState
-          title="No leads found"
-          description="Create a lead when a homeowner calls, submits a web form, or asks for an estimate."
-          action={<Button onClick={() => window.dispatchEvent(new CustomEvent('paintflow:add-lead'))}>Add lead</Button>}
-        />
-      ) : (
+      {isLoading ? (
         <div className="grid gap-3">
-          {filteredLeads.map((lead) => {
-            const address = formatAddress(lead);
-            return (
-              <Card key={lead.id} hoverable padding="md">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <Link to={`/leads/${lead.id}`} className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-base font-semibold text-gray-950">{lead.name || 'Unnamed lead'}</h3>
-                      <StatusBadge status={String(lead.status || 'new')} />
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-600">
-                      {lead.phone && <span>{formatPhone(lead.phone)}</span>}
-                      {lead.email && <span className="truncate">{lead.email}</span>}
-                    </div>
-                    {address && <p className="mt-1 truncate text-sm text-gray-600">{address}</p>}
-                    <p className="mt-2 text-xs text-gray-500">
-                      {[lead.source && `Source: ${labelize(lead.source)}`, formatDate(lead.createdAt) && `Created ${formatDate(lead.createdAt)}`].filter(Boolean).join(' · ')}
-                    </p>
-                  </Link>
-                  <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-                    {lead.estimatedValue && (
-                      <div className="mr-1 text-sm font-semibold text-gray-950 sm:text-right">
-                        {formatMoney(lead.estimatedValue)}
-                      </div>
-                    )}
-                    <Link to={`/estimates/production?leadId=${lead.id}`}>
-                      <Button variant="secondary" size="sm">Estimate</Button>
-                    </Link>
-                    <Link to={`/sms?leadId=${lead.id}`}>
-                      <Button variant="ghost" size="sm">Message</Button>
-                    </Link>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
+          {[0, 1, 2].map((item) => <div key={item} className="h-28 animate-pulse rounded-lg bg-gray-200" />)}
+        </div>
+      ) : leads.length === 0 ? (
+        isFiltered ? (
+          <Card padding="lg" className="text-center">
+            <p className="pf-row-title">No leads match this view</p>
+            <p className="pf-copy mt-1">Clear the search or change filters to see more customers.</p>
+            <Button variant="secondary" className="mt-4" onClick={() => {
+              setSearchQuery('');
+              setStatusFilter('all');
+              setSourceFilter('all');
+            }}>
+              Clear filters
+            </Button>
+          </Card>
+        ) : (
+          <FirstLeadEmptyState onAddLead={() => setIsModalOpen(true)} />
+        )
+      ) : (
+        <div className="grid gap-2 sm:gap-3">
+          {leads.map((lead) => (
+            <LeadCard key={lead.id} lead={lead} onStatusChange={updateLeadStatus} />
+          ))}
         </div>
       )}
+
+      {isModalOpen && (
+        <div
+          className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lead-modal-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-lg bg-white p-5 shadow-xl sm:rounded-lg sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 id="lead-modal-title" className="pf-section-title">Add lead</h3>
+              <Button variant="ghost" size="sm" onClick={() => setIsModalOpen(false)}>Close</Button>
+            </div>
+            <form className="space-y-4" onSubmit={submitLead}>
+              <Input
+                label="Name *"
+                autoComplete="name"
+                enterKeyHint="next"
+                required
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Phone"
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="numeric"
+                  placeholder="(555) 123-4567"
+                  enterKeyHint="next"
+                  value={form.phone}
+                  onChange={(event) => setForm({ ...form, phone: maskPhone(event.target.value) })}
+                />
+                <Input
+                  label="Email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="customer@example.com"
+                  enterKeyHint="next"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                />
+              </div>
+              <Input
+                label="Jobsite street address"
+                autoComplete="street-address"
+                placeholder="123 Main St"
+                enterKeyHint="next"
+                value={form.streetAddress}
+                onChange={(event) => setForm({ ...form, streetAddress: event.target.value })}
+              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_96px_120px]">
+                <Input
+                  label="City"
+                  autoComplete="address-level2"
+                  enterKeyHint="next"
+                  value={form.city}
+                  onChange={(event) => setForm({ ...form, city: event.target.value })}
+                />
+                <Input
+                  label="State"
+                  autoComplete="address-level1"
+                  maxLength={2}
+                  enterKeyHint="next"
+                  value={form.state}
+                  onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase().slice(0, 2) })}
+                />
+                <Input
+                  label="ZIP"
+                  autoComplete="postal-code"
+                  inputMode="numeric"
+                  enterKeyHint="next"
+                  value={form.postalCode}
+                  onChange={(event) => setForm({ ...form, postalCode: cleanZip(event.target.value) })}
+                />
+              </div>
+              <Select
+                label="Source"
+                value={form.source}
+                onChange={(event) => setForm({ ...form, source: event.target.value })}
+                options={[
+                  { value: '', label: 'Select source...' },
+                  ...sources.map((source) => ({ value: source.name, label: source.name })),
+                ]}
+              />
+              <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+                <Button type="button" variant="secondary" fullWidth onClick={() => setIsModalOpen(false)}>Cancel</Button>
+                <Button type="submit" fullWidth isLoading={isSaving} disabled={!canSaveLead}>Save lead</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeadCard({ lead, onStatusChange }: { lead: Lead; onStatusChange: (id: string, status: string) => void }) {
+  const address = formatAddress(lead);
+  const contactLine = [lead.phone && formatPhone(lead.phone), lead.email].filter(Boolean).join('   ');
+
+  function stop(event: MouseEvent) {
+    event.stopPropagation();
+  }
+
+  return (
+    <Card hoverable padding="md" className="mobile-card-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <Link to={`/leads/${lead.id}`} className="min-w-0 flex-1">
+          <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="pf-row-title truncate">{lead.name || 'Unnamed lead'}</h3>
+            <StatusBadge status={String(lead.status || 'new')} />
+            {lead.qboCustomerId && <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">QB</span>}
+          </div>
+          {contactLine && <p className="pf-copy truncate">{contactLine}</p>}
+          {address && <p className="pf-copy mt-1 truncate">{address}</p>}
+          <p className="pf-meta mt-2">
+            {[lead.source || 'No source', formatDate(lead.createdAt)].filter(Boolean).map((item, index) => index === 0 ? labelize(item) : `Created ${item}`).join(' - ')}
+          </p>
+        </Link>
+
+        <div className="flex shrink-0 flex-col gap-2 sm:w-44">
+          <Select
+            aria-label={`Status for ${lead.name}`}
+            value={lead.status || 'new'}
+            onClick={stop}
+            onChange={(event) => onStatusChange(lead.id, event.target.value)}
+            options={leadStatuses}
+          />
+          <div className="flex flex-wrap gap-1 sm:justify-end" onClick={stop}>
+            {lead.phone && (
+              <a href={`tel:${lead.phone}`} className="btn-icon btn-icon-outlined" aria-label={`Call ${lead.name}`} title="Call">
+                <Icon name="phone" className="pf-icon" />
+              </a>
+            )}
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} className="btn-icon btn-icon-outlined" aria-label={`Email ${lead.name}`} title="Email">
+                <Icon name="mail" className="pf-icon" />
+              </a>
+            )}
+            <Link to={`/sms?leadId=${lead.id}`} className="btn-icon btn-icon-outlined" aria-label={`Text ${lead.name}`} title="Text">
+              <Icon name="message" className="pf-icon" />
+            </Link>
+            <Link to={`/estimates/production?leadId=${lead.id}`} className="btn-icon btn-icon-tonal" aria-label={`Create estimate for ${lead.name}`} title="Create estimate">
+              <Icon name="file-text" className="pf-icon" />
+            </Link>
+          </div>
+          {lead.estimatedValue && <p className="pf-row-title text-right">{formatMoney(lead.estimatedValue)}</p>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function FirstLeadEmptyState({ onAddLead }: { onAddLead: () => void }) {
+  return (
+    <Card padding="lg">
+      <div className="mx-auto max-w-2xl text-center">
+        <p className="pf-section-title">Start with your first lead</p>
+        <p className="pf-copy mt-2">
+          Add a homeowner, jobsite address, and source. From there you can text or call them, create an estimate, schedule follow-ups, and move the customer through the pipeline.
+        </p>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <InfoTile title="1. Add inquiry" text="Name, phone, email, jobsite, and how they found you." />
+        <InfoTile title="2. Qualify" text="Capture notes, book a visit, or start an estimate." />
+        <InfoTile title="3. Follow up" text="Keep reminders and pipeline movement attached to the customer." />
+      </div>
+      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+        <Button onClick={onAddLead}>Add first lead</Button>
+        <Link to="/settings#lead-sources" className="btn-secondary justify-center">Set lead sources</Link>
+        <Link to="/pipeline" className="btn-text justify-center">View pipeline</Link>
+      </div>
+    </Card>
+  );
+}
+
+function InfoTile({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-lg border bg-gray-50 p-3">
+      <p className="pf-row-title">{title}</p>
+      <p className="pf-copy mt-1">{text}</p>
     </div>
   );
 }
