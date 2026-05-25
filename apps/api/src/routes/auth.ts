@@ -223,8 +223,8 @@ function safeRedirectUrl(env: Env, value: string | null | undefined, fallback = 
     const isPublicOrigin = url.origin === publicUrl.origin;
     const isLocalDev = env.ENVIRONMENT !== 'production'
       && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-      && Number(url.port || 0) >= 4321
-      && Number(url.port || 0) <= 4399;
+      && Number(url.port || 0) >= 3000
+      && Number(url.port || 0) <= 5999;
     if (isPublicOrigin || isLocalDev) return url.toString();
   } catch {
     // Fall through to the configured app URL.

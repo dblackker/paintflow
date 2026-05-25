@@ -20,7 +20,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
-          className={`block w-full rounded-lg border shadow-sm focus:ring-2 focus:ring-offset-0 sm:text-sm ${
+          className={`block w-full rounded-lg border px-3.5 py-2.5 shadow-sm focus:ring-2 focus:ring-offset-0 sm:text-sm ${
             error
               ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-red-500'
               : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
@@ -60,7 +60,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         <textarea
           ref={ref}
           id={inputId}
-          className={`block w-full rounded-lg border shadow-sm focus:ring-2 focus:ring-offset-0 sm:text-sm ${
+          className={`block w-full rounded-lg border px-3.5 py-2.5 shadow-sm focus:ring-2 focus:ring-offset-0 sm:text-sm ${
             error
               ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-red-500'
               : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
@@ -101,7 +101,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={inputId}
-          className={`block w-full rounded-lg border shadow-sm focus:ring-2 focus:ring-offset-0 sm:text-sm ${
+          className={`block w-full rounded-lg border px-3.5 py-2.5 shadow-sm focus:ring-2 focus:ring-offset-0 sm:text-sm ${
             error
               ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-500'
               : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
