@@ -89,31 +89,37 @@ function TeamMemberRow({
   inactive?: boolean;
   onEdit: (member: TeamMember) => void;
 }) {
+  const rateItems = [
+    ['Base pay', `${formatMoney(member.hourlyRate)}/hr`],
+    ['Burden', `${numberValue(member.burdenRate).toFixed(1)}%`],
+    ['Job cost', `${formatMoney(burdenedRate(member))}/hr`],
+  ];
+
   return (
-    <article className={`grid grid-cols-1 gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_auto] ${inactive ? 'bg-gray-50 opacity-85' : ''}`}>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="pf-row-title truncate">{member.name || 'Unnamed crew member'}</h3>
-          <Badge size="sm">{memberRoleLabel(member.role)}</Badge>
-          {inactive && <Badge variant="danger" size="sm">Deactivated</Badge>}
+    <article className={`p-4 sm:p-5 ${inactive ? 'bg-gray-50 opacity-85' : ''}`}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(16rem,1fr)_auto] lg:items-center">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="pf-row-title truncate">{member.name || 'Unnamed crew member'}</h3>
+            <Badge size="sm">{memberRoleLabel(member.role)}</Badge>
+            {inactive && <Badge variant="danger" size="sm">Deactivated</Badge>}
+          </div>
+          <p className="pf-copy mt-1 truncate">{member.email || 'No email on file'}</p>
         </div>
-        <p className="pf-copy mt-1 truncate">{member.email || 'No email on file'}</p>
-      </div>
-      <div className="grid grid-cols-3 items-center gap-2 sm:gap-3 lg:grid-cols-[7.5rem_7.5rem_8.75rem_auto]">
-        <div>
-          <p className="pf-meta">Base pay</p>
-          <p className="pf-emphasis">{formatMoney(member.hourlyRate)}/hr</p>
-        </div>
-        <div>
-          <p className="pf-meta">Burden</p>
-          <p className="pf-emphasis">{numberValue(member.burdenRate).toFixed(1)}%</p>
-        </div>
-        <div>
-          <p className="pf-meta">Job cost</p>
-          <p className="pf-emphasis">{formatMoney(burdenedRate(member))}/hr</p>
-        </div>
-        <div className="col-span-3 flex justify-end lg:col-span-1">
-          <button type="button" className="btn-icon btn-icon-tonal" aria-label={`Edit ${member.name || 'crew member'}`} onClick={() => onEdit(member)}>
+
+        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_2.5rem] items-stretch gap-2 sm:grid-cols-[7.25rem_7.25rem_8.5rem_2.5rem] sm:gap-3">
+          {rateItems.map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="pf-meta">{label}</p>
+              <p className="pf-emphasis truncate">{value}</p>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn-icon btn-icon-tonal self-center justify-self-end"
+            aria-label={`Edit ${member.name || 'crew member'}`}
+            onClick={() => onEdit(member)}
+          >
             <Icon name="edit" className="h-4 w-4" />
           </button>
         </div>
