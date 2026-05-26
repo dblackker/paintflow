@@ -73,6 +73,24 @@ const mergeTags = [
   '{{scopeSummaryText}}',
 ];
 
+const previewData: Record<string, string> = {
+  companyName: 'Golden Brush Painting',
+  leadName: 'Emily Rivera',
+  total: '8,740',
+  estimatorName: 'Nick Martinez',
+  estimatorEmail: 'nick@goldenbrush.example',
+  estimatorPhone: '(415) 555-0138',
+  proposalUrl: 'https://paintflow-demo.pages.dev/estimates/demo-preview',
+  scopeSummaryHtml: [
+    '<table style="width:100%;border-collapse:collapse;margin:16px 0;font-family:Arial,sans-serif;font-size:14px;">',
+    '<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;"><strong>Living Room</strong><br>Walls, 2 coats, Sherwin-Williams Duration Matte</td></tr>',
+    '<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;"><strong>Kitchen</strong><br>Ceiling and trim, 2 coats, Emerald Urethane Semi-Gloss</td></tr>',
+    '<tr><td style="padding:8px;"><strong>Primary Bedroom</strong><br>Walls, accent wall, and door casing</td></tr>',
+    '</table>',
+  ].join(''),
+  scopeSummaryText: 'Living Room: walls, 2 coats. Kitchen: ceiling and trim. Primary Bedroom: walls, accent wall, and door casing.',
+};
+
 function formFromTemplate(template?: EmailTemplate | null): TemplateFormState {
   if (!template) return newTemplateDefaults;
   return {
@@ -87,6 +105,35 @@ function formFromTemplate(template?: EmailTemplate | null): TemplateFormState {
     text: template.text || '',
     isActive: template.isActive !== false,
   };
+}
+
+function renderTemplate(value: string) {
+  return Object.entries(previewData).reduce((result, [key, replacement]) => {
+    return result.split(`{{${key}}}`).join(replacement);
+  }, value || '');
+}
+
+function previewHtml(form: TemplateFormState) {
+  const body = renderTemplate(form.html || '<p>No HTML body yet.</p>');
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { margin: 0; background: #f8fafc; color: #111827; font-family: Arial, sans-serif; }
+      .shell { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+      .card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,.06); }
+      a { color: #2563eb; font-weight: 700; }
+      p { line-height: 1.55; }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="card">${body}</div>
+    </div>
+  </body>
+</html>`;
 }
 
 function templateStatus(template: EmailTemplate) {
@@ -176,6 +223,10 @@ export function EmailTemplates() {
       return groups;
     }, {});
   }, [templates]);
+  const renderedSubject = useMemo(() => renderTemplate(form.subject), [form.subject]);
+  const renderedPreheader = useMemo(() => renderTemplate(form.preheader), [form.preheader]);
+  const renderedText = useMemo(() => renderTemplate(form.text || ''), [form.text]);
+  const renderedPreviewHtml = useMemo(() => previewHtml(form), [form]);
 
   useEffect(() => {
     loadTemplates();
@@ -336,7 +387,7 @@ export function EmailTemplates() {
 
       {modalOpen && (
         <div
-          className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+          className="mobile-sheet fixed inset-0 z-[220] flex items-end justify-center overflow-y-auto bg-black/50 p-0 pt-[calc(4.75rem+env(safe-area-inset-top))] sm:items-start sm:p-4 sm:pt-[calc(5rem+env(safe-area-inset-top))]"
           role="dialog"
           aria-modal="true"
           aria-labelledby="template-modal-title"
@@ -344,7 +395,7 @@ export function EmailTemplates() {
             if (event.target === event.currentTarget) closeEditor();
           }}
         >
-          <section className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
+          <section className="flex max-h-[calc(100dvh-5.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-6xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
             <div className="sticky top-0 z-10 border-b bg-white px-4 py-3 sm:px-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -361,84 +412,118 @@ export function EmailTemplates() {
               </div>
             </div>
 
-            <form className="space-y-4 px-4 py-4 sm:px-5" onSubmit={saveTemplate}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                  label="Template key"
-                  required
-                  placeholder="estimate.interior.sent"
-                  value={form.key}
-                  disabled={Boolean(form.id)}
-                  onChange={(event) => setForm({ ...form, key: event.target.value })}
-                />
-                <Input
-                  label="Name"
-                  required
-                  placeholder="Interior estimate ready"
-                  value={form.name}
-                  onChange={(event) => setForm({ ...form, name: event.target.value })}
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Select
-                  label="Category"
-                  value={form.category}
-                  onChange={(event) => setForm({ ...form, category: event.target.value })}
-                  options={categoryOptions}
-                />
-                <Select
-                  label="Channel"
-                  value={form.channel}
-                  onChange={(event) => setForm({ ...form, channel: event.target.value })}
-                  options={channelOptions}
-                />
-                <label className="flex items-end gap-2 rounded-lg border px-3 py-2">
-                  <input
-                    type="checkbox"
-                    className="mb-1 rounded border-gray-300"
-                    checked={form.isActive}
-                    onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+            <form className="min-h-0 overflow-y-auto" onSubmit={saveTemplate}>
+              <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]">
+                <div className="space-y-4 px-4 py-4 sm:px-5">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Input
+                      label="Template key"
+                      required
+                      placeholder="estimate.interior.sent"
+                      value={form.key}
+                      disabled={Boolean(form.id)}
+                      onChange={(event) => setForm({ ...form, key: event.target.value })}
+                    />
+                    <Input
+                      label="Name"
+                      required
+                      placeholder="Interior estimate ready"
+                      value={form.name}
+                      onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Select
+                      label="Category"
+                      value={form.category}
+                      onChange={(event) => setForm({ ...form, category: event.target.value })}
+                      options={categoryOptions}
+                    />
+                    <Select
+                      label="Channel"
+                      value={form.channel}
+                      onChange={(event) => setForm({ ...form, channel: event.target.value })}
+                      options={channelOptions}
+                    />
+                    <label className="flex items-end gap-2 rounded-lg border px-3 py-2">
+                      <input
+                        type="checkbox"
+                        className="mb-1 rounded border-gray-300"
+                        checked={form.isActive}
+                        onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+                      />
+                      <span className="pf-row-title">Active override</span>
+                    </label>
+                  </div>
+                  <Input
+                    label="Subject"
+                    required
+                    placeholder="{{companyName}} painting proposal for {{leadName}}"
+                    value={form.subject}
+                    onChange={(event) => setForm({ ...form, subject: event.target.value })}
                   />
-                  <span className="pf-row-title">Active override</span>
-                </label>
+                  <Input
+                    label="Preheader"
+                    maxLength={255}
+                    placeholder="Short inbox preview text"
+                    value={form.preheader}
+                    onChange={(event) => setForm({ ...form, preheader: event.target.value })}
+                  />
+                  <Textarea
+                    label="HTML body"
+                    className="min-h-[18rem] font-mono text-xs"
+                    required
+                    value={form.html}
+                    onChange={(event) => setForm({ ...form, html: event.target.value })}
+                  />
+                  <Textarea
+                    label="Plain text fallback"
+                    className="min-h-28 font-mono text-xs"
+                    placeholder="Optional. Generated from HTML when blank."
+                    value={form.text}
+                    onChange={(event) => setForm({ ...form, text: event.target.value })}
+                  />
+                  <div className="pf-meta rounded-lg bg-gray-50 p-3">
+                    Available merge tags:{' '}
+                    {mergeTags.map((tag, index) => (
+                      <span key={tag}>
+                        <code>{tag}</code>{index < mergeTags.length - 1 ? ', ' : '.'}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <aside className="border-t bg-gray-50 px-4 py-4 sm:px-5 lg:border-l lg:border-t-0">
+                  <div className="lg:sticky lg:top-4">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="pf-section-title">Live preview</p>
+                        <p className="pf-copy mt-1">Rendered with sample customer, estimate, and painter data.</p>
+                      </div>
+                      <Badge size="sm">Sample data</Badge>
+                    </div>
+                    <div className="rounded-xl border bg-white shadow-sm">
+                      <div className="border-b px-4 py-3">
+                        <p className="pf-meta">Subject</p>
+                        <p className="pf-row-title mt-1">{renderedSubject || 'No subject yet'}</p>
+                        {renderedPreheader && <p className="pf-copy mt-1">{renderedPreheader}</p>}
+                      </div>
+                      <iframe
+                        title="Email template HTML preview"
+                        sandbox=""
+                        srcDoc={renderedPreviewHtml}
+                        className="h-[28rem] w-full rounded-b-xl bg-white"
+                      />
+                    </div>
+                    <details className="mt-3 rounded-lg border bg-white p-3">
+                      <summary className="cursor-pointer pf-row-title">Plain text preview</summary>
+                      <pre className="mt-3 whitespace-pre-wrap text-xs leading-5 text-gray-700">
+                        {renderedText || 'Plain text fallback is blank. PaintFlow will generate a fallback from the HTML body when sending.'}
+                      </pre>
+                    </details>
+                  </div>
+                </aside>
               </div>
-              <Input
-                label="Subject"
-                required
-                placeholder="{{companyName}} painting proposal for {{leadName}}"
-                value={form.subject}
-                onChange={(event) => setForm({ ...form, subject: event.target.value })}
-              />
-              <Input
-                label="Preheader"
-                maxLength={255}
-                placeholder="Short inbox preview text"
-                value={form.preheader}
-                onChange={(event) => setForm({ ...form, preheader: event.target.value })}
-              />
-              <Textarea
-                label="HTML body"
-                className="min-h-[18rem] font-mono text-xs"
-                required
-                value={form.html}
-                onChange={(event) => setForm({ ...form, html: event.target.value })}
-              />
-              <Textarea
-                label="Plain text fallback"
-                className="min-h-28 font-mono text-xs"
-                placeholder="Optional. Generated from HTML when blank."
-                value={form.text}
-                onChange={(event) => setForm({ ...form, text: event.target.value })}
-              />
-              <div className="pf-meta rounded-lg bg-gray-50 p-3">
-                Available merge tags:{' '}
-                {mergeTags.map((tag, index) => (
-                  <span key={tag}>
-                    <code>{tag}</code>{index < mergeTags.length - 1 ? ', ' : '.'}
-                  </span>
-                ))}
-              </div>
-              <div className="mobile-sticky-actions flex flex-col gap-2 border-t bg-white pt-3 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent">
+              <div className="mobile-sticky-actions flex flex-col gap-2 border-t bg-white px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
                 {form.id && (
                   <Button type="button" variant="ghost" className="justify-center text-red-700" isLoading={isDeleting} onClick={resetTemplate}>
                     Reset to system default
