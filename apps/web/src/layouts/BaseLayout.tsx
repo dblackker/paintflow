@@ -40,6 +40,7 @@ interface NotificationPreview {
   sourceId?: string;
   title: string;
   message?: string;
+  body?: string;
   href?: string;
   read?: boolean;
   createdAt?: string;
@@ -137,6 +138,21 @@ export function BaseLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    function handleNotificationsRead(event: Event) {
+      const detail = (event as CustomEvent<{ items?: NotificationPreview[] }>).detail;
+      if (detail?.items?.length) {
+        const ids = new Set(detail.items.map((item) => item.id));
+        setNotifications((current) => current.map((item) => ids.has(item.id) ? { ...item, read: true } : item));
+        return;
+      }
+      setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+    }
+
+    window.addEventListener('paintflow:notifications-read', handleNotificationsRead as EventListener);
+    return () => window.removeEventListener('paintflow:notifications-read', handleNotificationsRead as EventListener);
+  }, []);
+
   async function logout() {
     try {
       await apiJson('/v1/auth/logout', {
@@ -152,7 +168,7 @@ export function BaseLayout() {
 
   async function markNotificationRead(item: NotificationPreview) {
     setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry));
-    if (item.source === 'notification') {
+    if (item.source === 'notification' || item.source === 'message') {
       try {
         await apiJson('/v1/notifications/mark-read', {
           method: 'POST',
@@ -160,7 +176,11 @@ export function BaseLayout() {
             'Content-Type': 'application/json',
             'Idempotency-Key': crypto.randomUUID(),
           },
-          body: JSON.stringify({ notificationIds: [item.sourceId || item.id] }),
+          body: JSON.stringify(
+            item.source === 'message'
+              ? { messageIds: [item.sourceId || item.id] }
+              : { notificationIds: [item.sourceId || item.id] },
+          ),
         });
       } catch {
         window.showToast?.('Failed to mark notification read', 'error');
@@ -220,7 +240,9 @@ export function BaseLayout() {
                           onClick={() => markNotificationRead(item)}
                         >
                           <span className="block text-sm font-semibold text-gray-950">{item.title}</span>
-                          {item.message && <span className="mt-1 block text-sm text-gray-600">{item.message}</span>}
+                          {(item.message || item.body) && (
+                            <span className="mt-1 block text-sm text-gray-600">{item.message || item.body}</span>
+                          )}
                           <span className="mt-1 block text-xs text-gray-500">{notificationTime(item.createdAt)}</span>
                         </Link>
                       )) : (

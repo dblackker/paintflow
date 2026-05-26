@@ -5,6 +5,7 @@ interface IconProps {
 
 const icons: Record<string, string> = {
   'bar-chart': '<path d="M3 3v18h18" /><path d="M7 16v-5" /><path d="M12 16V7" /><path d="M17 16v-8" />',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />',
   briefcase: '<path d="M10 6V5a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v1" /><path d="M3 7h18v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /><path d="M3 13h18" />',
   calendar: '<path d="M8 2v4M16 2v4" /><path d="M3 10h18" /><rect x="3" y="4" width="18" height="18" rx="2" />',
   clock: '<circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />',
