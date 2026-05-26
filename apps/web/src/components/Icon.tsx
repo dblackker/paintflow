@@ -20,8 +20,13 @@ const icons: Record<string, string> = {
   templates: '<path d="M4 4h7v7H4Z" /><path d="M13 4h7v7h-7Z" /><path d="M4 13h7v7H4Z" /><path d="M13 13h7v7h-7Z" />',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" />',
   close: '<path d="M18 6L6 18M6 6l12 12" />',
+  'chevron-left': '<path d="m15 18-6-6 6-6" />',
+  'chevron-right': '<path d="m9 18 6-6-6-6" />',
+  minus: '<path d="M5 12h14" />',
   refresh: '<path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" /><path d="M9 9h6v6" />',
   edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />',
+  trash: '<path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="m19 6-1 14H6L5 6" /><path d="M10 11v5M14 11v5" />',
+  warning: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" />',
 };
 
 export function Icon({ name, className = 'w-5 h-5' }: IconProps) {

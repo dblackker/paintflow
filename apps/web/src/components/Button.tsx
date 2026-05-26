@@ -2,7 +2,7 @@ import { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
 
 type ButtonAs = 'button' | 'a' | 'span';
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, Pick<AnchorHTMLAttributes<HTMLAnchorElement>, 'target' | 'rel' | 'download'> {
   as?: ButtonAs;
   href?: string;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
