@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { Input } from '@/components/Input';
 import { ServiceErrorState } from '@/components/ServiceErrorState';
-import { apiJson, formatMoney, formatPhone, labelize } from '@/lib/api';
+import { apiJson, formatMoney, labelize } from '@/lib/api';
 
 interface TeamMember {
   id: string;
@@ -105,6 +105,14 @@ function marginTone(margin: number) {
   return 'text-red-700 bg-red-50 border-red-100';
 }
 
+function scheduleLabel(job: Job) {
+  const start = formatDate(job.scheduledStartAt);
+  const end = formatDate(job.scheduledEndAt);
+  if (start && end && start !== end) return `${start} - ${end}`;
+  if (start) return start;
+  return 'Needs date';
+}
+
 export function JobsList() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -149,7 +157,7 @@ export function JobsList() {
   const filteredJobs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return jobs.filter((job) => {
-      const haystack = [displayJobName(job), job.leadName, job.leadPhone, job.leadEmail, jobAddress(job), job.status]
+      const haystack = [displayJobName(job), job.leadName, jobAddress(job), job.status, job.jobNumber]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -250,7 +258,8 @@ export function JobsList() {
       <div className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
         <Input
           type="search"
-          placeholder="Search customer, job, phone, email, or address"
+          placeholder="Search customer, jobsite, status, or job number"
+          aria-label="Search jobs"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
         />
@@ -275,7 +284,7 @@ export function JobsList() {
             )}
           />
         ) : (
-          <EmptyState title="No jobs found" description="Try a different customer, jobsite, status, phone, or email search." />
+          <EmptyState title="No jobs found" description="Try a different customer, jobsite, status, or job number." />
         )
       ) : (
         <div className="grid gap-3 sm:gap-4">
@@ -331,67 +340,71 @@ function JobCard({
   const completed = String(job.status || '').toLowerCase() === 'completed';
 
   return (
-    <article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md sm:p-5">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+    <article className="rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md">
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="min-w-0">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Link to={`/jobs/${job.id}`} className="pf-row-title truncate hover:text-blue-700">
+          <div className="p-4 sm:p-5">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <Link to={`/jobs/${job.id}`} className="pf-row-title block truncate hover:text-blue-700">
                   {displayJobName(job)}
                 </Link>
-                <StatusBadge status={String(job.status || 'scheduled')} />
-                {job.jobNumber && <Badge size="sm" variant="default">{job.jobNumber}</Badge>}
-              </div>
-              <div className="mt-2 space-y-1">
-                {job.leadName && (
-                  <Link to={job.leadId ? `/leads/${job.leadId}` : `/jobs/${job.id}`} className="block truncate text-sm font-medium text-gray-800 hover:text-blue-700">
-                    {job.leadName}
-                  </Link>
-                )}
-                <AddressInline address={address} className="pf-copy" />
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-500">
-                  {job.leadPhone && <a href={`tel:${job.leadPhone}`} className="hover:text-blue-700">{formatPhone(job.leadPhone)}</a>}
-                  {job.leadEmail && <a href={`mailto:${job.leadEmail}`} className="truncate hover:text-blue-700">{job.leadEmail}</a>}
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {job.leadName && (
+                    <Link to={job.leadId ? `/leads/${job.leadId}` : `/jobs/${job.id}`} className="pf-copy truncate hover:text-blue-700">
+                      {job.leadName}
+                    </Link>
+                  )}
+                  {job.jobNumber && <Badge size="sm" variant="default">{job.jobNumber}</Badge>}
                 </div>
               </div>
+              <div className={`inline-flex w-fit items-baseline gap-1 rounded-lg border px-3 py-2 ${marginTone(margin)}`}>
+                <span className="pf-section-title">{margin.toFixed(1)}%</span>
+                <span className="pf-meta">margin</span>
+              </div>
             </div>
-            <div className={`mt-1 inline-flex w-fit items-baseline gap-1 rounded-lg border px-3 py-2 ${marginTone(margin)} sm:mt-0`}>
-              <span className="text-xl font-semibold">{margin.toFixed(1)}%</span>
-              <span className="text-xs font-medium">margin</span>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <AddressInline address={address} className="pf-copy" />
+              <Link to="/calendar" className="btn-text btn-sm justify-start sm:justify-end" title="Open calendar">
+                <Icon name="calendar" className="h-4 w-4" />
+                {scheduleLabel(job)}
+              </Link>
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-3 gap-2 border-t bg-gray-50/60 p-3 sm:gap-3 sm:px-5">
             <MiniMetric label="Revenue" value={formatMoney(revenue)} />
             <MiniMetric label="Actual Cost" value={formatMoney(actualCost)} />
             <MiniMetric label="Profit" value={formatMoney(profit)} />
           </div>
-
-          <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
-            {job.scheduledStartAt && <span>Starts {formatDate(job.scheduledStartAt)}</span>}
-            {job.scheduledEndAt && <span>Ends {formatDate(job.scheduledEndAt)}</span>}
-            <span>{Number(laborHours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} labor hrs</span>
-          </div>
         </div>
 
-        <div className="grid gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-center sm:justify-end lg:min-w-44 lg:border-t-0 lg:pt-0">
-          <button type="button" className="btn-tonal btn-sm justify-center" onClick={onLogTime}>
-            <Icon name="clock" className="h-4 w-4" />
-            Log time
-          </button>
-          <Link to={`/jobs/${job.id}`} className="btn-primary btn-sm justify-center">
-            Open job
-          </Link>
-          {completed ? (
-            <button type="button" className="btn-secondary btn-sm justify-center" onClick={onRequestReview} disabled={isRequestingReview}>
-              {isRequestingReview ? 'Sending...' : 'Request review'}
+        <div className="flex flex-col justify-between gap-3 border-t p-3 sm:flex-row sm:items-center lg:border-l lg:border-t-0 lg:p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link to="/calendar" className="inline-flex" title="Open calendar">
+              <StatusBadge status={String(job.status || 'scheduled')} />
+            </Link>
+            <span className="pf-meta">{Number(laborHours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} labor hrs</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            <button type="button" className="btn-text btn-sm" onClick={onLogTime}>
+              <Icon name="clock" className="h-4 w-4" />
+              Time
             </button>
-          ) : (
-            <button type="button" className="btn-secondary btn-sm justify-center" onClick={onMarkComplete} disabled={isUpdating}>
-              {isUpdating ? 'Updating...' : 'Mark complete'}
-            </button>
-          )}
+            {completed ? (
+              <button type="button" className="btn-text btn-sm" onClick={onRequestReview} disabled={isRequestingReview}>
+                {isRequestingReview ? 'Sending...' : 'Review'}
+              </button>
+            ) : (
+              <button type="button" className="btn-text btn-sm text-green-700" onClick={onMarkComplete} disabled={isUpdating}>
+                {isUpdating ? 'Updating...' : 'Complete'}
+              </button>
+            )}
+            <Link to={`/jobs/${job.id}`} className="btn-icon btn-icon-tonal" aria-label="Open job" title="Open job">
+              <Icon name="arrow-right" className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </div>
     </article>
@@ -400,9 +413,9 @@ function JobCard({
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 sm:p-3">
-      <p className="truncate text-[0.68rem] font-medium uppercase tracking-wide text-gray-500">{labelize(label)}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-gray-950 sm:text-base">{value}</p>
+    <div className="rounded-lg border border-gray-200 bg-white p-2 sm:p-3">
+      <p className="pf-metric-label truncate">{labelize(label)}</p>
+      <p className="pf-row-title mt-1 truncate">{value}</p>
     </div>
   );
 }
