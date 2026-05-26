@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AddressInline } from '@/components/AddressInline';
 import { StatusBadge } from '@/components/Badge';
 import { Card, CardHeader } from '@/components/Card';
+import { CrewTimecardModal, CrewTimecardPayload } from '@/components/CrewTimecardModal';
 import { Icon } from '@/components/Icon';
 import { Modal, ModalFooter } from '@/components/Modal';
 import { API_URL, apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
@@ -49,6 +50,7 @@ interface TeamMember {
   role?: string | null;
   hourlyRate?: string | number | null;
   burdenRate?: string | number | null;
+  isActive?: boolean | null;
 }
 
 interface TimeEntry {
@@ -103,19 +105,6 @@ interface JobCostingResponse {
 }
 
 const costCategories = ['materials', 'supplies', 'labor', 'subcontractor', 'equipment', 'other'];
-
-const roleLabels: Record<string, string> = {
-  admin: 'Admin',
-  crew: 'Crew member',
-  crew_lead: 'Crew lead',
-  estimator: 'Estimator',
-  painter: 'Painter',
-  prep: 'Prep crew',
-};
-
-function todayInput() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function formatDate(value?: string | null) {
   if (!value) return 'Not recorded';
@@ -188,10 +177,6 @@ export function JobDetail() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [savingBulk, setSavingBulk] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
-  const [memberHours, setMemberHours] = useState<Record<string, string>>({});
-  const [bulkDate, setBulkDate] = useState(todayInput());
-  const [bulkNotes, setBulkNotes] = useState('');
 
   async function loadJob() {
     if (!id) return;
@@ -207,17 +192,6 @@ export function JobDetail() {
       setTeamMembers(membersResponse.data || []);
       setTimeEntries(timeResponse.data || []);
       setPhotos(photoResponse.data || []);
-      setSelectedMembers((current) => {
-        if (current.size) return current;
-        return new Set((membersResponse.data || []).map((member) => member.id));
-      });
-      setMemberHours((current) => {
-        const next = { ...current };
-        for (const member of membersResponse.data || []) {
-          if (!next[member.id]) next[member.id] = '8';
-        }
-        return next;
-      });
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load job');
@@ -234,13 +208,6 @@ export function JobDetail() {
   const address = job ? formatAddress(job) : '';
   const totalTimeHours = timeEntries.reduce((sum, entry) => sum + numberValue(entry.hours), 0);
   const totalTimeCost = timeEntries.reduce((sum, entry) => sum + numberValue(entry.totalCost), 0);
-  const selectedBulkMembers = useMemo(
-    () => teamMembers.filter((member) => selectedMembers.has(member.id)),
-    [teamMembers, selectedMembers],
-  );
-  const selectedAverageHours = selectedBulkMembers.length
-    ? selectedBulkMembers.reduce((sum, member) => sum + numberValue(memberHours[member.id] || 0), 0) / selectedBulkMembers.length
-    : 0;
 
   function openCostModal(cost?: JobCost) {
     setEditingCost(cost || null);
@@ -311,20 +278,8 @@ export function JobDetail() {
     }
   }
 
-  async function saveBulkTimecard(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveBulkTimecard(payload: CrewTimecardPayload) {
     if (!id) return;
-    const entries = selectedBulkMembers
-      .map((member) => ({
-        teamMemberId: member.id,
-        hours: Number(memberHours[member.id] || 0),
-        description: bulkNotes.trim() || undefined,
-      }))
-      .filter((entry) => entry.hours > 0);
-    if (!entries.length) {
-      window.showToast?.('Select at least one crew member with hours.', 'error');
-      return;
-    }
     setSavingBulk(true);
     try {
       await apiJson('/v1/team/timecards', {
@@ -333,12 +288,7 @@ export function JobDetail() {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        body: JSON.stringify({
-          jobId: id,
-          date: new Date(`${bulkDate}T12:00:00`).toISOString(),
-          notes: bulkNotes.trim() || undefined,
-          entries,
-        }),
+        body: JSON.stringify(payload),
       });
       setBulkOpen(false);
       await loadJob();
@@ -814,63 +764,16 @@ export function JobDetail() {
         </form>
       </Modal>
 
-      <Modal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} title="Crew Timecard" size="lg">
-        <form onSubmit={saveBulkTimecard} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label>
-              <span className="form-label">Date</span>
-              <input type="date" className="input" value={bulkDate} onChange={(event) => setBulkDate(event.target.value)} required />
-            </label>
-            <label>
-              <span className="form-label">Notes</span>
-              <input className="input" value={bulkNotes} onChange={(event) => setBulkNotes(event.target.value)} placeholder="Crew labor" autoComplete="off" />
-            </label>
-          </div>
-          <div className="rounded-lg border bg-gray-50 p-3 text-sm text-gray-700">
-            {selectedBulkMembers.length} selected - average {selectedAverageHours.toFixed(2)} hrs
-          </div>
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
-            {teamMembers.map((member) => (
-              <label key={member.id} className="grid grid-cols-[minmax(0,1fr)_5.75rem] items-center gap-3 rounded-lg border p-3">
-                <span className="flex min-w-0 items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedMembers.has(member.id)}
-                    onChange={(event) => {
-                      setSelectedMembers((current) => {
-                        const next = new Set(current);
-                        if (event.target.checked) next.add(member.id);
-                        else next.delete(member.id);
-                        return next;
-                      });
-                    }}
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-gray-950">{member.name}</span>
-                    <span className="block text-xs text-gray-500">{roleLabels[String(member.role || '')] || labelize(member.role)}</span>
-                  </span>
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  max="24"
-                  step="0.25"
-                  inputMode="decimal"
-                  className="input text-right"
-                  aria-label={`Hours for ${member.name}`}
-                  value={memberHours[member.id] || ''}
-                  onFocus={(event) => event.currentTarget.select()}
-                  onChange={(event) => setMemberHours((current) => ({ ...current, [member.id]: event.target.value }))}
-                />
-              </label>
-            ))}
-          </div>
-          <ModalFooter className="-mx-6 -mb-4 mt-4">
-            <button type="button" className="btn-secondary" onClick={() => setBulkOpen(false)}>Cancel</button>
-            <button className="btn-primary" disabled={savingBulk}>{savingBulk ? 'Submitting...' : 'Submit timecard'}</button>
-          </ModalFooter>
-        </form>
-      </Modal>
+      <CrewTimecardModal
+        isOpen={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        members={teamMembers}
+        jobs={job ? [job] : []}
+        jobId={id}
+        description="Fast end-of-day crew hours for this job. Pay and burdened rates are managed in Team."
+        isSaving={savingBulk}
+        onSubmit={saveBulkTimecard}
+      />
 
       <Modal isOpen={changeOrderOpen} onClose={() => setChangeOrderOpen(false)} title="Add Change Order">
         <form onSubmit={saveChangeOrder} className="space-y-4">
