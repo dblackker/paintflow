@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -48,6 +49,15 @@ interface OnboardingResponse {
 }
 
 type StepKey = 'business' | 'pricing' | 'areas' | 'connectors' | 'ready';
+type SubscriptionStatus = {
+  status?: string | null;
+  currentPeriodEnd?: string | null;
+  plan?: {
+    name?: string | null;
+    price?: string | number | null;
+    features?: { displayName?: string; userLimit?: number | null } | null;
+  } | null;
+} | null;
 
 const steps: Array<{ key: StepKey; title: string }> = [
   { key: 'business', title: 'Business basics' },
@@ -86,6 +96,7 @@ export function Onboarding() {
   const [settings, setSettings] = useState<OrgSettings>({});
   const [zipCodes, setZipCodes] = useState('');
   const [progress, setProgress] = useState<OnboardingProgress | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionStatus>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -100,7 +111,10 @@ export function Onboarding() {
     async function load() {
       setIsLoading(true);
       try {
-        const payload = await apiJson<OnboardingResponse>('/v1/settings/onboarding');
+        const [payload, subscriptionPayload] = await Promise.all([
+          apiJson<OnboardingResponse>('/v1/settings/onboarding'),
+          apiJson<{ data?: SubscriptionStatus }>('/v1/billing/subscription').catch(() => ({ data: null })),
+        ]);
         if (cancelled) return;
         const nextSettings = payload.data?.settings || {};
         setSettings({
@@ -110,6 +124,7 @@ export function Onboarding() {
         });
         setZipCodes((payload.data?.serviceAreas || []).map((area) => area.zipCode).join(', '));
         setProgress(payload.data?.progress || null);
+        setSubscription(subscriptionPayload.data || null);
       } catch (err) {
         if (!cancelled) setAlert({ type: 'error', message: err instanceof Error ? err.message : 'Failed to load onboarding' });
       } finally {
@@ -195,7 +210,7 @@ export function Onboarding() {
       {isWelcome && (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
           <p className="font-semibold">Workspace created</p>
-          <p className="mt-1">
+                  <p className="mt-1">
             We loaded starter settings for lead intake, estimating, job costing, roles, and follow-up. Review the defaults here before your first estimate.
           </p>
         </div>
@@ -244,11 +259,14 @@ export function Onboarding() {
                 }}
               >
                 {step.key === 'business' && (
-                  <div className="grid gap-4">
-                    <Input label="Company name" required autoComplete="organization" value={settings.companyName || ''} onChange={(event) => updateSetting('companyName', event.target.value)} placeholder="Acme Painting Co." />
-                    <Input label="Phone number" required type="tel" inputMode="numeric" autoComplete="tel" maxLength={14} value={settings.phone || ''} onChange={(event) => updateSetting('phone', maskPhone(event.target.value))} placeholder="(555) 123-4567" />
-                    <Input label="Email" required type="email" inputMode="email" autoComplete="email" value={settings.email || ''} onChange={(event) => updateSetting('email', event.target.value)} placeholder="owner@example.com" />
-                    <Input label="Business address" required autoComplete="street-address" value={settings.address || ''} onChange={(event) => updateSetting('address', event.target.value)} placeholder="123 Main St, Tacoma, WA 98402" />
+                  <div className="grid gap-5">
+                    <TrialSummary subscription={subscription} />
+                    <div className="grid gap-4">
+                      <Input label="Company name" required autoComplete="organization" value={settings.companyName || ''} onChange={(event) => updateSetting('companyName', event.target.value)} placeholder="Acme Painting Co." />
+                      <Input label="Phone number" required type="tel" inputMode="numeric" autoComplete="tel" maxLength={14} value={settings.phone || ''} onChange={(event) => updateSetting('phone', maskPhone(event.target.value))} placeholder="(555) 123-4567" />
+                      <Input label="Email" required type="email" inputMode="email" autoComplete="email" value={settings.email || ''} onChange={(event) => updateSetting('email', event.target.value)} placeholder="owner@example.com" />
+                      <Input label="Business address" required autoComplete="street-address" value={settings.address || ''} onChange={(event) => updateSetting('address', event.target.value)} placeholder="123 Main St, Tacoma, WA 98402" />
+                    </div>
                   </div>
                 )}
 
@@ -335,6 +353,16 @@ export function Onboarding() {
             </Card>
 
             <Card padding="sm">
+              <CardHeader title="Trial and billing" />
+              <CardContent>
+                <TrialSummary subscription={subscription} compact />
+                <Button as="a" href="/billing" variant="secondary" size="sm" className="mt-4">
+                  Manage billing
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card padding="sm">
               <CardHeader title="Estimator setup" />
               <CardContent>
                 <p className="pf-copy">Keep pricing accurate by entering paint products and production rates before live estimates.</p>
@@ -359,6 +387,24 @@ export function Onboarding() {
           </aside>
         </div>
       )}
+    </div>
+  );
+}
+
+function TrialSummary({ subscription, compact = false }: { subscription: SubscriptionStatus; compact?: boolean }) {
+  const planName = subscription?.plan?.features?.displayName || subscription?.plan?.name || 'PaintFlow';
+  const trialEnd = subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const status = subscription?.status || 'trial';
+  return (
+    <div className={`rounded-lg border border-blue-100 bg-blue-50 ${compact ? 'p-3' : 'p-4'}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="pf-row-title text-blue-950">{planName} trial</p>
+        <Badge variant={status === 'active' ? 'success' : 'info'} size="sm">{status === 'trial_pending_payment' ? 'Payment pending' : status}</Badge>
+      </div>
+      <p className="pf-copy mt-1 text-blue-900">
+        {trialEnd ? `Your trial runs through ${trialEnd}.` : 'Your subscription details will appear here after checkout.'}
+        {' '}Stripe stores the payment method and handles automatic billing after the trial.
+      </p>
     </div>
   );
 }

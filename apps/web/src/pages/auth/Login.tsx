@@ -117,7 +117,7 @@ export function Login() {
       setEmail('');
       setMessage({
         tone: 'success',
-        text: 'Check your email for a one-time sign-in link.',
+        text: 'If a workspace exists for that email, we will send a one-time sign-in link.',
         href: payload.devToken ? `${API_URL}/v1/auth/verify?token=${payload.devToken}` : undefined,
         hrefLabel: payload.devToken ? 'Development sign-in shortcut' : undefined,
       });

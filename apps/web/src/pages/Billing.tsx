@@ -24,14 +24,14 @@ const planCards = [
     name: 'Starter',
     price: 49,
     copy: 'Best for a small owner-operator getting organized.',
-    features: ['Up to 3 team members', '100 leads/month', 'E-signatures', 'Basic reports'],
+    features: ['Up to 3 users', 'Lead pipeline', 'Production estimates', 'E-signatures', 'Basic reports'],
   },
   {
     key: 'pro',
     name: 'Pro',
     price: 149,
     copy: 'For growing painting companies running sales and operations in one place.',
-    features: ['Unlimited team', 'Unlimited leads', 'QuickBooks sync', 'Advanced reporting', 'Priority support'],
+    features: ['Up to 10 users', 'Crew time tracking', 'Job costing', 'Email templates', 'Advanced reporting'],
     popular: true,
   },
   {
@@ -39,7 +39,7 @@ const planCards = [
     name: 'Enterprise',
     price: 399,
     copy: 'For larger operators that need branding, access controls, and support.',
-    features: ['Everything in Pro', 'White-label', 'API access', 'Dedicated CSM'],
+    features: ['Everything in Pro', 'Unlimited users', 'White-label', 'API access', 'Priority support'],
   },
 ];
 
@@ -162,7 +162,7 @@ export function Billing() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-1 pb-24 sm:px-0">
-      <p className="pf-page-copy">Manage your PaintFlow plan and subscription billing.</p>
+      <p className="pf-page-copy">Manage your PaintFlow plan and subscription billing. You can cancel any time from the billing portal.</p>
 
       <Card>
         <CardHeader title="Current Plan" description="Subscription billing is separate from customer deposits and contractor Stripe Connect payouts." />
@@ -181,7 +181,7 @@ export function Billing() {
         {!isLoading && !error && !subscription && (
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
             <p className="pf-row-title">Free trial</p>
-            <p className="pf-copy mt-1">No active subscription. You are on a 14-day free trial.</p>
+            <p className="pf-copy mt-1">No active subscription is recorded. Start checkout to add payment information for the 14-day trial.</p>
           </div>
         )}
         {!isLoading && !error && subscription && (
@@ -201,6 +201,9 @@ export function Billing() {
             </Button>
           </div>
         )}
+        <p className="pf-meta mt-4">
+          Subscription changes, cancellation, payment method updates, invoices, and refunds are handled through Stripe Billing. Configure prorations and refund policy in Stripe so billing behavior stays consistent.
+        </p>
       </Card>
 
       <div>

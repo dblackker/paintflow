@@ -13,11 +13,14 @@ import {
   estimateTemplates,
   messageTemplates,
   roles,
+  saasPlans,
+  subscriptions,
   userRoles,
   teamMembers,
 } from '@paintflow/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { sendEmail } from '../lib/email';
+import Stripe from 'stripe';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -112,6 +115,71 @@ const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
 const GOLDEN_DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
 const GOLDEN_DEMO_CREW_DOMAIN = '@goldenbrush.example';
 const GOLDEN_DEMO_LOGIN_EMAILS = new Set([GOLDEN_DEMO_EMAIL, GOLDEN_DEMO_CREW_EMAIL]);
+const TRIAL_DAYS = 14;
+
+const PLAN_CONFIG = {
+  starter: {
+    name: 'starter',
+    displayName: 'Starter',
+    price: '49.00',
+    userLimit: 3,
+    featureCopy: ['CRM pipeline', 'Production estimates', 'E-signatures', 'Payments', 'Basic reports'],
+  },
+  pro: {
+    name: 'pro',
+    displayName: 'Pro',
+    price: '149.00',
+    userLimit: 10,
+    featureCopy: ['Everything in Starter', 'Crew time tracking', 'Job costing', 'Email templates', 'Advanced reports'],
+  },
+  enterprise: {
+    name: 'enterprise',
+    displayName: 'Enterprise',
+    price: '399.00',
+    userLimit: null,
+    featureCopy: ['Everything in Pro', 'Unlimited users', 'API access', 'White-labeling', 'Priority support'],
+  },
+} as const;
+
+type PlanKey = keyof typeof PLAN_CONFIG;
+
+function planPriceIds(env: Env) {
+  return {
+    starter: env.STRIPE_STARTER_PRICE_ID,
+    pro: env.STRIPE_PRO_PRICE_ID,
+    enterprise: env.STRIPE_ENTERPRISE_PRICE_ID,
+  };
+}
+
+function normalizePlan(value: unknown): PlanKey {
+  return value === 'starter' || value === 'enterprise' ? value : 'pro';
+}
+
+function validEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function ensureSaasPlan(db: ReturnType<typeof createDb>, env: Env, plan: PlanKey) {
+  const existing = await db.query.saasPlans.findFirst({
+    where: eq(saasPlans.name, plan),
+  });
+  if (existing) return existing;
+
+  const config = PLAN_CONFIG[plan];
+  const [created] = await db.insert(saasPlans).values({
+    name: config.name,
+    price: config.price,
+    interval: 'month',
+    stripePriceId: planPriceIds(env)[plan],
+    features: {
+      displayName: config.displayName,
+      userLimit: config.userLimit,
+      featureCopy: config.featureCopy,
+      trialDays: TRIAL_DAYS,
+    },
+  }).returning();
+  return created;
+}
 
 function accessRoleForTeamRole(teamRole: string) {
   return teamRole === 'crew_lead'
@@ -505,9 +573,135 @@ auth.get('/demo-login', async (c) => {
   return redirectWithSession(redirectUrl, result.sessionToken, c.env);
 });
 
+auth.post('/signup', async (c) => {
+  const idempotencyKey = c.req.header('Idempotency-Key')?.trim();
+  if (!idempotencyKey) {
+    return c.json({ error: 'Idempotency-Key is required.' }, 400);
+  }
+
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const normalizedEmail = String(body.email || '').trim().toLowerCase();
+  const name = String(body.name || '').trim();
+  const companyName = String(body.companyName || '').trim();
+  const phone = String(body.phone || '').trim();
+  const teamSize = String(body.teamSize || '').trim();
+  const plan = normalizePlan(body.plan);
+
+  if (!normalizedEmail || !validEmail(normalizedEmail)) {
+    return c.json({ error: 'Enter a valid work email.' }, 400);
+  }
+  if (!name) return c.json({ error: 'Enter your name.' }, 400);
+  if (!companyName) return c.json({ error: 'Enter your company name.' }, 400);
+
+  const limits = magicLinkLimits(c.env);
+  const ipBucket = await checkMagicLinkBucket(c.env, `ratelimit:signup:ip:${clientIp(c)}`, limits.ip);
+  if (!ipBucket.allowed) {
+    return c.json({
+      error: `Too many signup attempts from this network. Try again in ${ipBucket.retryAfterMinutes} minute${ipBucket.retryAfterMinutes === 1 ? '' : 's'}.`,
+      code: 'SIGNUP_IP_RATE_LIMIT',
+      retryAfterMinutes: ipBucket.retryAfterMinutes,
+    }, 429);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const existingUser = await db.query.users.findFirst({ where: eq(users.email, normalizedEmail) });
+  if (existingUser) {
+    return c.json({
+      success: true,
+      existingAccount: true,
+      message: 'If this email already has a workspace, use sign in to receive a one-time link.',
+    });
+  }
+
+  const priceId = planPriceIds(c.env)[plan];
+  if (!priceId || priceId.startsWith('price_replace')) {
+    return c.json({ error: 'Subscription billing is not configured yet. Add the Stripe price IDs before accepting signups.' }, 503);
+  }
+
+  const [user] = await db.insert(users).values({
+    email: normalizedEmail,
+    name,
+  }).returning();
+
+  const [org] = await db.insert(organizations).values({
+    name: companyName,
+    slug: `org-${crypto.randomUUID().slice(0, 8)}`,
+  }).returning();
+
+  await db.insert(memberships).values({
+    userId: user.id,
+    orgId: org.id,
+    role: 'owner',
+  });
+
+  await seedWorkspaceDefaults(db, org.id, user.id, normalizedEmail, companyName);
+  if (phone || teamSize) {
+    await db.update(orgSettings)
+      .set({
+        ...(phone ? { phone } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(orgSettings.orgId, org.id));
+  }
+
+  const planRecord = await ensureSaasPlan(db, c.env, plan);
+  await db.insert(subscriptions).values({
+    orgId: org.id,
+    planId: planRecord.id,
+    status: 'trial_pending_payment',
+    currentPeriodStart: new Date(),
+    currentPeriodEnd: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+  });
+
+  const token = crypto.randomUUID();
+  await c.env.KV.put(
+    `magic:${token}`,
+    JSON.stringify({ email: normalizedEmail, userId: user.id, orgId: org.id, isNewUser: true, redirectPath: '/onboarding?welcome=1' }),
+    { expirationTtl: 3600 }
+  );
+
+  try {
+    const stripe = new Stripe(c.env.STRIPE_SECRET_KEY);
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer_email: normalizedEmail,
+      payment_method_collection: 'always',
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: TRIAL_DAYS,
+        metadata: {
+          orgId: org.id,
+          plan,
+          signupIdempotencyKey: idempotencyKey,
+        },
+      },
+      success_url: `${c.env.APP_URL}/v1/auth/verify?token=${token}`,
+      cancel_url: `${c.env.PUBLIC_URL}/signup?checkout=canceled&plan=${plan}`,
+      metadata: {
+        orgId: org.id,
+        userId: user.id,
+        plan,
+        teamSize,
+      },
+    });
+
+    return c.json({
+      success: true,
+      checkoutUrl: session.url,
+      trialDays: TRIAL_DAYS,
+      plan,
+      devToken: c.env.ENVIRONMENT === 'development' ? token : undefined,
+    }, 201);
+  } catch (err) {
+    console.error('Failed to create signup checkout:', err);
+    return c.json({ error: 'Could not start subscription checkout. Check Stripe configuration and try again.' }, 502);
+  }
+});
+
 // POST /v1/auth/magic-link
 auth.post('/magic-link', async (c) => {
-  const { email, name, companyName } = await c.req.json();
+  const body = await c.req.json().catch(() => null) as { email?: unknown; name?: unknown; companyName?: unknown } | null;
+  const { email, name, companyName } = body || {};
   
   if (!email || typeof email !== 'string') {
     return c.json({ error: 'Email required' }, 400);
@@ -584,6 +778,14 @@ auth.post('/magic-link', async (c) => {
   let redirectPath = '/dashboard';
   
   if (!user) {
+    if (!linkedTeamMember && !companyName) {
+      console.info('Magic link requested for unknown email; returning generic response without issuing token.');
+      return c.json({
+        success: true,
+        message: 'If an account exists for this email, a one-time sign-in link will be sent.',
+      });
+    }
+
     isNewUser = true;
     const [newUser] = await db.insert(users).values({
       email: normalizedEmail,
