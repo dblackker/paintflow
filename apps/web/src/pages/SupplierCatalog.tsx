@@ -287,14 +287,10 @@ export function SupplierCatalog() {
 
   return (
     <section className="mx-auto max-w-6xl space-y-5 pb-24">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-1">
         <p className="pf-page-copy max-w-3xl">
           Browse supplier products, color libraries, and product-color availability before adding products to your estimating setup.
         </p>
-        <Button variant="secondary" size="sm" onClick={loadCatalog}>
-          <Icon name="refresh" className="pf-icon" />
-          Refresh
-        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
