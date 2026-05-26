@@ -360,11 +360,11 @@ function CustomerCard({ customer, jobsiteAddress }: { customer: Customer | null;
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <Link to={`/leads/${customer.id}`} className="text-xl font-semibold text-gray-950 hover:text-blue-700">{customer.name || 'Customer'}</Link>
-            <div className="mt-2 text-sm text-gray-700">
-              <span className="font-medium text-gray-950">Jobsite:</span> {jobsiteAddress || 'No jobsite address'}
-            </div>
+            <p className="pf-copy mt-2">
+              <span className="pf-row-title">Jobsite:</span> {jobsiteAddress || 'No jobsite address'}
+            </p>
           </div>
-          <div className="text-sm text-gray-600 sm:text-right">
+          <div className="pf-copy sm:text-right">
             <p>{customer.phone ? formatPhone(customer.phone) : 'No phone'}</p>
             <p>{customer.email || 'No email'}</p>
           </div>

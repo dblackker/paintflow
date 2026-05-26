@@ -206,8 +206,8 @@ export function Portal() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-gray-950">{job.name || job.title || 'Painting project'}</h2>
-                <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-600">
-                  {job.jobNumber && <span className="font-medium text-gray-900">{job.jobNumber}</span>}
+                <div className="pf-copy mt-2 flex flex-wrap gap-2">
+                  {job.jobNumber && <span className="pf-row-title">{job.jobNumber}</span>}
                   {[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ') && (
                     <span>{[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ')}</span>
                   )}

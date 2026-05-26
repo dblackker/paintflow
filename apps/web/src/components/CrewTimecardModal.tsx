@@ -187,8 +187,8 @@ export function CrewTimecardModal({
                     }}
                   />
                   <span className="min-w-0">
-                    <span className="block truncate font-medium text-gray-950">{member.name}</span>
-                    <span className="block text-xs text-gray-500">
+                    <span className="pf-row-title block truncate">{member.name}</span>
+                    <span className="pf-meta block">
                       {roleLabels[String(member.role || '')] || labelize(member.role)} {member.hourlyRate ? `- ${formatMoney(member.hourlyRate)}/hr` : ''}
                     </span>
                   </span>

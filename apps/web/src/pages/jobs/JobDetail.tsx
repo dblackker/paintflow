@@ -553,9 +553,9 @@ export function JobDetail() {
               <StatusBadge status={String(job.status || 'scheduled')} />
               {job.jobNumber && <span className="pf-status pf-status-neutral pf-status-sm">{job.jobNumber}</span>}
             </div>
-            <div className="space-y-1 text-sm text-gray-600">
+            <div className="pf-copy space-y-1">
               {job.leadName && (
-                <Link to={`/leads/${job.leadId}`} className="block truncate font-medium text-gray-900 hover:text-blue-700">
+                <Link to={`/leads/${job.leadId}`} className="pf-row-title block truncate hover:text-blue-700">
                   {job.leadName}
                 </Link>
               )}
