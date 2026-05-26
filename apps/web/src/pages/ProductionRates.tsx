@@ -1,47 +1,461 @@
-import { Card, CardContent } from '@/components/Card';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
-import { Table } from '@/components/Table';
+import { Card, CardContent, CardHeader } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
+import { Icon } from '@/components/Icon';
+import { Input, Select, Textarea } from '@/components/Input';
+import { apiJson, formatMoney, labelize } from '@/lib/api';
 
-export function ProductionRates() {
-  const rates = [
-    { task: 'Prep walls', rate: 30, unit: 'sq ft/hr' },
-    { task: 'Paint walls', rate: 150, unit: 'sq ft/hr' },
-    { task: 'Paint trim', rate: 50, unit: 'linear ft/hr' },
-    { task: 'Paint doors', rate: 2, unit: 'doors/hr' },
-    { task: 'Caulking', rate: 100, unit: 'linear ft/hr' },
-  ];
+interface ProductionRate {
+  id: string;
+  category?: string | null;
+  surfaceType?: string | null;
+  unit?: string | null;
+  ratePerHour?: number | string | null;
+  hourlyRate?: number | string | null;
+  prepMultiplier?: number | string | null;
+  coats?: number | string | null;
+  description?: string | null;
+}
+
+interface RateFormState {
+  id: string;
+  category: string;
+  surfaceType: string;
+  unit: string;
+  ratePerHour: string;
+  hourlyRate: string;
+  prepMultiplier: string;
+  coats: string;
+  description: string;
+}
+
+const emptyRateForm: RateFormState = {
+  id: '',
+  category: '',
+  surfaceType: '',
+  unit: 'sqft',
+  ratePerHour: '',
+  hourlyRate: '50',
+  prepMultiplier: '1',
+  coats: '2',
+  description: '',
+};
+
+const unitOptions = [
+  { value: 'sqft', label: 'sq ft' },
+  { value: 'linear_ft', label: 'linear ft' },
+  { value: 'each', label: 'each' },
+];
+
+const coatOptions = [
+  { value: '1', label: '1 coat' },
+  { value: '2', label: '2 coats' },
+  { value: '3', label: '3 coats' },
+];
+
+function numberValue(value: unknown) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function unitLabel(value?: string | null) {
+  return unitOptions.find((option) => option.value === value)?.label || labelize(value || 'unit');
+}
+
+function rateFromForm(form: RateFormState) {
+  return {
+    category: form.category.trim(),
+    surfaceType: form.surfaceType.trim(),
+    unit: form.unit,
+    ratePerHour: Number(form.ratePerHour),
+    hourlyRate: Number(form.hourlyRate),
+    prepMultiplier: Number(form.prepMultiplier || 1),
+    coats: Number(form.coats || 2),
+    description: form.description.trim() || null,
+  };
+}
+
+function formFromRate(rate?: ProductionRate | null): RateFormState {
+  if (!rate) return emptyRateForm;
+  return {
+    id: rate.id,
+    category: rate.category || '',
+    surfaceType: rate.surfaceType || '',
+    unit: rate.unit || 'sqft',
+    ratePerHour: rate.ratePerHour == null ? '' : String(rate.ratePerHour),
+    hourlyRate: rate.hourlyRate == null ? '50' : String(rate.hourlyRate),
+    prepMultiplier: rate.prepMultiplier == null ? '1' : String(rate.prepMultiplier),
+    coats: rate.coats == null ? '2' : String(rate.coats),
+    description: rate.description || '',
+  };
+}
+
+function RateSkeleton() {
+  return (
+    <div className="divide-y divide-gray-200">
+      {[0, 1, 2, 3].map((item) => (
+        <div key={item} className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="h-4 w-1/2 animate-pulse rounded bg-gray-200" />
+              <div className="h-3 w-3/4 animate-pulse rounded bg-gray-100" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-9 w-9 animate-pulse rounded-full bg-gray-100" />
+              <div className="h-9 w-9 animate-pulse rounded-full bg-gray-100" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RateRow({
+  rate,
+  onEdit,
+  onDelete,
+  isDeleting,
+}: {
+  rate: ProductionRate;
+  onEdit: (rate: ProductionRate) => void;
+  onDelete: (rate: ProductionRate) => void;
+  isDeleting: boolean;
+}) {
+  const ratePerHour = numberValue(rate.ratePerHour);
+  const hourlyRate = numberValue(rate.hourlyRate);
+  const laborUnitCost = ratePerHour > 0 ? hourlyRate / ratePerHour : 0;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Production Rates</h1>
-        <Button>Add Rate</Button>
+    <article className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="pf-row-title">
+            {labelize(rate.category || 'Rate')} · {labelize(rate.surfaceType || 'Substrate')}
+          </p>
+          <span className="pf-status pf-status-neutral pf-status-sm">{unitLabel(rate.unit)}</span>
+        </div>
+        <p className="pf-copy mt-1">
+          {ratePerHour.toLocaleString('en-US')} {unitLabel(rate.unit)}/hr at {formatMoney(hourlyRate, false)}/hr
+        </p>
+        {rate.description && <p className="pf-helper mt-1">{rate.description}</p>}
       </div>
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-4">Task</th>
-                <th className="text-left p-4">Rate</th>
-                <th className="text-left p-4">Unit</th>
-                <th className="text-left p-4"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rates.map(rate => (
-                <tr key={rate.task} className="border-b">
-                  <td className="p-4 font-medium">{rate.task}</td>
-                  <td className="p-4">{rate.rate}</td>
-                  <td className="p-4">{rate.unit}</td>
-                  <td className="p-4"><Button variant="ghost" size="sm">Edit</Button></td>
-                </tr>
+
+      <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_auto] items-center gap-2 sm:grid-cols-[6.5rem_6.5rem_6.5rem_auto]">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <p className="pf-meta">Coats</p>
+          <p className="pf-emphasis">{numberValue(rate.coats) || 2}</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <p className="pf-meta">Prep</p>
+          <p className="pf-emphasis">{numberValue(rate.prepMultiplier || 1).toFixed(2)}x</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <p className="pf-meta">Labor cost</p>
+          <p className="pf-emphasis">{formatMoney(laborUnitCost)}/{unitLabel(rate.unit)}</p>
+        </div>
+        <div className="flex justify-end gap-1">
+          <button type="button" className="btn-icon btn-icon-tonal" aria-label={`Edit ${labelize(rate.category || 'rate')}`} onClick={() => onEdit(rate)}>
+            <Icon name="edit" className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon btn-icon-outlined btn-icon-danger"
+            aria-label={`Delete ${labelize(rate.category || 'rate')}`}
+            disabled={isDeleting}
+            onClick={() => onDelete(rate)}
+          >
+            <Icon name="trash" className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export function ProductionRates() {
+  const [rates, setRates] = useState<ProductionRate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<RateFormState>(emptyRateForm);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
+
+  const groupedRates = useMemo(() => {
+    return [...rates].sort((a, b) => {
+      const aKey = `${a.category || ''} ${a.surfaceType || ''}`;
+      const bKey = `${b.category || ''} ${b.surfaceType || ''}`;
+      return aKey.localeCompare(bKey);
+    });
+  }, [rates]);
+
+  const averageHourlyRate = useMemo(() => {
+    if (!rates.length) return 0;
+    return rates.reduce((sum, rate) => sum + numberValue(rate.hourlyRate), 0) / rates.length;
+  }, [rates]);
+
+  useEffect(() => {
+    loadRates();
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('pf-modal-open', modalOpen);
+    return () => document.body.classList.remove('pf-modal-open');
+  }, [modalOpen]);
+
+  async function loadRates() {
+    setIsLoading(true);
+    setError('');
+    try {
+      const payload = await apiJson<{ data?: ProductionRate[] }>('/v1/production-rates');
+      setRates(payload.data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load production rates');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function openRateModal(rate?: ProductionRate) {
+    setForm(formFromRate(rate));
+    setModalOpen(true);
+  }
+
+  function closeRateModal() {
+    if (isSaving) return;
+    setModalOpen(false);
+  }
+
+  async function saveRate(event: FormEvent) {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      const id = form.id;
+      await apiJson(`/v1/production-rates${id ? `/${id}` : ''}`, {
+        method: id ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(id ? {} : { 'Idempotency-Key': crypto.randomUUID() }),
+        },
+        body: JSON.stringify(rateFromForm(form)),
+      });
+      window.showToast?.(id ? 'Production rate updated' : 'Production rate added', 'success');
+      setModalOpen(false);
+      await loadRates();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Could not save production rate', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteRate(rate: ProductionRate) {
+    const confirmed = window.confirm('Delete this rate? Existing estimates keep their saved pricing, but new estimates will no longer use this rate.');
+    if (!confirmed) return;
+    setDeletingId(rate.id);
+    try {
+      await apiJson(`/v1/production-rates/${rate.id}`, { method: 'DELETE' });
+      window.showToast?.('Production rate deleted', 'success');
+      await loadRates();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Could not delete production rate', 'error');
+    } finally {
+      setDeletingId('');
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-5xl space-y-5 px-1 pb-24 sm:px-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="pf-page-copy max-w-2xl">
+          Set your production rates for accurate estimates. Rates are how much your crew can complete per labor hour.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <Button as="a" href="/materials" variant="secondary" size="sm">Paint products</Button>
+          <Button type="button" size="sm" leftIcon={<Icon name="plus" className="h-4 w-4" />} onClick={() => openRateModal()}>
+            Add rate
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <Card padding="sm" className="shadow-none">
+          <p className="pf-meta">Rates</p>
+          <p className="pf-metric mt-1">{rates.length}</p>
+        </Card>
+        <Card padding="sm" className="shadow-none">
+          <p className="pf-meta">Substrates</p>
+          <p className="pf-metric mt-1">{new Set(rates.map((rate) => rate.surfaceType).filter(Boolean)).size}</p>
+        </Card>
+        <Card padding="sm" className="shadow-none">
+          <p className="pf-meta">Avg labor</p>
+          <p className="pf-metric mt-1">{formatMoney(averageHourlyRate, false)}</p>
+        </Card>
+      </div>
+
+      <Card padding="none" className="overflow-hidden">
+        <CardHeader
+          className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5"
+          title="Production Rate Library"
+          description="Use rates that match how your crews actually paint by substrate, prep, and unit."
+        />
+        <CardContent>
+          {isLoading && <RateSkeleton />}
+
+          {!isLoading && error && (
+            <div className="p-8 text-center">
+              <Icon name="warning" className="mx-auto h-6 w-6 text-red-600" />
+              <p className="pf-copy mt-2 text-red-700">{error}</p>
+              <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={loadRates}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!isLoading && !error && !rates.length && (
+            <EmptyState
+              icon={<Icon name="paint-bucket" className="h-5 w-5" />}
+              title="No production rates yet."
+              description="Add rates for walls, trim, doors, cabinets, exterior siding, and other common painting substrates."
+              action={{ label: 'Add production rate', onClick: () => openRateModal() }}
+            />
+          )}
+
+          {!isLoading && !error && rates.length > 0 && (
+            <div className="divide-y divide-gray-200">
+              {groupedRates.map((rate) => (
+                <RateRow
+                  key={rate.id}
+                  rate={rate}
+                  onEdit={openRateModal}
+                  onDelete={deleteRate}
+                  isDeleting={deletingId === rate.id}
+                />
               ))}
-            </tbody>
-          </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
-    </div>
+
+      {modalOpen && (
+        <div
+          className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rate-modal-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeRateModal();
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="rate-modal-title" className="pf-section-title">{form.id ? 'Edit Production Rate' : 'Add Production Rate'}</h2>
+                <p className="pf-copy mt-1">Rates power production estimates and job costing assumptions.</p>
+              </div>
+              <button type="button" className="btn-icon" aria-label="Close production rate form" onClick={closeRateModal}>
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={saveRate}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Input
+                  label="Category"
+                  required
+                  autoComplete="off"
+                  enterKeyHint="next"
+                  placeholder="walls, trim, exterior siding"
+                  value={form.category}
+                  onChange={(event) => setForm({ ...form, category: event.target.value })}
+                />
+                <Input
+                  label="Substrate"
+                  required
+                  autoComplete="off"
+                  enterKeyHint="next"
+                  placeholder="drywall, wood, stucco"
+                  value={form.surfaceType}
+                  onChange={(event) => setForm({ ...form, surfaceType: event.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Select
+                  label="Unit"
+                  required
+                  value={form.unit}
+                  onChange={(event) => setForm({ ...form, unit: event.target.value })}
+                  options={unitOptions}
+                />
+                <Input
+                  label="Production per hour"
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="400"
+                  value={form.ratePerHour}
+                  onChange={(event) => setForm({ ...form, ratePerHour: event.target.value })}
+                />
+                <Input
+                  label="Labor rate"
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="65"
+                  value={form.hourlyRate}
+                  onChange={(event) => setForm({ ...form, hourlyRate: event.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Input
+                  label="Prep multiplier"
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="1"
+                  value={form.prepMultiplier}
+                  onChange={(event) => setForm({ ...form, prepMultiplier: event.target.value })}
+                />
+                <Select
+                  label="Default coats"
+                  required
+                  value={form.coats}
+                  onChange={(event) => setForm({ ...form, coats: event.target.value })}
+                  options={coatOptions}
+                />
+              </div>
+              <Textarea
+                label="Description"
+                rows={2}
+                autoComplete="off"
+                enterKeyHint="done"
+                placeholder="Interior walls - roll"
+                value={form.description}
+                onChange={(event) => setForm({ ...form, description: event.target.value })}
+              />
+              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
+                <Button type="button" variant="secondary" fullWidth onClick={closeRateModal}>
+                  Cancel
+                </Button>
+                <Button type="submit" fullWidth isLoading={isSaving}>
+                  {form.id ? 'Save changes' : 'Save rate'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
