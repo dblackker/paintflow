@@ -507,11 +507,13 @@ export function JobDetail() {
             </div>
             <div className="space-y-1 text-sm text-gray-600">
               {job.leadName && (
-                <Link to={`/leads/${job.leadId}`} className="font-medium text-gray-900 hover:text-blue-700">
+                <Link to={`/leads/${job.leadId}`} className="block truncate font-medium text-gray-900 hover:text-blue-700">
                   {job.leadName}
                 </Link>
               )}
-              <AddressInline address={address} className="text-sm text-gray-700" />
+              <div className="min-w-0">
+                <AddressInline address={address} className="text-sm text-gray-700" />
+              </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {job.leadPhone && <a href={`tel:${job.leadPhone}`} className="hover:text-blue-700">{formatPhone(job.leadPhone)}</a>}
                 {job.leadEmail && <a href={`mailto:${job.leadEmail}`} className="hover:text-blue-700">{job.leadEmail}</a>}
