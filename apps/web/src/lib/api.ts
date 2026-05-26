@@ -1,6 +1,15 @@
-export const API_URL = import.meta.env.PUBLIC_API_URL
-  || import.meta.env.VITE_API_URL
-  || `${window.location.protocol}//${window.location.hostname}:8787`;
+function resolveApiUrl() {
+  const configuredUrl = import.meta.env.PUBLIC_API_URL || import.meta.env.VITE_API_URL;
+  if (configuredUrl) return configuredUrl.replace(/\/$/, '');
+
+  if (typeof window !== 'undefined' && window.location.hostname === 'paintflow-demo.pages.dev') {
+    return 'https://paintflow-api-demo.danielablack.workers.dev';
+  }
+
+  return `${window.location.protocol}//${window.location.hostname}:8787`;
+}
+
+export const API_URL = resolveApiUrl();
 
 export async function apiJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_URL}${path}`;

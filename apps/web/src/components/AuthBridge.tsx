@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
+import { API_URL } from '@/lib/api';
 
 export function AuthBridge() {
   useEffect(() => {
-    const configuredApiUrl = import.meta.env.PUBLIC_API_URL || import.meta.env.VITE_API_URL || '';
+    const configuredApiUrl = API_URL || import.meta.env.PUBLIC_API_URL || import.meta.env.VITE_API_URL || '';
     const allowSessionFallback = import.meta.env.DEV
       || ['localhost', '127.0.0.1'].includes(window.location.hostname)
       || window.location.hostname === 'paintflow-demo.pages.dev'
@@ -13,7 +14,10 @@ export function AuthBridge() {
     const storageKey = 'paintflow.sessionToken';
     const configuredApiOrigin = configuredApiUrl ? new URL(configuredApiUrl, window.location.origin).origin : '';
     const fallbackApiOrigin = `${window.location.protocol}//${window.location.hostname}:8787`;
-    const apiOrigins = new Set([configuredApiOrigin, fallbackApiOrigin].filter(Boolean));
+    const demoApiOrigin = window.location.hostname === 'paintflow-demo.pages.dev'
+      ? 'https://paintflow-api-demo.danielablack.workers.dev'
+      : '';
+    const apiOrigins = new Set([configuredApiOrigin, fallbackApiOrigin, demoApiOrigin].filter(Boolean));
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const search = new URLSearchParams(window.location.search);
     const sessionToken = hash.get('paintflow_session') || search.get('paintflow_session');
