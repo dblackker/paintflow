@@ -88,9 +88,23 @@ function getWeekStart(date: Date) {
   return next;
 }
 
+function getMonthStart(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  next.setDate(1);
+  return next;
+}
+
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
   return next;
 }
 
@@ -293,6 +307,7 @@ function googleWeatherHref(zipCode?: string) {
 
 export function Calendar() {
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [jobs, setJobs] = useState<Job[]>([]);
   const [googleEvents, setGoogleEvents] = useState<GoogleEvent[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
@@ -313,6 +328,15 @@ export function Calendar() {
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const weekEnd = weekDays[6];
+  const monthStart = useMemo(() => getMonthStart(weekStart), [weekStart]);
+  const monthGridStart = useMemo(() => getWeekStart(monthStart), [monthStart]);
+  const monthDays = useMemo(() => Array.from({ length: 42 }, (_, index) => addDays(monthGridStart, index)), [monthGridStart]);
+  const visibleDays = viewMode === 'month' ? monthDays : weekDays;
+  const visibleEnd = visibleDays[visibleDays.length - 1];
+  const statsDays = useMemo(
+    () => viewMode === 'month' ? monthDays.filter((day) => day.getMonth() === monthStart.getMonth()) : weekDays,
+    [monthDays, monthStart, viewMode, weekDays],
+  );
 
   const actualHoursByJob = useMemo(() => timeEntries.reduce((totals, entry) => {
     if (!entry.jobId) return totals;
@@ -326,19 +350,19 @@ export function Calendar() {
 
   const stats = useMemo(() => {
     const active = jobs.filter(activeJob);
-    const weekCount = active.filter((job) => jobHasSchedule(job) && weekDays.some((day) => jobIntersectsDay(job, day))).length;
+    const scheduledCount = active.filter((job) => jobHasSchedule(job) && statsDays.some((day) => jobIntersectsDay(job, day))).length;
     return {
-      week: weekCount,
+      scheduled: scheduledCount,
       needsDate: active.filter((job) => !jobHasSchedule(job)).length,
       inProgress: active.filter((job) => job.status === 'in_progress').length,
     };
-  }, [jobs, weekDays]);
+  }, [jobs, statsDays]);
 
   async function loadCalendar() {
     setIsLoading(true);
     setError('');
-    const timeMin = weekStart.toISOString();
-    const timeMax = addDays(weekStart, 7).toISOString();
+    const timeMin = visibleDays[0].toISOString();
+    const timeMax = addDays(visibleEnd, 1).toISOString();
     try {
       const [eventsPayload, jobsPayload, timePayload] = await Promise.all([
         apiJson<{ data?: { google?: GoogleEvent[] } }>(`/v1/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`).catch(() => ({ data: { google: [] } })),
@@ -383,7 +407,7 @@ export function Calendar() {
 
   useEffect(() => {
     loadCalendar();
-  }, [weekStart.getTime()]);
+  }, [weekStart.getTime(), viewMode]);
 
   async function patchJob(jobId: string, body: Partial<Job>, successMessage: string) {
     setSavingJobId(jobId);
@@ -509,40 +533,65 @@ export function Calendar() {
     await scheduleDroppedJob(finalDrag.jobId, finalTarget);
   }
 
-  function renderStats() {
+  function shiftCalendar(direction: -1 | 1) {
+    setWeekStart((current) => viewMode === 'month'
+      ? getWeekStart(addMonths(current, direction))
+      : addDays(current, direction * 7));
+  }
+
+  function resetCalendar() {
+    setWeekStart(getWeekStart(new Date()));
+  }
+
+  function calendarTitle() {
+    if (viewMode === 'month') {
+      return formatDate(monthStart, { month: 'long', year: 'numeric' });
+    }
+    return `${formatDate(weekStart)} - ${formatDate(weekEnd)}`;
+  }
+
+  function renderCompactStats() {
+    const scheduledLabel = viewMode === 'month' ? 'Scheduled this month' : 'Scheduled this week';
     return (
-      <section className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
-        <Stat label="This week" value={stats.week} />
+      <div className="flex flex-wrap gap-2">
+        <Stat label={scheduledLabel} value={stats.scheduled} />
         <Stat label="Needs date" value={stats.needsDate} />
         <Stat label="In progress" value={stats.inProgress} />
-      </section>
+      </div>
     );
   }
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <p className="pf-copy max-w-2xl">
-          Put accepted jobs on the production calendar, spot jobs missing dates, and keep Google Calendar as an optional external sync.
-        </p>
-        <Button variant="secondary" size="sm" onClick={connectGoogle} leftIcon={<Icon name="calendar" className="h-4 w-4" />}>
-          Connect Google
-        </Button>
+      <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div>
+          <p className="pf-copy max-w-2xl">
+            Put accepted jobs on the production calendar, spot jobs missing dates, and keep Google Calendar as an optional external sync.
+          </p>
+          <div className="mt-3">{renderCompactStats()}</div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[auto_auto] lg:justify-end">
+          <Button variant="secondary" size="sm" onClick={connectGoogle} leftIcon={<Icon name="calendar" className="h-4 w-4" />}>
+            Connect Google
+          </Button>
+          <div className="pf-segmented-group" aria-label="Calendar view">
+            <button type="button" aria-pressed={viewMode === 'week'} onClick={() => setViewMode('week')}>Week</button>
+            <button type="button" aria-pressed={viewMode === 'month'} onClick={() => setViewMode('month')}>Month</button>
+          </div>
+        </div>
       </div>
 
       <div className="sticky top-[4.4rem] z-20 mb-5 grid grid-cols-3 gap-2 rounded-lg border border-gray-200 bg-white/95 p-2 shadow-sm backdrop-blur sm:ml-auto sm:w-fit sm:min-w-80 sm:rounded-full">
-        <Button variant="secondary" size="sm" onClick={() => setWeekStart((current) => addDays(current, -7))} leftIcon={<Icon name="chevron-left" className="h-4 w-4" />}>
+        <Button variant="secondary" size="sm" onClick={() => shiftCalendar(-1)} leftIcon={<Icon name="chevron-left" className="h-4 w-4" />}>
           Prev
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => setWeekStart(getWeekStart(new Date()))}>
+        <Button variant="secondary" size="sm" onClick={resetCalendar}>
           Today
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => setWeekStart((current) => addDays(current, 7))} rightIcon={<Icon name="chevron-right" className="h-4 w-4" />}>
+        <Button variant="secondary" size="sm" onClick={() => shiftCalendar(1)} rightIcon={<Icon name="chevron-right" className="h-4 w-4" />}>
           Next
         </Button>
       </div>
-
-      {renderStats()}
 
       {renderWeatherPanel()}
 
@@ -556,8 +605,12 @@ export function Calendar() {
         <Card className="lg:col-span-8" padding="none">
           <div className="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="pf-section-title">{formatDate(weekStart)} - {formatDate(weekEnd)}</h2>
-              <p className="pf-helper">Jobs render on every scheduled work day they span.</p>
+              <h2 className="pf-section-title">{calendarTitle()}</h2>
+              <p className="pf-helper">
+                {viewMode === 'month'
+                  ? 'Month view gives owners a wider production picture. Switch to week for fuller job detail.'
+                  : 'Jobs render on every scheduled work day they span.'}
+              </p>
             </div>
             <Button as="a" href="/jobs" variant="ghost" size="sm">Open jobs</Button>
           </div>
@@ -568,9 +621,7 @@ export function Calendar() {
                 <p className="pf-copy mt-4">Loading calendar...</p>
               </div>
             ) : (
-              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(11.5rem,1fr))] max-sm:grid-cols-1">
-                {weekDays.map((day) => renderDay(day))}
-              </div>
+              viewMode === 'month' ? renderMonthGrid() : renderWeekGrid()
             )}
           </CardContent>
         </Card>
@@ -594,9 +645,33 @@ export function Calendar() {
     </main>
   );
 
-  function renderDay(day: Date) {
+  function renderWeekGrid() {
+    return (
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(11.5rem,1fr))] max-sm:grid-cols-1">
+        {weekDays.map((day) => renderDay(day))}
+      </div>
+    );
+  }
+
+  function renderMonthGrid() {
+    return (
+      <div>
+        <div className="mb-2 hidden grid-cols-7 gap-2 px-1 text-center sm:grid">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
+            <p key={label} className="pf-meta">{label}</p>
+          ))}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-7">
+          {monthDays.map((day) => renderDay(day, true))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderDay(day: Date, compact = false) {
     const key = dateKey(day);
     const today = key === dateKey(new Date());
+    const inCurrentMonth = day.getMonth() === monthStart.getMonth();
     const dayEvents = googleEvents.filter((event) => {
       const start = event.start?.dateTime || event.start?.date;
       return start && dateKey(start) === key;
@@ -608,6 +683,64 @@ export function Calendar() {
     const dayWeather = weatherForDay(weatherForecast, day);
     const weather = weatherMeta(dayWeather?.weatherCode);
     const concerns = weatherConcerns(dayWeather);
+    if (compact) {
+      return (
+        <section
+          key={key}
+          data-calendar-day={key}
+          className={`flex min-h-36 flex-col rounded-lg border bg-white p-2 transition-colors sm:min-h-44 ${inCurrentMonth ? '' : 'opacity-55'} ${today ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200'} ${dropTargetDay === key ? 'border-blue-500 bg-blue-50 shadow-inner' : ''}`}
+          onDragOver={(event) => {
+            if (!Array.from(event.dataTransfer.types || []).includes('text/plain')) return;
+            event.preventDefault();
+            setDropTargetDay(key);
+          }}
+          onDragLeave={() => setDropTargetDay(null)}
+          onDrop={(event) => {
+            event.preventDefault();
+            const jobId = event.dataTransfer.getData('application/x-paintflow-job-id') || event.dataTransfer.getData('text/plain');
+            setDropTargetDay(null);
+            if (jobId) scheduleDroppedJob(jobId, key);
+          }}
+        >
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="pf-emphasis text-sm sm:hidden">{formatDate(day, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+              <p className="hidden text-sm font-semibold text-gray-950 sm:block">{day.getDate()}</p>
+              {dayWeather && (
+                <a
+                  href={googleWeatherHref(weatherZip)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 rounded-full bg-gray-50 px-1.5 py-0.5 text-[0.68rem] font-medium text-gray-700 hover:text-blue-700"
+                  title={weather.label}
+                >
+                  <span aria-hidden="true">{weather.icon}</span>
+                  <span>{Math.round(numberValue(dayWeather.high))}°</span>
+                  <span>{numberValue(dayWeather.precipProbability)}%</span>
+                </a>
+              )}
+            </div>
+            <div className="flex shrink-0 gap-1">
+              {today && <Badge variant="info" size="sm">Today</Badge>}
+              {concerns.length > 0 && <Badge variant="warning" size="sm">{concerns[0]}</Badge>}
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            {dayJobs.slice(0, 3).map((job) => renderMonthJobChip(job, day))}
+            {dayJobs.length > 3 && <p className="pf-meta">+{dayJobs.length - 3} more</p>}
+            {dayEvents.length > 0 && <p className="rounded bg-gray-100 px-2 py-1 text-[0.68rem] font-medium text-gray-600">{dayEvents.length} Google event{dayEvents.length === 1 ? '' : 's'}</p>}
+            {!dayJobs.length && !dayEvents.length && <p className="pf-helper text-center sm:mt-2">Open</p>}
+          </div>
+          {quickSchedule?.dayKey === key && renderQuickSchedule(key)}
+          <div className="mt-auto flex justify-end pt-2">
+            <button type="button" className="px-1 text-[0.7rem] font-semibold text-blue-700 hover:underline" onClick={() => openQuickSchedule(key)}>
+              + Add
+            </button>
+          </div>
+        </section>
+      );
+    }
+
     return (
       <section
         key={key}
@@ -666,6 +799,31 @@ export function Calendar() {
           </button>
         </div>
       </section>
+    );
+  }
+
+  function renderMonthJobChip(job: Job, day: Date) {
+    const dayInfo = jobWorkDayInfo(job, day);
+    const siteForecast = jobForecasts.find((forecast) => forecast.zipCode === jobZip(job));
+    const siteConcerns = weatherConcerns(weatherForDay(siteForecast, day));
+    return (
+      <Link
+        key={job.id}
+        to={`/jobs/${job.id}`}
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.setData('text/plain', job.id);
+          event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
+          event.dataTransfer.effectAllowed = 'move';
+        }}
+        className={`min-w-0 rounded-md px-2 py-1 text-[0.72rem] font-semibold leading-snug text-blue-950 hover:bg-blue-100 ${siteConcerns.length ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-blue-50'}`}
+        title={siteConcerns.length ? `${job.name || 'Job'} - ${siteConcerns.join(', ')}` : job.name || 'Job'}
+      >
+        <span className="block truncate">{job.name || 'Job'}</span>
+        {dayInfo.totalDays > 1 && dayInfo.dayNumber && (
+          <span className="mt-0.5 block text-[0.65rem] font-medium text-blue-700">Day {dayInfo.dayNumber}/{dayInfo.totalDays}</span>
+        )}
+      </Link>
     );
   }
 
@@ -915,9 +1073,9 @@ export function Calendar() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-gray-50 p-3">
-      <p className="pf-label-small uppercase tracking-wide text-gray-500">{label}</p>
-      <p className="pf-value mt-1 text-gray-950">{value}</p>
+    <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
+      <span className="text-sm font-semibold text-gray-950">{value}</span>
+      <span className="pf-meta whitespace-nowrap">{label}</span>
     </div>
   );
 }
