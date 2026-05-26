@@ -423,24 +423,10 @@ function ProductRow({ product, selected, onSelect }: { product: CatalogProduct; 
           <p className="pf-meta mt-1">{[product.sku ? `SKU ${product.sku}` : '', product.size, coverageLabel(product)].filter(Boolean).join(' - ')}</p>
         </div>
       </button>
-      <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
-        <button type="button" className="flex flex-wrap gap-1 text-left sm:justify-end" onClick={onSelect}>
-          {price != null && <Badge variant="info" size="sm">{formatMoney(price)}</Badge>}
-          {sheens.slice(0, 3).map((sheen) => <Badge key={sheen} size="sm">{labelize(sheen)}</Badge>)}
-        </button>
-        {product.url && (
-          <a
-            href={product.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            aria-label={`Open ${productName(product)} on ${product.supplierName || 'supplier site'}`}
-            title="Open supplier product page"
-          >
-            <Icon name="external-link" className="h-4 w-4" />
-          </a>
-        )}
-      </div>
+      <button type="button" className="flex shrink-0 flex-wrap items-center gap-1 text-left sm:justify-end" onClick={onSelect}>
+        {price != null && <Badge variant="info" size="sm">{formatMoney(price)}</Badge>}
+        {sheens.slice(0, 3).map((sheen) => <Badge key={sheen} size="sm">{labelize(sheen)}</Badge>)}
+      </button>
     </div>
   );
 }
@@ -469,23 +455,7 @@ function ProductDetail({ product, colors, loading }: { product: CatalogProduct |
   return (
     <div className="space-y-4">
       <div>
-        <div className="flex items-start justify-between gap-3">
-          <p className="pf-label-small">{product.supplierName || product.supplierId}</p>
-          {product.url && (
-            <Button
-              as="a"
-              href={product.url}
-              target="_blank"
-              rel="noreferrer"
-              variant="ghost"
-              size="sm"
-              className="-mt-1"
-              rightIcon={<Icon name="external-link" className="h-4 w-4" />}
-            >
-              Supplier page
-            </Button>
-          )}
-        </div>
+        <p className="pf-label-small">{product.supplierName || product.supplierId}</p>
         <h2 className="pf-section-title mt-1">{productName(product)}</h2>
         <p className="pf-copy mt-1">{product.description || 'No product description captured yet.'}</p>
       </div>
