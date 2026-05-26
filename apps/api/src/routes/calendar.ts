@@ -12,10 +12,15 @@ const calendar = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 calendar.use('*', authMiddleware);
 
-const zipSchema = z.string().trim().regex(/^\d{5}$/);
+const zipSchema = z.preprocess(
+  (value) => firstZip(typeof value === 'string' ? value : ''),
+  z.string().regex(/^\d{5}$/)
+);
 const weatherSettingsSchema = z.object({
   zipCode: zipSchema,
 }).strict();
+
+const weatherCacheSeconds = 30 * 60;
 
 function firstZip(value?: string | null) {
   return String(value || '').match(/\b\d{5}(?:-\d{4})?\b/)?.[0]?.slice(0, 5) || '';
@@ -103,6 +108,26 @@ async function fetchForecastForZip(zipCode: string) {
       windGust: payload.daily?.wind_gusts_10m_max?.[index] ?? null,
     })),
   };
+}
+
+async function cachedForecastForZip(env: Env, zipCode: string) {
+  const key = `weather:forecast:v1:${zipCode}`;
+  try {
+    const cached = await env.KV.get(key, 'json') as Awaited<ReturnType<typeof fetchForecastForZip>> | null;
+    if (cached?.zipCode === zipCode && Array.isArray(cached.days)) return cached;
+  } catch {
+    // Weather should remain best-effort if KV is unavailable locally.
+  }
+
+  const forecast = await fetchForecastForZip(zipCode);
+  if (forecast) {
+    try {
+      await env.KV.put(key, JSON.stringify(forecast), { expirationTtl: weatherCacheSeconds });
+    } catch {
+      // Ignore cache writes; the live forecast is still usable.
+    }
+  }
+  return forecast;
 }
 
 // GET /v1/calendar/connect
@@ -268,7 +293,7 @@ calendar.get('/weather', async (c) => {
   }
 
   const uniqueZips = Array.from(new Set([primaryZip, ...jobZips])).slice(0, 8);
-  const forecasts = await Promise.all(uniqueZips.map(async (zipCode) => fetchForecastForZip(zipCode).catch(() => null)));
+  const forecasts = await Promise.all(uniqueZips.map(async (zipCode) => cachedForecastForZip(c.env, zipCode).catch(() => null)));
   const forecastByZip = new Map(forecasts.filter(Boolean).map((forecast) => [forecast!.zipCode, forecast!]));
 
   return c.json({

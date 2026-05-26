@@ -911,15 +911,16 @@ export function Calendar() {
           <div>
             <h2 className="pf-section-title">10-day weather</h2>
             <p className="pf-copy mt-1">
-              Forecast defaults to the business ZIP{businessWeatherZip ? ` (${businessWeatherZip})` : ''}. Job-site ZIPs are checked for scheduled weather risks.
+              Weather ZIP{businessWeatherZip ? ` defaults to ${businessWeatherZip}` : ''}. Job-site risks are flagged on the calendar.
             </p>
           </div>
-          <form className="flex gap-2 sm:w-72" onSubmit={saveWeatherZip}>
+          <form className="flex gap-2 sm:w-72" noValidate onSubmit={saveWeatherZip}>
             <input
               className="input"
+              type="text"
+              autoComplete="postal-code"
               inputMode="numeric"
               maxLength={5}
-              pattern="\\d{5}"
               aria-label="Calendar weather ZIP"
               placeholder="ZIP"
               value={weatherZipInput}
