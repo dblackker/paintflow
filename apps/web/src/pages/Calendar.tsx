@@ -402,14 +402,16 @@ export function Calendar() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
-      <p className="pf-copy mb-4 max-w-2xl">
-        Put accepted jobs on the production calendar, spot jobs missing dates, and keep Google Calendar as an optional external sync.
-      </p>
-
-      <div className="sticky top-[4.4rem] z-20 mb-5 grid gap-2 rounded-lg border border-gray-200 bg-white/95 p-2 shadow-sm backdrop-blur sm:ml-auto sm:flex sm:w-fit sm:flex-wrap sm:rounded-full">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <p className="pf-copy max-w-2xl">
+          Put accepted jobs on the production calendar, spot jobs missing dates, and keep Google Calendar as an optional external sync.
+        </p>
         <Button variant="secondary" size="sm" onClick={connectGoogle} leftIcon={<Icon name="calendar" className="h-4 w-4" />}>
           Connect Google
         </Button>
+      </div>
+
+      <div className="sticky top-[4.4rem] z-20 mb-5 grid grid-cols-3 gap-2 rounded-lg border border-gray-200 bg-white/95 p-2 shadow-sm backdrop-blur sm:ml-auto sm:w-fit sm:min-w-80 sm:rounded-full">
         <Button variant="secondary" size="sm" onClick={() => setWeekStart((current) => addDays(current, -7))} leftIcon={<Icon name="chevron-left" className="h-4 w-4" />}>
           Prev
         </Button>
