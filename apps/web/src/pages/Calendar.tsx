@@ -313,6 +313,7 @@ export function Calendar() {
   const [googleEvents, setGoogleEvents] = useState<GoogleEvent[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedCalendar, setHasLoadedCalendar] = useState(false);
   const [error, setError] = useState('');
   const [quickSchedule, setQuickSchedule] = useState<QuickScheduleState | null>(null);
   const [backlogDrafts, setBacklogDrafts] = useState<Record<string, { startDate: string; endDate: string }>>({});
@@ -378,6 +379,7 @@ export function Calendar() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar');
     } finally {
+      setHasLoadedCalendar(true);
       setIsLoading(false);
     }
   }
@@ -568,6 +570,9 @@ export function Calendar() {
     );
   }
 
+  const isInitialCalendarLoading = isLoading && !hasLoadedCalendar;
+  const isRefreshingCalendar = isLoading && hasLoadedCalendar;
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
@@ -645,22 +650,34 @@ export function Calendar() {
             </div>
             <Button as="a" href="/jobs" variant="ghost" size="sm">Open jobs</Button>
           </div>
-          <CardContent className="p-3 sm:p-4">
-            {isLoading ? (
+          <CardContent className="relative p-3 sm:p-4">
+            {isInitialCalendarLoading ? (
               <div className="py-12 text-center">
                 <div className="mx-auto h-10 w-10 animate-spin rounded-full border-b-2 border-blue-600" />
                 <p className="pf-copy mt-4">Loading calendar...</p>
               </div>
             ) : (
-              viewMode === 'month' ? renderMonthGrid() : renderWeekGrid()
+              <>
+                <div className={isRefreshingCalendar ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
+                  {viewMode === 'month' ? renderMonthGrid() : renderWeekGrid()}
+                </div>
+                {isRefreshingCalendar && (
+                  <div className="absolute inset-0 z-10 flex items-start justify-center rounded-b-lg bg-white/55 pt-6 backdrop-blur-[1px]" aria-live="polite" aria-label="Refreshing calendar">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                      Updating calendar
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
 
         <Card className="lg:col-span-4" padding="none">
           <CardHeader className="border-b border-gray-200 px-4 py-3" title="Needs scheduling" description="Active jobs without production dates." />
-          <CardContent className="grid gap-3 p-3 sm:p-4">
-            {isLoading ? (
+          <CardContent className="relative grid gap-3 p-3 sm:p-4">
+            {isInitialCalendarLoading ? (
               <p className="pf-copy py-8 text-center">Loading jobs...</p>
             ) : unscheduledJobs.length ? (
               unscheduledJobs.map((job) => renderBacklogJob(job))
@@ -669,6 +686,9 @@ export function Calendar() {
                 <p className="pf-emphasis">Everything active has a date.</p>
                 <p className="pf-copy mt-1">New accepted jobs without dates will appear here.</p>
               </div>
+            )}
+            {isRefreshingCalendar && (
+              <div className="absolute inset-0 rounded-b-lg bg-white/45 backdrop-blur-[1px]" aria-hidden="true" />
             )}
           </CardContent>
         </Card>
