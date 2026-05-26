@@ -893,19 +893,19 @@ export function JobDetail() {
         onSubmit={saveBulkTimecard}
       />
 
-      <Modal isOpen={changeOrderOpen} onClose={() => setChangeOrderOpen(false)} title="Add Change Order">
-        <form onSubmit={saveChangeOrder} className="space-y-4">
-          <p className="text-sm text-gray-600">Track approved or pending scope changes separately from the original contract.</p>
-          <label>
+      <Modal isOpen={changeOrderOpen} onClose={() => setChangeOrderOpen(false)} title="Add Change Order" size="lg">
+        <form onSubmit={saveChangeOrder} className="space-y-5">
+          <p className="pf-copy">Track approved or pending scope changes separately from the original contract.</p>
+          <label className="block space-y-1.5">
             <span className="form-label">Description</span>
             <textarea name="description" required rows={3} autoComplete="off" className="input resize-none" placeholder="Add garage door trim, extra prep, color change" />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label>
+            <label className="block space-y-1.5">
               <span className="form-label">Amount</span>
               <input name="amount" type="number" min="0.01" step="0.01" inputMode="decimal" autoComplete="off" required className="input" placeholder="0.00" />
             </label>
-            <label>
+            <label className="block space-y-1.5">
               <span className="form-label">Status</span>
               <select name="status" className="input" defaultValue="pending">
                 <option value="pending">Pending</option>
@@ -914,14 +914,14 @@ export function JobDetail() {
               </select>
             </label>
           </div>
-          <label>
+          <label className="block space-y-1.5">
             <span className="form-label">Requested by</span>
             <select name="createdBy" className="input" defaultValue="contractor">
               <option value="contractor">Contractor</option>
               <option value="customer">Customer</option>
             </select>
           </label>
-          <div className="rounded-lg border p-3">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
             <label className="flex items-start gap-3">
               <input name="paymentRequired" type="checkbox" value="true" className="mt-1" />
               <span>
@@ -929,7 +929,7 @@ export function JobDetail() {
                 <span className="block text-xs text-gray-600">Use this for added work that should be paid before or during production.</span>
               </span>
             </label>
-            <label className="mt-3 block">
+            <label className="mt-4 block space-y-1.5">
               <span className="form-label">Amount due at approval</span>
               <select name="depositPercent" className="input" defaultValue="100">
                 <option value="100">100% of change order</option>
@@ -938,7 +938,7 @@ export function JobDetail() {
               </select>
             </label>
           </div>
-          <ModalFooter className="-mx-6 -mb-4 mt-4">
+          <ModalFooter className="-mx-6 -mb-4 mt-6">
             <button type="button" className="btn-secondary" onClick={() => setChangeOrderOpen(false)}>Cancel</button>
             <button className="btn-primary" disabled={savingChangeOrder}>{savingChangeOrder ? 'Adding...' : 'Add'}</button>
           </ModalFooter>
