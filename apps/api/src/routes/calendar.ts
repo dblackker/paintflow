@@ -1,14 +1,109 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { jobs, googleCalendarConnections } from '@paintflow/db/schema';
+import { jobs, googleCalendarConnections, orgSettings } from '@paintflow/db/schema';
 import { eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createOAuthState, consumeOAuthState } from '../auth';
+import { readPreferenceObject } from '../lib/legal-settings';
 
 const calendar = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 calendar.use('*', authMiddleware);
+
+const zipSchema = z.string().trim().regex(/^\d{5}$/);
+const weatherSettingsSchema = z.object({
+  zipCode: zipSchema,
+}).strict();
+
+function firstZip(value?: string | null) {
+  return String(value || '').match(/\b\d{5}(?:-\d{4})?\b/)?.[0]?.slice(0, 5) || '';
+}
+
+function weatherPreferences(preferences: Record<string, unknown>, userId?: string) {
+  const raw = preferences.calendarWeather && typeof preferences.calendarWeather === 'object' && !Array.isArray(preferences.calendarWeather)
+    ? preferences.calendarWeather as Record<string, unknown>
+    : {};
+  const byUser = raw.byUser && typeof raw.byUser === 'object' && !Array.isArray(raw.byUser)
+    ? raw.byUser as Record<string, unknown>
+    : {};
+  const userZip = userId && typeof byUser[userId] === 'string' ? firstZip(byUser[userId] as string) : '';
+  return {
+    byUser,
+    userZip,
+    defaultZip: typeof raw.defaultZip === 'string' ? firstZip(raw.defaultZip) : '',
+  };
+}
+
+async function geocodeZip(zipCode: string) {
+  const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${new URLSearchParams({
+    name: zipCode,
+    count: '1',
+    language: 'en',
+    format: 'json',
+    countryCode: 'US',
+  })}`);
+  if (!response.ok) return null;
+  const payload = await response.json() as {
+    results?: Array<{ latitude?: number; longitude?: number; name?: string; admin1?: string; country_code?: string }>;
+  };
+  const result = payload.results?.find((item) => item.country_code === 'US') || payload.results?.[0];
+  if (!result?.latitude || !result?.longitude) return null;
+  return {
+    latitude: result.latitude,
+    longitude: result.longitude,
+    label: [result.name, result.admin1].filter(Boolean).join(', '),
+  };
+}
+
+async function fetchForecastForZip(zipCode: string) {
+  const location = await geocodeZip(zipCode);
+  if (!location) return null;
+  const params = new URLSearchParams({
+    latitude: String(location.latitude),
+    longitude: String(location.longitude),
+    forecast_days: '10',
+    temperature_unit: 'fahrenheit',
+    wind_speed_unit: 'mph',
+    timezone: 'auto',
+    daily: [
+      'weather_code',
+      'temperature_2m_max',
+      'temperature_2m_min',
+      'precipitation_probability_max',
+      'precipitation_sum',
+      'wind_gusts_10m_max',
+    ].join(','),
+  });
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+  if (!response.ok) return null;
+  const payload = await response.json() as {
+    daily?: {
+      time?: string[];
+      weather_code?: number[];
+      temperature_2m_max?: number[];
+      temperature_2m_min?: number[];
+      precipitation_probability_max?: number[];
+      precipitation_sum?: number[];
+      wind_gusts_10m_max?: number[];
+    };
+  };
+  const times = payload.daily?.time || [];
+  return {
+    zipCode,
+    label: location.label,
+    days: times.map((date, index) => ({
+      date,
+      weatherCode: payload.daily?.weather_code?.[index] ?? null,
+      high: payload.daily?.temperature_2m_max?.[index] ?? null,
+      low: payload.daily?.temperature_2m_min?.[index] ?? null,
+      precipProbability: payload.daily?.precipitation_probability_max?.[index] ?? null,
+      precipAmount: payload.daily?.precipitation_sum?.[index] ?? null,
+      windGust: payload.daily?.wind_gusts_10m_max?.[index] ?? null,
+    })),
+  };
+}
 
 // GET /v1/calendar/connect
 calendar.get('/connect', async (c) => {
@@ -94,6 +189,96 @@ calendar.get('/status', async (c) => {
   });
   
   return c.json({ connected: !!connection });
+});
+
+calendar.get('/weather-settings', async (c) => {
+  const orgId = c.get('orgId');
+  const userId = c.get('userId');
+  const db = createDb(c.env.DATABASE_URL);
+  let settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  if (!settings) {
+    [settings] = await db.insert(orgSettings).values({ orgId }).returning();
+  }
+  const preferences = readPreferenceObject(settings.businessHours);
+  const weather = weatherPreferences(preferences, userId);
+  const businessZip = firstZip(settings.address);
+  return c.json({
+    data: {
+      zipCode: weather.userZip || weather.defaultZip || businessZip,
+      businessZip,
+    },
+  });
+});
+
+calendar.put('/weather-settings', async (c) => {
+  const orgId = c.get('orgId');
+  const userId = c.get('userId');
+  const parsed = weatherSettingsSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  const preferences = readPreferenceObject(existing?.businessHours);
+  const current = weatherPreferences(preferences, userId);
+  const byUser = userId ? { ...current.byUser, [userId]: parsed.data.zipCode } : current.byUser;
+  const businessHours = {
+    ...preferences,
+    calendarWeather: {
+      defaultZip: current.defaultZip || firstZip(existing?.address),
+      byUser,
+    },
+  };
+
+  await db.insert(orgSettings)
+    .values({ orgId, businessHours })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { businessHours, updatedAt: new Date() },
+    });
+
+  return c.json({ data: { zipCode: parsed.data.zipCode, businessZip: firstZip(existing?.address) } });
+});
+
+calendar.get('/weather', async (c) => {
+  const orgId = c.get('orgId');
+  const userId = c.get('userId');
+  const requestedZip = firstZip(c.req.query('zip'));
+  const jobZips = Array.from(new Set(String(c.req.query('jobZips') || '')
+    .split(',')
+    .map((zip) => firstZip(zip))
+    .filter(Boolean)))
+    .slice(0, 8);
+
+  const db = createDb(c.env.DATABASE_URL);
+  const settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, orgId),
+  });
+  const preferences = readPreferenceObject(settings?.businessHours);
+  const weather = weatherPreferences(preferences, userId);
+  const businessZip = firstZip(settings?.address);
+  const primaryZip = requestedZip || weather.userZip || weather.defaultZip || businessZip || jobZips[0] || '';
+
+  if (!primaryZip) {
+    return c.json({ data: { zipCode: '', businessZip, forecast: null, jobForecasts: [] } });
+  }
+
+  const uniqueZips = Array.from(new Set([primaryZip, ...jobZips])).slice(0, 8);
+  const forecasts = await Promise.all(uniqueZips.map(async (zipCode) => fetchForecastForZip(zipCode).catch(() => null)));
+  const forecastByZip = new Map(forecasts.filter(Boolean).map((forecast) => [forecast!.zipCode, forecast!]));
+
+  return c.json({
+    data: {
+      zipCode: primaryZip,
+      businessZip,
+      forecast: forecastByZip.get(primaryZip) || null,
+      jobForecasts: jobZips.map((zipCode) => forecastByZip.get(zipCode)).filter(Boolean),
+    },
+  });
 });
 
 // GET /v1/calendar/events

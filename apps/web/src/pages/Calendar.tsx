@@ -41,6 +41,31 @@ interface TimeEntry {
   hours?: string | number | null;
 }
 
+interface WeatherDay {
+  date: string;
+  weatherCode: number | null;
+  high: number | null;
+  low: number | null;
+  precipProbability: number | null;
+  precipAmount: number | null;
+  windGust: number | null;
+}
+
+interface WeatherForecast {
+  zipCode: string;
+  label?: string;
+  days: WeatherDay[];
+}
+
+interface CalendarWeatherResponse {
+  data?: {
+    zipCode?: string;
+    businessZip?: string;
+    forecast?: WeatherForecast | null;
+    jobForecasts?: WeatherForecast[];
+  };
+}
+
 interface QuickScheduleState {
   dayKey: string;
   jobId: string;
@@ -211,6 +236,10 @@ function jobAddress(job: Job) {
   }).replace(/\s+\d{5}$/, '');
 }
 
+function jobZip(job: Job) {
+  return String(job.leadPostalCode || '').match(/\d{5}/)?.[0] || '';
+}
+
 function jobOptionLabel(job: Job) {
   const address = jobAddress(job);
   return address ? `${job.name || 'Job'} - ${address}` : job.name || 'Job';
@@ -231,6 +260,37 @@ function jobWorkDayInfo(job: Job, day: Date) {
   };
 }
 
+function weatherMeta(code?: number | null) {
+  if (code === 0) return { icon: '☀️', label: 'Sunny' };
+  if ([1, 2].includes(Number(code))) return { icon: '🌤️', label: 'Partly cloudy' };
+  if (code === 3) return { icon: '☁️', label: 'Cloudy' };
+  if ([45, 48].includes(Number(code))) return { icon: '🌫️', label: 'Fog' };
+  if ([51, 53, 55, 56, 57].includes(Number(code))) return { icon: '🌦️', label: 'Drizzle' };
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(Number(code))) return { icon: '🌧️', label: 'Rain' };
+  if ([71, 73, 75, 77, 85, 86].includes(Number(code))) return { icon: '❄️', label: 'Snow' };
+  if ([95, 96, 99].includes(Number(code))) return { icon: '⛈️', label: 'Storms' };
+  return { icon: '🌡️', label: 'Forecast' };
+}
+
+function weatherForDay(forecast: WeatherForecast | null | undefined, day: Date | string) {
+  const key = typeof day === 'string' ? day : dateKey(day);
+  return forecast?.days.find((entry) => entry.date === key) || null;
+}
+
+function weatherConcerns(day?: WeatherDay | null) {
+  if (!day) return [];
+  const concerns: string[] = [];
+  if (numberValue(day.precipProbability) >= 45 || numberValue(day.precipAmount) >= 0.05) concerns.push('Rain risk');
+  if (numberValue(day.windGust) >= 25) concerns.push('Wind');
+  if (numberValue(day.low) > 0 && numberValue(day.low) < 50) concerns.push('Cold start');
+  if (numberValue(day.high) >= 90) concerns.push('Heat');
+  return concerns;
+}
+
+function googleWeatherHref(zipCode?: string) {
+  return `https://www.google.com/search?${new URLSearchParams({ q: `weather ${zipCode || ''}` })}`;
+}
+
 export function Calendar() {
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -243,6 +303,13 @@ export function Calendar() {
   const [dropTargetDay, setDropTargetDay] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [savingJobId, setSavingJobId] = useState<string | null>(null);
+  const [weatherZip, setWeatherZip] = useState('');
+  const [weatherZipInput, setWeatherZipInput] = useState('');
+  const [businessWeatherZip, setBusinessWeatherZip] = useState('');
+  const [weatherForecast, setWeatherForecast] = useState<WeatherForecast | null>(null);
+  const [jobForecasts, setJobForecasts] = useState<WeatherForecast[]>([]);
+  const [isWeatherLoading, setIsWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState('');
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const weekEnd = weekDays[6];
@@ -279,12 +346,38 @@ export function Calendar() {
         apiJson<{ data: TimeEntry[] }>('/v1/team/time').catch(() => ({ data: [] })),
       ]);
       setGoogleEvents(eventsPayload.data?.google || []);
-      setJobs(jobsPayload.data || []);
+      const loadedJobs = jobsPayload.data || [];
+      setJobs(loadedJobs);
       setTimeEntries(timePayload.data || []);
+      await loadWeather(loadedJobs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar');
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadWeather(sourceJobs = jobs, overrideZip?: string) {
+    const zips = Array.from(new Set(sourceJobs.map(jobZip).filter(Boolean))).slice(0, 8);
+    const params = new URLSearchParams();
+    if (overrideZip) params.set('zip', overrideZip);
+    if (zips.length) params.set('jobZips', zips.join(','));
+    setIsWeatherLoading(true);
+    setWeatherError('');
+    try {
+      const payload = await apiJson<CalendarWeatherResponse>(`/v1/calendar/weather${params.toString() ? `?${params}` : ''}`);
+      const data = payload.data || {};
+      setWeatherZip(data.zipCode || overrideZip || '');
+      setWeatherZipInput(data.zipCode || overrideZip || '');
+      setBusinessWeatherZip(data.businessZip || '');
+      setWeatherForecast(data.forecast || null);
+      setJobForecasts(data.jobForecasts || []);
+    } catch (err) {
+      setWeatherForecast(null);
+      setJobForecasts([]);
+      setWeatherError(err instanceof Error ? err.message : 'Failed to load weather');
+    } finally {
+      setIsWeatherLoading(false);
     }
   }
 
@@ -340,6 +433,32 @@ export function Calendar() {
 
   function connectGoogle() {
     window.location.href = `${API_URL}/v1/calendar/connect`;
+  }
+
+  async function saveWeatherZip(event: FormEvent) {
+    event.preventDefault();
+    const zipCode = weatherZipInput.trim().match(/\d{5}/)?.[0] || '';
+    if (!zipCode) {
+      window.showToast?.('Enter a 5-digit ZIP code', 'error');
+      return;
+    }
+    setIsWeatherLoading(true);
+    try {
+      await apiJson('/v1/calendar/weather-settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({ zipCode }),
+      });
+      await loadWeather(jobs, zipCode);
+      window.showToast?.('Calendar weather ZIP saved', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save weather ZIP', 'error');
+    } finally {
+      setIsWeatherLoading(false);
+    }
   }
 
   function openQuickSchedule(dayKeyValue: string) {
@@ -425,6 +544,8 @@ export function Calendar() {
 
       {renderStats()}
 
+      {renderWeatherPanel()}
+
       {error && (
         <Card className="mb-5 border-red-100 bg-red-50" padding="sm">
           <p className="pf-copy text-red-700">{error}</p>
@@ -484,6 +605,9 @@ export function Calendar() {
       .filter((job) => activeJob(job) && jobIntersectsDay(job, day))
       .sort((a, b) => String(a.scheduledStartAt || '').localeCompare(String(b.scheduledStartAt || '')));
     const empty = !dayEvents.length && !dayJobs.length;
+    const dayWeather = weatherForDay(weatherForecast, day);
+    const weather = weatherMeta(dayWeather?.weatherCode);
+    const concerns = weatherConcerns(dayWeather);
     return (
       <section
         key={key}
@@ -506,10 +630,23 @@ export function Calendar() {
           <div>
             <p className="pf-emphasis text-sm">{formatDate(day, { weekday: 'short' })}</p>
             <p className="pf-helper">{formatDate(day)}</p>
+            {dayWeather && (
+              <a
+                href={googleWeatherHref(weatherZip)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-xs font-medium text-gray-700 shadow-sm hover:text-blue-700"
+              >
+                <span aria-hidden="true">{weather.icon}</span>
+                <span>{Math.round(numberValue(dayWeather.high))}°/{Math.round(numberValue(dayWeather.low))}°</span>
+                <span>{numberValue(dayWeather.precipProbability)}%</span>
+              </a>
+            )}
           </div>
           <div className="flex gap-1">
             {weekend(day) && <Badge size="sm">Weekend</Badge>}
             {today && <Badge variant="info" size="sm">Today</Badge>}
+            {concerns.length > 0 && <Badge variant="warning" size="sm">{concerns[0]}</Badge>}
           </div>
         </div>
         <div className="grid gap-2">
@@ -540,6 +677,9 @@ export function Calendar() {
     const remainingHours = Math.max(0, estimatedHours - actualHours);
     const progress = estimatedHours > 0 ? Math.min(100, (actualHours / estimatedHours) * 100) : 0;
     const canUnschedule = job.status === 'scheduled';
+    const siteForecast = jobForecasts.find((forecast) => forecast.zipCode === jobZip(job));
+    const siteWeather = weatherForDay(siteForecast, day);
+    const siteConcerns = weatherConcerns(siteWeather);
     return (
       <article
         key={job.id}
@@ -588,6 +728,11 @@ export function Calendar() {
         ) : (
           <p className="mt-2 pf-helper">No labor estimate</p>
         )}
+        {siteConcerns.length > 0 && (
+          <div className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
+            {siteConcerns.join(', ')} at job site{jobZip(job) ? ` (${jobZip(job)})` : ''}
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Link to={`/jobs/${job.id}`} className="text-xs font-semibold text-blue-700 hover:underline">Open job</Link>
           {canUnschedule && (
@@ -597,6 +742,75 @@ export function Calendar() {
           )}
         </div>
       </article>
+    );
+  }
+
+  function renderWeatherPanel() {
+    const days = weatherForecast?.days || [];
+    return (
+      <Card className="mb-5" padding="sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="pf-section-title">10-day weather</h2>
+            <p className="pf-copy mt-1">
+              Forecast defaults to the business ZIP{businessWeatherZip ? ` (${businessWeatherZip})` : ''}. Job-site ZIPs are checked for scheduled weather risks.
+            </p>
+          </div>
+          <form className="flex gap-2 sm:w-72" onSubmit={saveWeatherZip}>
+            <input
+              className="input"
+              inputMode="numeric"
+              maxLength={5}
+              pattern="\\d{5}"
+              aria-label="Calendar weather ZIP"
+              placeholder="ZIP"
+              value={weatherZipInput}
+              onChange={(event) => setWeatherZipInput(event.target.value.replace(/\D/g, '').slice(0, 5))}
+            />
+            <Button type="submit" variant="secondary" size="sm" isLoading={isWeatherLoading}>
+              Save
+            </Button>
+          </form>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="pf-meta">
+            {weatherForecast ? `${weatherForecast.label || weatherForecast.zipCode} weather` : weatherError || 'Add a ZIP code to show weather.'}
+          </p>
+          {weatherZip && (
+            <a className="text-sm font-semibold text-blue-700 hover:underline" href={googleWeatherHref(weatherZip)} target="_blank" rel="noreferrer">
+              Google Weather
+            </a>
+          )}
+        </div>
+        {isWeatherLoading && !days.length ? (
+          <div className="mt-3 grid grid-cols-5 gap-2">
+            {Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-20 animate-pulse rounded-lg bg-gray-100" />)}
+          </div>
+        ) : days.length ? (
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {days.map((day) => {
+              const meta = weatherMeta(day.weatherCode);
+              const concerns = weatherConcerns(day);
+              return (
+                <a
+                  key={day.date}
+                  href={googleWeatherHref(weatherZip)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`min-w-24 rounded-lg border p-2 text-center hover:border-blue-300 ${concerns.length ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-white'}`}
+                  title={meta.label}
+                >
+                  <p className="pf-meta">{formatDate(day.date, { weekday: 'short' })}</p>
+                  <p className="mt-1 text-xl" aria-label={meta.label}>{meta.icon}</p>
+                  <p className="pf-meta mt-0.5 truncate">{meta.label}</p>
+                  <p className="mt-1 text-sm font-semibold text-gray-950">{Math.round(numberValue(day.high))}°/{Math.round(numberValue(day.low))}°</p>
+                  <p className="pf-meta mt-1">{numberValue(day.precipProbability)}% precip</p>
+                </a>
+              );
+            })}
+          </div>
+        ) : null}
+      </Card>
     );
   }
 
