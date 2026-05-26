@@ -19,6 +19,20 @@ export interface DataIssue {
   description: string;
 }
 
+export interface SupplierCatalogExport {
+  suppliers: Array<{
+    id: string;
+    name: string;
+    website: string;
+    lastScrapedAt?: string | null;
+    lastSuccessfulScrapeAt?: string | null;
+  }>;
+  products: Array<Record<string, any>>;
+  colors: Array<Record<string, any>>;
+  productColors: Array<Record<string, any>>;
+  issues: DataIssue[];
+}
+
 export class DatabaseClient {
   private db: Database | null = null;
   private logger: Logger;
@@ -45,7 +59,11 @@ export class DatabaseClient {
     
     // Load schema
     const schemaPath = path.join(__dirname, 'schema.sql');
-    const schema = await fs.readFile(schemaPath, 'utf-8');
+    const sourceSchemaPath = path.resolve(__dirname, '../../src/db/schema.sql');
+    const cwdSchemaPath = path.resolve(process.cwd(), 'src/db/schema.sql');
+    const schema = await fs.readFile(schemaPath, 'utf-8')
+      .catch(() => fs.readFile(sourceSchemaPath, 'utf-8'))
+      .catch(() => fs.readFile(cwdSchemaPath, 'utf-8'));
     await this.db.exec(schema);
 
     // Insert suppliers if not exists
@@ -327,6 +345,116 @@ export class DatabaseClient {
 
     const rows = await this.db.all(query, params);
     return rows;
+  }
+
+  async exportCatalog(options: ExportOptions = {}): Promise<SupplierCatalogExport> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const params: any[] = [];
+    const supplierFilter = options.supplier ? 'WHERE s.id = ?' : '';
+    if (options.supplier) params.push(options.supplier);
+
+    const suppliers = await this.db.all(
+      `SELECT
+        s.id,
+        s.name,
+        s.website,
+        s.last_scraped_at as lastScrapedAt,
+        s.last_successful_scrape_at as lastSuccessfulScrapeAt
+       FROM suppliers s
+       ${supplierFilter}
+       ORDER BY s.name`,
+      params
+    );
+
+    const productParams: any[] = [];
+    let productFilter = 'WHERE p.is_active = 1';
+    if (options.supplier) {
+      productFilter += ' AND p.supplier_id = ?';
+      productParams.push(options.supplier);
+    }
+    if (options.type) {
+      productFilter += ' AND p.type = ?';
+      productParams.push(options.type);
+    }
+
+    const products = await this.db.all(
+      `SELECT
+        p.id,
+        p.supplier_id as supplierId,
+        s.name as supplierName,
+        p.sku,
+        p.name,
+        p.product_line as productLine,
+        p.type,
+        p.category,
+        p.sheens,
+        p.bases,
+        p.description,
+        p.features,
+        p.url,
+        p.image_url as imageUrl,
+        p.last_seen_at as lastSeenAt,
+        pr.size,
+        pr.price_cents as priceCents,
+        pr.currency,
+        pr.tier as pricingTier,
+        spec.coverage_rate_sqft_per_gal_min as coverageSqFtMin,
+        spec.coverage_rate_sqft_per_gal_max as coverageSqFtMax
+       FROM products p
+       JOIN suppliers s ON p.supplier_id = s.id
+       LEFT JOIN pricing pr ON p.id = pr.product_id AND pr.is_current = 1
+       LEFT JOIN specifications spec ON p.id = spec.product_id
+       ${productFilter}
+       ORDER BY s.name, p.product_line, p.name`,
+      productParams
+    );
+
+    const colors = await this.db.all(
+      `SELECT
+        c.id,
+        c.supplier_id as supplierId,
+        s.name as supplierName,
+        c.color_code as colorCode,
+        c.name,
+        c.hex_code as hexCode,
+        c.rgb_r as rgbR,
+        c.rgb_g as rgbG,
+        c.rgb_b as rgbB,
+        c.collection,
+        c.family,
+        c.lrv,
+        c.is_popular as isPopular
+       FROM colors c
+       JOIN suppliers s ON c.supplier_id = s.id
+       WHERE c.is_active = 1
+       ${options.supplier ? 'AND c.supplier_id = ?' : ''}
+       ORDER BY s.name, c.family, c.name`,
+      options.supplier ? [options.supplier] : []
+    );
+
+    const productColors = await this.db.all(
+      `SELECT
+        pc.product_id as productId,
+        pc.color_id as colorId,
+        p.supplier_id as supplierId,
+        pc.is_available as isAvailable,
+        pc.base_required as baseRequired,
+        pc.recommended_use as recommendedUse
+       FROM product_colors pc
+       JOIN products p ON pc.product_id = p.id
+       WHERE pc.is_available = 1
+       ${options.supplier ? 'AND p.supplier_id = ?' : ''}`,
+      options.supplier ? [options.supplier] : []
+    );
+
+    return {
+      suppliers,
+      products,
+      colors,
+      productColors,
+      issues: await this.validateData(),
+    };
   }
 
   async getStats(): Promise<any[]> {

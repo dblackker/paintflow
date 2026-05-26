@@ -88,7 +88,7 @@ export abstract class BaseSupplierScraper {
   protected rateLimitMs: number = 1000;
   
   constructor() {
-    this.logger = new Logger(`scraper:${this.supplierId}`);
+    this.logger = new Logger('scraper');
   }
 
   // Must be implemented by subclasses

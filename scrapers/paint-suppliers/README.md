@@ -108,6 +108,36 @@ See [Docker section](#docker-deployment) below for more details.
 
 ## Usage
 
+### Scheduled PaintFlow catalog hydration
+
+PaintFlow now treats this package as a workspace package and uses it to hydrate
+the app database's `supplier_catalog_*` tables. The scheduled job lives in
+`.github/workflows/supplier-catalog.yml` and runs weekly, with manual
+`workflow_dispatch` support for a single supplier or limited test scrape.
+
+Required secrets:
+
+- `DATABASE_URL` - Neon/Postgres connection string for the target PaintFlow
+  database.
+
+Local smoke test:
+
+```bash
+corepack pnpm --filter @paintflow/supplier-scraper build
+cd scrapers/paint-suppliers
+DATABASE_PATH=./data/suppliers.db node dist/index.js scrape sherwin-williams --limit 10
+DATABASE_URL=postgres://... node dist/index.js hydrate-postgres
+```
+
+The scraper writes to SQLite first, validates the data, then upserts products,
+colors, and product-color availability into Postgres. Retailer pages can change
+without notice, so the sync records `supplier_catalog_sync_runs.issues` instead
+of blocking the app when a supplier is slow or stale.
+
+Estimator behavior should use `/v1/supplier-catalog/*` as an optional catalog.
+If the catalog is empty or unavailable, manual product and color entry should
+continue to work.
+
 ### Scrape all suppliers
 ```bash
 npm run scrape

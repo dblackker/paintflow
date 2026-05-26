@@ -1,0 +1,61 @@
+name: Supplier Catalog Sync
+
+on:
+  schedule:
+    - cron: '18 11 * * 1'
+  workflow_dispatch:
+    inputs:
+      supplier:
+        description: Optional supplier id (sherwin-williams, ppg, benjamin-moore)
+        required: false
+        type: string
+      limit:
+        description: Optional per-category scrape limit for test runs
+        required: false
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_PATH: ./data/suppliers.db
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browser runtime
+        run: pnpm --filter @paintflow/supplier-scraper exec playwright install --with-deps chromium
+
+      - name: Build scraper
+        run: pnpm --filter @paintflow/supplier-scraper build
+
+      - name: Scrape suppliers
+        working-directory: scrapers/paint-suppliers
+        run: |
+          SUPPLIER="${{ inputs.supplier }}"
+          LIMIT="${{ inputs.limit }}"
+          ARGS="all"
+          if [ -n "$SUPPLIER" ]; then ARGS="$SUPPLIER"; fi
+          if [ -n "$LIMIT" ]; then
+            node dist/index.js scrape "$ARGS" --limit "$LIMIT"
+          else
+            node dist/index.js scrape "$ARGS"
+          fi
+
+      - name: Hydrate Neon catalog
+        working-directory: scrapers/paint-suppliers
+        run: node dist/index.js hydrate-postgres

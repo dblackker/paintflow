@@ -41,6 +41,15 @@ interface Material {
   markupPercent?: number | string | null;
 }
 
+interface CatalogColor {
+  id: string;
+  supplierName?: string | null;
+  name?: string | null;
+  colorCode?: string | null;
+  hexCode?: string | null;
+  family?: string | null;
+}
+
 interface OrgSettings {
   defaultLaborRate?: number | string | null;
   materialMarkupPercent?: number | string | null;
@@ -271,6 +280,7 @@ export function EstimateProduction() {
   const [rates, setRates] = useState<ProductionRate[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [catalogColors, setCatalogColors] = useState<CatalogColor[]>([]);
   const [settings, setSettings] = useState<OrgSettings>({});
   const [editingEstimate, setEditingEstimate] = useState<Estimate | null>(null);
   const [leadId, setLeadId] = useState(initialLeadId);
@@ -319,17 +329,19 @@ export function EstimateProduction() {
     setIsLoading(true);
     setSetupError('');
     try {
-      const [ratesRes, leadsRes, settingsRes, materialsRes, estimateRes] = await Promise.all([
+      const [ratesRes, leadsRes, settingsRes, materialsRes, catalogColorsRes, estimateRes] = await Promise.all([
         apiJson<{ data: ProductionRate[] }>('/v1/production-rates'),
         apiJson<{ data: Lead[] }>('/v1/leads?status=all&limit=200'),
         apiJson<{ data: OrgSettings }>('/v1/settings/org'),
         apiJson<{ data: Material[] }>('/v1/materials'),
+        apiJson<{ data: CatalogColor[] }>('/v1/supplier-catalog/colors?popular=true&limit=80').catch(() => ({ data: [] })),
         estimateId ? apiJson<{ data: Estimate }>(`/v1/estimates/${estimateId}`) : Promise.resolve({ data: null as unknown as Estimate }),
       ]);
       setRates(ratesRes.data || []);
       setLeads(leadsRes.data || []);
       setSettings(settingsRes.data || {});
       setMaterials(materialsRes.data || []);
+      setCatalogColors(catalogColorsRes.data || []);
       if (estimateRes.data) hydrateEstimate(estimateRes.data, ratesRes.data || []);
       else if (initialLeadId) setLeadId(initialLeadId);
     } catch (err) {
@@ -427,6 +439,19 @@ export function EstimateProduction() {
       ...room,
       surfaces: room.surfaces.map((surface) => surface.id === surfaceId ? { ...surface, ...patch } : surface),
     }));
+  }
+
+  function updateSurfaceColor(roomId: string, surfaceId: string, colorName: string) {
+    const normalized = colorName.trim().toLowerCase();
+    const catalogColor = catalogColors.find((color) => {
+      const name = String(color.name || '').trim().toLowerCase();
+      const code = String(color.colorCode || '').trim().toLowerCase();
+      return normalized === name || normalized === `${name} (${code})` || normalized === `${name} ${code}`;
+    });
+    updateSurface(roomId, surfaceId, {
+      colorName,
+      ...(catalogColor?.colorCode ? { colorCode: catalogColor.colorCode, colorStatus: 'Selected' } : {}),
+    });
   }
 
   function addRoom(name = defaultRoomName(), surfaces: Surface[] = []) {
@@ -828,6 +853,13 @@ export function EstimateProduction() {
 
   return (
     <div className="mx-auto max-w-6xl py-5 sm:py-8">
+      <datalist id="paintflow-catalog-colors">
+        {catalogColors.map((color) => (
+          <option key={color.id} value={[color.name, color.colorCode ? `(${color.colorCode})` : ''].filter(Boolean).join(' ')}>
+            {[color.supplierName, color.family].filter(Boolean).join(' - ')}
+          </option>
+        ))}
+      </datalist>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="pf-page-copy max-w-2xl">
@@ -932,8 +964,10 @@ export function EstimateProduction() {
                   ratesByCategory={ratesByCategory}
                   rates={rates}
                   materials={paintMaterials}
+                  catalogColors={catalogColors}
                   updateRoom={updateRoom}
                   updateSurface={updateSurface}
+                  updateSurfaceColor={updateSurfaceColor}
                   removeRoom={(roomId) => setRooms((current) => current.filter((item) => item.id !== roomId))}
                   addSurface={addSurface}
                   removeSurface={(roomId, surfaceId) => setRooms((current) => current.map((item) => item.id === roomId ? { ...item, surfaces: item.surfaces.filter((surface) => surface.id !== surfaceId) } : item))}
@@ -1186,8 +1220,10 @@ function RoomCard({
   ratesByCategory,
   rates,
   materials,
+  catalogColors,
   updateRoom,
   updateSurface,
+  updateSurfaceColor,
   removeRoom,
   addSurface,
   removeSurface,
@@ -1198,8 +1234,10 @@ function RoomCard({
   ratesByCategory: [string, ProductionRate[]][];
   rates: ProductionRate[];
   materials: Material[];
+  catalogColors: CatalogColor[];
   updateRoom: (roomId: string, patch: Partial<Room>) => void;
   updateSurface: (roomId: string, surfaceId: string, patch: Partial<Surface>) => void;
+  updateSurfaceColor: (roomId: string, surfaceId: string, colorName: string) => void;
   removeRoom: (roomId: string) => void;
   addSurface: (roomId: string) => void;
   removeSurface: (roomId: string, surfaceId: string) => void;
@@ -1300,7 +1338,7 @@ function RoomCard({
                 <NumberField label="Paint hours +/-" value={surface.paintAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { paintAdjustmentHours: value })} />
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_0.7fr_0.8fr]">
-                <input className="input" value={surface.colorName} onChange={(event) => updateSurface(room.id, surface.id, { colorName: event.target.value })} placeholder="Color name" />
+                <input className="input" list="paintflow-catalog-colors" value={surface.colorName} onChange={(event) => updateSurfaceColor(room.id, surface.id, event.target.value)} placeholder={catalogColors.length ? 'Search color library' : 'Color name'} />
                 <input className="input" value={surface.colorCode} onChange={(event) => updateSurface(room.id, surface.id, { colorCode: event.target.value })} placeholder="Color code" />
                 <select className="input" value={surface.colorStatus} onChange={(event) => updateSurface(room.id, surface.id, { colorStatus: event.target.value })}>
                   {['TBD', 'Selected', 'Approved', 'Ordered', 'Delivered', 'Changed'].map((status) => <option key={status} value={status}>{status}</option>)}

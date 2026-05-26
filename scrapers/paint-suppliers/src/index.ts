@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Command } from 'commander';
 import { chromium, Browser, Page } from 'playwright';
 import { DatabaseClient } from './db/client';
@@ -5,6 +6,7 @@ import { SherwinWilliamsScraper } from './suppliers/sherwin-williams';
 import { PPGScraper } from './suppliers/ppg';
 import { BenjaminMooreScraper } from './suppliers/benjamin-moore';
 import { Logger } from './utils/logger';
+import { hydratePostgres } from './hydrate-postgres';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -174,6 +176,19 @@ program
     } finally {
       await db.close();
     }
+  });
+
+program
+  .command('hydrate-postgres')
+  .description('Hydrate PaintFlow Postgres supplier catalog tables from the local scraper database')
+  .option('--supplier <supplier>', 'Filter by supplier')
+  .option('--type <type>', 'Filter by product type')
+  .action(async (options) => {
+    const result = await hydratePostgres({
+      supplier: options.supplier,
+      type: options.type,
+    });
+    logger.info(`Postgres hydration complete: syncRunId=${result.syncRunId}`);
   });
 
 program

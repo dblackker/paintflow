@@ -39,9 +39,9 @@ CREATE TABLE IF NOT EXISTS products (
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
-CREATE INDEX idx_products_supplier ON products(supplier_id);
-CREATE INDEX idx_products_type ON products(type);
-CREATE INDEX idx_products_active ON products(is_active);
+CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_products_type ON products(type);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active);
 
 -- Pricing table (supports multiple sizes and tiers)
 CREATE TABLE IF NOT EXISTS pricing (
@@ -57,9 +57,9 @@ CREATE TABLE IF NOT EXISTS pricing (
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
-CREATE INDEX idx_pricing_product ON pricing(product_id);
-CREATE INDEX idx_pricing_current ON pricing(is_current);
-CREATE INDEX idx_pricing_effective ON pricing(effective_date);
+CREATE INDEX IF NOT EXISTS idx_pricing_product ON pricing(product_id);
+CREATE INDEX IF NOT EXISTS idx_pricing_current ON pricing(is_current);
+CREATE INDEX IF NOT EXISTS idx_pricing_effective ON pricing(effective_date);
 
 -- Colors table
 CREATE TABLE IF NOT EXISTS colors (
@@ -81,9 +81,9 @@ CREATE TABLE IF NOT EXISTS colors (
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
-CREATE INDEX idx_colors_supplier ON colors(supplier_id);
-CREATE INDEX idx_colors_family ON colors(family);
-CREATE INDEX idx_colors_popular ON colors(is_popular);
+CREATE INDEX IF NOT EXISTS idx_colors_supplier ON colors(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_colors_family ON colors(family);
+CREATE INDEX IF NOT EXISTS idx_colors_popular ON colors(is_popular);
 
 -- Product-Color many-to-many relationship
 CREATE TABLE IF NOT EXISTS product_colors (
@@ -100,9 +100,9 @@ CREATE TABLE IF NOT EXISTS product_colors (
     FOREIGN KEY (color_id) REFERENCES colors(id)
 );
 
-CREATE INDEX idx_product_colors_product ON product_colors(product_id);
-CREATE INDEX idx_product_colors_color ON product_colors(color_id);
-CREATE INDEX idx_product_colors_available ON product_colors(is_available);
+CREATE INDEX IF NOT EXISTS idx_product_colors_product ON product_colors(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_colors_color ON product_colors(color_id);
+CREATE INDEX IF NOT EXISTS idx_product_colors_available ON product_colors(is_available);
 
 -- Specifications table
 CREATE TABLE IF NOT EXISTS specifications (
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS specifications (
     FOREIGN KEY (product_id) REFERENCES products(id)
 );
 
-CREATE INDEX idx_specs_product ON specifications(product_id);
+CREATE INDEX IF NOT EXISTS idx_specs_product ON specifications(product_id);
 
 -- Sundries table (brushes, rollers, tape, etc.)
 CREATE TABLE IF NOT EXISTS sundries (
@@ -146,8 +146,8 @@ CREATE TABLE IF NOT EXISTS sundries (
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
-CREATE INDEX idx_sundries_supplier ON sundries(supplier_id);
-CREATE INDEX idx_sundries_category ON sundries(category);
+CREATE INDEX IF NOT EXISTS idx_sundries_supplier ON sundries(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_sundries_category ON sundries(category);
 
 -- Scrape logs for audit trail
 CREATE TABLE IF NOT EXISTS scrape_logs (
@@ -168,9 +168,9 @@ CREATE TABLE IF NOT EXISTS scrape_logs (
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
-CREATE INDEX idx_logs_supplier ON scrape_logs(supplier_id);
-CREATE INDEX idx_logs_status ON scrape_logs(status);
-CREATE INDEX idx_logs_started ON scrape_logs(started_at);
+CREATE INDEX IF NOT EXISTS idx_logs_supplier ON scrape_logs(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_logs_status ON scrape_logs(status);
+CREATE INDEX IF NOT EXISTS idx_logs_started ON scrape_logs(started_at);
 
 -- Data quality issues
 CREATE TABLE IF NOT EXISTS data_quality_issues (
@@ -188,8 +188,8 @@ CREATE TABLE IF NOT EXISTS data_quality_issues (
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
-CREATE INDEX idx_issues_supplier ON scrape_logs(supplier_id);
-CREATE INDEX idx_issues_resolved ON data_quality_issues(is_resolved);
+CREATE INDEX IF NOT EXISTS idx_issues_supplier ON scrape_logs(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_issues_resolved ON data_quality_issues(is_resolved);
 
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (

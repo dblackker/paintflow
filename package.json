@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "scrapers/*"
   ],
   "scripts": {
     "dev": "pnpm -r --parallel dev",
