@@ -177,6 +177,10 @@ export function JobDetail() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [savingBulk, setSavingBulk] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [completingJob, setCompletingJob] = useState(false);
+  const [requestingReview, setRequestingReview] = useState(false);
+  const [sendingChangeOrderId, setSendingChangeOrderId] = useState<string | null>(null);
+  const [updatingChangeOrderId, setUpdatingChangeOrderId] = useState<string | null>(null);
 
   async function loadJob() {
     if (!id) return;
@@ -262,6 +266,7 @@ export function JobDetail() {
 
   async function markComplete() {
     if (!id || !confirm('Mark this job completed?')) return;
+    setCompletingJob(true);
     try {
       await apiJson(`/v1/jobs/${id}`, {
         method: 'PATCH',
@@ -275,6 +280,28 @@ export function JobDetail() {
       window.showToast?.('Job marked complete', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to complete job', 'error');
+    } finally {
+      setCompletingJob(false);
+    }
+  }
+
+  async function requestReview() {
+    if (!id || !confirm('Send review request to customer?')) return;
+    setRequestingReview(true);
+    try {
+      await apiJson('/v1/reviews/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({ jobId: id }),
+      });
+      window.showToast?.('Review request sent', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to send review request', 'error');
+    } finally {
+      setRequestingReview(false);
     }
   }
 
@@ -374,6 +401,7 @@ export function JobDetail() {
   }
 
   async function sendChangeOrder(order: ChangeOrder) {
+    setSendingChangeOrderId(order.id);
     try {
       const response = await apiJson<{ data?: { link?: string; to?: string } }>(`/v1/change-orders/${order.id}/send-email`, {
         method: 'POST',
@@ -388,11 +416,14 @@ export function JobDetail() {
       window.showToast?.(response.data?.to ? `Change order emailed to ${response.data.to}` : 'Change order email sent', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to send change order', 'error');
+    } finally {
+      setSendingChangeOrderId(null);
     }
   }
 
   async function updateChangeOrderStatus(order: ChangeOrder, status: 'approved' | 'completed') {
     if (status === 'approved' && !confirm('Mark this change order approved? This adds it to job revenue.')) return;
+    setUpdatingChangeOrderId(order.id);
     try {
       await apiJson(`/v1/change-orders/${order.id}`, {
         method: 'PATCH',
@@ -406,6 +437,8 @@ export function JobDetail() {
       window.showToast?.(status === 'approved' ? 'Change order approved' : 'Change order marked complete', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to update change order', 'error');
+    } finally {
+      setUpdatingChangeOrderId(null);
     }
   }
 
@@ -446,6 +479,8 @@ export function JobDetail() {
   const lastEntry = timeEntries
     .slice()
     .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())[0];
+  const activeCrewCount = teamMembers.filter((member) => member.isActive !== false).length;
+  const isCompleted = String(job.status || '').toLowerCase() === 'completed';
 
   return (
     <div className="mx-auto max-w-7xl py-5 sm:py-8">
@@ -471,18 +506,47 @@ export function JobDetail() {
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
             {job.estimateId && <Link to={`/estimates/${job.estimateId}`} className="btn-secondary btn-sm">Estimate</Link>}
-            {job.status !== 'completed' && (
-              <button type="button" className="btn-tonal btn-sm" onClick={markComplete}>
-                Mark complete
+            <button type="button" className="btn-tonal btn-sm" onClick={() => setBulkOpen(true)}>
+              <Icon name="clock" className="h-4 w-4" />
+              Log time
+            </button>
+            <button type="button" className="btn-secondary btn-sm" onClick={() => openCostModal()}>
+              <Icon name="plus" className="h-4 w-4" />
+              Add cost
+            </button>
+            <button type="button" className="btn-secondary btn-sm" onClick={() => setChangeOrderOpen(true)}>
+              Change order
+            </button>
+            {isCompleted ? (
+              <button type="button" className="btn-tonal btn-sm" onClick={requestReview} disabled={requestingReview}>
+                {requestingReview ? 'Sending...' : 'Request review'}
+              </button>
+            ) : (
+              <button type="button" className="btn-tonal btn-sm" onClick={markComplete} disabled={completingJob}>
+                {completingJob ? 'Updating...' : 'Mark complete'}
               </button>
             )}
           </div>
         </div>
       </section>
 
-      <section className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <nav className="mb-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" aria-label="Job sections">
+        {[
+          ['Costs', '#job-costs'],
+          ['Time', '#job-time'],
+          ['Change orders', '#job-change-orders'],
+          ['Purchases', '#job-purchases'],
+          ['Photos', '#job-photos'],
+        ].map(([label, href]) => (
+          <a key={href} href={href} className="btn-text btn-sm shrink-0 whitespace-nowrap rounded-full bg-white px-3 shadow-sm">
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <section className="mb-6 -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-5">
         {kpis.map(([label, value, help]) => (
-          <Card key={label} padding="sm">
+          <Card key={label} padding="sm" className="min-w-[10.5rem] snap-start sm:min-w-0">
             <p className="pf-label text-xs uppercase text-gray-500">{label}</p>
             <p className="mt-1 text-xl font-semibold text-gray-950 sm:text-2xl">{value}</p>
             <p className="mt-1 text-xs text-gray-500">{help}</p>
@@ -492,8 +556,8 @@ export function JobDetail() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Card padding="none">
-            <div className="flex items-center justify-between gap-3 border-b p-4">
+          <Card padding="none" id="job-costs" className="scroll-mt-24">
+            <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
               <CardHeader className="mb-0" title="Actual Costs" description="Labor, materials, supplies, subcontractors, equipment, and other job costs" />
               <button type="button" className="btn-primary btn-sm shrink-0" onClick={() => openCostModal()}>
                 <Icon name="plus" className="h-4 w-4" />
@@ -532,7 +596,7 @@ export function JobDetail() {
             </div>
           </Card>
 
-          <Card padding="none">
+          <Card padding="none" id="job-time" className="scroll-mt-24">
             <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
               <CardHeader className="mb-0" title="Crew Timecard" description="Fast end-of-day crew hours for this job. Pay and burdened rates are managed in Team." />
               <button type="button" className="btn-tonal btn-sm shrink-0" onClick={() => setBulkOpen(true)}>
@@ -547,7 +611,7 @@ export function JobDetail() {
                 </p>
               ) : (
                 <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-                  <MiniMetric label="Active crew" value={teamMembers.length.toLocaleString()} />
+                  <MiniMetric label="Active crew" value={activeCrewCount.toLocaleString()} />
                   <MiniMetric label="Logged hours" value={totalTimeHours.toFixed(2)} />
                   <MiniMetric label="Last entry" value={lastEntry ? formatDate(lastEntry.date) : 'None yet'} />
                 </div>
@@ -588,8 +652,8 @@ export function JobDetail() {
             </div>
           </Card>
 
-          <Card padding="none">
-            <div className="flex items-center justify-between gap-3 border-b p-4">
+          <Card padding="none" id="job-change-orders" className="scroll-mt-24">
+            <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
               <CardHeader className="mb-0" title="Change Orders" />
               <button type="button" className="btn-secondary btn-sm" onClick={() => setChangeOrderOpen(true)}>Add change order</button>
             </div>
@@ -614,18 +678,18 @@ export function JobDetail() {
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
                       {order.status === 'pending' && (
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => sendChangeOrder(order)}>
-                          {order.sentAt ? 'Resend email' : 'Send for approval'}
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => sendChangeOrder(order)} disabled={sendingChangeOrderId === order.id}>
+                          {sendingChangeOrderId === order.id ? 'Sending...' : order.sentAt ? 'Resend email' : 'Send for approval'}
                         </button>
                       )}
                       {order.status === 'pending' && (
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => updateChangeOrderStatus(order, 'approved')}>
-                          Mark approved
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => updateChangeOrderStatus(order, 'approved')} disabled={updatingChangeOrderId === order.id}>
+                          {updatingChangeOrderId === order.id ? 'Approving...' : 'Mark approved'}
                         </button>
                       )}
                       {order.status === 'approved' && (
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => updateChangeOrderStatus(order, 'completed')}>
-                          Mark complete
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => updateChangeOrderStatus(order, 'completed')} disabled={updatingChangeOrderId === order.id}>
+                          {updatingChangeOrderId === order.id ? 'Completing...' : 'Mark complete'}
                         </button>
                       )}
                     </div>
@@ -635,7 +699,7 @@ export function JobDetail() {
             </div>
           </Card>
 
-          <Card padding="none">
+          <Card padding="none" id="job-purchases" className="scroll-mt-24">
             <div className="border-b p-4">
               <CardHeader className="mb-0" title="Material Purchases" description="Imported invoices linked to this job" />
             </div>
@@ -643,20 +707,20 @@ export function JobDetail() {
               {detail.lists.materialPurchases.length === 0 ? (
                 <div className="p-6 text-sm text-gray-500">No material invoices imported for this job.</div>
               ) : detail.lists.materialPurchases.map((purchase) => (
-                <div key={purchase.id} className="flex justify-between gap-4 p-4">
-                  <div>
+                <div key={purchase.id} className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0">
                     <p className="font-medium text-gray-950">{purchase.supplier || purchase.vendor || 'Material purchase'}</p>
                     <p className="text-sm text-gray-600">Invoice {purchase.invoiceNumber || 'not set'} - {formatDate(purchase.invoiceDate || purchase.purchasedAt || purchase.createdAt)}</p>
                   </div>
-                  <p className="font-semibold text-gray-950">{formatMoney(purchase.totalAmount || purchase.totalCost || 0)}</p>
+                  <p className="font-semibold text-gray-950 sm:text-right">{formatMoney(purchase.totalAmount || purchase.totalCost || 0)}</p>
                 </div>
               ))}
             </div>
           </Card>
 
-          <Card padding="none">
+          <Card padding="none" id="job-photos" className="scroll-mt-24">
             <div className="border-b p-4">
-              <CardHeader className="mb-0" title="Job Photos" description="Before, progress, and after photos for production proof and future marketing." />
+              <CardHeader className="mb-0" title="Job Photos" description="Track before, progress, and after photos." />
             </div>
             <form className="grid gap-3 p-4 sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-end" onSubmit={uploadPhoto}>
               <label>
@@ -685,7 +749,18 @@ export function JobDetail() {
                   {photos.map((photo) => (
                     <a key={photo.id} href={photoSrc(photo)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border bg-gray-50">
                       <div className="aspect-[4/3] bg-gray-100">
-                        <img src={photoSrc(photo)} alt={photo.caption || `${labelize(photo.type || 'progress')} job photo`} className="h-full w-full object-cover" loading="lazy" />
+                        <img
+                          src={photoSrc(photo)}
+                          alt={photo.caption || `${labelize(photo.type || 'progress')} job photo`}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          onError={(event) => {
+                            event.currentTarget.replaceWith(Object.assign(document.createElement('div'), {
+                              className: 'flex h-full w-full items-center justify-center p-3 text-center text-xs text-gray-500',
+                              textContent: 'Photo preview unavailable',
+                            }));
+                          }}
+                        />
                       </div>
                       <div className="p-2">
                         <div className="flex items-center justify-between gap-2">
