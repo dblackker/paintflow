@@ -605,6 +605,8 @@ export function Calendar() {
         onCta={connectGoogle}
       />
 
+      {renderWeatherPanel()}
+
       <Card className="sticky top-[4.4rem] z-20 mb-5 bg-white/95 backdrop-blur lg:ml-auto lg:max-w-md" padding="sm">
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
           <button
@@ -631,8 +633,6 @@ export function Calendar() {
           </button>
         </div>
       </Card>
-
-      {renderWeatherPanel()}
 
       {error && (
         <div className="mb-5">
@@ -992,23 +992,12 @@ export function Calendar() {
           <p className="pf-meta">
             {weatherForecast ? `${weatherForecast.label || weatherForecast.zipCode} weather` : weatherError || 'Add a ZIP code to show weather.'}
           </p>
-          {fallbackZip && (
+          {(fallbackZip || weatherError) && (
             <a className="text-sm font-semibold text-blue-700 hover:underline" href={googleWeatherHref(fallbackZip)} target="_blank" rel="noreferrer">
               Google Weather
             </a>
           )}
         </div>
-        {weatherError && !days.length && (
-          <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-            <p className="pf-row-title text-yellow-950">Weather could not be loaded</p>
-            <p className="pf-copy mt-1 text-yellow-900">Scheduling is still available. Check the local forecast in Google Weather and try again later.</p>
-            {fallbackZip && (
-              <a className="btn-secondary btn-sm mt-3 inline-flex" href={googleWeatherHref(fallbackZip)} target="_blank" rel="noreferrer">
-                Open Google Weather
-              </a>
-            )}
-          </div>
-        )}
         {isWeatherLoading && !days.length ? (
           <div className="mt-3 grid grid-cols-5 gap-2">
             {Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-20 animate-pulse rounded-lg bg-gray-100" />)}
