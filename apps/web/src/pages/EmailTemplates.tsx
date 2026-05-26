@@ -1,36 +1,460 @@
-import { Card, CardContent } from '@/components/Card';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
+import { Card, CardContent, CardHeader } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
+import { Icon } from '@/components/Icon';
+import { Input, Select, Textarea } from '@/components/Input';
+import { apiJson, labelize } from '@/lib/api';
 
-export function EmailTemplates() {
-  const templates = [
-    { id: '1', name: 'Estimate Sent', subject: 'Your painting estimate is ready', type: 'estimate' },
-    { id: '2', name: 'Job Scheduled', subject: 'Your painting project is scheduled', type: 'job' },
-    { id: '3', name: 'Invoice Due', subject: 'Payment reminder', type: 'invoice' },
-    { id: '4', name: 'Review Request', subject: 'How was your experience?', type: 'review' },
+interface EmailTemplate {
+  id?: string | null;
+  key: string;
+  name?: string | null;
+  category?: string | null;
+  channel?: string | null;
+  subject?: string | null;
+  preheader?: string | null;
+  html?: string | null;
+  text?: string | null;
+  isActive?: boolean | null;
+  source?: 'system' | 'org' | string | null;
+}
+
+interface TemplateFormState {
+  id: string;
+  key: string;
+  name: string;
+  category: string;
+  channel: string;
+  subject: string;
+  preheader: string;
+  html: string;
+  text: string;
+  isActive: boolean;
+}
+
+const newTemplateDefaults: TemplateFormState = {
+  id: '',
+  key: 'estimate.followup.custom',
+  category: 'estimate',
+  channel: 'transactional',
+  name: 'Custom estimate email',
+  subject: 'Painting proposal from {{companyName}}',
+  preheader: 'Review your painting proposal and approval link.',
+  html: '<p>Hi {{leadName}},</p>\n<p>Your proposal from {{companyName}} is ready.</p>\n<p>Total: ${{total}}</p>\n{{scopeSummaryHtml}}\n<p><a href="{{proposalUrl}}">Review and approve proposal</a></p>',
+  text: '',
+  isActive: true,
+};
+
+const categoryOptions = [
+  { value: 'estimate', label: 'Estimate' },
+  { value: 'change_order', label: 'Change order' },
+  { value: 'drip', label: 'Drip' },
+  { value: 'review', label: 'Review' },
+  { value: 'system', label: 'System' },
+];
+
+const channelOptions = [
+  { value: 'transactional', label: 'Transactional' },
+  { value: 'operational', label: 'Operational' },
+  { value: 'marketing', label: 'Marketing' },
+];
+
+const mergeTags = [
+  '{{companyName}}',
+  '{{leadName}}',
+  '{{total}}',
+  '{{estimatorName}}',
+  '{{estimatorEmail}}',
+  '{{estimatorPhone}}',
+  '{{proposalUrl}}',
+  '{{scopeSummaryHtml}}',
+  '{{scopeSummaryText}}',
+];
+
+function formFromTemplate(template?: EmailTemplate | null): TemplateFormState {
+  if (!template) return newTemplateDefaults;
+  return {
+    id: template.id || '',
+    key: template.key || '',
+    name: template.name || '',
+    category: template.category || 'estimate',
+    channel: template.channel || 'transactional',
+    subject: template.subject || '',
+    preheader: template.preheader || '',
+    html: template.html || '',
+    text: template.text || '',
+    isActive: template.isActive !== false,
+  };
+}
+
+function templateStatus(template: EmailTemplate) {
+  if (template.source === 'system') return { label: 'System default', variant: 'default' as const };
+  if (template.isActive === false) return { label: 'Inactive override', variant: 'danger' as const };
+  return { label: 'Org override', variant: 'success' as const };
+}
+
+function TemplateSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[0, 1, 2].map((item) => (
+        <Card key={item} padding="sm" className="shadow-none">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_6rem] sm:items-center">
+            <div className="space-y-2">
+              <div className="h-4 w-1/2 animate-pulse rounded bg-gray-200" />
+              <div className="h-3 w-4/5 animate-pulse rounded bg-gray-100" />
+              <div className="h-3 w-2/3 animate-pulse rounded bg-gray-100" />
+            </div>
+            <div className="h-8 animate-pulse rounded bg-gray-100" />
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function RecommendedStructure() {
+  const items = [
+    ['Transactional', 'Estimates, change orders, deposits, and approvals. Always preview when sent by a person.'],
+    ['Operational', 'Daily summaries, stale follow-ups, schedule confirmations, and job readiness.'],
+    ['Marketing', 'Drips, referral asks, win-back campaigns, and seasonal repaint reminders with consent controls.'],
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Email Templates</h1>
-        <Button>New Template</Button>
-      </div>
-      <div className="grid gap-4">
-        {templates.map(template => (
-          <Card key={template.id}>
-            <CardContent className="p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-semibold">{template.name}</h3>
-                  <p className="text-sm text-gray-600">{template.subject}</p>
-                  <span className="inline-block mt-2 text-xs bg-gray-100 px-2 py-1 rounded">{template.type}</span>
-                </div>
-                <Button variant="secondary" size="sm">Edit</Button>
-              </div>
-            </CardContent>
-          </Card>
+    <Card>
+      <CardHeader title="Recommended structure" />
+      <div className="grid gap-3 sm:grid-cols-3">
+        {items.map(([title, copy]) => (
+          <div key={title} className="rounded-lg bg-gray-50 p-3">
+            <p className="pf-row-title">{title}</p>
+            <p className="pf-copy mt-1">{copy}</p>
+          </div>
         ))}
       </div>
+    </Card>
+  );
+}
+
+function TemplateRow({ template, onEdit }: { template: EmailTemplate; onEdit: (template: EmailTemplate) => void }) {
+  const status = templateStatus(template);
+  return (
+    <div className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="pf-row-title">{template.name || labelize(template.key)}</p>
+          <Badge variant={status.variant} size="sm">{status.label}</Badge>
+          <Badge size="sm">{labelize(template.channel || 'transactional')}</Badge>
+        </div>
+        <p className="pf-copy mt-1">{template.subject || 'No subject set'}</p>
+        <p className="pf-meta mt-1">
+          {template.key}{template.preheader ? ` · ${template.preheader}` : ''}
+        </p>
+      </div>
+      <Button type="button" variant="secondary" size="sm" onClick={() => onEdit(template)}>
+        {template.source === 'system' ? 'Customize' : 'Edit'}
+      </Button>
     </div>
+  );
+}
+
+export function EmailTemplates() {
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<TemplateFormState>(newTemplateDefaults);
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const groupedTemplates = useMemo(() => {
+    return templates.reduce<Record<string, EmailTemplate[]>>((groups, template) => {
+      const key = template.category || 'other';
+      groups[key] ||= [];
+      groups[key].push(template);
+      return groups;
+    }, {});
+  }, [templates]);
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('pf-modal-open', modalOpen);
+    return () => document.body.classList.remove('pf-modal-open');
+  }, [modalOpen]);
+
+  async function loadTemplates() {
+    setIsLoading(true);
+    setError('');
+    try {
+      const payload = await apiJson<{ data?: EmailTemplate[] }>('/v1/email-templates');
+      setTemplates(payload.data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load email templates');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function openEditor(template?: EmailTemplate | null) {
+    const nextTemplate = template || { ...newTemplateDefaults, source: 'org' };
+    setEditingTemplate(nextTemplate);
+    setForm(formFromTemplate(nextTemplate));
+    setModalOpen(true);
+  }
+
+  function closeEditor() {
+    if (isSaving || isDeleting) return;
+    setModalOpen(false);
+    setEditingTemplate(null);
+  }
+
+  async function saveTemplate(event: FormEvent) {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      const body = {
+        key: form.key,
+        name: form.name,
+        category: form.category,
+        channel: form.channel,
+        subject: form.subject,
+        preheader: form.preheader || null,
+        html: form.html,
+        text: form.text || null,
+        isActive: form.isActive,
+      };
+
+      if (form.id) {
+        const { key, ...patch } = body;
+        void key;
+        await apiJson(`/v1/email-templates/${form.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': crypto.randomUUID(),
+          },
+          body: JSON.stringify(patch),
+        });
+      } else {
+        await apiJson('/v1/email-templates', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': crypto.randomUUID(),
+          },
+          body: JSON.stringify(body),
+        });
+      }
+
+      window.showToast?.('Email template saved', 'success');
+      setModalOpen(false);
+      await loadTemplates();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save template', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function resetTemplate() {
+    if (!form.id) return;
+    const confirmed = window.confirm('Reset this template to the system default? Your organization override will be removed.');
+    if (!confirmed) return;
+    setIsDeleting(true);
+    try {
+      await apiJson(`/v1/email-templates/${form.id}`, {
+        method: 'DELETE',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      window.showToast?.('Template reset to system default', 'success');
+      setModalOpen(false);
+      await loadTemplates();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to reset template', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  return (
+    <section className="mx-auto max-w-5xl space-y-5 px-1 pb-24 sm:px-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <p className="pf-page-copy max-w-2xl">
+          Manage customer-facing estimate emails. Direct estimate and change-order sends should be previewed before delivery, then logged on the customer profile.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button as="a" href="/settings" variant="secondary" size="sm">Settings</Button>
+          <Button type="button" size="sm" leftIcon={<Icon name="plus" className="h-4 w-4" />} onClick={() => openEditor()}>
+            New template
+          </Button>
+        </div>
+      </div>
+
+      <RecommendedStructure />
+
+      {isLoading && <TemplateSkeleton />}
+
+      {!isLoading && error && (
+        <Card className="text-center">
+          <Icon name="warning" className="mx-auto h-6 w-6 text-red-600" />
+          <p className="pf-copy mt-2 text-red-700">{error}</p>
+          <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={loadTemplates}>
+            Retry
+          </Button>
+        </Card>
+      )}
+
+      {!isLoading && !error && !templates.length && (
+        <Card>
+          <EmptyState
+            icon={<Icon name="mail" className="h-5 w-5" />}
+            title="No templates found."
+            description="Start with a transactional estimate email, then add change-order and follow-up templates as the system grows."
+            action={{ label: 'New template', onClick: () => openEditor() }}
+          />
+        </Card>
+      )}
+
+      {!isLoading && !error && templates.length > 0 && (
+        <div className="space-y-3">
+          {Object.entries(groupedTemplates).map(([category, items]) => (
+            <Card key={category} padding="none" className="overflow-hidden">
+              <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3" title={labelize(category)} />
+              <CardContent className="divide-y divide-gray-200">
+                {items.map((template) => (
+                  <TemplateRow key={template.id || template.key} template={template} onEdit={openEditor} />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {modalOpen && (
+        <div
+          className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="template-modal-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeEditor();
+          }}
+        >
+          <section className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
+            <div className="sticky top-0 z-10 border-b bg-white px-4 py-3 sm:px-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 id="template-modal-title" className="pf-section-title">
+                    {editingTemplate?.source === 'system' ? 'Customize system template' : form.id ? 'Edit template' : 'New template'}
+                  </h2>
+                  <p className="pf-copy mt-1">
+                    Merge tags use double braces, such as <code>{'{{leadName}}'}</code> and <code>{'{{proposalUrl}}'}</code>.
+                  </p>
+                </div>
+                <button type="button" className="btn-icon" aria-label="Close template editor" onClick={closeEditor}>
+                  <Icon name="close" className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <form className="space-y-4 px-4 py-4 sm:px-5" onSubmit={saveTemplate}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Template key"
+                  required
+                  placeholder="estimate.interior.sent"
+                  value={form.key}
+                  disabled={Boolean(form.id)}
+                  onChange={(event) => setForm({ ...form, key: event.target.value })}
+                />
+                <Input
+                  label="Name"
+                  required
+                  placeholder="Interior estimate ready"
+                  value={form.name}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Select
+                  label="Category"
+                  value={form.category}
+                  onChange={(event) => setForm({ ...form, category: event.target.value })}
+                  options={categoryOptions}
+                />
+                <Select
+                  label="Channel"
+                  value={form.channel}
+                  onChange={(event) => setForm({ ...form, channel: event.target.value })}
+                  options={channelOptions}
+                />
+                <label className="flex items-end gap-2 rounded-lg border px-3 py-2">
+                  <input
+                    type="checkbox"
+                    className="mb-1 rounded border-gray-300"
+                    checked={form.isActive}
+                    onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+                  />
+                  <span className="pf-row-title">Active override</span>
+                </label>
+              </div>
+              <Input
+                label="Subject"
+                required
+                placeholder="{{companyName}} painting proposal for {{leadName}}"
+                value={form.subject}
+                onChange={(event) => setForm({ ...form, subject: event.target.value })}
+              />
+              <Input
+                label="Preheader"
+                maxLength={255}
+                placeholder="Short inbox preview text"
+                value={form.preheader}
+                onChange={(event) => setForm({ ...form, preheader: event.target.value })}
+              />
+              <Textarea
+                label="HTML body"
+                className="min-h-[18rem] font-mono text-xs"
+                required
+                value={form.html}
+                onChange={(event) => setForm({ ...form, html: event.target.value })}
+              />
+              <Textarea
+                label="Plain text fallback"
+                className="min-h-28 font-mono text-xs"
+                placeholder="Optional. Generated from HTML when blank."
+                value={form.text}
+                onChange={(event) => setForm({ ...form, text: event.target.value })}
+              />
+              <div className="pf-meta rounded-lg bg-gray-50 p-3">
+                Available merge tags:{' '}
+                {mergeTags.map((tag, index) => (
+                  <span key={tag}>
+                    <code>{tag}</code>{index < mergeTags.length - 1 ? ', ' : '.'}
+                  </span>
+                ))}
+              </div>
+              <div className="mobile-sticky-actions flex flex-col gap-2 border-t bg-white pt-3 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent">
+                {form.id && (
+                  <Button type="button" variant="ghost" className="justify-center text-red-700" isLoading={isDeleting} onClick={resetTemplate}>
+                    Reset to system default
+                  </Button>
+                )}
+                <Button type="button" variant="secondary" className="justify-center" onClick={closeEditor}>
+                  Cancel
+                </Button>
+                <Button type="submit" className="justify-center" isLoading={isSaving}>
+                  Save template
+                </Button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </section>
   );
 }
