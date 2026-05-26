@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { Card, CardContent, CardHeader } from '@/components/Card';
+import { Card, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { apiJson, formatMoney, labelize } from '@/lib/api';
 
@@ -46,6 +46,22 @@ const planCards = [
 function formatDate(value?: string | null) {
   if (!value) return '';
   return new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function planDisplayName(planName?: string | null) {
+  if (!planName) return 'Starter';
+  const match = planCards.find((plan) => plan.key === planName.toLowerCase() || plan.name.toLowerCase() === planName.toLowerCase());
+  return match?.name || labelize(planName);
+}
+
+function planPrice(planName?: string | null, fallback?: number | string | null) {
+  if (fallback !== null && fallback !== undefined && fallback !== '') return Number(fallback);
+  const match = planCards.find((plan) => plan.key === planName?.toLowerCase() || plan.name.toLowerCase() === planName?.toLowerCase());
+  return match?.price || 49;
+}
+
+function isTrialStatus(status?: string | null) {
+  return ['trial', 'trialing', 'trial_pending_payment'].includes(String(status || '').toLowerCase());
 }
 
 function PlanCard({
@@ -107,6 +123,12 @@ export function Billing() {
   const [error, setError] = useState('');
 
   const currentPlan = useMemo(() => subscription?.plan?.name || null, [subscription]);
+  const currentPlanName = planDisplayName(currentPlan);
+  const currentPlanKey = currentPlan?.toLowerCase() || 'starter';
+  const currentPlanPrice = planPrice(currentPlan, subscription?.plan?.price);
+  const billingDate = subscription?.currentPeriodEnd ? formatDate(subscription.currentPeriodEnd) : '';
+  const isTrial = isTrialStatus(subscription?.status);
+  const needsPaymentInfo = subscription?.status === 'trial_pending_payment';
 
   useEffect(() => {
     loadSubscription();
@@ -130,7 +152,7 @@ export function Billing() {
       window.location.href = 'mailto:sales@paintflow.app';
       return;
     }
-    if (currentPlan?.toLowerCase() === plan) return;
+    if (currentPlan?.toLowerCase() === plan && !needsPaymentInfo) return;
     setCheckoutPlan(plan);
     try {
       const payload = await apiJson<{ url?: string }>('/v1/billing/create-checkout', {
@@ -162,10 +184,10 @@ export function Billing() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-1 pb-24 sm:px-0">
-      <p className="pf-page-copy">Manage your PaintFlow plan and subscription billing. You can cancel any time from the billing portal.</p>
+      <p className="pf-page-copy">Manage your PaintFlow plan, payment method, invoices, and cancellation from one place.</p>
 
       <Card>
-        <CardHeader title="Current Plan" description="Subscription billing is separate from customer deposits and contractor Stripe Connect payouts." />
+        <CardHeader title="Current Plan" description="This subscription is for PaintFlow software access. Customer deposits and contractor payouts are handled separately." />
         {isLoading && (
           <div className="space-y-2">
             <div className="h-5 w-1/3 animate-pulse rounded bg-gray-200" />
@@ -180,29 +202,63 @@ export function Billing() {
         )}
         {!isLoading && !error && !subscription && (
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-            <p className="pf-row-title">Free trial</p>
-            <p className="pf-copy mt-1">No active subscription is recorded. Start checkout to add payment information for the 14-day trial.</p>
-          </div>
-        )}
-        {!isLoading && !error && subscription && (
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="pf-section-title">{subscription.plan?.name || 'PaintFlow plan'}</p>
-                <Badge variant={subscription.status === 'active' ? 'success' : 'warning'}>{labelize(subscription.status || 'active')}</Badge>
-              </div>
-              <p className="pf-copy mt-1">
-                {formatMoney(subscription.plan?.price, false)}/month
-                {subscription.currentPeriodEnd ? ` · Renews ${formatDate(subscription.currentPeriodEnd)}` : ''}
-              </p>
-            </div>
-            <Button type="button" variant="secondary" isLoading={isPortalLoading} onClick={manageBilling}>
-              Manage billing
+            <p className="pf-row-title">Starter trial pending</p>
+            <p className="pf-copy mt-1">
+              Add payment information to start the 14-day trial. Starter will be the subscribed product after the trial ends unless you choose a different plan. The first charge happens 14 days after payment information is added.
+            </p>
+            <Button type="button" size="sm" className="mt-4" isLoading={checkoutPlan === 'starter'} onClick={() => subscribe('starter')}>
+              Add payment info
             </Button>
           </div>
         )}
+        {!isLoading && !error && subscription && (
+          <div className="grid gap-5">
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="pf-section-title">{currentPlanName}</p>
+                  <Badge variant={subscription.status === 'active' ? 'success' : 'warning'}>{labelize(subscription.status || 'active')}</Badge>
+                </div>
+                <p className="pf-copy mt-1">
+                  {formatMoney(currentPlanPrice, false)}/month
+                  {billingDate ? ` - ${isTrial ? 'Trial ends' : 'Renews'} ${billingDate}` : ''}
+                </p>
+              </div>
+              {needsPaymentInfo ? (
+                <Button type="button" isLoading={checkoutPlan === currentPlanKey} onClick={() => subscribe(currentPlanKey)}>
+                  Add payment info
+                </Button>
+              ) : (
+                <Button type="button" variant="secondary" isLoading={isPortalLoading} onClick={manageBilling}>
+                  Manage billing
+                </Button>
+              )}
+            </div>
+
+            {isTrial ? (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <p className="pf-row-title text-blue-950">{currentPlanName} starts after the free trial</p>
+                <p className="pf-copy mt-1 text-blue-900">
+                  Your free trial ends {billingDate || 'after 14 days'}. The first charge will happen when the trial ends, and the subscribed product will be {currentPlanName} at {formatMoney(currentPlanPrice, false)}/month.
+                </p>
+                {needsPaymentInfo && (
+                  <p className="pf-meta mt-2 text-blue-900">
+                    Payment information is still needed before the trial can continue automatically.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                <p className="pf-row-title">Next billing date</p>
+                <p className="pf-copy mt-1">
+                  {billingDate ? `Your next ${formatMoney(currentPlanPrice, false)} charge is scheduled for ${billingDate}.` : 'Your next billing date will appear here after Stripe confirms the subscription period.'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         <p className="pf-meta mt-4">
-          Subscription changes, cancellation, payment method updates, invoices, and refunds are handled through Stripe Billing. Configure prorations and refund policy in Stripe so billing behavior stays consistent.
+          Manage billing opens Stripe's secure customer page for this PaintFlow subscription. From there you can update the card, view invoices, change or cancel the subscription, and handle billing history.
         </p>
       </Card>
 
