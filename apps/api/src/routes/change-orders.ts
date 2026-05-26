@@ -15,7 +15,7 @@ const changeOrderSchema = z.object({
   estimateId: z.string().uuid(),
   description: z.string().trim().min(1).max(2000),
   amount: z.coerce.number().positive(),
-  status: z.enum(['pending', 'approved', 'rejected', 'completed']).default('pending'),
+  status: z.enum(['pending', 'approved', 'rejected', 'completed', 'canceled']).default('pending'),
   createdBy: z.enum(['contractor', 'customer']).default('contractor'),
   paymentRequired: z.coerce.boolean().default(false),
   depositPercent: z.coerce.number().min(0).max(100).default(100),
@@ -24,11 +24,12 @@ const changeOrderSchema = z.object({
 const updateChangeOrderSchema = z.object({
   description: z.string().trim().min(1).max(2000).optional(),
   amount: z.coerce.number().positive().optional(),
-  status: z.enum(['pending', 'approved', 'rejected', 'completed']).optional(),
+  status: z.enum(['pending', 'approved', 'rejected', 'completed', 'canceled']).optional(),
   createdBy: z.enum(['contractor', 'customer']).optional(),
   paymentRequired: z.coerce.boolean().optional(),
   depositPercent: z.coerce.number().min(0).max(100).optional(),
   paymentStatus: z.enum(['not_requested', 'pending', 'paid', 'waived']).optional(),
+  reason: z.string().trim().max(500).optional(),
 }).refine((value) => Object.keys(value).length > 0, {
   message: 'At least one field is required',
 });
@@ -49,6 +50,24 @@ function money(value: unknown) {
 
 function leadAddress(lead: typeof leads.$inferSelect) {
   return [lead.streetAddress, lead.city, lead.state, lead.postalCode].filter(Boolean).join(', ');
+}
+
+async function contractorSignature(db: ReturnType<typeof createDb>, orgId: string, userId?: string) {
+  const [branding, settings, signer] = await Promise.all([
+    db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) }),
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+    userId ? db.query.users.findFirst({ where: eq(users.id, userId) }) : Promise.resolve(null),
+  ]);
+  const companyName = branding?.companyName || settings?.companyName || 'the painting company';
+  const name = signer?.name || signer?.email || settings?.companyName || branding?.companyName || 'Authorized representative';
+  return {
+    name,
+    email: signer?.email || settings?.email || null,
+    title: 'Authorized representative',
+    companyName,
+    capacity: `Authorized representative for ${companyName}`,
+    signedAt: new Date().toISOString(),
+  };
 }
 
 function isMissingRelation(error: unknown) {
@@ -145,8 +164,12 @@ changeOrdersRoute.post('/', async (c) => {
     paymentDueAmount: paymentDueAmount(data.amount, data.paymentRequired, data.depositPercent)?.toFixed(2) ?? null,
     paymentStatus: data.paymentRequired ? 'pending' : 'not_requested',
     approvedAt: data.status === 'approved' ? new Date() : undefined,
+    contractorSignature: await contractorSignature(db, orgId, c.get('userId')),
   }).returning();
-  return c.json({ data: order });
+
+  const portal = await createPortalLink(db, orgId, order.id);
+  const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
+  return c.json({ data: { ...order, approvalLink: portal ? `${baseUrl}/portal/${portal.token}?changeOrderId=${order.id}` : null } });
 });
 
 changeOrdersRoute.post('/:id/portal-link', async (c) => {
@@ -158,7 +181,10 @@ changeOrdersRoute.post('/:id/portal-link', async (c) => {
   if (!portal) return c.json({ error: 'Change order, job, or customer not found' }, 404);
 
   const [updated] = await db.update(changeOrders)
-    .set({ sentAt: new Date() })
+    .set({
+      sentAt: new Date(),
+      contractorSignature: await contractorSignature(db, orgId, c.get('userId')),
+    })
     .where(and(eq(changeOrders.id, id), eq(changeOrders.orgId, orgId)))
     .returning();
 
@@ -198,6 +224,7 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     : null;
   const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
   const portalUrl = `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`;
+  const countersignature = await contractorSignature(db, orgId, userId);
   const templateKey = 'change_order.approval.sent';
   const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
   const renderedEmail = renderChangeOrderEmail({
@@ -220,7 +247,10 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     text: renderedEmail.text,
   }) as { id?: string; message_id?: string };
   const [updatedOrder] = await db.update(changeOrders)
-    .set({ sentAt: new Date() })
+    .set({
+      sentAt: new Date(),
+      contractorSignature: countersignature,
+    })
     .where(and(eq(changeOrders.id, id), eq(changeOrders.orgId, orgId)))
     .returning();
   const emailSend = await recordEmailSend(db, {
@@ -248,6 +278,7 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
       amount: portal.order.amount,
       paymentRequired: portal.order.paymentRequired,
       expiresAt: portal.expiresAt.toISOString(),
+      contractorSignature: countersignature,
     },
   });
 
@@ -266,6 +297,7 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
       templateKey: renderedEmail.templateKey,
       link: portalUrl,
       expiresAt: portal.expiresAt.toISOString(),
+      contractorSignature: countersignature,
     },
   });
 
@@ -294,6 +326,7 @@ changeOrdersRoute.patch('/:id', async (c) => {
   const nextDepositPercent = data.depositPercent ?? Number(existing.depositPercent || 100);
   const update: Record<string, unknown> = {
     ...data,
+    reason: undefined,
     amount: data.amount == null ? undefined : data.amount.toFixed(2),
     depositPercent: data.depositPercent == null ? undefined : data.depositPercent.toFixed(2),
     paymentDueAmount: paymentDueAmount(nextAmount, nextPaymentRequired, nextDepositPercent)?.toFixed(2) ?? null,
@@ -304,8 +337,19 @@ changeOrdersRoute.patch('/:id', async (c) => {
   }
 
   if (data.status === 'approved' && !existing.approvedAt) {
+    if (!existing.customerSignedAt) {
+      return c.json({ error: 'Customer signature is required before marking a change order approved. Send the portal link or use the customer portal approval flow.' }, 409);
+    }
     update.approvedAt = new Date();
     update.approvedBy = 'contractor';
+  }
+
+  if (data.status === 'canceled') {
+    if (['approved', 'completed'].includes(existing.status) || existing.paymentStatus === 'paid') {
+      return c.json({ error: 'Approved, completed, or paid change orders cannot be canceled. Use a credit/refund workflow instead.' }, 409);
+    }
+    update.canceledAt = new Date();
+    update.canceledReason = data.reason || 'Canceled from job detail';
   }
   
   const [order] = await db.update(changeOrders)

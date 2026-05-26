@@ -120,6 +120,13 @@
       "when": 1779166012000,
       "tag": "0016_supplier_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779166013000,
+      "tag": "0017_change_order_signatures",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,10 @@ interface ChangeOrder {
   paymentRequired?: boolean | null;
   paymentStatus?: string | null;
   paymentDueAmount?: string | number | null;
+  approvalLink?: string | null;
+  customerSignedAt?: string | null;
+  customerSignatureName?: string | null;
+  canceledAt?: string | null;
 }
 
 interface MaterialPurchase {
@@ -374,7 +378,7 @@ export function JobDetail() {
     }
     setSavingChangeOrder(true);
     try {
-      await apiJson('/v1/change-orders', {
+      const response = await apiJson<{ data?: ChangeOrder & { approvalLink?: string | null } }>('/v1/change-orders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -392,8 +396,9 @@ export function JobDetail() {
         }),
       });
       setChangeOrderOpen(false);
+      if (response.data?.approvalLink) setApprovalLink(response.data.approvalLink);
       await loadJob();
-      window.showToast?.('Change order added', 'success');
+      window.showToast?.('Change order added. Approval link is ready.', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to add change order', 'error');
     } finally {
@@ -422,8 +427,45 @@ export function JobDetail() {
     }
   }
 
-  async function updateChangeOrderStatus(order: ChangeOrder, status: 'approved' | 'completed') {
-    if (status === 'approved' && !confirm('Mark this change order approved? This adds it to job revenue.')) return;
+  async function viewChangeOrder(order: ChangeOrder) {
+    setUpdatingChangeOrderId(order.id);
+    try {
+      const response = await apiJson<{ data?: { link?: string } }>(`/v1/change-orders/${order.id}/portal-link`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      if (!response.data?.link) throw new Error('Approval link could not be created');
+      window.open(response.data.link, '_blank', 'noopener,noreferrer');
+      await loadJob();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to open change order', 'error');
+    } finally {
+      setUpdatingChangeOrderId(null);
+    }
+  }
+
+  async function copyChangeOrderLink(order: ChangeOrder) {
+    setUpdatingChangeOrderId(order.id);
+    try {
+      const response = await apiJson<{ data?: { link?: string } }>(`/v1/change-orders/${order.id}/portal-link`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      const link = response.data?.link || '';
+      if (!link) throw new Error('Approval link could not be created');
+      const copied = await navigator.clipboard?.writeText(link).then(() => true).catch(() => false);
+      if (!copied) setApprovalLink(link);
+      await loadJob();
+      window.showToast?.(copied ? 'Change order link copied' : 'Approval link ready', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to copy change order link', 'error');
+    } finally {
+      setUpdatingChangeOrderId(null);
+    }
+  }
+
+  async function updateChangeOrderStatus(order: ChangeOrder, status: 'completed' | 'canceled') {
+    if (status === 'canceled' && !confirm('Cancel this change order? The customer approval link will no longer be actionable.')) return;
     setUpdatingChangeOrderId(order.id);
     try {
       await apiJson(`/v1/change-orders/${order.id}`, {
@@ -432,10 +474,10 @@ export function JobDetail() {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, reason: status === 'canceled' ? 'Canceled from job detail' : undefined }),
       });
       await loadJob();
-      window.showToast?.(status === 'approved' ? 'Change order approved' : 'Change order marked complete', 'success');
+      window.showToast?.(status === 'canceled' ? 'Change order canceled' : 'Change order marked complete', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to update change order', 'error');
     } finally {
@@ -726,13 +768,23 @@ export function JobDetail() {
                         </button>
                       )}
                       {order.status === 'pending' && (
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => updateChangeOrderStatus(order, 'approved')} disabled={updatingChangeOrderId === order.id}>
-                          {updatingChangeOrderId === order.id ? 'Approving...' : 'Mark approved'}
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => viewChangeOrder(order)} disabled={updatingChangeOrderId === order.id}>
+                          View
+                        </button>
+                      )}
+                      {order.status === 'pending' && (
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => copyChangeOrderLink(order)} disabled={updatingChangeOrderId === order.id}>
+                          Copy link
                         </button>
                       )}
                       {order.status === 'approved' && (
                         <button type="button" className="btn-secondary btn-sm" onClick={() => updateChangeOrderStatus(order, 'completed')} disabled={updatingChangeOrderId === order.id}>
                           {updatingChangeOrderId === order.id ? 'Completing...' : 'Mark complete'}
+                        </button>
+                      )}
+                      {['pending', 'rejected'].includes(String(order.status || 'pending')) && (
+                        <button type="button" className="btn-text btn-sm text-red-700" onClick={() => updateChangeOrderStatus(order, 'canceled')} disabled={updatingChangeOrderId === order.id}>
+                          Cancel
                         </button>
                       )}
                     </div>

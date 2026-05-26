@@ -8,6 +8,10 @@ import { createCheckoutSession } from '../lib/stripe';
 
 const portalApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+function isValidSignatureData(value: unknown) {
+  return typeof value === 'string' && value.startsWith('data:image/') && value.length > 100 && value.length < 100000;
+}
+
 function leadNameFromApproval(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : 'Customer';
 }
@@ -29,7 +33,12 @@ portalApp.get('/:token', async (c) => {
     where: and(eq(leads.id, portalToken.leadId), eq(leads.orgId, portalToken.orgId)),
   });
   
-  const estimate = await db.query.estimates.findFirst({
+  const focusedChangeOrder = changeOrderId
+    ? await db.query.changeOrders.findFirst({
+      where: and(eq(changeOrders.id, changeOrderId), eq(changeOrders.orgId, portalToken.orgId)),
+    })
+    : null;
+  const estimate = focusedChangeOrder ? null : await db.query.estimates.findFirst({
     where: and(
       eq(estimates.leadId, portalToken.leadId),
       eq(estimates.orgId, portalToken.orgId),
@@ -37,12 +46,6 @@ portalApp.get('/:token', async (c) => {
     ),
     orderBy: [desc(estimates.createdAt)],
   });
-  
-  const focusedChangeOrder = changeOrderId
-    ? await db.query.changeOrders.findFirst({
-      where: and(eq(changeOrders.id, changeOrderId), eq(changeOrders.orgId, portalToken.orgId)),
-    })
-    : null;
   const job = focusedChangeOrder
     ? await db.query.jobs.findFirst({
       where: and(eq(jobs.id, focusedChangeOrder.jobId), eq(jobs.orgId, portalToken.orgId), eq(jobs.leadId, portalToken.leadId)),
@@ -122,6 +125,12 @@ portalApp.post('/:token/change-orders/:id/approve', async (c) => {
     where: and(eq(changeOrders.id, id), eq(changeOrders.orgId, portalToken.orgId)),
   });
   if (!order) return c.json({ error: 'Change order not found' }, 404);
+  if (['canceled', 'rejected'].includes(order.status)) {
+    return c.json({ error: 'This change order is no longer available for approval.' }, 409);
+  }
+  if (order.status === 'completed') {
+    return c.json({ error: 'This change order is already complete.' }, 409);
+  }
 
   const job = await db.query.jobs.findFirst({
     where: and(eq(jobs.id, order.jobId), eq(jobs.orgId, portalToken.orgId), eq(jobs.leadId, portalToken.leadId)),
@@ -130,11 +139,28 @@ portalApp.post('/:token/change-orders/:id/approve', async (c) => {
 
   const approvedAt = new Date();
   const paymentRequired = Boolean(order.paymentRequired);
+  const approvedBy = typeof body.approvedBy === 'string' && body.approvedBy.trim() ? body.approvedBy.trim().slice(0, 255) : '';
+  const signatureData = typeof body.signatureData === 'string' ? body.signatureData : '';
+  if (!order.contractorSignature) {
+    return c.json({ error: 'The contractor has not countersigned this change order yet. Ask them to send or update the approval link.' }, 409);
+  }
+  if (order.customerSignedAt) {
+    return c.json({ error: 'This change order has already been signed.' }, 409);
+  }
+  if (!approvedBy) {
+    return c.json({ error: 'Please enter the customer signature name.' }, 400);
+  }
+  if (!isValidSignatureData(signatureData)) {
+    return c.json({ error: 'Please add your signature.' }, 400);
+  }
   const [updated] = await db.update(changeOrders)
     .set({
       status: 'approved',
       approvedAt: order.approvedAt || approvedAt,
-      approvedBy: typeof body.approvedBy === 'string' && body.approvedBy.trim() ? body.approvedBy.trim().slice(0, 255) : 'customer',
+      approvedBy,
+      customerSignatureName: approvedBy,
+      customerSignatureData: signatureData,
+      customerSignedAt: approvedAt,
       signedIp: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || null,
       signedUserAgent: c.req.header('user-agent') || null,
       paymentStatus: paymentRequired ? (order.paymentStatus === 'paid' ? 'paid' : 'pending') : 'not_requested',
@@ -199,6 +225,7 @@ portalApp.post('/:token/change-orders/:id/checkout', async (c) => {
   });
   if (!job) return c.json({ error: 'Change order not available for this customer' }, 404);
   if (!order.paymentRequired) return c.json({ error: 'Payment is not required for this change order' }, 400);
+  if (order.status !== 'approved' && order.status !== 'completed') return c.json({ error: 'Sign and approve this change order before paying.' }, 409);
   if (order.paymentStatus === 'paid') return c.json({ error: 'This change order is already paid' }, 400);
 
   const stripeConnection = await db.query.stripeConnections.findFirst({

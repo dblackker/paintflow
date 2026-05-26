@@ -301,6 +301,12 @@ export const changeOrders = pgTable('change_orders', {
   approvedBy: varchar('approved_by', { length: 255 }),
   signedIp: varchar('signed_ip', { length: 45 }),
   signedUserAgent: text('signed_user_agent'),
+  contractorSignature: jsonb('contractor_signature'),
+  customerSignatureName: varchar('customer_signature_name', { length: 255 }),
+  customerSignatureData: text('customer_signature_data'),
+  customerSignedAt: timestamp('customer_signed_at'),
+  canceledAt: timestamp('canceled_at'),
+  canceledReason: text('canceled_reason'),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
   approvedAt: timestamp('approved_at'),
   createdBy: varchar('created_by', { length: 100 }).notNull(), // contractor or customer
