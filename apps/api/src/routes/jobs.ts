@@ -228,6 +228,8 @@ jobsApp.get('/:id/costing', async (c) => {
         city: job.city,
         state: job.state,
         postalCode: job.postalCode,
+        scheduledStartAt: job.scheduledStartAt,
+        scheduledEndAt: job.scheduledEndAt,
         completedAt: job.completedAt,
         estimateId: job.estimateId,
         leadId: job.leadId,

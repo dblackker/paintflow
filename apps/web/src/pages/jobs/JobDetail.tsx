@@ -6,7 +6,7 @@ import { Card, CardHeader } from '@/components/Card';
 import { CrewTimecardModal, CrewTimecardPayload } from '@/components/CrewTimecardModal';
 import { Icon } from '@/components/Icon';
 import { Modal, ModalFooter } from '@/components/Modal';
-import { API_URL, apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
+import { API_URL, apiJson, formatAddress, formatMoney, labelize } from '@/lib/api';
 
 interface JobCost {
   id: string;
@@ -94,6 +94,8 @@ interface JobCostingResponse {
       city?: string | null;
       state?: string | null;
       postalCode?: string | null;
+      scheduledStartAt?: string | null;
+      scheduledEndAt?: string | null;
       leadStreetAddress?: string | null;
       leadCity?: string | null;
       leadState?: string | null;
@@ -163,6 +165,20 @@ function displayJobName(job: JobCostingResponse['data']['job']) {
   }
   if (leadName && scope && street && !name.includes(' - ')) return [leadName, scope, street].join(' - ');
   return name || [leadName || 'Customer', street].filter(Boolean).join(' - ') || 'Job detail';
+}
+
+function marginTone(margin: number) {
+  if (margin > 30) return 'text-green-700 bg-green-50 border-green-100';
+  if (margin > 15) return 'text-amber-700 bg-amber-50 border-amber-100';
+  return 'text-red-700 bg-red-50 border-red-100';
+}
+
+function scheduleLabel(job: JobCostingResponse['data']['job']) {
+  const start = formatDate(job.scheduledStartAt);
+  const end = formatDate(job.scheduledEndAt);
+  if (start !== 'Not recorded' && end !== 'Not recorded' && start !== end) return `${start} - ${end}`;
+  if (start !== 'Not recorded') return start;
+  return 'Needs date';
 }
 
 function iconButtonLabel(action: string, subject?: string | null) {
@@ -545,51 +561,59 @@ export function JobDetail() {
 
   return (
     <div className="mx-auto max-w-7xl py-5 sm:py-8">
-      <section className="mb-6 rounded-lg border bg-white p-4 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h2 className="pf-page-title truncate">{displayJobName(job)}</h2>
-              <StatusBadge status={String(job.status || 'scheduled')} />
-              {job.jobNumber && <span className="pf-status pf-status-neutral pf-status-sm">{job.jobNumber}</span>}
-            </div>
-            <div className="pf-copy space-y-1">
-              {job.leadName && (
-                <Link to={`/leads/${job.leadId}`} className="pf-row-title block truncate hover:text-blue-700">
-                  {job.leadName}
-                </Link>
-              )}
+      <section className="mb-6 rounded-lg border bg-white shadow-sm">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="min-w-0 p-4 sm:p-5">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <AddressInline address={address} className="text-sm text-gray-700" />
+                <h2 className="pf-row-title truncate">{displayJobName(job)}</h2>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {job.leadName && (
+                    <Link to={`/leads/${job.leadId}`} className="pf-copy truncate hover:text-blue-700">
+                      {job.leadName}
+                    </Link>
+                  )}
+                  {job.jobNumber && <span className="pf-status pf-status-neutral pf-status-sm">{job.jobNumber}</span>}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {job.leadPhone && <a href={`tel:${job.leadPhone}`} className="hover:text-blue-700">{formatPhone(job.leadPhone)}</a>}
-                {job.leadEmail && <a href={`mailto:${job.leadEmail}`} className="hover:text-blue-700">{job.leadEmail}</a>}
+              <div className={`inline-flex w-fit items-baseline gap-1 rounded-lg border px-3 py-2 ${marginTone(detail.profitability.grossMargin)}`}>
+                <span className="pf-section-title">{formatPercent(detail.profitability.grossMargin)}</span>
+                <span className="pf-meta">margin</span>
               </div>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <AddressInline address={address} className="pf-copy" />
+              <Link to="/calendar" className="btn-text btn-sm justify-start sm:justify-end" title="Open calendar">
+                <Icon name="calendar" className="h-4 w-4" />
+                {scheduleLabel(job)}
+              </Link>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-            {job.estimateId && <Link to={`/estimates/${job.estimateId}`} className="btn-secondary btn-sm">Estimate</Link>}
-            <button type="button" className="btn-tonal btn-sm" onClick={() => setBulkOpen(true)}>
-              <Icon name="clock" className="h-4 w-4" />
-              Log time
-            </button>
-            <button type="button" className="btn-secondary btn-sm" onClick={() => openCostModal()}>
-              <Icon name="plus" className="h-4 w-4" />
-              Add cost
-            </button>
-            <button type="button" className="btn-secondary btn-sm" onClick={() => setChangeOrderOpen(true)}>
-              Change order
-            </button>
-            {isCompleted ? (
-              <button type="button" className="btn-tonal btn-sm" onClick={requestReview} disabled={requestingReview}>
-                {requestingReview ? 'Sending...' : 'Request review'}
+          <div className="flex flex-col justify-between gap-3 border-t p-3 sm:flex-row sm:items-center lg:border-l lg:border-t-0 lg:p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link to="/calendar" className="inline-flex" title="Open calendar">
+                <StatusBadge status={String(job.status || 'scheduled')} />
+              </Link>
+              <span className="pf-meta">{Number(detail.production.laborHours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} labor hrs</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-1">
+              {job.estimateId && <Link to={`/estimates/${job.estimateId}`} className="btn-text btn-sm">Estimate</Link>}
+              <button type="button" className="btn-text btn-sm" onClick={() => setBulkOpen(true)}>
+                <Icon name="clock" className="h-4 w-4" />
+                Time
               </button>
-            ) : (
-              <button type="button" className="btn-tonal btn-sm" onClick={markComplete} disabled={completingJob}>
-                {completingJob ? 'Updating...' : 'Mark complete'}
-              </button>
-            )}
+              <button type="button" className="btn-text btn-sm" onClick={() => openCostModal()}>Cost</button>
+              <button type="button" className="btn-text btn-sm" onClick={() => setChangeOrderOpen(true)}>Change</button>
+              {isCompleted ? (
+                <button type="button" className="btn-text btn-sm" onClick={requestReview} disabled={requestingReview}>
+                  {requestingReview ? 'Sending...' : 'Review'}
+                </button>
+              ) : (
+                <button type="button" className="btn-text btn-sm text-green-700" onClick={markComplete} disabled={completingJob}>
+                  {completingJob ? 'Updating...' : 'Complete'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -611,9 +635,9 @@ export function JobDetail() {
       <section className="mb-6 -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-5">
         {kpis.map(([label, value, help]) => (
           <Card key={label} padding="sm" className="min-w-[10.5rem] snap-start sm:min-w-0">
-            <p className="pf-label text-xs uppercase text-gray-500">{label}</p>
-            <p className="mt-1 text-xl font-semibold text-gray-950 sm:text-2xl">{value}</p>
-            <p className="mt-1 text-xs text-gray-500">{help}</p>
+            <p className="pf-metric-label">{label}</p>
+            <p className="pf-row-title mt-1">{value}</p>
+            <p className="pf-meta mt-1">{help}</p>
           </Card>
         ))}
       </section>
