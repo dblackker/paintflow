@@ -14,21 +14,21 @@ export function Badge({
   className = '' 
 }: BadgeProps) {
   const variants = {
-    default: 'bg-gray-100 text-gray-800',
-    success: 'bg-green-100 text-green-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    danger: 'bg-red-100 text-red-800',
-    info: 'bg-blue-100 text-blue-800',
-    purple: 'bg-purple-100 text-purple-800',
+    default: 'pf-status-neutral',
+    success: 'pf-status-success',
+    warning: 'pf-status-warning',
+    danger: 'pf-status-danger',
+    info: 'pf-status-info',
+    purple: 'pf-status-purple',
   };
   
   const sizes = {
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-2.5 py-0.5 text-xs',
+    sm: 'pf-status-sm',
+    md: '',
   };
   
   return (
-    <span className={`inline-flex items-center rounded-full font-medium ${variants[variant]} ${sizes[size]} ${className}`}>
+    <span className={`pf-status ${variants[variant]} ${sizes[size]} ${className}`}>
       {children}
     </span>
   );

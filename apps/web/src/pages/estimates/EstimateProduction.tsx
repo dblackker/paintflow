@@ -954,17 +954,17 @@ export function EstimateProduction() {
             </div>
             <div className="space-y-2 p-4">
               {surfaceItems.length === 0 ? (
-                <p className="rounded-lg border border-dashed p-3 text-sm text-gray-500">Add scope lines to build the paint schedule.</p>
+                <p className="pf-supporting rounded-lg border border-dashed p-3">Add scope lines to build the paint schedule.</p>
               ) : surfaceItems.map((item) => (
                 <div key={`${item.roomName}-${item.surfaceName}-${item.productionRateId}`} className="rounded-lg border p-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="font-medium text-gray-950">{item.desc}</p>
-                      <p className="text-xs text-gray-500">{num(item.dimensions?.quantity).toFixed(1)} {item.dimensions?.unit}</p>
+                      <p className="pf-value">{item.desc}</p>
+                      <p className="pf-label-small">{num(item.dimensions?.quantity).toFixed(1)} {item.dimensions?.unit}</p>
                     </div>
                     <StatusBadge status={item.material?.status || 'TBD'} />
                   </div>
-                  <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
                     <PaintScheduleCell label="Product" value={[item.material?.brand, item.material?.name].filter(Boolean).join(' ') || 'Missing product'} />
                     <PaintScheduleCell label="Color" value={[item.material?.colorName, item.material?.colorCode].filter(Boolean).join(' ') || 'TBD'} />
                     <PaintScheduleCell label="Crew note" value={item.material?.crewNote || 'None'} />
@@ -985,7 +985,7 @@ export function EstimateProduction() {
               </button>
             </div>
             <div className="space-y-3 p-4">
-              {adjustments.length === 0 ? <p className="text-sm text-gray-500">No add-ons or adjustments yet.</p> : adjustments.map((item) => (
+              {adjustments.length === 0 ? <p className="pf-supporting">No add-ons or adjustments yet.</p> : adjustments.map((item) => (
                 <div key={item.id} className="grid gap-2 rounded-lg border bg-gray-50 p-3 sm:grid-cols-[minmax(0,1fr)_5rem_7rem_auto] sm:items-end">
                   <label>
                     <span className="form-label">Description</span>
@@ -999,9 +999,9 @@ export function EstimateProduction() {
                     <span className="form-label">Price</span>
                     <input className="input mt-1" type="number" inputMode="decimal" step="0.01" value={item.rate} onChange={(event) => updateAdjustment(item.id, { rate: event.target.value })} onFocus={(event) => event.currentTarget.select()} />
                   </label>
-                <div className="flex items-center justify-between gap-2">
-                    <label className="inline-flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={item.customerVisible} onChange={(event) => updateAdjustment(item.id, { customerVisible: event.target.checked })} />Show</label>
-                    <label className="inline-flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={item.optional} onChange={(event) => updateAdjustment(item.id, { optional: event.target.checked })} />Option</label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="pf-inline-option"><input type="checkbox" checked={item.customerVisible} onChange={(event) => updateAdjustment(item.id, { customerVisible: event.target.checked })} />Show</label>
+                    <label className="pf-inline-option"><input type="checkbox" checked={item.optional} onChange={(event) => updateAdjustment(item.id, { optional: event.target.checked })} />Option</label>
                     <button className="btn-text btn-sm text-red-700" onClick={() => setAdjustments((current) => current.filter((row) => row.id !== item.id))}>Remove</button>
                   </div>
                 </div>
@@ -1013,7 +1013,7 @@ export function EstimateProduction() {
         <aside className="min-w-0 space-y-4 lg:sticky lg:top-20 self-start">
           <Card>
             <CardHeader title="Estimate Summary" />
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2">
               <SummaryRow label="Labor hours" value={totals.hours.toFixed(1)} />
               <SummaryRow label="Labor" value={formatMoney(totals.labor)} />
               <SummaryRow label="Materials" value={formatMoney(totals.materials)} />
@@ -1051,7 +1051,7 @@ export function EstimateProduction() {
 
           <Card>
             <CardHeader title="Production Readiness" />
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2">
               <ReadinessRow label="Missing customer" count={ready.missingCustomer} />
               <ReadinessRow label="Zero-quantity substrates" count={ready.zeroQuantity} />
               <ReadinessRow label="Missing products" count={ready.missingProduct} />
@@ -1111,15 +1111,15 @@ function InteriorStarter({
   ];
   return (
     <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-      <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {numericFields.map(([key, label]) => (
           <label key={key}>
-            <span className="text-xs text-emerald-900">{label}</span>
+            <span className="pf-field-label text-emerald-900">{label}</span>
             <input className="input mt-1" type="number" min="0" step={key === 'ceilingHeight' ? '0.5' : '1'} inputMode="decimal" value={String(assumptions[key])} onChange={(event) => setValue(key, event.target.value)} />
           </label>
         ))}
         <label className="col-span-2">
-          <span className="text-xs text-emerald-900">Trim scope</span>
+          <span className="pf-field-label text-emerald-900">Trim scope</span>
           <select className="input mt-1" value={String(assumptions.trimScope)} onChange={(event) => setValue('trimScope', event.target.value)}>
             <option value="none">None</option>
             <option value="base">Baseboards</option>
@@ -1128,8 +1128,8 @@ function InteriorStarter({
           </select>
         </label>
         <div className="col-span-2 grid gap-2 min-[420px]:grid-cols-2">
-          <label className="inline-flex h-10 items-center gap-2 rounded border bg-white px-2 text-xs text-emerald-900"><input type="checkbox" checked={Boolean(assumptions.includeCeilings)} onChange={(event) => setValue('includeCeilings', event.target.checked)} />Ceilings</label>
-          <label className="inline-flex h-10 items-center gap-2 rounded border bg-white px-2 text-xs text-emerald-900"><input type="checkbox" checked={Boolean(assumptions.includeDoors)} onChange={(event) => setValue('includeDoors', event.target.checked)} />Doors</label>
+          <label className="pf-inline-option h-10 rounded border bg-white px-2 text-emerald-900"><input type="checkbox" checked={Boolean(assumptions.includeCeilings)} onChange={(event) => setValue('includeCeilings', event.target.checked)} />Ceilings</label>
+          <label className="pf-inline-option h-10 rounded border bg-white px-2 text-emerald-900"><input type="checkbox" checked={Boolean(assumptions.includeDoors)} onChange={(event) => setValue('includeDoors', event.target.checked)} />Doors</label>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -1153,15 +1153,15 @@ function ExteriorStarter({ assumptions, setAssumptions, onBuild, onSkip }: { ass
   ];
   return (
     <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-      <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {fields.map(([key, label, placeholder]) => (
           <label key={key}>
-            <span className="text-xs text-blue-900">{label}</span>
+            <span className="pf-field-label text-blue-900">{label}</span>
             <input className="input mt-1" type="number" min="0" step="0.1" inputMode="decimal" placeholder={placeholder} value={assumptions[key]} onChange={(event) => setValue(key, event.target.value)} />
           </label>
         ))}
         <label>
-          <span className="text-xs text-blue-900">Stories</span>
+          <span className="pf-field-label text-blue-900">Stories</span>
           <select className="input mt-1" value={assumptions.stories} onChange={(event) => setValue('stories', event.target.value)}>
             <option value="1">1</option>
             <option value="1.5">1.5</option>
@@ -1170,7 +1170,7 @@ function ExteriorStarter({ assumptions, setAssumptions, onBuild, onSkip }: { ass
           </select>
         </label>
       </div>
-      <p className="mt-3 rounded-md border border-blue-200 bg-white p-3 text-xs text-blue-950">
+      <p className="pf-supporting mt-3 rounded-md border border-blue-200 bg-white p-3 text-blue-950">
         Exterior assumptions create editable siding, soffit, fascia, trim, and corner-board substrate lines. Exact measurements can override any generated line.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -1211,7 +1211,7 @@ function RoomCard({
       <div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <label className="min-w-0">
           <span className="form-label">Room / Space</span>
-          <input className="input mt-1 text-base font-semibold" value={room.name} onChange={(event) => updateRoom(room.id, { name: event.target.value })} placeholder="Bedroom 1, front elevation, kitchen cabinets" />
+          <input className="input pf-value mt-1" value={room.name} onChange={(event) => updateRoom(room.id, { name: event.target.value })} placeholder="Bedroom 1, front elevation, kitchen cabinets" />
         </label>
         <div className="flex gap-2">
           <button className="btn-text btn-sm text-red-700" onClick={() => removeRoom(room.id)}>Remove</button>
@@ -1219,7 +1219,7 @@ function RoomCard({
       </div>
       <div className="space-y-3">
         {room.surfaces.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-3 text-sm text-gray-500">No substrates in this space yet.</p>
+          <p className="pf-supporting rounded-lg border border-dashed p-3">No substrates in this space yet.</p>
         ) : room.surfaces.map((surface) => {
           const rate = rates.find((item) => item.id === surface.rateId);
           const config = measurementConfig(rate);
@@ -1268,7 +1268,7 @@ function RoomCard({
                 </label>
               </div>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-gray-500">{config.helper}</p>
+                <p className="pf-helper">{config.helper}</p>
                 {canUseRoomMetrics && <button className="btn-text btn-sm shrink-0" onClick={() => useRoomMetrics(room.id, surface.id)}>Use room metrics</button>}
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -1309,8 +1309,8 @@ function RoomCard({
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
                 <input className="input" value={surface.crewNote} onChange={(event) => updateSurface(room.id, surface.id, { crewNote: event.target.value })} placeholder="Crew note / production handoff" />
                 <div className="flex items-center justify-between gap-3">
-                  <label className="inline-flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={surface.customerVisible} onChange={(event) => updateSurface(room.id, surface.id, { customerVisible: event.target.checked })} />Show</label>
-                  <label className="inline-flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={surface.optional} onChange={(event) => updateSurface(room.id, surface.id, { optional: event.target.checked })} />Option</label>
+                  <label className="pf-inline-option"><input type="checkbox" checked={surface.customerVisible} onChange={(event) => updateSurface(room.id, surface.id, { customerVisible: event.target.checked })} />Show</label>
+                  <label className="pf-inline-option"><input type="checkbox" checked={surface.optional} onChange={(event) => updateSurface(room.id, surface.id, { optional: event.target.checked })} />Option</label>
                   <span className="pf-row-title whitespace-nowrap">{surfaceTotal(surface)}</span>
                   <button className="btn-text btn-sm text-red-700" onClick={() => removeSurface(room.id, surface.id)}>Remove</button>
                 </div>
@@ -1334,7 +1334,7 @@ function NumberField({ label, value, onChange }: { label: string; value: string;
 }
 
 function PaintScheduleCell({ label, value }: { label: string; value: string }) {
-  return <div><span className="text-gray-500">{label}</span><div className="font-medium text-gray-800">{value}</div></div>;
+  return <div><span className="pf-label-small">{label}</span><div className="pf-value">{value}</div></div>;
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -1342,7 +1342,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 function ReadinessRow({ label, count }: { label: string; count: number }) {
-  return <div className={`flex justify-between ${count ? 'text-amber-700' : 'text-green-700'}`}><span>{label}</span><span className="font-medium">{count}</span></div>;
+  return <div className={`flex justify-between ${count ? 'text-amber-700' : 'text-green-700'}`}><span className="pf-supporting">{label}</span><span className="pf-value">{count}</span></div>;
 }
 
 function SendPreview({
@@ -1375,33 +1375,33 @@ function SendPreview({
       <div className="rounded-lg border bg-gray-50 p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Customer</p>
-            <p className="font-semibold text-gray-950">{leadName}</p>
+            <p className="pf-label-small uppercase">Customer</p>
+            <p className="pf-emphasis">{leadName}</p>
           </div>
           <div className="sm:text-right">
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Proposal total</p>
-            <p className="text-lg font-bold text-gray-950">{formatMoney(totals.total)}</p>
+            <p className="pf-label-small uppercase">Proposal total</p>
+            <p className="pf-section-title text-blue-700">{formatMoney(totals.total)}</p>
           </div>
         </div>
-        <div className="mt-3 rounded-md border bg-white p-3 text-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Email preview</p>
-          <p className="mt-1 font-medium text-gray-950">{editingSent ? `Updated ${estimateType} painting proposal for ${leadName}` : `${leadName} ${estimateType} painting proposal`}</p>
-          <p className="mt-1 text-gray-600">{editingSent ? 'Tells the customer this is an updated proposal and keeps the same preview link current.' : 'Includes this compact scope summary and a secure link to review, approve, sign, and pay.'}</p>
-          <p className="mt-2 text-xs text-gray-500">Once signed, the estimate becomes immutable. Later scope or price changes should be handled with a change order or new estimate agreement.</p>
+        <div className="mt-3 rounded-md border bg-white p-3">
+          <p className="pf-label-small uppercase">Email preview</p>
+          <p className="pf-emphasis mt-1">{editingSent ? `Updated ${estimateType} painting proposal for ${leadName}` : `${leadName} ${estimateType} painting proposal`}</p>
+          <p className="pf-supporting mt-1">{editingSent ? 'Tells the customer this is an updated proposal and keeps the same preview link current.' : 'Includes this compact scope summary and a secure link to review, approve, sign, and pay.'}</p>
+          <p className="pf-helper mt-2">Once signed, the estimate becomes immutable. Later scope or price changes should be handled with a change order or new estimate agreement.</p>
         </div>
       </div>
       <div className="space-y-2">
         {Array.from(groups.entries()).map(([name, items]) => (
           <section key={name} className="rounded-lg border bg-white">
             <div className="flex items-center justify-between gap-3 border-b bg-gray-50 px-3 py-2">
-              <h3 className="font-semibold text-gray-950">{name}</h3>
-              <span className="text-xs text-gray-500">{items.length} substrate{items.length === 1 ? '' : 's'}</span>
+              <h3 className="pf-row-title">{name}</h3>
+              <span className="pf-label-small">{items.length} substrate{items.length === 1 ? '' : 's'}</span>
             </div>
             <div className="divide-y">
               {items.map((item) => (
-                <div key={`${item.desc}-${item.productionRateId}`} className="grid gap-1 px-3 py-2 text-sm sm:grid-cols-[9rem_1fr]">
-                  <p className="font-medium text-gray-900">{String(item.desc || '').split(':').pop()?.trim()}</p>
-                  <p className="text-gray-600">{proposalDetail(item)}</p>
+                <div key={`${item.desc}-${item.productionRateId}`} className="grid gap-1 px-3 py-2 sm:grid-cols-[9rem_1fr]">
+                  <p className="pf-value">{String(item.desc || '').split(':').pop()?.trim()}</p>
+                  <p className="pf-supporting">{proposalDetail(item)}</p>
                 </div>
               ))}
             </div>
@@ -1410,9 +1410,9 @@ function SendPreview({
       </div>
       {optional.length > 0 && (
         <section className="rounded-lg border bg-white p-3">
-          <h3 className="font-semibold text-gray-950">Customer Options</h3>
-          <div className="mt-2 space-y-1 text-sm text-gray-700">
-            {optional.map((item) => <div key={`${item.desc}-${item.productionRateId}`} className="flex justify-between gap-3 border-t py-2"><span>{item.desc}</span><span className="font-semibold">{formatMoney(num(item.rate))}</span></div>)}
+          <h3 className="pf-row-title">Customer Options</h3>
+          <div className="mt-2 space-y-1">
+            {optional.map((item) => <div key={`${item.desc}-${item.productionRateId}`} className="flex justify-between gap-3 border-t py-2"><span className="pf-supporting">{item.desc}</span><span className="pf-value">{formatMoney(num(item.rate))}</span></div>)}
           </div>
         </section>
       )}
