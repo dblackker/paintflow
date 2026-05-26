@@ -4,6 +4,7 @@ import { Badge, StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
+import { UpsellCard } from '@/components/UpsellCard';
 import { API_URL, apiJson, formatAddress, formatMoney, labelize } from '@/lib/api';
 
 const dayMs = 86_400_000;
@@ -576,10 +577,7 @@ export function Calendar() {
           </p>
           <div className="mt-3">{renderCompactStats()}</div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-[auto_auto] lg:justify-end">
-          <Button variant="secondary" size="sm" onClick={connectGoogle} leftIcon={<Icon name="calendar" className="h-4 w-4" />}>
-            Connect Google
-          </Button>
+        <div className="lg:justify-self-end">
           <div className="pf-segmented-group" aria-label="Calendar view">
             <button type="button" aria-pressed={viewMode === 'week'} onClick={() => setViewMode('week')}>Week</button>
             <button type="button" aria-pressed={viewMode === 'month'} onClick={() => setViewMode('month')}>Month</button>
@@ -587,17 +585,44 @@ export function Calendar() {
         </div>
       </div>
 
-      <div className="sticky top-[4.4rem] z-20 mb-5 grid grid-cols-3 gap-2 rounded-lg border border-gray-200 bg-white/95 p-2 shadow-sm backdrop-blur sm:ml-auto sm:w-fit sm:min-w-80 sm:rounded-full">
-        <Button variant="secondary" size="sm" onClick={() => shiftCalendar(-1)} leftIcon={<Icon name="chevron-left" className="h-4 w-4" />}>
-          Prev
-        </Button>
-        <Button variant="secondary" size="sm" onClick={resetCalendar}>
-          Today
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => shiftCalendar(1)} rightIcon={<Icon name="chevron-right" className="h-4 w-4" />}>
-          Next
-        </Button>
-      </div>
+      <UpsellCard
+        eyebrow="Calendar sync"
+        title="Connect Google Calendar"
+        body="Keep production dates visible outside PaintFlow and reduce missed schedule updates as the crew calendar changes."
+        ctaText="Connect Google"
+        icon="calendar"
+        tone="neutral"
+        compact
+        className="mb-5"
+        onCta={connectGoogle}
+      />
+
+      <Card className="sticky top-[4.4rem] z-20 mb-5 bg-white/95 backdrop-blur lg:ml-auto lg:max-w-md" padding="sm">
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+          <button
+            type="button"
+            className="btn-icon btn-icon-outlined"
+            aria-label={viewMode === 'month' ? 'Previous month' : 'Previous week'}
+            onClick={() => shiftCalendar(-1)}
+          >
+            <Icon name="chevron-left" className="h-4 w-4" />
+          </button>
+          <div className="min-w-0 text-center">
+            <p className="pf-emphasis truncate">{calendarTitle()}</p>
+            <button type="button" className="mt-1 text-sm font-medium text-blue-700 hover:text-blue-800" onClick={resetCalendar}>
+              Today
+            </button>
+          </div>
+          <button
+            type="button"
+            className="btn-icon btn-icon-outlined"
+            aria-label={viewMode === 'month' ? 'Next month' : 'Next week'}
+            onClick={() => shiftCalendar(1)}
+          >
+            <Icon name="chevron-right" className="h-4 w-4" />
+          </button>
+        </div>
+      </Card>
 
       {renderWeatherPanel()}
 
@@ -611,7 +636,7 @@ export function Calendar() {
         <Card className="lg:col-span-8" padding="none">
           <div className="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="pf-section-title">{calendarTitle()}</h2>
+              <h2 className="pf-section-title">Production schedule</h2>
               <p className="pf-helper">
                 {viewMode === 'month'
                   ? 'Month view gives owners a wider production picture. Switch to week for fuller job detail.'
