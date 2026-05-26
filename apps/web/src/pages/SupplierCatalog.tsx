@@ -304,12 +304,20 @@ export function SupplierCatalog() {
       <Card padding="none">
         <div className="border-b p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex rounded-full bg-gray-100 p-1">
-              <button type="button" className={`btn-segment ${tab === 'products' ? 'is-active' : ''}`} onClick={() => setTab('products')}>Products</button>
-              <button type="button" className={`btn-segment ${tab === 'colors' ? 'is-active' : ''}`} onClick={() => setTab('colors')}>Colors</button>
+            <div className="w-full sm:w-56">
+              <label className="pf-label-small" htmlFor="supplier-catalog-view">Browse by</label>
+              <Select
+                id="supplier-catalog-view"
+                className="mt-1"
+                value={tab}
+                onChange={(event) => setTab(event.target.value as CatalogTab)}
+              >
+                <option value="products">Paint products</option>
+                <option value="colors">Paint colors</option>
+              </Select>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[16rem_12rem_12rem_auto]">
-              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === 'products' ? 'Search product, line, SKU' : 'Search color, code, family'} />
+              <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === 'products' ? 'Search products, lines, SKUs' : 'Search colors, codes, families'} />
               <Select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
                 <option value="">All suppliers</option>
                 {suppliers.map((supplier) => <option key={supplier.value} value={supplier.value}>{supplier.label}</option>)}
