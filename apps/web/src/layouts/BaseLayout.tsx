@@ -66,6 +66,7 @@ function routeTitle(pathname: string) {
   if (pathname.startsWith('/email-templates')) return 'Email Templates';
   if (pathname.startsWith('/settings')) return 'Settings';
   if (pathname.startsWith('/notifications')) return 'Notifications';
+  if (pathname.startsWith('/onboarding')) return 'Onboarding';
   if (pathname.startsWith('/production-rates')) return 'Production Rates';
   if (pathname.startsWith('/materials')) return 'Paint Products';
   if (pathname.startsWith('/billing')) return 'Billing';
