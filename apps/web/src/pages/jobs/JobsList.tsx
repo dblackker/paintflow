@@ -6,6 +6,7 @@ import { CrewTimecardModal, CrewTimecardPayload } from '@/components/CrewTimecar
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { Input } from '@/components/Input';
+import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { apiJson, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface TeamMember {
@@ -249,8 +250,8 @@ export function JobsList() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          {error}
+        <div className="mb-4">
+          <ServiceErrorState error={error} pageName="Jobs" title="Jobs are unavailable" onRetry={loadJobs} compact />
         </div>
       )}
 

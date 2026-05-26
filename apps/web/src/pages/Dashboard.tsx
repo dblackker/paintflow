@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
+import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface DashboardStats {
@@ -172,7 +173,7 @@ export function Dashboard() {
   const [quickActions, setQuickActions] = useState<QuickActionPreference[]>(defaultQuickActionState);
   const [isEditingActions, setIsEditingActions] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>(null);
   const [setupPrompt, setSetupPrompt] = useState(false);
   const [applyingRecommendation, setApplyingRecommendation] = useState('');
 
@@ -198,9 +199,9 @@ export function Dashboard() {
       setRecommendations(recommendationsResponse.data || []);
       setQuickActions(mergeQuickActionPreferences(quickActionsResponse.data.actions));
       setSetupPrompt(Boolean(orgResponse && orgResponse.data.companyName && !orgResponse.data.onboardingCompletedAt));
-      setError('');
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -274,6 +275,25 @@ export function Dashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="dashboard-shell mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+        <ServiceErrorState
+          error={error}
+          pageName="Dashboard"
+          title="Dashboard data is unavailable"
+          onRetry={loadDashboard}
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to="/leads" className="btn-secondary btn-sm">Open leads</Link>
+          <Link to="/estimates" className="btn-secondary btn-sm">Open estimates</Link>
+          <Link to="/jobs" className="btn-secondary btn-sm">Open jobs</Link>
+          <Link to="/settings" className="btn-text btn-sm">Settings</Link>
+        </div>
+      </div>
+    );
+  }
+
   const hasNoData = !stats.activeLeads && !stats.estimatesSent && !stats.jobsThisMonth;
 
   return (
@@ -291,8 +311,6 @@ export function Dashboard() {
           ))}
         </div>
       </div>
-
-      {error && <Card className="mb-4 border-red-200 bg-red-50 text-sm text-red-800">{error}</Card>}
 
       {setupPrompt && (
         <section className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-5 sm:p-6">

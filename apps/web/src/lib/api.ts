@@ -11,9 +11,31 @@ function resolveApiUrl() {
 
 export const API_URL = resolveApiUrl();
 
+export class PaintFlowApiError extends Error {
+  status?: number;
+  code?: string;
+  serviceUnavailable: boolean;
+
+  constructor(message: string, options: { status?: number; code?: string; serviceUnavailable?: boolean } = {}) {
+    super(message);
+    this.name = 'PaintFlowApiError';
+    this.status = options.status;
+    this.code = options.code;
+    this.serviceUnavailable = Boolean(options.serviceUnavailable);
+  }
+}
+
 export async function apiJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_URL}${path}`;
-  const response = await fetch(url, { credentials: 'include', ...options });
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: 'include', ...options });
+  } catch {
+    throw new PaintFlowApiError('PaintFlow API is unreachable. The app loaded, but the service that provides this page data did not respond.', {
+      serviceUnavailable: true,
+      code: 'NETWORK_UNREACHABLE',
+    });
+  }
 
   if (response.status === 401) {
     window.location.href = '/login';
@@ -22,7 +44,15 @@ export async function apiJson<T>(path: string, options: RequestInit = {}): Promi
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(body?.error || body?.message || 'Request failed');
+    const statusUnavailable = response.status === 502 || response.status === 503 || response.status === 504;
+    throw new PaintFlowApiError(
+      body?.error || body?.message || (statusUnavailable ? 'PaintFlow API is temporarily unavailable.' : 'Request failed'),
+      {
+        status: response.status,
+        code: body?.code,
+        serviceUnavailable: statusUnavailable,
+      },
+    );
   }
 
   return body as T;

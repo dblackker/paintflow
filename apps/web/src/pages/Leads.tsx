@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { Input, Select } from '@/components/Input';
+import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 const leadStatuses = [
@@ -260,9 +261,9 @@ export function Leads() {
       </Card>
 
       {error && (
-        <Card padding="md" className="mb-4 border-red-200 bg-red-50 text-sm text-red-800">
-          {error}
-        </Card>
+        <div className="mb-4">
+          <ServiceErrorState error={error} pageName="Leads" title="Leads are unavailable" onRetry={loadLeads} compact />
+        </div>
       )}
 
       {isLoading ? (

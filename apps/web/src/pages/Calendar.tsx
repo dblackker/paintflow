@@ -4,6 +4,7 @@ import { Badge, StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
+import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { UpsellCard } from '@/components/UpsellCard';
 import { API_URL, apiJson, formatAddress, formatMoney, labelize } from '@/lib/api';
 
@@ -632,9 +633,9 @@ export function Calendar() {
       {renderWeatherPanel()}
 
       {error && (
-        <Card className="mb-5 border-red-100 bg-red-50" padding="sm">
-          <p className="pf-copy text-red-700">{error}</p>
-        </Card>
+        <div className="mb-5">
+          <ServiceErrorState error={error} pageName="Calendar" title="Calendar schedule is unavailable" onRetry={loadCalendar} compact />
+        </div>
       )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">

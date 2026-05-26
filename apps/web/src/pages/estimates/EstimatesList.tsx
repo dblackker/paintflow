@@ -5,6 +5,7 @@ import { AddressInline } from '@/components/AddressInline';
 import { Card } from '@/components/Card';
 import { Input, Select, Textarea } from '@/components/Input';
 import { Modal, ModalFooter } from '@/components/Modal';
+import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { EstimateActionMenu, EstimateActionMenuEstimate, EstimateActionType } from '@/components/estimates/EstimateActionMenu';
 import { apiJson, formatMoney, formatPhone } from '@/lib/api';
 
@@ -329,11 +330,9 @@ export function EstimatesList() {
       </Card>
 
       {error && (
-        <Card padding="md" className="mb-4 border-red-200 bg-red-50 text-red-800">
-          <p className="pf-row-title">Estimates could not be loaded</p>
-          <p className="pf-copy mt-1">{error || 'Check that the API server is running and try again.'}</p>
-          <button type="button" className="btn-primary btn-sm mt-4" onClick={loadEstimates}>Retry</button>
-        </Card>
+        <div className="mb-4">
+          <ServiceErrorState error={error} pageName="Estimates" title="Estimates are unavailable" onRetry={loadEstimates} compact />
+        </div>
       )}
 
       {filteredEstimates.length === 0 ? (
