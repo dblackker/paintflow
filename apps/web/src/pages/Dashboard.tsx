@@ -280,8 +280,7 @@ export function Dashboard() {
     <div className="dashboard-shell mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       <div className="dashboard-hero mb-6 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="pf-page-title">Dashboard</h2>
-          <p className="pf-page-copy mt-1">Run today's lead, estimate, and job workflow from one place.</p>
+          <p className="pf-page-copy">Run today's lead, estimate, and job workflow from one place.</p>
         </div>
         <div className="dashboard-primary-actions grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           {primaryActions.map(({ action }, index) => (

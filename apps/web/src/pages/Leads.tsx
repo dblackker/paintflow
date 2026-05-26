@@ -222,8 +222,7 @@ export function Leads() {
     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="pf-page-title">Leads</h2>
-          <p className="pf-page-copy mt-1">Capture inquiries, qualify them, and keep follow-up moving.</p>
+          <p className="pf-page-copy">Capture inquiries, qualify them, and keep follow-up moving.</p>
         </div>
         <Button fullWidth className="sm:w-auto" onClick={() => setIsModalOpen(true)}>
           <Icon name="plus" className="pf-icon" />
