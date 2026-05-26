@@ -9,7 +9,6 @@ const navSections = [
   {
     label: 'Sales',
     links: [
-      { href: '/dashboard', label: 'Dashboard' },
       { href: '/leads', label: 'Leads' },
       { href: '/pipeline', label: 'Pipeline' },
       { href: '/estimates', label: 'Estimates' },
