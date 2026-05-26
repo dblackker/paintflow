@@ -1277,10 +1277,10 @@ export function Time() {
                 </label>
               )}
               <div className="mt-3 flex justify-end gap-2">
-                <Button size="sm" variant="secondary" disabled={!row.endedAtActual} onClick={() => reviewPunch(row.id, 'approved')}>
+                <Button size="sm" variant="success" disabled={!row.endedAtActual} onClick={() => reviewPunch(row.id, 'approved')}>
                   Approve
                 </Button>
-                <Button size="sm" variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => reviewPunch(row.id, 'rejected')}>
+                <Button size="sm" variant="dangerSubtle" onClick={() => reviewPunch(row.id, 'rejected')}>
                   Reject
                 </Button>
               </div>
