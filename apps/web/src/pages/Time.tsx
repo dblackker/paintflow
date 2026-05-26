@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -113,6 +113,21 @@ interface MapPayload {
     employees?: number;
     jobs?: number;
   };
+}
+
+interface MapViewport {
+  centerLat: number;
+  centerLng: number;
+  zoom: number;
+}
+
+interface MapDragState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  centerPixelX: number;
+  centerPixelY: number;
+  zoom: number;
 }
 
 interface EditEntryState {
@@ -283,6 +298,17 @@ function latLngToWorldPixel(latitude: number, longitude: number, zoom: number) {
   };
 }
 
+function worldPixelToLatLng(x: number, y: number, zoom: number) {
+  const scale = 256 * 2 ** zoom;
+  const longitude = (x / scale) * 360 - 180;
+  const n = Math.PI - (2 * Math.PI * y) / scale;
+  const latitude = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  return {
+    latitude: Math.max(-85.0511, Math.min(85.0511, latitude)),
+    longitude: ((((longitude + 180) % 360) + 360) % 360) - 180,
+  };
+}
+
 function mapZoomForSpan(latSpan: number, lngSpan: number) {
   const span = Math.max(latSpan, lngSpan);
   if (span < 0.01) return 16;
@@ -410,6 +436,7 @@ export function Time() {
   const [switchJobId, setSwitchJobId] = useState('');
   const [showLongShiftModal, setShowLongShiftModal] = useState(false);
   const [confirmedLongClockOut, setConfirmedLongClockOut] = useState(false);
+  const [mapViewport, setMapViewport] = useState<MapViewport>({ centerLat: 39.8283, centerLng: -98.5795, zoom: 4 });
   const [showEditModal, setShowEditModal] = useState(false);
   const [editEntry, setEditEntry] = useState<EditEntryState | null>(null);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
@@ -425,6 +452,7 @@ export function Time() {
   }));
   const [isSavingBulk, setIsSavingBulk] = useState(false);
   const [reviewJobsBySession, setReviewJobsBySession] = useState<Record<string, string>>({});
+  const mapDragRef = useRef<MapDragState | null>(null);
   const canManage = Boolean(punchStatus.canManage);
   const isCrewOnly = Boolean(punchStatus.member && !canManage);
 
@@ -579,6 +607,25 @@ export function Time() {
   useEffect(() => {
     loadMapData();
   }, [canManage, mapCollapsed, mapDate.getTime()]);
+
+  useEffect(() => {
+    const events = mapData.events || [];
+    if (!events.length) {
+      setMapViewport({ centerLat: 39.8283, centerLng: -98.5795, zoom: 4 });
+      return;
+    }
+    const bounds = events.reduce((acc, event) => ({
+      minLat: Math.min(acc.minLat, event.latitude),
+      maxLat: Math.max(acc.maxLat, event.latitude),
+      minLng: Math.min(acc.minLng, event.longitude),
+      maxLng: Math.max(acc.maxLng, event.longitude),
+    }), { minLat: 90, maxLat: -90, minLng: 180, maxLng: -180 });
+    setMapViewport({
+      centerLat: events.reduce((sum, event) => sum + event.latitude, 0) / events.length,
+      centerLng: events.reduce((sum, event) => sum + event.longitude, 0) / events.length,
+      zoom: mapZoomForSpan(Math.max(0.001, bounds.maxLat - bounds.minLat), Math.max(0.001, bounds.maxLng - bounds.minLng)),
+    });
+  }, [mapData.events]);
 
   useEffect(() => {
     localStorage.setItem(viewStorageKey, viewMode);
@@ -873,6 +920,69 @@ export function Time() {
     };
   }
 
+  function zoomMap(delta: number) {
+    setMapViewport((current) => ({
+      ...current,
+      zoom: Math.max(3, Math.min(18, current.zoom + delta)),
+    }));
+  }
+
+  function resetMapView() {
+    const events = mapData.events || [];
+    if (!events.length) {
+      setMapViewport({ centerLat: 39.8283, centerLng: -98.5795, zoom: 4 });
+      return;
+    }
+    const bounds = events.reduce((acc, event) => ({
+      minLat: Math.min(acc.minLat, event.latitude),
+      maxLat: Math.max(acc.maxLat, event.latitude),
+      minLng: Math.min(acc.minLng, event.longitude),
+      maxLng: Math.max(acc.maxLng, event.longitude),
+    }), { minLat: 90, maxLat: -90, minLng: 180, maxLng: -180 });
+    setMapViewport({
+      centerLat: events.reduce((sum, event) => sum + event.latitude, 0) / events.length,
+      centerLng: events.reduce((sum, event) => sum + event.longitude, 0) / events.length,
+      zoom: mapZoomForSpan(Math.max(0.001, bounds.maxLat - bounds.minLat), Math.max(0.001, bounds.maxLng - bounds.minLng)),
+    });
+  }
+
+  function startMapPan(event: PointerEvent<HTMLDivElement>) {
+    if ((event.target as Element).closest('a, button')) return;
+    const centerPixel = latLngToWorldPixel(mapViewport.centerLat, mapViewport.centerLng, mapViewport.zoom);
+    mapDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      centerPixelX: centerPixel.x,
+      centerPixelY: centerPixel.y,
+      zoom: mapViewport.zoom,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveMapPan(event: PointerEvent<HTMLDivElement>) {
+    const drag = mapDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const nextCenter = worldPixelToLatLng(
+      drag.centerPixelX - (event.clientX - drag.startX),
+      drag.centerPixelY - (event.clientY - drag.startY),
+      drag.zoom,
+    );
+    setMapViewport((current) => ({
+      ...current,
+      centerLat: nextCenter.latitude,
+      centerLng: nextCenter.longitude,
+    }));
+  }
+
+  function endMapPan(event: PointerEvent<HTMLDivElement>) {
+    if (mapDragRef.current?.pointerId === event.pointerId) {
+      mapDragRef.current = null;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1135,23 +1245,14 @@ export function Time() {
 
   function renderMapPanel() {
     const events = mapData.events || [];
-    const bounds = events.reduce((acc, event) => ({
-      minLat: Math.min(acc.minLat, event.latitude),
-      maxLat: Math.max(acc.maxLat, event.latitude),
-      minLng: Math.min(acc.minLng, event.longitude),
-      maxLng: Math.max(acc.maxLng, event.longitude),
-    }), { minLat: 90, maxLat: -90, minLng: 180, maxLng: -180 });
-    const spanLat = Math.max(0.001, bounds.maxLat - bounds.minLat);
-    const spanLng = Math.max(0.001, bounds.maxLng - bounds.minLng);
-    const centerLat = events.length ? events.reduce((sum, event) => sum + event.latitude, 0) / events.length : 39.8283;
-    const centerLng = events.length ? events.reduce((sum, event) => sum + event.longitude, 0) / events.length : -98.5795;
-    const zoom = events.length ? mapZoomForSpan(spanLat, spanLng) : 4;
-    const centerTileX = Math.floor(latLngToWorldPixel(centerLat, centerLng, zoom).x / 256);
-    const centerTileY = Math.floor(latLngToWorldPixel(centerLat, centerLng, zoom).y / 256);
-    const tileOriginX = (centerTileX - 1) * 256;
-    const tileOriginY = (centerTileY - 1) * 256;
+    const { centerLat, centerLng, zoom } = mapViewport;
+    const centerPixel = latLngToWorldPixel(centerLat, centerLng, zoom);
+    const centerTileX = Math.floor(centerPixel.x / 256);
+    const centerTileY = Math.floor(centerPixel.y / 256);
+    const tileOriginX = (centerTileX - 2) * 256;
+    const tileOriginY = (centerTileY - 2) * 256;
     const tileCount = 2 ** zoom;
-    const tiles = [-1, 0, 1].flatMap((yOffset) => [-1, 0, 1].map((xOffset) => ({
+    const tiles = [-2, -1, 0, 1, 2].flatMap((yOffset) => [-2, -1, 0, 1, 2].map((xOffset) => ({
       key: `${xOffset}:${yOffset}`,
       x: centerTileX + xOffset,
       y: centerTileY + yOffset,
@@ -1198,12 +1299,24 @@ export function Time() {
               ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
-              <div className="relative min-h-80 overflow-hidden rounded-xl border border-gray-200 bg-slate-100">
+              <div
+                className="relative min-h-80 cursor-grab touch-none overflow-hidden rounded-xl border border-gray-200 bg-slate-100 active:cursor-grabbing"
+                onPointerDown={startMapPan}
+                onPointerMove={moveMapPan}
+                onPointerUp={endMapPan}
+                onPointerCancel={endMapPan}
+              >
                 {isMapLoading ? (
                   <p className="pf-copy p-4">Loading punch locations...</p>
-                ) : events.length ? (
+                ) : (
                   <>
-                    <div className="absolute left-1/2 top-1/2 grid h-[768px] w-[768px] -translate-x-1/2 -translate-y-1/2 grid-cols-3 grid-rows-3 opacity-95">
+                    <div
+                      className="absolute grid h-[1280px] w-[1280px] grid-cols-5 grid-rows-5 opacity-95"
+                      style={{
+                        left: `calc(50% - ${centerPixel.x - tileOriginX}px)`,
+                        top: `calc(50% - ${centerPixel.y - tileOriginY}px)`,
+                      }}
+                    >
                       {tiles.map((tile) => (
                         <img
                           key={tile.key}
@@ -1211,15 +1324,32 @@ export function Time() {
                           className="h-64 w-64 select-none"
                           draggable={false}
                           src={`https://tile.openstreetmap.org/${zoom}/${((tile.x % tileCount) + tileCount) % tileCount}/${tile.y}.png`}
-                          style={{ gridColumnStart: tile.xOffset + 2, gridRowStart: tile.yOffset + 2 }}
+                          style={{ gridColumnStart: tile.xOffset + 3, gridRowStart: tile.yOffset + 3 }}
                         />
                       ))}
                     </div>
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/20" />
+                    <div className="absolute left-2 top-2 z-10 flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+                      <button type="button" className="btn-icon rounded-none border-0" aria-label="Zoom in" onClick={() => zoomMap(1)}>
+                        <Icon name="plus" className="h-4 w-4" />
+                      </button>
+                      <button type="button" className="btn-icon rounded-none border-0 border-t border-gray-200" aria-label="Zoom out" onClick={() => zoomMap(-1)}>
+                        <Icon name="minus" className="h-4 w-4" />
+                      </button>
+                      <button type="button" className="btn-icon rounded-none border-0 border-t border-gray-200" aria-label="Reset map view" onClick={resetMapView}>
+                        <Icon name="refresh" className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {!events.length && (
+                      <div className="absolute left-1/2 top-1/2 z-10 w-[min(18rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-gray-200 bg-white/95 p-4 text-center shadow-sm">
+                        <p className="pf-emphasis">No GPS punches for this day</p>
+                        <p className="pf-helper mt-1">Use the day controls above to review another crew location snapshot.</p>
+                      </div>
+                    )}
                     {events.map((event) => {
                       const pixel = latLngToWorldPixel(event.latitude, event.longitude, zoom);
-                      const left = ((pixel.x - tileOriginX) / 768) * 100;
-                      const top = ((pixel.y - tileOriginY) / 768) * 100;
+                      const left = `calc(50% + ${pixel.x - centerPixel.x}px)`;
+                      const top = `calc(50% + ${pixel.y - centerPixel.y}px)`;
                       const isOut = event.type.includes('clock_out');
                       return (
                         <a
@@ -1227,8 +1357,8 @@ export function Time() {
                           href={mapHref(event.latitude, event.longitude)}
                           target="_blank"
                           rel="noreferrer"
-                          className={`absolute flex h-9 w-9 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full border-2 border-white text-xs font-semibold shadow-lg ${event.reviewRequired ? 'bg-amber-500 text-white' : isOut ? 'bg-slate-700 text-white' : 'bg-green-600 text-white'}`}
-                          style={{ left: `${left}%`, top: `${top}%` }}
+                          className={`absolute z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full border-2 border-white text-xs font-semibold shadow-lg ${event.reviewRequired ? 'bg-amber-500 text-white' : isOut ? 'bg-slate-700 text-white' : 'bg-green-600 text-white'}`}
+                          style={{ left, top }}
                           title={`${event.teamMemberName || 'Crew member'} ${eventTypeLabel(event.type)}`}
                         >
                           {event.reviewRequired ? '!' : isOut ? 'Out' : 'In'}
@@ -1245,8 +1375,6 @@ export function Time() {
                       Open map
                     </a>
                   </>
-                ) : (
-                  <p className="pf-copy p-4">No GPS punch locations for this day.</p>
                 )}
               </div>
               <div>
