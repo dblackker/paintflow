@@ -1,107 +1,604 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader } from '@/components/Card';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/Tabs';
+import { Card, CardContent, CardHeader } from '@/components/Card';
+import { Icon } from '@/components/Icon';
+import { API_URL, apiJson, formatPhone } from '@/lib/api';
+
+interface OrgSettings {
+  companyName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  defaultLaborRate?: string | number | null;
+  materialMarkupPercent?: string | number | null;
+  salesTaxRate?: string | number | null;
+  paymentTerms?: string | null;
+  googleReviewUrl?: string | null;
+  yelpReviewUrl?: string | null;
+}
+
+interface BrandingSettings {
+  companyName?: string | null;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+}
+
+interface LegalSettings {
+  jurisdiction?: string | null;
+  contractorRegistrationNumber?: string | null;
+  bondAmount?: string | null;
+  contractTerms?: string | null;
+  disclosureEnabled?: boolean;
+  disclosureRequired?: boolean;
+  disclosureTitle?: string | null;
+  disclosureText?: string | null;
+  legalReviewNote?: string | null;
+}
+
+interface PaymentMilestone {
+  key?: string;
+  label: string;
+  due: string;
+  percent: number | string;
+  payable?: boolean;
+}
+
+interface PaymentSchedule {
+  enabled?: boolean;
+  milestones?: PaymentMilestone[];
+}
+
+interface ConnectorStatus {
+  stripe: React.ReactNode;
+  quickbooks: React.ReactNode;
+  calendar: React.ReactNode;
+}
+
+const defaultMilestones: PaymentMilestone[] = [
+  { key: 'deposit', label: 'Deposit', due: 'Due after approval to reserve the schedule', percent: 40, payable: true },
+  { key: 'progress', label: 'Progress payment', due: 'Due before production starts', percent: 30, payable: false },
+  { key: 'completion', label: 'Final payment', due: 'Due on completion', percent: 30, payable: false },
+];
+
+const setupCards = [
+  ['Company', 'Business profile', 'Company name, phone, email, address, proposal branding, and review links.', '#business-settings'],
+  ['Estimating', 'Pricing defaults', 'Labor rate, material markup, tax, deposit, paint products, and production rates.', '#pricing-settings'],
+  ['Operations', 'Team and field setup', 'Crew roles, time clock policies, scheduling, notifications, and reusable templates.', '#operations-settings'],
+  ['Connectors', 'Payments and integrations', 'Stripe deposits, Google Calendar, QuickBooks status, billing, and browser notifications.', '#integrations-settings'],
+  ['Insights', 'Reports', 'Review sales, revenue, jobs, and operating metrics from one reporting surface.', '/reports'],
+  ['Audit', 'Activity log', 'See customer events and operational changes across leads, estimates, and jobs.', '/activity'],
+  ['Email', 'Email templates', 'Customize estimate emails and future drips, thank-yous, and change-order communication.', '/email-templates'],
+  ['Legal', 'Contract terms', 'Set company-reviewed proposal terms, disclosures, and registration details.', '#legal-settings'],
+];
+
+function phoneDigits(value: string) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits.slice(0, 10);
+}
+
+function maskPhone(value: string) {
+  return formatPhone(phoneDigits(value));
+}
+
+function numberPercent(value: unknown) {
+  const numeric = Number(value || 0);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function salesTaxDisplay(value: unknown) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return '';
+  return numeric > 0 && numeric <= 1 ? String(Number((numeric * 100).toFixed(4))) : String(numeric || '');
+}
+
+function slugify(value: string, fallback: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40) || fallback;
+}
+
+function ActionCard({ href, title, copy }: { href: string; title: string; copy: string }) {
+  return (
+    <Link to={href} className="flex min-h-[4.25rem] items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm sm:p-4">
+      <span className="min-w-0">
+        <span className="block font-semibold text-gray-950">{title}</span>
+        <span className="pf-copy mt-0.5 block">{copy}</span>
+      </span>
+      <span className="btn-text btn-sm pointer-events-none shrink-0">Open</span>
+    </Link>
+  );
+}
+
+function FieldLabel({ label, help }: { label: string; help?: string }) {
+  return (
+    <span className="form-label inline-flex items-center gap-1.5">
+      {label}
+      {help && (
+        <span className="group relative inline-flex">
+          <button type="button" className="btn-icon h-5 w-5 text-gray-500" aria-label={`Explain ${label}`}>
+            <Icon name="info" className="h-3.5 w-3.5" />
+          </button>
+          <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-72 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block sm:left-full sm:top-1/2 sm:ml-2 sm:mt-0 sm:-translate-y-1/2">
+            {help}
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
 
 export function Settings() {
-  const [companyName, setCompanyName] = useState('PaintFlow Painting Co');
-  const [email, setEmail] = useState('hello@paintflow.com');
-  const [phone, setPhone] = useState('(555) 123-4567');
-  const [laborRate, setLaborRate] = useState('65');
-  const [markup, setMarkup] = useState('30');
-  const [taxRate, setTaxRate] = useState('9.2');
+  const [settings, setSettings] = useState<OrgSettings>({});
+  const [branding, setBranding] = useState<BrandingSettings>({ primaryColor: '#2563eb' });
+  const [legal, setLegal] = useState<LegalSettings>({});
+  const [milestones, setMilestones] = useState<PaymentMilestone[]>(defaultMilestones);
+  const [connectors, setConnectors] = useState<ConnectorStatus>({
+    stripe: 'Checking...',
+    quickbooks: 'Check QuickBooks settings',
+    calendar: 'Checking...',
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const paymentTotal = useMemo(
+    () => milestones.reduce((sum, milestone) => sum + numberPercent(milestone.percent), 0),
+    [milestones],
+  );
+  const paymentTotalOk = Math.abs(paymentTotal - 100) <= 0.01;
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  async function loadSettings() {
+    setIsLoading(true);
+    setError('');
+    try {
+      const [orgPayload, brandingPayload, legalPayload, schedulePayload] = await Promise.all([
+        apiJson<{ data?: OrgSettings }>('/v1/settings/org'),
+        apiJson<{ data?: BrandingSettings }>('/v1/settings/branding'),
+        apiJson<{ data?: LegalSettings }>('/v1/settings/legal'),
+        apiJson<{ data?: PaymentSchedule }>('/v1/settings/payment-schedule'),
+      ]);
+      const org = orgPayload.data || {};
+      setSettings({ ...org, phone: org.phone ? maskPhone(String(org.phone)) : '', salesTaxRate: salesTaxDisplay(org.salesTaxRate) });
+      setBranding({ primaryColor: '#2563eb', ...(brandingPayload.data || {}) });
+      setLegal(legalPayload.data || {});
+      setMilestones(schedulePayload.data?.milestones?.length ? schedulePayload.data.milestones : defaultMilestones);
+      void loadConnectorStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load settings');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function loadConnectorStatus() {
+    const next: ConnectorStatus = { stripe: 'Checking...', quickbooks: 'Check QuickBooks settings', calendar: 'Checking...' };
+    try {
+      const calendarResponse = await fetch(`${API_URL}/v1/calendar/status`, { credentials: 'include' });
+      const calendar = await calendarResponse.json().catch(() => ({}));
+      next.calendar = calendar.connected ? <span className="text-green-700">Connected</span> : 'Not connected';
+    } catch {
+      next.calendar = 'Not connected';
+    }
+    try {
+      const stripePayload = await apiJson<{ data?: { onboardingComplete?: boolean } }>('/v1/stripe/status');
+      next.stripe = stripePayload.data?.onboardingComplete ? <span className="text-green-700">Ready for deposits</span> : <Link to="/payments/stripe" className="text-blue-700">Set up payments</Link>;
+    } catch {
+      next.stripe = <Link to="/payments/stripe" className="text-blue-700">Set up payments</Link>;
+    }
+    setConnectors(next);
+  }
+
+  async function saveOrgPatch(section: string, patch: Record<string, unknown>, toast: string) {
+    setSaving(section);
+    try {
+      const payload = await apiJson<{ data?: OrgSettings }>('/v1/settings/org', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      const next = payload.data || {};
+      setSettings({ ...next, phone: next.phone ? maskPhone(String(next.phone)) : '', salesTaxRate: salesTaxDisplay(next.salesTaxRate) });
+      window.showToast?.(toast, 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save settings', 'error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveBusiness(event: FormEvent) {
+    event.preventDefault();
+    const digits = phoneDigits(String(settings.phone || ''));
+    if (settings.phone && digits.length !== 10) {
+      window.showToast?.('Enter a 10-digit phone number', 'error');
+      return;
+    }
+    await saveOrgPatch('business', {
+      companyName: settings.companyName,
+      phone: settings.phone ? maskPhone(String(settings.phone)) : undefined,
+      email: settings.email,
+      address: settings.address,
+    }, 'Business info saved');
+  }
+
+  async function savePricing(event: FormEvent) {
+    event.preventDefault();
+    await saveOrgPatch('pricing', {
+      defaultLaborRate: settings.defaultLaborRate,
+      materialMarkupPercent: settings.materialMarkupPercent,
+      salesTaxRate: settings.salesTaxRate,
+      paymentTerms: settings.paymentTerms,
+    }, 'Pricing saved');
+  }
+
+  async function saveReviews(event: FormEvent) {
+    event.preventDefault();
+    await saveOrgPatch('reviews', {
+      googleReviewUrl: settings.googleReviewUrl,
+      yelpReviewUrl: settings.yelpReviewUrl,
+    }, 'Review links saved');
+  }
+
+  async function saveBranding(event: FormEvent) {
+    event.preventDefault();
+    setSaving('branding');
+    try {
+      const payload = await apiJson<{ data?: BrandingSettings }>('/v1/settings/branding', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(branding),
+      });
+      setBranding({ primaryColor: '#2563eb', ...(payload.data || branding) });
+      window.showToast?.('Branding saved', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save branding', 'error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveLegal(event: FormEvent) {
+    event.preventDefault();
+    setSaving('legal');
+    try {
+      const payload = await apiJson<{ data?: LegalSettings }>('/v1/settings/legal', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(legal),
+      });
+      setLegal(payload.data || legal);
+      window.showToast?.('Contract terms saved', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save terms', 'error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function savePaymentSchedule(event: FormEvent) {
+    event.preventDefault();
+    const valid = milestones
+      .filter((milestone) => String(milestone.label).trim() && String(milestone.due).trim() && numberPercent(milestone.percent) > 0)
+      .map((milestone, index) => ({
+        ...milestone,
+        key: slugify(String(milestone.label), `payment_${index + 1}`),
+        percent: numberPercent(milestone.percent),
+        payable: Boolean(milestone.payable),
+      }));
+    if (!valid.length) {
+      window.showToast?.('Add at least one payment milestone', 'error');
+      return;
+    }
+    if (!paymentTotalOk) {
+      window.showToast?.('Payment milestones must total 100%', 'error');
+      return;
+    }
+    setSaving('schedule');
+    try {
+      const payload = await apiJson<{ data?: PaymentSchedule }>('/v1/settings/payment-schedule', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true, milestones: valid }),
+      });
+      setMilestones(payload.data?.milestones?.length ? payload.data.milestones : valid);
+      window.showToast?.('Payment schedule saved', 'success');
+      await loadSettings();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save payment schedule', 'error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function updateMilestone(index: number, patch: Partial<PaymentMilestone>) {
+    setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  }
+
+  if (isLoading) {
+    return (
+      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-b-2 border-blue-600" />
+          <p className="pf-copy mt-4">Loading settings...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
-      
-      <Tabs defaultValue="company">
-        <TabsList>
-          <TabsTrigger value="company">Company</TabsTrigger>
-          <TabsTrigger value="pricing">Pricing</TabsTrigger>
-          <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="company">
-          <Card>
-            <CardHeader>
-              <h2 className="text-xl font-semibold">Company Information</h2>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input label="Company Name" value={companyName} onChange={e => setCompanyName(e.target.value)} />
-              <Input label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-              <Input label="Phone" value={phone} onChange={e => setPhone(e.target.value)} />
-              <Button>Save Changes</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="pricing">
-          <Card>
-            <CardHeader>
-              <h2 className="text-xl font-semibold">Default Pricing</h2>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input label="Labor Rate ($/hr)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} />
-              <Input label="Material Markup (%)" type="number" value={markup} onChange={e => setMarkup(e.target.value)} />
-              <Input label="Sales Tax Rate (%)" type="number" value={taxRate} onChange={e => setTaxRate(e.target.value)} />
-              <Button>Save Changes</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="integrations">
-          <div className="space-y-4">
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="font-semibold">Stripe</h3>
-                    <p className="text-sm text-gray-600">Accept credit cards and ACH payments</p>
-                  </div>
-                  <Button variant="secondary">Connect</Button>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="font-semibold">QuickBooks</h3>
-                    <p className="text-sm text-gray-600">Sync invoices and payments</p>
-                  </div>
-                  <Button variant="secondary">Connect</Button>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="font-semibold">Google Calendar</h3>
-                    <p className="text-sm text-gray-600">Two-way calendar sync</p>
-                  </div>
-                  <Button variant="secondary">Connect</Button>
-                </div>
-              </CardContent>
-            </Card>
+    <main className="mx-auto max-w-4xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+      <section className="mb-5 rounded-lg border border-blue-100 bg-blue-50/70 p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="pf-meta text-blue-700">Owner setup</p>
+            <p className="pf-copy mt-1 max-w-3xl">
+              Configure the business defaults that make PaintFlow usable in the field: pricing, production rates, materials, team roles, payments, and customer-facing branding.
+            </p>
           </div>
-        </TabsContent>
-        
-        <TabsContent value="team">
-          <Card>
-            <CardHeader>
-              <h2 className="text-xl font-semibold">Team Members</h2>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600 mb-4">Manage team access and permissions</p>
-              <Button>Add Team Member</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+          <Link to="/onboarding" className="btn-primary btn-sm justify-center">Review</Link>
+        </div>
+      </section>
+
+      {error && (
+        <Card className="mb-5 border-red-100 bg-red-50" padding="sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="pf-copy text-red-700">{error}</p>
+            <button type="button" className="btn-secondary btn-sm" onClick={loadSettings}>Retry</button>
+          </div>
+        </Card>
+      )}
+
+      <section className="mb-6">
+        <div className="mb-3">
+          <h2 className="pf-section-title">Setup checklist</h2>
+          <p className="pf-copy mt-1">Use these sections to get a contractor workspace ready before sending live estimates or scheduling crews.</p>
+        </div>
+        <div className="grid gap-3">
+          {setupCards.map(([pill, title, copy, href]) => (
+            <Link key={title} to={href} className="grid gap-2 rounded-lg border border-gray-200 bg-white p-4 transition hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm sm:grid-cols-[7rem_minmax(0,1fr)_auto] sm:items-start">
+              <span className="w-fit rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold uppercase text-gray-700">{pill}</span>
+              <span className="min-w-0">
+                <span className="pf-section-title block">{title}</span>
+                <span className="pf-copy mt-1 block">{copy}</span>
+              </span>
+              <span className="btn-text btn-sm pointer-events-none hidden sm:inline-flex">Open</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-6">
+        <Card id="business-settings" padding="lg" className="scroll-mt-20">
+          <CardHeader title="Business Information" />
+          <form className="grid gap-4" onSubmit={saveBusiness}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1.5">
+                <FieldLabel label="Company name" />
+                <input className="input" autoComplete="organization" value={settings.companyName || ''} onChange={(event) => setSettings({ ...settings, companyName: event.target.value })} placeholder="Blackline Painting" />
+              </label>
+              <label className="grid gap-1.5">
+                <FieldLabel label="Business phone" />
+                <input className="input" type="tel" autoComplete="tel" inputMode="numeric" maxLength={14} value={settings.phone || ''} onChange={(event) => setSettings({ ...settings, phone: maskPhone(event.target.value) })} placeholder="(555) 123-4567" />
+              </label>
+            </div>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Business email" />
+              <input className="input" type="email" autoComplete="email" inputMode="email" value={settings.email || ''} onChange={(event) => setSettings({ ...settings, email: event.target.value })} placeholder="office@example.com" />
+            </label>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Business address" />
+              <input className="input" autoComplete="street-address" value={settings.address || ''} onChange={(event) => setSettings({ ...settings, address: event.target.value })} placeholder="123 Main St, San Francisco, CA" />
+            </label>
+            <Button type="submit" isLoading={saving === 'business'} className="w-full sm:w-fit">Save</Button>
+          </form>
+        </Card>
+
+        <Card padding="lg">
+          <CardHeader title="Branding & Proposals" />
+          <form className="grid gap-4" onSubmit={saveBranding}>
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
+              <label className="grid gap-1.5">
+                <FieldLabel label="Proposal company name" />
+                <input className="input" autoComplete="organization" value={branding.companyName || ''} onChange={(event) => setBranding({ ...branding, companyName: event.target.value })} placeholder="Blackline Painting" />
+              </label>
+              <label className="grid gap-1.5">
+                <FieldLabel label="Brand color" />
+                <input className="h-11 w-full rounded-lg border border-gray-300" type="color" value={branding.primaryColor || '#2563eb'} onChange={(event) => setBranding({ ...branding, primaryColor: event.target.value })} />
+              </label>
+            </div>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Logo URL for customer estimates" />
+              <input className="input" type="url" inputMode="url" autoComplete="url" value={branding.logoUrl || ''} onChange={(event) => setBranding({ ...branding, logoUrl: event.target.value })} placeholder="https://example.com/logo.png" />
+            </label>
+            {branding.logoUrl && (
+              <div className="rounded-lg border border-gray-200 p-4">
+                <img src={branding.logoUrl} className="h-12 max-w-48 object-contain" alt="Logo preview" />
+              </div>
+            )}
+            <Button type="submit" isLoading={saving === 'branding'} className="w-full sm:w-fit">Save Branding</Button>
+          </form>
+        </Card>
+
+        <Card id="pricing-settings" padding="lg" className="scroll-mt-20">
+          <CardHeader title="Pricing & Tax" />
+          <form className="grid gap-4" onSubmit={savePricing}>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="grid gap-1.5">
+                <FieldLabel label="Labor Rate ($/hr)" />
+                <input className="input" type="number" min="0" step="0.01" inputMode="decimal" value={settings.defaultLaborRate ?? ''} onChange={(event) => setSettings({ ...settings, defaultLaborRate: event.target.value })} />
+              </label>
+              <label className="grid gap-1.5">
+                <FieldLabel label="Material Markup (%)" />
+                <input className="input" type="number" min="0" step="0.1" inputMode="decimal" value={settings.materialMarkupPercent ?? ''} onChange={(event) => setSettings({ ...settings, materialMarkupPercent: event.target.value })} />
+              </label>
+              <label className="grid gap-1.5">
+                <FieldLabel label="Sales Tax (%)" />
+                <input className="input" type="number" min="0" step="0.01" inputMode="decimal" value={settings.salesTaxRate ?? ''} onChange={(event) => setSettings({ ...settings, salesTaxRate: event.target.value })} />
+              </label>
+            </div>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Payment terms summary" />
+              <input className="input" maxLength={255} value={settings.paymentTerms || ''} onChange={(event) => setSettings({ ...settings, paymentTerms: event.target.value })} placeholder="40% deposit, 30% before production, balance due on completion" />
+              <span className="pf-meta">Shown on proposals as the short summary. The milestone schedule below controls deposit and payment amounts.</span>
+            </label>
+            <Button type="submit" isLoading={saving === 'pricing'} className="w-full sm:w-fit">Save</Button>
+          </form>
+
+          <form className="mt-6 grid gap-4 border-t border-gray-200 pt-5" onSubmit={savePaymentSchedule}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h4 className="pf-section-title">Deposit & Payment Schedule</h4>
+                <p className="pf-copy mt-1">Define the payment milestones customers see on proposals. Percentages must total 100%.</p>
+              </div>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setMilestones([...milestones, { key: `payment_${milestones.length + 1}`, label: 'Progress payment', due: 'Due before the next phase starts', percent: 0, payable: false }])}>
+                Add Payment
+              </Button>
+            </div>
+            <div className="grid gap-2">
+              {milestones.map((milestone, index) => (
+                <div key={`${milestone.key || 'payment'}-${index}`} className="grid gap-3 rounded-lg border border-gray-200 p-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_6rem_7rem_auto] sm:items-end">
+                  <label className="grid gap-1.5">
+                    <FieldLabel label="Milestone" />
+                    <input className="input" maxLength={80} value={milestone.label} onChange={(event) => updateMilestone(index, { label: event.target.value })} />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <FieldLabel label="Due" />
+                    <input className="input" maxLength={160} value={milestone.due} onChange={(event) => updateMilestone(index, { due: event.target.value })} />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <FieldLabel label="Percent" />
+                    <input className="input" type="number" min="0.1" max="100" step="0.1" inputMode="decimal" value={milestone.percent} onChange={(event) => updateMilestone(index, { percent: event.target.value })} />
+                  </label>
+                  <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
+                    <input type="checkbox" className="rounded border-gray-300" checked={Boolean(milestone.payable)} onChange={(event) => updateMilestone(index, { payable: event.target.checked })} />
+                    Online pay
+                  </label>
+                  <button type="button" className="btn-icon btn-icon-tonal justify-self-end" aria-label="Remove payment milestone" onClick={() => setMilestones((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                    <Icon name="close" className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className={`pf-row-title ${paymentTotalOk ? 'text-green-700' : 'text-red-700'}`}>Configured total: {Math.round(paymentTotal * 10) / 10}%</p>
+            <Button type="submit" isLoading={saving === 'schedule'} className="w-full sm:w-fit">Save Schedule</Button>
+          </form>
+        </Card>
+
+        <Card padding="lg">
+          <CardHeader title="Estimator Setup" description="Keep labor production and paint product costs current before sending live estimates." />
+          <div className="grid gap-3">
+            <ActionCard href="/materials" title="Paint products and costs" copy="Enter cost per gallon/unit, coverage, supplier, SKU, and markup." />
+            <ActionCard href="/production-rates" title="Production rates" copy="Tune sqft/hr, linear ft/hr, labor rate, coats, and prep defaults." />
+          </div>
+        </Card>
+
+        <Card id="legal-settings" padding="lg" className="scroll-mt-20">
+          <CardHeader title="Contract Terms & Disclosures" description="Configure company-reviewed language shown to customers before they sign a proposal. PaintFlow stores the accepted snapshot in estimate activity." />
+          <form className="grid gap-4" onSubmit={saveLegal}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-1.5">
+                <FieldLabel label="Jurisdiction" />
+                <input className="input" maxLength={80} value={legal.jurisdiction || ''} onChange={(event) => setLegal({ ...legal, jurisdiction: event.target.value })} placeholder="WA" />
+              </label>
+              <label className="grid gap-1.5">
+                <FieldLabel label="Registration/license number" />
+                <input className="input" maxLength={120} value={legal.contractorRegistrationNumber || ''} onChange={(event) => setLegal({ ...legal, contractorRegistrationNumber: event.target.value })} placeholder="Contractor registration #" />
+              </label>
+            </div>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Bond/insurance summary" />
+              <input className="input" maxLength={120} value={legal.bondAmount || ''} onChange={(event) => setLegal({ ...legal, bondAmount: event.target.value })} placeholder="Bonded and insured per state requirements" />
+            </label>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Contract terms" />
+              <textarea className="input min-h-44" maxLength={12000} value={legal.contractTerms || ''} onChange={(event) => setLegal({ ...legal, contractTerms: event.target.value })} placeholder="Scope, payment terms, change orders, warranty, access, and exclusions." />
+            </label>
+            <div className="grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <label className="flex items-start gap-3">
+                <input type="checkbox" className="mt-1 rounded border-gray-300" checked={Boolean(legal.disclosureEnabled)} onChange={(event) => setLegal({ ...legal, disclosureEnabled: event.target.checked })} />
+                <span>
+                  <span className="pf-row-title block">Show statutory disclosure before signature</span>
+                  <span className="pf-copy block">Use for state-required notices, lien disclosures, cancellation language, or other contractor-specific legal copy.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3">
+                <input type="checkbox" className="mt-1 rounded border-gray-300" checked={Boolean(legal.disclosureRequired)} onChange={(event) => setLegal({ ...legal, disclosureRequired: event.target.checked })} />
+                <span>
+                  <span className="pf-row-title block">Require customer acknowledgement</span>
+                  <span className="pf-copy block">Customers must check an acknowledgement box before the signature modal opens.</span>
+                </span>
+              </label>
+            </div>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Disclosure title" />
+              <input className="input" maxLength={255} value={legal.disclosureTitle || ''} onChange={(event) => setLegal({ ...legal, disclosureTitle: event.target.value })} placeholder="Required disclosure" />
+            </label>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Disclosure text" />
+              <textarea className="input min-h-36" maxLength={12000} value={legal.disclosureText || ''} onChange={(event) => setLegal({ ...legal, disclosureText: event.target.value })} placeholder="Paste the exact disclosure language your company wants customers to acknowledge." />
+            </label>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Internal legal review note" />
+              <input className="input" maxLength={1000} value={legal.legalReviewNote || ''} onChange={(event) => setLegal({ ...legal, legalReviewNote: event.target.value })} />
+            </label>
+            <Button type="submit" isLoading={saving === 'legal'} className="w-full sm:w-fit">Save Terms</Button>
+          </form>
+        </Card>
+
+        <Card id="operations-settings" padding="lg" className="scroll-mt-20">
+          <CardHeader title="Operations Setup" description="Configure the workflows that crew leads and office admins use every day." />
+          <div className="grid gap-3">
+            <ActionCard href="/team" title="Team and roles" copy="Manage active crew members, roles, rates, and time clock policies." />
+            <ActionCard href="/calendar" title="Calendar scheduling" copy="Schedule jobs by day and connect Google Calendar when ready." />
+            <ActionCard href="/templates" title="Templates" copy="Reusable estimate, message, and follow-up language." />
+            <ActionCard href="/email-templates" title="Email templates" copy="Proposal emails, future drips, thank-yous, and change-order communication." />
+            <ActionCard href="/notifications" title="Notifications" copy="Review messages, accepted estimates, and browser alert readiness." />
+          </div>
+        </Card>
+
+        <Card id="integrations-settings" padding="lg" className="scroll-mt-20">
+          <CardHeader title="Connectors" />
+          <div className="grid gap-3">
+            {[
+              ['Stripe', connectors.stripe],
+              ['QuickBooks', connectors.quickbooks],
+              ['Google Calendar', connectors.calendar],
+            ].map(([label, status]) => (
+              <div key={label as string} className="flex flex-col gap-1 rounded-lg border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="font-medium text-gray-950">{label}</span>
+                <span className="pf-copy">{status}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-3">
+            <ActionCard href="/payments/stripe" title="Stripe payments" copy="Collect deposits and customer payments." />
+            <ActionCard href="/billing" title="Billing" copy="Manage the PaintFlow subscription and account status." />
+            <ActionCard href="/notifications" title="Browser notifications" copy="Enable alerts for new messages and accepted estimates." />
+          </div>
+        </Card>
+
+        <Card padding="lg">
+          <CardHeader title="Review Links" />
+          <form className="grid gap-4" onSubmit={saveReviews}>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Google Business review URL" help="The direct Google review link customers use after a completed job. PaintFlow can send happy customers here after they rate the project highly." />
+              <input className="input" type="url" inputMode="url" autoComplete="url" value={settings.googleReviewUrl || ''} onChange={(event) => setSettings({ ...settings, googleReviewUrl: event.target.value })} placeholder="https://g.page/r/..." />
+            </label>
+            <label className="grid gap-1.5">
+              <FieldLabel label="Yelp review URL" help="Optional Yelp review destination for customers who prefer Yelp or for future review-request routing by source, city, or campaign." />
+              <input className="input" type="url" inputMode="url" autoComplete="url" value={settings.yelpReviewUrl || ''} onChange={(event) => setSettings({ ...settings, yelpReviewUrl: event.target.value })} placeholder="Optional" />
+            </label>
+            <Button type="submit" isLoading={saving === 'reviews'} className="w-full sm:w-fit">Save</Button>
+          </form>
+        </Card>
+      </div>
+    </main>
   );
 }
