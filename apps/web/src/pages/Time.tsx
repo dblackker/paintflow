@@ -1154,7 +1154,7 @@ export function Time() {
             <label>
               <span className="form-label inline-flex items-center gap-2">
                 Job
-                {warningIcon('If no job is selected, the shift is saved but flagged for crew lead review before approval.')}
+                {!selectedPunchJobId && warningIcon('Select a job before clocking in. If no job is selected, the shift is saved but flagged for crew lead review before approval.')}
               </span>
               <select className="input" value={selectedPunchJobId} onChange={(event) => setSelectedPunchJobId(event.target.value)}>
                 <option value="">No job selected</option>
