@@ -124,6 +124,8 @@ function jobEnd(job: Job) {
 function jobIntersectsDay(job: Job, day: Date) {
   const start = jobStart(job);
   if (!start) return false;
+  const workDates = scheduledWorkDates(job);
+  if (workDates.length) return workDates.includes(dateKey(day));
   const end = jobEnd(job) || start;
   const dayStart = new Date(day);
   dayStart.setHours(0, 0, 0, 0);
@@ -165,6 +167,22 @@ function scheduledWorkDays(job: Job) {
   return Math.max(1, days || estimatedWorkDays(job));
 }
 
+function scheduledWorkDates(job: Job) {
+  const start = jobStart(job);
+  const end = jobEnd(job) || start;
+  if (!start || !end) return [];
+  const cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  const last = new Date(end);
+  last.setHours(0, 0, 0, 0);
+  const dates: string[] = [];
+  while (cursor <= last && dates.length < 60) {
+    if (!weekend(cursor)) dates.push(dateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates.length ? dates : [dateKey(start)];
+}
+
 function scheduleDatesFromDuration(startDateValue: string, durationDays: string | number) {
   const safeDuration = Math.max(1, Math.min(30, Number.parseInt(String(durationDays), 10) || 1));
   const startDate = localDateFromKey(startDateValue);
@@ -200,6 +218,17 @@ function jobOptionLabel(job: Job) {
 
 function weekend(date: Date) {
   return date.getDay() === 0 || date.getDay() === 6;
+}
+
+function jobWorkDayInfo(job: Job, day: Date) {
+  const workDates = scheduledWorkDates(job);
+  const index = workDates.indexOf(dateKey(day));
+  return {
+    dayNumber: index >= 0 ? index + 1 : null,
+    totalDays: workDates.length || 1,
+    isFirst: index === 0,
+    isLast: index === workDates.length - 1,
+  };
 }
 
 export function Calendar() {
@@ -482,7 +511,7 @@ export function Calendar() {
           </div>
         </div>
         <div className="grid gap-2">
-          {dayJobs.map((job) => renderJobCard(job))}
+          {dayJobs.map((job) => renderJobCard(job, day))}
           {dayEvents.map((event) => (
             <div key={event.id || event.summary} className="rounded-lg bg-gray-100 p-2 text-xs text-gray-700">
               <p className="pf-emphasis">{event.summary || 'Google event'}</p>
@@ -501,8 +530,9 @@ export function Calendar() {
     );
   }
 
-  function renderJobCard(job: Job) {
+  function renderJobCard(job: Job, day: Date) {
     const address = jobAddress(job);
+    const dayInfo = jobWorkDayInfo(job, day);
     const actualHours = actualHoursByJob.get(job.id) || 0;
     const estimatedHours = numberValue(job.estimatedLaborHours);
     const remainingHours = Math.max(0, estimatedHours - actualHours);
@@ -524,13 +554,24 @@ export function Calendar() {
           setDragState(null);
           setDropTargetDay(null);
         }}
-        className={`rounded-xl border border-blue-100 bg-blue-50/70 p-3 shadow-sm transition hover:border-blue-300 hover:shadow ${dragState?.jobId === job.id && dragState.active ? 'opacity-70' : ''}`}
+        className={`min-w-0 overflow-hidden border border-blue-100 bg-blue-50/70 p-2.5 shadow-sm transition hover:border-blue-300 hover:shadow ${dayInfo.totalDays > 1 ? 'rounded-lg border-l-4 border-l-blue-500' : 'rounded-xl'} ${!dayInfo.isFirst && dayInfo.totalDays > 1 ? 'border-l-blue-300 bg-blue-50/50' : ''} ${dragState?.jobId === job.id && dragState.active ? 'opacity-70' : ''}`}
       >
-        <div className="flex items-start justify-between gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
           <p className="min-w-0 truncate pf-emphasis text-sm">{job.name || 'Job'}</p>
-          <StatusBadge status={job.status || 'scheduled'} />
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <StatusBadge status={job.status || 'scheduled'} />
+            {dayInfo.totalDays > 1 && dayInfo.dayNumber && (
+              <span className="rounded-full bg-white px-2 py-0.5 text-[0.68rem] font-semibold text-blue-800 shadow-sm">
+                Day {dayInfo.dayNumber}/{dayInfo.totalDays}
+              </span>
+            )}
+          </div>
         </div>
-        <p className="mt-1 pf-helper">{scheduleRange(job)}</p>
+        <p className="mt-1 truncate pf-helper">
+          {dayInfo.totalDays > 1
+            ? `${dayInfo.isFirst ? 'Starts' : dayInfo.isLast ? 'Finishes' : 'Continues'} - ${scheduleRange(job)}`
+            : scheduleRange(job)}
+        </p>
         {address && <p className="mt-1 line-clamp-2 pf-helper">{address}</p>}
         {estimatedHours > 0 ? (
           <div className="mt-2">
