@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
@@ -241,6 +241,10 @@ export function EmailTemplates() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeMergeField, setActiveMergeField] = useState<keyof Pick<TemplateFormState, 'subject' | 'preheader' | 'html' | 'text'>>('html');
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const preheaderRef = useRef<HTMLInputElement>(null);
+  const htmlRef = useRef<HTMLTextAreaElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
 
   const groupedTemplates = useMemo(() => {
     return templates.reduce<Record<string, EmailTemplate[]>>((groups, template) => {
@@ -293,10 +297,34 @@ export function EmailTemplates() {
   }
 
   function insertMergeTag(tag: string) {
+    const fieldRefs = {
+      subject: subjectRef,
+      preheader: preheaderRef,
+      html: htmlRef,
+      text: textRef,
+    };
+    const element = fieldRefs[activeMergeField].current;
+    const selectionStart = element?.selectionStart ?? null;
+    const selectionEnd = element?.selectionEnd ?? null;
+
     setForm((current) => {
       const currentValue = String(current[activeMergeField] || '');
-      const separator = currentValue && !/\s$/.test(currentValue) ? ' ' : '';
-      return { ...current, [activeMergeField]: `${currentValue}${separator}${tag}` };
+      const start = selectionStart ?? currentValue.length;
+      const end = selectionEnd ?? currentValue.length;
+      const before = currentValue.slice(0, start);
+      const after = currentValue.slice(end);
+      const prefix = before && !/\s$/.test(before) ? ' ' : '';
+      const suffix = after && !/^\s/.test(after) ? ' ' : '';
+      const nextValue = `${before}${prefix}${tag}${suffix}${after}`;
+      const cursor = start + prefix.length + tag.length;
+
+      window.requestAnimationFrame(() => {
+        const nextElement = fieldRefs[activeMergeField].current;
+        nextElement?.focus();
+        nextElement?.setSelectionRange(cursor, cursor);
+      });
+
+      return { ...current, [activeMergeField]: nextValue };
     });
   }
 
@@ -497,6 +525,7 @@ export function EmailTemplates() {
                     </label>
                   </div>
                   <Input
+                    ref={subjectRef}
                     label="Subject"
                     required
                     placeholder="{{companyName}} painting proposal for {{leadName}}"
@@ -505,6 +534,7 @@ export function EmailTemplates() {
                     onChange={(event) => setForm({ ...form, subject: event.target.value })}
                   />
                   <Input
+                    ref={preheaderRef}
                     label="Preheader"
                     maxLength={255}
                     placeholder="Short inbox preview text"
@@ -543,6 +573,7 @@ export function EmailTemplates() {
                     </div>
                   )}
                   <Textarea
+                    ref={htmlRef}
                     label="HTML body"
                     className="min-h-[18rem] font-mono text-xs"
                     required
@@ -551,6 +582,7 @@ export function EmailTemplates() {
                     onChange={(event) => setForm({ ...form, html: event.target.value })}
                   />
                   <Textarea
+                    ref={textRef}
                     label="Plain text fallback"
                     className="min-h-28 font-mono text-xs"
                     placeholder="Optional. Generated from HTML when blank."
