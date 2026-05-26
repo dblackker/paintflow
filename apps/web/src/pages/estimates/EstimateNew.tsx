@@ -3,11 +3,16 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input, Select, Textarea } from '@/components/Input';
+import { apiJson, formatMoney, formatPhone } from '@/lib/api';
 
 interface Lead {
   id: string;
   name: string;
   phone?: string;
+  email?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
 }
 
 interface ScopeItem {
@@ -20,10 +25,34 @@ interface ScopeItem {
 }
 
 interface OrgSettings {
-  defaultLaborRate: number;
-  materialMarkupPercent: number;
-  salesTaxRate: number;
-  depositPercent: number;
+  defaultLaborRate?: number | string | null;
+  materialMarkupPercent?: number | string | null;
+  salesTaxRate?: number | string | null;
+  depositPercent?: number | string | null;
+}
+
+interface LeadsResponse {
+  data?: Lead[];
+}
+
+interface SettingsResponse {
+  data?: OrgSettings;
+}
+
+interface EstimateResponse {
+  data?: {
+    id: string;
+  };
+}
+
+function apiErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return 'Request failed';
+}
+
+function numeric(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export function EstimateNew() {
@@ -46,17 +75,43 @@ export function EstimateNew() {
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    // Mock API load
-    setTimeout(() => {
-      setLeads([
-        { id: 'lead-1', name: 'John Smith', phone: '(206) 555-0100' },
-        { id: 'lead-2', name: 'Jane Doe', phone: '(425) 555-0200' },
-        { id: 'lead-3', name: 'Bob Johnson' },
-      ]);
-      setIsLoading(false);
-    }, 500);
+    let cancelled = false;
+    async function loadSetup() {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [leadsPayload, settingsPayload] = await Promise.all([
+          apiJson<LeadsResponse>('/v1/leads?status=all&limit=200'),
+          apiJson<SettingsResponse>('/v1/settings/org'),
+        ]);
+        if (cancelled) return;
+        const loadedLeads = leadsPayload.data || [];
+        setLeads(loadedLeads);
+        if (initialLeadId && loadedLeads.some((lead) => lead.id === initialLeadId)) {
+          setSelectedLeadId(initialLeadId);
+        }
+        setSettings({
+          defaultLaborRate: numeric(settingsPayload.data?.defaultLaborRate, 65),
+          materialMarkupPercent: numeric(settingsPayload.data?.materialMarkupPercent, 30),
+          salesTaxRate: numeric(settingsPayload.data?.salesTaxRate, 0.092),
+          depositPercent: numeric(settingsPayload.data?.depositPercent, 50),
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(apiErrorMessage(err));
+          window.showToast?.('Failed to load estimate setup', 'error');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    void loadSetup();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addItem = () => {
@@ -82,16 +137,16 @@ export function EstimateNew() {
   };
 
   const calculateItemTotal = (item: ScopeItem) => {
-    const laborCost = item.laborHours * settings.defaultLaborRate;
-    const materialCost = item.materialCost * (1 + settings.materialMarkupPercent / 100);
+    const laborCost = item.laborHours * numeric(settings.defaultLaborRate, 65);
+    const materialCost = item.materialCost * (1 + numeric(settings.materialMarkupPercent, 30) / 100);
     const itemTotal = laborCost + materialCost;
     return item.qty * itemTotal;
   };
 
   const totals = items.reduce((acc, item) => {
     const laborHours = item.qty * item.laborHours;
-    const laborCost = laborHours * settings.defaultLaborRate;
-    const materialCost = item.materialCost * (1 + settings.materialMarkupPercent / 100) * item.qty;
+    const laborCost = laborHours * numeric(settings.defaultLaborRate, 65);
+    const materialCost = item.materialCost * (1 + numeric(settings.materialMarkupPercent, 30) / 100) * item.qty;
     const subtotal = laborCost + materialCost;
     
     return {
@@ -102,38 +157,63 @@ export function EstimateNew() {
     };
   }, { laborHours: 0, laborCost: 0, materialCost: 0, subtotal: 0 });
 
-  const tax = totals.subtotal * settings.salesTaxRate;
+  const tax = totals.subtotal * numeric(settings.salesTaxRate, 0.092);
   const total = totals.subtotal + tax;
-  const deposit = total * (settings.depositPercent / 100);
-
-  const formatMoney = (cents: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(cents);
-  };
+  const deposit = total * (numeric(settings.depositPercent, 50) / 100);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!selectedLeadId) {
-      alert('Please select a customer');
+      window.showToast?.('Select a customer first', 'error');
+      return;
+    }
+    if (!items.some((item) => item.desc.trim() && item.qty > 0 && calculateItemTotal(item) > 0)) {
+      window.showToast?.('Add at least one priced scope item', 'error');
       return;
     }
 
     setIsSubmitting(true);
-    
-    // Mock API call
-    setTimeout(() => {
-      console.log('Creating estimate:', {
-        leadId: selectedLeadId,
-        items,
-        settings,
-        notes,
-        total,
+
+    try {
+      const payload = await apiJson<EstimateResponse>('/v1/estimates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          leadId: selectedLeadId,
+          packages: [{
+            name: 'proposal',
+            subtotal: totals.subtotal,
+            tax,
+            total,
+            items: items
+              .filter((item) => item.desc.trim() && item.qty > 0 && calculateItemTotal(item) > 0)
+              .map((item) => ({
+                desc: item.desc.trim(),
+                qty: item.qty,
+                rate: Number(((item.laborHours * numeric(settings.defaultLaborRate, 65)) + (item.materialCost * (1 + numeric(settings.materialMarkupPercent, 30) / 100))).toFixed(2)),
+                category: item.unit || 'item',
+                notes: [
+                  `${item.qty} ${item.unit || 'item'}`,
+                  `${item.laborHours} labor hours`,
+                  `${formatMoney(item.materialCost)} materials before markup`,
+                  notes.trim(),
+                ].filter(Boolean).join('; '),
+              })),
+          }],
+        }),
       });
+      const estimateId = payload.data?.id;
+      window.showToast?.('Estimate created. Opening it now.', 'success');
+      navigate(estimateId ? `/estimates/${estimateId}` : '/estimates');
+    } catch (err) {
+      window.showToast?.(apiErrorMessage(err), 'error');
+    } finally {
       setIsSubmitting(false);
-      navigate('/estimates');
-    }, 1500);
+    }
   };
 
   if (isLoading) {
@@ -147,11 +227,24 @@ export function EstimateNew() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-3xl px-1 pb-24 sm:px-0">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="pf-section-title">Estimate setup could not be loaded</p>
+            <p className="pf-copy mt-2">{loadError}</p>
+            <Button type="button" className="mt-5" onClick={() => window.location.reload()}>Try again</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div className="max-w-6xl mx-auto px-1 pb-24 sm:px-0">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Quick Estimate</h2>
           <p className="text-gray-600 mt-1">Build one simple proposal from a few priced scope rows.</p>
         </div>
         <div className="flex gap-2">
@@ -174,7 +267,7 @@ export function EstimateNew() {
                 <option value="">Select customer...</option>
                 {leads.map(lead => (
                   <option key={lead.id} value={lead.id}>
-                    {lead.name} {lead.phone ? `(${lead.phone})` : ''}
+                    {lead.name} {lead.phone ? `(${formatPhone(lead.phone)})` : ''}
                   </option>
                 ))}
               </Select>
@@ -281,7 +374,7 @@ export function EstimateNew() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={settings.defaultLaborRate}
+                    value={numeric(settings.defaultLaborRate, 65)}
                     onChange={(e) => setSettings({ ...settings, defaultLaborRate: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
@@ -291,7 +384,7 @@ export function EstimateNew() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={settings.materialMarkupPercent}
+                    value={numeric(settings.materialMarkupPercent, 30)}
                     onChange={(e) => setSettings({ ...settings, materialMarkupPercent: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
@@ -301,7 +394,7 @@ export function EstimateNew() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={(settings.salesTaxRate * 100).toFixed(2)}
+                    value={(numeric(settings.salesTaxRate, 0.092) * 100).toFixed(2)}
                     onChange={(e) => setSettings({ ...settings, salesTaxRate: (parseFloat(e.target.value) || 0) / 100 })}
                   />
                 </div>
@@ -312,7 +405,7 @@ export function EstimateNew() {
                     min="0"
                     max="100"
                     step="0.01"
-                    value={settings.depositPercent}
+                    value={numeric(settings.depositPercent, 50)}
                     onChange={(e) => setSettings({ ...settings, depositPercent: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
@@ -326,7 +419,7 @@ export function EstimateNew() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Labor ({totals.laborHours.toFixed(1)} hrs)</span>
-                  <span className="font-medium">{formatMoney(totals.laborCost)}</span>
+                    <span className="font-medium">{formatMoney(totals.laborCost)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Materials</span>
@@ -337,7 +430,7 @@ export function EstimateNew() {
                   <span className="font-medium">{formatMoney(totals.subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Tax ({(settings.salesTaxRate * 100).toFixed(1)}%)</span>
+                  <span className="text-gray-600">Tax ({(numeric(settings.salesTaxRate, 0.092) * 100).toFixed(1)}%)</span>
                   <span className="font-medium">{formatMoney(tax)}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t text-base font-semibold">
@@ -345,7 +438,7 @@ export function EstimateNew() {
                   <span>{formatMoney(total)}</span>
                 </div>
                 <div className="flex justify-between text-blue-600">
-                  <span>Deposit ({settings.depositPercent}%)</span>
+                  <span>Deposit ({numeric(settings.depositPercent, 50)}%)</span>
                   <span className="font-medium">{formatMoney(deposit)}</span>
                 </div>
               </div>
