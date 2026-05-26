@@ -42,14 +42,19 @@ function systemTemplates() {
       '<!DOCTYPE html>',
       '<html>',
       '<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">',
-      '<h1 style="color: #2563eb;">Your painting proposal is ready</h1>',
+      `<h1 style="color: #2563eb;">${template.category === 'change_order' ? 'Change order approval needed' : template.key === 'estimate.updated.sent' ? 'Your painting proposal was updated' : 'Your painting proposal is ready'}</h1>`,
       '<p>Hi {{leadName}},</p>',
       `<p>${template.intro}</p>`,
-      '<p><strong>Base proposal total: ${{total}}</strong></p>',
-      '{{scopeSummaryHtml}}',
-      '<p>Use the secure link below to review the included scope, choose any optional add-ons, approve the proposal, sign, and pay the deposit.</p>',
-      `<a href="{{proposalUrl}}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${template.cta}</a>`,
-      '<p style="color: #4b5563;">A PDF copy can be provided for your records, but approvals, selected options, signatures, and deposits should happen through the secure proposal link so everyone is working from the current version.</p>',
+      template.category === 'change_order'
+        ? '<div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;"><h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Change order summary</h2><p><strong>Job:</strong> {{jobName}}</p><p><strong>Jobsite:</strong> {{jobAddress}}</p><p><strong>Added scope:</strong> {{description}}</p><p><strong>Change order total:</strong> ${{amount}}</p><p style="color: #4b5563;">Payment due: ${{paymentDue}}</p></div>'
+        : '<p><strong>Base proposal total: ${{total}}</strong></p>\n{{scopeSummaryHtml}}',
+      template.category === 'change_order'
+        ? '<p>Use the secure link below to approve the added work. Approval is recorded with the job so the office and field crew can see that the scope is authorized.</p>'
+        : '<p>Use the secure link below to review the included scope, choose any optional add-ons, approve the proposal, sign, and view the expected payment schedule.</p>',
+      `<a href="${template.category === 'change_order' ? '{{portalUrl}}' : '{{proposalUrl}}'}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${template.cta}</a>`,
+      template.category === 'change_order'
+        ? '<p style="color: #4b5563;">If this scope or price does not look right, reply before approving so the production team can update the change order.</p>'
+        : '<p style="color: #4b5563;">A PDF copy can be provided for your records, but approvals, selected options, signatures, and deposits should happen through the secure proposal link so everyone is working from the current version.</p>',
       `<p>${template.outro}</p>`,
       '<p>Questions? Reply to this email or call {{estimatorPhone}}.</p>',
       '<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">',

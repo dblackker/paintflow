@@ -62,15 +62,22 @@ const channelOptions = [
 ];
 
 const mergeTags = [
-  '{{companyName}}',
-  '{{leadName}}',
-  '{{total}}',
-  '{{estimatorName}}',
-  '{{estimatorEmail}}',
-  '{{estimatorPhone}}',
-  '{{proposalUrl}}',
-  '{{scopeSummaryHtml}}',
-  '{{scopeSummaryText}}',
+  { tag: '{{companyName}}', label: 'Company', categories: ['estimate', 'change_order', 'drip', 'review', 'system'] },
+  { tag: '{{leadName}}', label: 'Customer', categories: ['estimate', 'change_order', 'drip', 'review', 'system'] },
+  { tag: '{{total}}', label: 'Estimate total', categories: ['estimate'] },
+  { tag: '{{proposalUrl}}', label: 'Proposal link', categories: ['estimate'] },
+  { tag: '{{scopeSummaryHtml}}', label: 'Scope table', categories: ['estimate'] },
+  { tag: '{{scopeSummaryText}}', label: 'Scope text', categories: ['estimate'] },
+  { tag: '{{estimatorName}}', label: 'Estimator', categories: ['estimate', 'change_order', 'drip', 'review', 'system'] },
+  { tag: '{{estimatorEmail}}', label: 'Estimator email', categories: ['estimate', 'change_order', 'drip', 'review', 'system'] },
+  { tag: '{{estimatorPhone}}', label: 'Estimator phone', categories: ['estimate', 'change_order', 'drip', 'review', 'system'] },
+  { tag: '{{jobName}}', label: 'Job', categories: ['change_order'] },
+  { tag: '{{jobAddress}}', label: 'Jobsite', categories: ['change_order'] },
+  { tag: '{{description}}', label: 'Change scope', categories: ['change_order'] },
+  { tag: '{{amount}}', label: 'Change total', categories: ['change_order'] },
+  { tag: '{{paymentDue}}', label: 'Payment due', categories: ['change_order'] },
+  { tag: '{{portalUrl}}', label: 'Portal link', categories: ['change_order'] },
+  { tag: '{{ctaText}}', label: 'CTA text', categories: ['estimate', 'change_order'] },
 ];
 
 const previewData: Record<string, string> = {
@@ -81,6 +88,13 @@ const previewData: Record<string, string> = {
   estimatorEmail: 'nick@goldenbrush.example',
   estimatorPhone: '(415) 555-0138',
   proposalUrl: 'https://paintflow-demo.pages.dev/estimates/demo-preview',
+  jobName: 'Rivera Interior Repaint',
+  jobAddress: '95 South Park St, San Francisco, CA',
+  description: 'Add two coats to the stairwell handrail and repaint the upstairs linen closet.',
+  amount: '640',
+  paymentDue: '320',
+  portalUrl: 'https://paintflow-demo.pages.dev/portal/demo-change-order',
+  ctaText: 'Review and approve',
   scopeSummaryHtml: [
     '<table style="width:100%;border-collapse:collapse;margin:16px 0;font-family:Arial,sans-serif;font-size:14px;">',
     '<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;"><strong>Living Room</strong><br>Walls, 2 coats, Sherwin-Williams Duration Matte</td></tr>',
@@ -90,6 +104,8 @@ const previewData: Record<string, string> = {
   ].join(''),
   scopeSummaryText: 'Living Room: walls, 2 coats. Kitchen: ceiling and trim. Primary Bedroom: walls, accent wall, and door casing.',
 };
+
+const allowedMergeTagNames = new Set(mergeTags.map((item) => item.tag.replace(/[{}]/g, '')));
 
 function formFromTemplate(template?: EmailTemplate | null): TemplateFormState {
   if (!template) return newTemplateDefaults;
@@ -111,6 +127,16 @@ function renderTemplate(value: string) {
   return Object.entries(previewData).reduce((result, [key, replacement]) => {
     return result.split(`{{${key}}}`).join(replacement);
   }, value || '');
+}
+
+function unknownMergeTags(form: TemplateFormState) {
+  const combined = [form.subject, form.preheader, form.html, form.text].join('\n');
+  const found = new Set<string>();
+  for (const match of combined.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)) {
+    const key = match[1];
+    if (!allowedMergeTagNames.has(key)) found.add(`{{${key}}}`);
+  }
+  return Array.from(found).sort();
 }
 
 function previewHtml(form: TemplateFormState) {
@@ -214,6 +240,7 @@ export function EmailTemplates() {
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [activeMergeField, setActiveMergeField] = useState<keyof Pick<TemplateFormState, 'subject' | 'preheader' | 'html' | 'text'>>('html');
 
   const groupedTemplates = useMemo(() => {
     return templates.reduce<Record<string, EmailTemplate[]>>((groups, template) => {
@@ -227,6 +254,8 @@ export function EmailTemplates() {
   const renderedPreheader = useMemo(() => renderTemplate(form.preheader), [form.preheader]);
   const renderedText = useMemo(() => renderTemplate(form.text || ''), [form.text]);
   const renderedPreviewHtml = useMemo(() => previewHtml(form), [form]);
+  const invalidMergeTags = useMemo(() => unknownMergeTags(form), [form]);
+  const availableMergeTags = useMemo(() => mergeTags.filter((item) => item.categories.includes(form.category)), [form.category]);
 
   useEffect(() => {
     loadTemplates();
@@ -263,8 +292,20 @@ export function EmailTemplates() {
     setEditingTemplate(null);
   }
 
+  function insertMergeTag(tag: string) {
+    setForm((current) => {
+      const currentValue = String(current[activeMergeField] || '');
+      const separator = currentValue && !/\s$/.test(currentValue) ? ' ' : '';
+      return { ...current, [activeMergeField]: `${currentValue}${separator}${tag}` };
+    });
+  }
+
   async function saveTemplate(event: FormEvent) {
     event.preventDefault();
+    if (invalidMergeTags.length) {
+      window.showToast?.(`Fix unknown merge tags before saving: ${invalidMergeTags.join(', ')}`, 'error');
+      return;
+    }
     setIsSaving(true);
     try {
       const body = {
@@ -460,6 +501,7 @@ export function EmailTemplates() {
                     required
                     placeholder="{{companyName}} painting proposal for {{leadName}}"
                     value={form.subject}
+                    onFocus={() => setActiveMergeField('subject')}
                     onChange={(event) => setForm({ ...form, subject: event.target.value })}
                   />
                   <Input
@@ -467,13 +509,45 @@ export function EmailTemplates() {
                     maxLength={255}
                     placeholder="Short inbox preview text"
                     value={form.preheader}
+                    onFocus={() => setActiveMergeField('preheader')}
                     onChange={(event) => setForm({ ...form, preheader: event.target.value })}
                   />
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="pf-row-title">Merge variables</p>
+                        <p className="pf-meta">Click a variable to insert it into the last field you edited.</p>
+                      </div>
+                      <Badge size="sm">Target: {labelize(activeMergeField)}</Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {availableMergeTags.map((item) => (
+                        <button
+                          key={item.tag}
+                          type="button"
+                          className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-800 hover:border-blue-400 hover:bg-blue-50"
+                          title={item.tag}
+                          onClick={() => insertMergeTag(item.tag)}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {invalidMergeTags.length > 0 && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                      <p className="pf-row-title text-red-900">Unknown merge variables</p>
+                      <p className="pf-copy mt-1 text-red-800">
+                        These variables will not be replaced when the email is sent: {invalidMergeTags.join(', ')}.
+                      </p>
+                    </div>
+                  )}
                   <Textarea
                     label="HTML body"
                     className="min-h-[18rem] font-mono text-xs"
                     required
                     value={form.html}
+                    onFocus={() => setActiveMergeField('html')}
                     onChange={(event) => setForm({ ...form, html: event.target.value })}
                   />
                   <Textarea
@@ -481,13 +555,14 @@ export function EmailTemplates() {
                     className="min-h-28 font-mono text-xs"
                     placeholder="Optional. Generated from HTML when blank."
                     value={form.text}
+                    onFocus={() => setActiveMergeField('text')}
                     onChange={(event) => setForm({ ...form, text: event.target.value })}
                   />
                   <div className="pf-meta rounded-lg bg-gray-50 p-3">
                     Available merge tags:{' '}
-                    {mergeTags.map((tag, index) => (
-                      <span key={tag}>
-                        <code>{tag}</code>{index < mergeTags.length - 1 ? ', ' : '.'}
+                    {availableMergeTags.map((item, index) => (
+                      <span key={item.tag}>
+                        <code>{item.tag}</code>{index < availableMergeTags.length - 1 ? ', ' : '.'}
                       </span>
                     ))}
                   </div>
@@ -532,7 +607,7 @@ export function EmailTemplates() {
                 <Button type="button" variant="secondary" className="justify-center" onClick={closeEditor}>
                   Cancel
                 </Button>
-                <Button type="submit" className="justify-center" isLoading={isSaving}>
+                <Button type="submit" className="justify-center" isLoading={isSaving} disabled={invalidMergeTags.length > 0}>
                   Save template
                 </Button>
               </div>
