@@ -376,7 +376,7 @@ export function Calendar() {
       const loadedJobs = jobsPayload.data || [];
       setJobs(loadedJobs);
       setTimeEntries(timePayload.data || []);
-      await loadWeather(loadedJobs);
+      void loadWeather(loadedJobs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar');
     } finally {
@@ -395,11 +395,13 @@ export function Calendar() {
     try {
       const payload = await apiJson<CalendarWeatherResponse>(`/v1/calendar/weather${params.toString() ? `?${params}` : ''}`);
       const data = payload.data || {};
-      setWeatherZip(data.zipCode || overrideZip || '');
-      setWeatherZipInput(data.zipCode || overrideZip || '');
+      const resolvedZip = data.zipCode || overrideZip || weatherZipInput || '';
+      setWeatherZip(resolvedZip);
+      setWeatherZipInput(resolvedZip);
       setBusinessWeatherZip(data.businessZip || '');
       setWeatherForecast(data.forecast || null);
       setJobForecasts(data.jobForecasts || []);
+      if (!data.forecast && resolvedZip) setWeatherError(`Weather is unavailable for ${resolvedZip}.`);
     } catch (err) {
       setWeatherForecast(null);
       setJobForecasts([]);
@@ -961,14 +963,13 @@ export function Calendar() {
 
   function renderWeatherPanel() {
     const days = weatherForecast?.days || [];
+    const fallbackZip = weatherZip || weatherZipInput || businessWeatherZip;
     return (
       <Card className="mb-5" padding="sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="pf-section-title">10-day weather</h2>
-            <p className="pf-copy mt-1">
-              Weather ZIP{businessWeatherZip ? ` defaults to ${businessWeatherZip}` : ''}. Job-site risks are flagged on the calendar.
-            </p>
+            <p className="pf-copy mt-1">Job-site weather risks appear on scheduled work days when forecast data is available.</p>
           </div>
           <form className="flex gap-2 sm:w-72" noValidate onSubmit={saveWeatherZip}>
             <input
@@ -991,12 +992,23 @@ export function Calendar() {
           <p className="pf-meta">
             {weatherForecast ? `${weatherForecast.label || weatherForecast.zipCode} weather` : weatherError || 'Add a ZIP code to show weather.'}
           </p>
-          {weatherZip && (
-            <a className="text-sm font-semibold text-blue-700 hover:underline" href={googleWeatherHref(weatherZip)} target="_blank" rel="noreferrer">
+          {fallbackZip && (
+            <a className="text-sm font-semibold text-blue-700 hover:underline" href={googleWeatherHref(fallbackZip)} target="_blank" rel="noreferrer">
               Google Weather
             </a>
           )}
         </div>
+        {weatherError && !days.length && (
+          <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+            <p className="pf-row-title text-yellow-950">Weather could not be loaded</p>
+            <p className="pf-copy mt-1 text-yellow-900">Scheduling is still available. Check the local forecast in Google Weather and try again later.</p>
+            {fallbackZip && (
+              <a className="btn-secondary btn-sm mt-3 inline-flex" href={googleWeatherHref(fallbackZip)} target="_blank" rel="noreferrer">
+                Open Google Weather
+              </a>
+            )}
+          </div>
+        )}
         {isWeatherLoading && !days.length ? (
           <div className="mt-3 grid grid-cols-5 gap-2">
             {Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-20 animate-pulse rounded-lg bg-gray-100" />)}
