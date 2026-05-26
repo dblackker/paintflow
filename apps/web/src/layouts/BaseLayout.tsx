@@ -60,6 +60,7 @@ function routeTitle(pathname: string) {
   if (pathname.startsWith('/jobs')) return 'Jobs';
   if (pathname.startsWith('/calendar')) return 'Calendar';
   if (pathname.startsWith('/time')) return 'Time Tracking';
+  if (pathname.startsWith('/portal')) return 'Customer Portal';
   if (pathname.startsWith('/reports') || pathname.startsWith('/reporting')) return 'Reports';
   if (pathname.startsWith('/activity')) return 'Activity';
   if (pathname.startsWith('/team')) return 'Team';
