@@ -228,8 +228,8 @@ export function SupplierCatalog() {
       const nextProducts = productsRes.data || [];
       const nextColors = colorsRes.data || [];
       const nextStatus = statusRes.data || null;
-      if (!nextProducts.length && !nextColors.length && !nextStatus?.latestRun && attempt < 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 400));
+      if (!nextProducts.length && !nextColors.length && !nextStatus?.latestRun && attempt < 3) {
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
         await loadCatalog(attempt + 1);
         return;
       }
@@ -289,7 +289,7 @@ export function SupplierCatalog() {
     <section className="mx-auto max-w-6xl space-y-5 pb-24">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="pf-page-copy max-w-3xl">
-          Browse scraped supplier products, color libraries, and product-color availability before adding products to your estimating setup.
+          Browse supplier products, color libraries, and product-color availability before adding products to your estimating setup.
         </p>
         <Button variant="secondary" size="sm" onClick={loadCatalog}>
           <Icon name="refresh" className="pf-icon" />
@@ -392,7 +392,7 @@ function SupplierSyncStatus({ suppliers }: { suppliers: NonNullable<CatalogStatu
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="pf-section-title">Supplier sync status</h2>
-          <p className="pf-meta">Each supplier can refresh independently as scraper sources change.</p>
+          <p className="pf-meta">Each supplier can refresh independently as product data sources change.</p>
         </div>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-3">
@@ -419,19 +419,33 @@ function ProductRow({ product, selected, onSelect }: { product: CatalogProduct; 
   const price = cents(product.priceCents);
   const sheens = arrayValue(product.sheens);
   return (
-    <button type="button" className={`block w-full p-4 text-left transition hover:bg-blue-50/50 ${selected ? 'bg-blue-50' : 'bg-white'}`} onClick={onSelect}>
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <div className={`flex w-full flex-col gap-3 p-4 text-left transition hover:bg-blue-50/50 sm:flex-row sm:items-start sm:justify-between ${selected ? 'bg-blue-50' : 'bg-white'}`}>
+      <button type="button" className="min-w-0 flex-1 text-left" onClick={onSelect}>
         <div className="min-w-0">
           <p className="pf-row-title truncate">{productName(product)}</p>
           <p className="pf-copy mt-1">{[product.supplierName, labelize(product.type || ''), product.category ? labelize(product.category) : ''].filter(Boolean).join(' - ')}</p>
           <p className="pf-meta mt-1">{[product.sku ? `SKU ${product.sku}` : '', product.size, coverageLabel(product)].filter(Boolean).join(' - ')}</p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-1 sm:justify-end">
+      </button>
+      <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
+        <button type="button" className="flex flex-wrap gap-1 text-left sm:justify-end" onClick={onSelect}>
           {price != null && <Badge variant="info" size="sm">{formatMoney(price)}</Badge>}
           {sheens.slice(0, 3).map((sheen) => <Badge key={sheen} size="sm">{labelize(sheen)}</Badge>)}
-        </div>
+        </button>
+        {product.url && (
+          <a
+            href={product.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label={`Open ${productName(product)} on ${product.supplierName || 'supplier site'}`}
+            title="Open supplier product page"
+          >
+            <Icon name="external-link" className="h-4 w-4" />
+          </a>
+        )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -459,7 +473,23 @@ function ProductDetail({ product, colors, loading }: { product: CatalogProduct |
   return (
     <div className="space-y-4">
       <div>
-        <p className="pf-label-small">{product.supplierName || product.supplierId}</p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="pf-label-small">{product.supplierName || product.supplierId}</p>
+          {product.url && (
+            <Button
+              as="a"
+              href={product.url}
+              target="_blank"
+              rel="noreferrer"
+              variant="ghost"
+              size="sm"
+              className="-mt-1"
+              rightIcon={<Icon name="external-link" className="h-4 w-4" />}
+            >
+              Supplier page
+            </Button>
+          )}
+        </div>
         <h2 className="pf-section-title mt-1">{productName(product)}</h2>
         <p className="pf-copy mt-1">{product.description || 'No product description captured yet.'}</p>
       </div>
@@ -549,7 +579,7 @@ function EmptyCatalogState({ title, compact = false }: { title: string; compact?
         <Icon name="paint-bucket" className="h-5 w-5" />
       </span>
       <p className="pf-row-title mt-3">{title}</p>
-      <p className="pf-copy mt-1 max-w-sm">Run the supplier catalog sync to hydrate products, colors, and availability mappings.</p>
+      <p className="pf-copy mt-1 max-w-sm">Run the supplier catalog sync to load products, colors, and availability mappings.</p>
     </div>
   );
 }
