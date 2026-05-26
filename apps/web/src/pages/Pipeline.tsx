@@ -250,8 +250,7 @@ export function Pipeline() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="pf-kicker">Customer workflow</p>
-          <h2 className="pf-page-title">Pipeline</h2>
-          <p className="pf-page-copy mt-2 max-w-3xl">Track customers from lead capture through estimate, scheduling, production, and closeout.</p>
+          <p className="pf-page-copy mt-1 max-w-3xl">Track customers from lead capture through estimate, scheduling, production, and closeout.</p>
         </div>
         <div className="mobile-action-row flex flex-wrap gap-2">
           <Link className="btn-secondary btn-sm" to="/leads?new=1">Add lead</Link>
