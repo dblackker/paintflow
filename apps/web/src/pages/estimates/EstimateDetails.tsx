@@ -54,6 +54,10 @@ interface Estimate {
   leadId?: string;
   status: string;
   total?: number | string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
   packages?: EstimatePackage[];
   payments?: Payment[];
   createdAt?: string;
@@ -148,6 +152,16 @@ function groupItems(items: EstimateLineItem[]) {
     groups.set(parts.room, rows);
   });
   return Array.from(groups.entries());
+}
+
+function estimateAddress(estimate: Estimate | null, customer: Customer | null) {
+  const source = {
+    streetAddress: estimate?.streetAddress || customer?.streetAddress,
+    city: estimate?.city || customer?.city,
+    state: estimate?.state || customer?.state,
+    postalCode: estimate?.postalCode || customer?.postalCode,
+  };
+  return formatAddress(source);
 }
 
 export function EstimateDetails() {
@@ -265,7 +279,7 @@ export function EstimateDetails() {
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)]">
           <div className="grid gap-5">
-            <CustomerCard customer={customer} />
+            <CustomerCard customer={customer} jobsiteAddress={estimateAddress(estimate, customer)} />
             <ScopeCard includedItems={includedItems} optionalItems={optionalItems} />
           </div>
           <aside className="grid gap-5 self-start">
@@ -335,11 +349,10 @@ function TimelineTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CustomerCard({ customer }: { customer: Customer | null }) {
+function CustomerCard({ customer, jobsiteAddress }: { customer: Customer | null; jobsiteAddress: string }) {
   if (!customer) {
     return <Card><CardContent className="text-sm text-gray-500">Customer details unavailable.</CardContent></Card>;
   }
-  const address = formatAddress(customer);
   return (
     <Card>
       <CardContent>
@@ -347,7 +360,9 @@ function CustomerCard({ customer }: { customer: Customer | null }) {
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <Link to={`/leads/${customer.id}`} className="text-xl font-semibold text-gray-950 hover:text-blue-700">{customer.name || 'Customer'}</Link>
-            <div className="mt-2 text-sm text-gray-700">{address || 'No jobsite address'}</div>
+            <div className="mt-2 text-sm text-gray-700">
+              <span className="font-medium text-gray-950">Jobsite:</span> {jobsiteAddress || 'No jobsite address'}
+            </div>
           </div>
           <div className="text-sm text-gray-600 sm:text-right">
             <p>{customer.phone ? formatPhone(customer.phone) : 'No phone'}</p>

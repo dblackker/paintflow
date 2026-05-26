@@ -39,9 +39,14 @@ interface Estimate {
 
 interface Job {
   id: string;
+  jobNumber?: string | null;
   name?: string | null;
   status?: string | null;
   budget?: number | string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   createdAt?: string | null;
   completedAt?: string | null;
   scheduledStartAt?: string | null;
@@ -163,6 +168,11 @@ function estimateContractTotal(estimate: Estimate) {
 
 function paymentNet(payment: Payment) {
   return Math.max(Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+}
+
+function jobAddress(job: Job) {
+  const locality = [job.city, job.state].filter(Boolean).join(', ');
+  return [job.streetAddress, locality, String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ');
 }
 
 function photoSrc(photo: Photo, source: 'Estimate' | 'Job') {
@@ -471,7 +481,11 @@ export function LeadDetail() {
               <Link key={job.id} to={`/jobs/${job.id}`} className="block border-b p-4 last:border-b-0 hover:bg-gray-50">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="pf-row-title truncate">{job.name || 'Job'}</p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      {job.jobNumber && <span className="pf-status pf-status-neutral pf-status-sm">{job.jobNumber}</span>}
+                      <p className="pf-row-title truncate">{job.name || 'Job'}</p>
+                    </div>
+                    {jobAddress(job) && <p className="pf-copy mt-1 truncate">{jobAddress(job)}</p>}
                     <p className="pf-meta mt-1">Created {formatDate(job.createdAt)}{job.completedAt ? ` - Completed ${formatDate(job.completedAt)}` : ''}</p>
                   </div>
                   <div className="sm:text-right">

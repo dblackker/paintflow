@@ -14,6 +14,7 @@ const crewHoursPerPersonDay = 8;
 
 interface Job {
   id: string;
+  jobNumber?: string | null;
   name?: string | null;
   status?: string | null;
   budget?: string | number | null;
@@ -22,6 +23,10 @@ interface Job {
   completedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   leadName?: string | null;
   leadStreetAddress?: string | null;
   leadCity?: string | null;
@@ -245,6 +250,10 @@ function scheduleRange(job: Job) {
 
 function jobAddress(job: Job) {
   return formatAddress({
+    streetAddress: job.streetAddress,
+    city: job.city,
+    state: job.state,
+    postalCode: job.postalCode,
     leadStreetAddress: job.leadStreetAddress,
     leadCity: job.leadCity,
     leadState: job.leadState,
@@ -253,12 +262,13 @@ function jobAddress(job: Job) {
 }
 
 function jobZip(job: Job) {
-  return String(job.leadPostalCode || '').match(/\d{5}/)?.[0] || '';
+  return String(job.postalCode || job.leadPostalCode || '').match(/\d{5}/)?.[0] || '';
 }
 
 function jobOptionLabel(job: Job) {
   const address = jobAddress(job);
-  return address ? `${job.name || 'Job'} - ${address}` : job.name || 'Job';
+  const name = [job.jobNumber, job.name || 'Job'].filter(Boolean).join(' - ');
+  return address ? `${name} - ${address}` : name;
 }
 
 function weekend(date: Date) {

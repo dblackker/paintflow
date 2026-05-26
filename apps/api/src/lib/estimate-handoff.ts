@@ -52,9 +52,33 @@ function jobScopeLabel(selectedPackage: EstimatePackage | null): string {
   return 'Job';
 }
 
+function generateJobNumber() {
+  const date = new Date();
+  const year = date.getUTCFullYear();
+  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `JOB-${year}-${suffix}`;
+}
+
 export function buildJobName(lead: typeof leads.$inferSelect, selectedPackage: EstimatePackage | null): string {
   const street = lead.streetAddress?.trim();
   return [lead.name, jobScopeLabel(selectedPackage), street].filter(Boolean).join(' - ');
+}
+
+function estimateStreet(estimate: AcceptedEstimate, lead: typeof leads.$inferSelect) {
+  return estimate.streetAddress?.trim() || lead.streetAddress?.trim() || '';
+}
+
+function estimateJobsite(estimate: AcceptedEstimate, lead: typeof leads.$inferSelect) {
+  return {
+    streetAddress: estimate.streetAddress || lead.streetAddress,
+    city: estimate.city || lead.city,
+    state: estimate.state || lead.state,
+    postalCode: estimate.postalCode || lead.postalCode,
+  };
+}
+
+function buildJobNameFromEstimate(estimate: AcceptedEstimate, lead: typeof leads.$inferSelect, selectedPackage: EstimatePackage | null) {
+  return [lead.name, jobScopeLabel(selectedPackage), estimateStreet(estimate, lead)].filter(Boolean).join(' - ');
 }
 
 export function selectEstimatePackage(
@@ -110,12 +134,15 @@ export async function createJobFromAcceptedEstimate(
   }
 
   const selectedPackage = selectEstimatePackage(estimate, input.packageName);
+  const jobsite = estimateJobsite(estimate, lead);
   const [job] = await db.insert(jobs)
     .values({
       orgId: estimate.orgId,
       leadId: estimate.leadId,
       estimateId: estimate.id,
-      name: buildJobName(lead, selectedPackage),
+      jobNumber: generateJobNumber(),
+      name: buildJobNameFromEstimate(estimate, lead, selectedPackage),
+      ...jobsite,
       status: 'scheduled',
       budget: contractValue.toFixed(2),
     })

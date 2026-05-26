@@ -28,6 +28,10 @@ interface Estimate {
   leadName?: string | null;
   leadPhone?: string | null;
   leadEmail?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   leadStreetAddress?: string | null;
   leadCity?: string | null;
   leadState?: string | null;
@@ -74,8 +78,8 @@ function formatDate(value?: string | null) {
 }
 
 function estimateAddress(estimate: Estimate) {
-  const street = estimate.leadStreetAddress || '';
-  const locality = [estimate.leadCity, estimate.leadState].filter(Boolean).join(', ');
+  const street = estimate.streetAddress || estimate.leadStreetAddress || '';
+  const locality = [estimate.city || estimate.leadCity, estimate.state || estimate.leadState].filter(Boolean).join(', ');
   return [street, locality].filter(Boolean).join(' ');
 }
 

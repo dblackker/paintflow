@@ -21,10 +21,15 @@ interface Estimate {
 
 interface Job {
   id: string;
+  jobNumber?: string | null;
   name?: string;
   title?: string;
   status?: string;
   balance?: number | string;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
 }
 
 interface ChangeOrder {
@@ -201,6 +206,12 @@ export function Portal() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-gray-950">{job.name || job.title || 'Painting project'}</h2>
+                <div className="mt-2 flex flex-wrap gap-2 text-sm text-gray-600">
+                  {job.jobNumber && <span className="font-medium text-gray-900">{job.jobNumber}</span>}
+                  {[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ') && (
+                    <span>{[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ')}</span>
+                  )}
+                </div>
                 {balance > 0 && <p className="pf-copy mt-2">Outstanding balance: <span className="font-semibold text-gray-950">{formatMoney(balance)}</span></p>}
               </div>
               <StatusBadge status={job.status || 'active'} />
@@ -218,6 +229,7 @@ export function Portal() {
                 <ChangeOrderCard
                   key={order.id}
                   order={order}
+                  job={job}
                   approvalName={approvalNameByOrder[order.id] || ''}
                   isApproving={busyAction === `approve-${order.id}`}
                   isPaying={busyAction === `pay-${order.id}`}
@@ -245,6 +257,7 @@ export function Portal() {
 
 function ChangeOrderCard({
   order,
+  job,
   approvalName,
   isApproving,
   isPaying,
@@ -253,6 +266,7 @@ function ChangeOrderCard({
   onPay,
 }: {
   order: ChangeOrder;
+  job?: Job | null;
   approvalName: string;
   isApproving: boolean;
   isPaying: boolean;
@@ -270,6 +284,7 @@ function ChangeOrderCard({
   const isPaid = order.paymentStatus === 'paid';
   const needsPayment = paymentRequired && !isPaid;
   const contractorSignature = order.contractorSignature;
+  const jobMeta = [job?.jobNumber, job?.streetAddress].filter(Boolean).join(' - ');
 
   function point(event: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
@@ -329,6 +344,7 @@ function ChangeOrderCard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="font-medium text-gray-950">{order.description || 'Change order'}</p>
+          {jobMeta && <p className="mt-1 text-sm text-gray-600">{jobMeta}</p>}
           <p className="mt-1 text-sm text-gray-600">Change order amount: {formatMoney(order.amount)}</p>
           <p className="text-sm text-gray-600">
             {paymentRequired ? `Payment due now: ${formatMoney(paymentDue)}` : 'No online payment is required for this change order.'}

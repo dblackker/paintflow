@@ -21,8 +21,13 @@ interface TeamMember {
 
 interface Job {
   id: string;
+  jobNumber?: string | null;
   name?: string | null;
   leadName?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   leadStreetAddress?: string | null;
   leadCity?: string | null;
   leadState?: string | null;
@@ -254,6 +259,10 @@ function dateKey(value: string) {
 
 function jobAddress(job: Partial<Job>) {
   return formatAddress({
+    streetAddress: job.streetAddress,
+    city: job.city,
+    state: job.state,
+    postalCode: job.postalCode,
     leadStreetAddress: job.leadStreetAddress,
     leadCity: job.leadCity,
     leadState: job.leadState,
@@ -265,7 +274,8 @@ function jobLabel(job?: Job | null) {
   if (!job) return 'Unassigned job';
   const address = jobAddress(job);
   const customer = job.leadName ? ` - ${job.leadName}` : '';
-  return address ? `${address}${customer} - ${job.name || 'Job'}` : `${job.name || job.leadName || 'Job'}${customer}`;
+  const name = [job.jobNumber, job.name || 'Job'].filter(Boolean).join(' - ');
+  return address ? `${address}${customer} - ${name}` : `${name}${customer}`;
 }
 
 function timeSortValue(value?: string | null) {

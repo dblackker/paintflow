@@ -48,8 +48,17 @@ function money(value: unknown) {
   return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function leadAddress(lead: typeof leads.$inferSelect) {
-  return [lead.streetAddress, lead.city, lead.state, lead.postalCode].filter(Boolean).join(', ');
+function jobAddress(job: typeof jobs.$inferSelect, lead: typeof leads.$inferSelect) {
+  return [
+    job.streetAddress || lead.streetAddress,
+    job.city || lead.city,
+    job.state || lead.state,
+    job.postalCode || lead.postalCode,
+  ].filter(Boolean).join(', ');
+}
+
+function jobDisplayName(job: typeof jobs.$inferSelect) {
+  return [job.jobNumber, job.name].filter(Boolean).join(' - ');
 }
 
 async function contractorSignature(db: ReturnType<typeof createDb>, orgId: string, userId?: string) {
@@ -196,6 +205,7 @@ changeOrdersRoute.post('/:id/portal-link', async (c) => {
     entityId: id,
     metadata: {
       jobId: portal.job.id,
+      jobNumber: portal.job.jobNumber,
       leadId: portal.lead.id,
       expiresAt: portal.expiresAt.toISOString(),
     },
@@ -233,8 +243,8 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
     estimatorEmail: settings?.email || estimator?.email || null,
     estimatorPhone: settings?.phone || null,
-    jobName: portal.job.name,
-    jobAddress: leadAddress(portal.lead),
+    jobName: jobDisplayName(portal.job),
+    jobAddress: jobAddress(portal.job, portal.lead),
     description: portal.order.description,
     amount: money(portal.order.amount),
     paymentRequired: Boolean(portal.order.paymentRequired),
@@ -276,6 +286,7 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     metadata: {
       link: portalUrl,
       amount: portal.order.amount,
+      jobNumber: portal.job.jobNumber,
       paymentRequired: portal.order.paymentRequired,
       expiresAt: portal.expiresAt.toISOString(),
       contractorSignature: countersignature,
@@ -290,6 +301,7 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     entityId: id,
     metadata: {
       jobId: portal.job.id,
+      jobNumber: portal.job.jobNumber,
       leadId: portal.lead.id,
       email: portal.lead.email,
       emailSendId: emailSend?.id,

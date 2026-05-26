@@ -13,8 +13,12 @@ export interface CrewTimecardMember {
 
 export interface CrewTimecardJob {
   id: string;
+  jobNumber?: string | null;
   name?: string | null;
   leadName?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
   leadStreetAddress?: string | null;
   leadCity?: string | null;
   leadState?: string | null;
@@ -65,10 +69,10 @@ function numberValue(value: unknown) {
 function jobLabel(job?: CrewTimecardJob) {
   if (!job) return 'Selected job';
   const address = [
-    job.leadStreetAddress,
-    [job.leadCity, job.leadState].filter(Boolean).join(', '),
+    job.streetAddress || job.leadStreetAddress,
+    [job.city || job.leadCity, job.state || job.leadState].filter(Boolean).join(', '),
   ].filter(Boolean).join(' ');
-  const name = job.name || job.leadName || 'Job';
+  const name = [job.jobNumber, job.name || job.leadName || 'Job'].filter(Boolean).join(' - ');
   return address ? `${address} - ${name}` : name;
 }
 

@@ -108,6 +108,10 @@ const estimatePackageSchema = z.object({
 
 const createEstimateSchema = z.object({
   leadId: z.string().uuid(),
+  streetAddress: z.string().trim().max(255).optional(),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(50).optional(),
+  postalCode: z.string().trim().max(20).optional(),
   status: z.enum(['draft', 'sent']).default('sent'),
   packages: z.array(estimatePackageSchema).max(5),
 }).superRefine((data, ctx) => {
@@ -191,6 +195,15 @@ function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, pack
     }));
 }
 
+function estimateJobsite(estimate: typeof estimates.$inferSelect, lead?: typeof leads.$inferSelect | null) {
+  return {
+    streetAddress: estimate.streetAddress || lead?.streetAddress || null,
+    city: estimate.city || lead?.city || null,
+    state: estimate.state || lead?.state || null,
+    postalCode: estimate.postalCode || lead?.postalCode || null,
+  };
+}
+
 async function recordPublicEstimateView(db: ReturnType<typeof createDb>, c: Context<{ Bindings: Env; Variables: Variables }>, estimate: typeof estimates.$inferSelect) {
   if (!['sent', 'accepted'].includes(estimate.status)) return;
   if (c.get('userId')) return;
@@ -263,6 +276,7 @@ estimatesApp.get('/:id/public', async (c) => {
   return c.json({ 
     data: {
       id: estimate.id,
+      ...estimateJobsite(estimate),
       packages: estimate.packages,
       total: estimate.total,
       status: estimate.status,
@@ -402,6 +416,7 @@ estimatesApp.get('/', async (c) => {
     leadCity: leadsById.get(estimate.leadId)?.city,
     leadState: leadsById.get(estimate.leadId)?.state,
     leadPostalCode: leadsById.get(estimate.leadId)?.postalCode,
+    ...estimateJobsite(estimate, leadsById.get(estimate.leadId)),
     publicUrl: publicEstimateUrl(baseUrl, estimate.id),
     customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id),
   }));
@@ -453,6 +468,10 @@ estimatesApp.post('/', async (c) => {
     .values({
       orgId,
       leadId: lead.id,
+      streetAddress: parsed.data.streetAddress || lead.streetAddress,
+      city: parsed.data.city || lead.city,
+      state: parsed.data.state || lead.state,
+      postalCode: parsed.data.postalCode || lead.postalCode,
       packages: parsed.data.packages,
       total: estimateTotal,
       status: isDraft ? 'draft' : 'sent',
@@ -661,6 +680,10 @@ estimatesApp.post('/:id/revise', async (c) => {
     .values({
       orgId,
       leadId: estimate.leadId,
+      streetAddress: estimate.streetAddress,
+      city: estimate.city,
+      state: estimate.state,
+      postalCode: estimate.postalCode,
       packages: estimate.packages,
       total: estimate.total,
       status: 'draft',
@@ -752,6 +775,10 @@ estimatesApp.patch('/:id', async (c) => {
   const [estimate] = await db.update(estimates)
     .set({
       leadId: lead.id,
+      streetAddress: parsed.data.streetAddress || lead.streetAddress,
+      city: parsed.data.city || lead.city,
+      state: parsed.data.state || lead.state,
+      postalCode: parsed.data.postalCode || lead.postalCode,
       packages: parsed.data.packages,
       total: estimateTotal,
       status: isDraft ? 'draft' : 'sent',

@@ -81,6 +81,7 @@ interface JobCostingResponse {
   data: {
     job: {
       id: string;
+      jobNumber?: string | null;
       name?: string | null;
       status?: string | null;
       budget?: number | string | null;
@@ -89,6 +90,10 @@ interface JobCostingResponse {
       leadName?: string | null;
       leadEmail?: string | null;
       leadPhone?: string | null;
+      streetAddress?: string | null;
+      city?: string | null;
+      state?: string | null;
+      postalCode?: string | null;
       leadStreetAddress?: string | null;
       leadCity?: string | null;
       leadState?: string | null;
@@ -130,7 +135,7 @@ function photoSrc(photo: JobPhoto) {
 }
 
 function streetAddress(job: JobCostingResponse['data']['job']) {
-  return String(job.leadStreetAddress || '').trim();
+  return String(job.streetAddress || job.leadStreetAddress || '').trim();
 }
 
 function jobScope(job: JobCostingResponse['data']['job']) {
@@ -546,6 +551,7 @@ export function JobDetail() {
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <h2 className="pf-page-title truncate">{displayJobName(job)}</h2>
               <StatusBadge status={String(job.status || 'scheduled')} />
+              {job.jobNumber && <span className="pf-status pf-status-neutral pf-status-sm">{job.jobNumber}</span>}
             </div>
             <div className="space-y-1 text-sm text-gray-600">
               {job.leadName && (
@@ -749,7 +755,9 @@ export function JobDetail() {
                 <div key={order.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <div className="min-w-0">
                     <p className="font-medium text-gray-950">{order.description || order.title || 'Change order'}</p>
-                    <p className="text-sm text-gray-600">{labelize(order.createdBy || 'contractor')} - {formatDate(order.createdAt)}</p>
+                    <p className="text-sm text-gray-600">
+                      {[job.jobNumber, labelize(order.createdBy || 'contractor'), formatDate(order.createdAt)].filter(Boolean).join(' - ')}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <StatusBadge status={String(order.status || 'pending')} />
                       {order.paymentRequired && <StatusBadge status={String(order.paymentStatus || 'pending')} />}

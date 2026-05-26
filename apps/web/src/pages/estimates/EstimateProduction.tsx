@@ -17,6 +17,7 @@ interface Lead {
   streetAddress?: string | null;
   city?: string | null;
   state?: string | null;
+  postalCode?: string | null;
 }
 
 interface ProductionRate {
@@ -59,6 +60,10 @@ interface OrgSettings {
 interface Estimate {
   id: string;
   leadId?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   status?: string | null;
   signedAt?: string | null;
   packages?: EstimatePackage[] | null;
@@ -284,6 +289,7 @@ export function EstimateProduction() {
   const [settings, setSettings] = useState<OrgSettings>({});
   const [editingEstimate, setEditingEstimate] = useState<Estimate | null>(null);
   const [leadId, setLeadId] = useState(initialLeadId);
+  const [jobsite, setJobsite] = useState({ streetAddress: '', city: '', state: '', postalCode: '' });
   const [estimateType, setEstimateType] = useState<EstimateType>('interior');
   const [paintMaterialId, setPaintMaterialId] = useState('');
   const [primerMaterialId, setPrimerMaterialId] = useState('');
@@ -360,6 +366,12 @@ export function EstimateProduction() {
     const pkg = estimate.packages?.[0];
     setEditingEstimate(estimate);
     setLeadId(estimate.leadId || '');
+    setJobsite({
+      streetAddress: estimate.streetAddress || '',
+      city: estimate.city || '',
+      state: estimate.state || '',
+      postalCode: String(estimate.postalCode || '').slice(0, 5),
+    });
     setEstimateType((pkg?.estimateType as EstimateType) || 'interior');
     setDiscount(String(pkg?.discount || 0));
     const roomMap = new Map<string, Room>();
@@ -426,6 +438,30 @@ export function EstimateProduction() {
     return Array.from(groups.entries());
   }, [rates]);
   const selectedLead = leads.find((lead) => lead.id === leadId);
+
+  useEffect(() => {
+    if (!selectedLead || editingEstimate) return;
+    setJobsite({
+      streetAddress: selectedLead.streetAddress || '',
+      city: selectedLead.city || '',
+      state: selectedLead.state || '',
+      postalCode: String(selectedLead.postalCode || '').slice(0, 5),
+    });
+  }, [selectedLead?.id, editingEstimate?.id]);
+
+  function selectLead(nextLeadId: string) {
+    setLeadId(nextLeadId);
+    const lead = leads.find((item) => item.id === nextLeadId);
+    if (lead) {
+      setJobsite({
+        streetAddress: lead.streetAddress || '',
+        city: lead.city || '',
+        state: lead.state || '',
+        postalCode: String(lead.postalCode || '').slice(0, 5),
+      });
+    }
+  }
+
   const totals = useMemo(() => calculateTotals(), [rooms, adjustments, rates, materials, settings, paintMaterialId, primerMaterialId, discount, estimateType]);
   const surfaceItems = totals.items.filter((item) => item.kind === 'surface' && item.customerVisible !== false);
   const editingSent = editingEstimate?.status === 'sent';
@@ -790,7 +826,7 @@ export function EstimateProduction() {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        body: JSON.stringify({ leadId, packages, status: editingSent ? 'sent' : statusValue }),
+        body: JSON.stringify({ leadId, ...jobsite, packages, status: editingSent ? 'sent' : statusValue }),
       });
       let sendResult: { previewUrl?: string } | null = null;
       if (statusValue === 'sent') {
@@ -894,7 +930,7 @@ export function EstimateProduction() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label>
                 <span className="form-label">Customer</span>
-                <select className="input mt-1" value={leadId} onChange={(event) => setLeadId(event.target.value)}>
+                <select className="input mt-1" value={leadId} onChange={(event) => selectLead(event.target.value)}>
                   <option value="">Select customer...</option>
                   {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}</option>)}
                 </select>
@@ -916,6 +952,52 @@ export function EstimateProduction() {
                   <option value="custom">Custom / commercial</option>
                 </select>
               </label>
+            </div>
+            <div className="mt-4 rounded-lg border bg-gray-50 p-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="pf-row-title">Jobsite address</p>
+                  <p className="pf-meta">Defaults from the customer, but proposals can use a different work address.</p>
+                </div>
+                {selectedLead && (
+                  <button
+                    type="button"
+                    className="btn-text btn-sm self-start"
+                    onClick={() => setJobsite({
+                      streetAddress: selectedLead.streetAddress || '',
+                      city: selectedLead.city || '',
+                      state: selectedLead.state || '',
+                      postalCode: String(selectedLead.postalCode || '').slice(0, 5),
+                    })}
+                  >
+                    Use customer address
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px_96px_120px]">
+                <label>
+                  <span className="form-label">Street address</span>
+                  <input
+                    className="input mt-1"
+                    autoComplete="street-address"
+                    value={jobsite.streetAddress}
+                    onChange={(event) => setJobsite({ ...jobsite, streetAddress: event.target.value })}
+                    placeholder="Jobsite street"
+                  />
+                </label>
+                <label>
+                  <span className="form-label">City</span>
+                  <input className="input mt-1" autoComplete="address-level2" value={jobsite.city} onChange={(event) => setJobsite({ ...jobsite, city: event.target.value })} />
+                </label>
+                <label>
+                  <span className="form-label">State</span>
+                  <input className="input mt-1" autoComplete="address-level1" maxLength={2} value={jobsite.state} onChange={(event) => setJobsite({ ...jobsite, state: event.target.value.toUpperCase().slice(0, 2) })} />
+                </label>
+                <label>
+                  <span className="form-label">ZIP</span>
+                  <input className="input mt-1" autoComplete="postal-code" inputMode="numeric" maxLength={5} value={jobsite.postalCode} onChange={(event) => setJobsite({ ...jobsite, postalCode: event.target.value.replace(/\D/g, '').slice(0, 5) })} />
+                </label>
+              </div>
             </div>
           </Card>
 

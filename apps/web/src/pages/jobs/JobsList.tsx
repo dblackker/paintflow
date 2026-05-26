@@ -19,6 +19,7 @@ interface TeamMember {
 
 interface Job {
   id: string;
+  jobNumber?: string | null;
   name?: string | null;
   status?: string | null;
   budget?: number | string | null;
@@ -28,6 +29,10 @@ interface Job {
   leadName?: string | null;
   leadPhone?: string | null;
   leadEmail?: string | null;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
   leadStreetAddress?: string | null;
   leadCity?: string | null;
   leadState?: string | null;
@@ -55,12 +60,14 @@ function formatDate(value?: string | null) {
 }
 
 function jobAddress(job: Job) {
-  const locality = [job.leadCity, job.leadState].filter(Boolean).join(', ');
-  return [job.leadStreetAddress, locality].filter(Boolean).join(' ');
+  const city = job.city || job.leadCity;
+  const state = job.state || job.leadState;
+  const locality = [city, state].filter(Boolean).join(', ');
+  return [job.streetAddress || job.leadStreetAddress, locality].filter(Boolean).join(' ');
 }
 
 function streetAddress(job: Job) {
-  return String(job.leadStreetAddress || '').trim();
+  return String(job.streetAddress || job.leadStreetAddress || '').trim();
 }
 
 function jobScope(job: Job) {
@@ -334,6 +341,7 @@ function JobCard({
                   {displayJobName(job)}
                 </Link>
                 <StatusBadge status={String(job.status || 'scheduled')} />
+                {job.jobNumber && <Badge size="sm" variant="default">{job.jobNumber}</Badge>}
               </div>
               <div className="mt-2 space-y-1">
                 {job.leadName && (
