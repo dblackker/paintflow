@@ -43,6 +43,14 @@ import { Landing } from '@/pages/landing/Landing';
 
 export const router = createBrowserRouter([
   {
+    path: '/estimates/:id',
+    element: <EstimateDetail />,
+  },
+  {
+    path: '/estimates/:id/success',
+    element: <EstimateDetail />,
+  },
+  {
     element: <BaseLayout />,
     children: [
       { path: '/', element: <Landing /> },
@@ -50,7 +58,6 @@ export const router = createBrowserRouter([
       { path: '/estimates', element: <EstimatesList /> },
       { path: '/estimates/new', element: <EstimateNew /> },
       { path: '/estimates/production', element: <EstimateProduction /> },
-      { path: '/estimates/:id', element: <EstimateDetail /> },
       { path: '/estimates/:id/details', element: <EstimateDetails /> },
       { path: '/estimates/:id/photos', element: <EstimatePhotos /> },
       { path: '/jobs', element: <JobsList /> },
