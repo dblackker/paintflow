@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from '@/components/BottomNav';
 import { Toast } from '@/components/Toast';
 import { AuthBridge } from '@/components/AuthBridge';
@@ -91,6 +91,7 @@ export function BaseLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationPreview[]>([]);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
   const title = useMemo(() => routeTitle(location.pathname), [location.pathname]);
   const unreadCount = notifications.filter((item) => !item.read).length;
 
@@ -114,6 +115,26 @@ export function BaseLayout() {
     document.body.classList.toggle('pf-nav-drawer-open', isMobileMenuOpen);
     return () => document.body.classList.remove('pf-nav-drawer-open');
   }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (notificationsRef.current?.contains(event.target as Node)) return;
+      setNotificationsOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setNotificationsOpen(false);
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [notificationsOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -209,12 +230,13 @@ export function BaseLayout() {
             </button>
             <p className="truncate text-lg font-semibold text-gray-950 sm:text-xl">{title}</p>
             <div className="flex items-center gap-2">
-              <div className="relative">
+              <div ref={notificationsRef} className="relative">
                 <button
                   type="button"
                   className="btn-icon pf-notification-button relative"
                   aria-label="Open notifications"
                   aria-expanded={notificationsOpen}
+                  aria-haspopup="menu"
                   onClick={() => setNotificationsOpen((open) => !open)}
                 >
                   <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor">
