@@ -32,6 +32,7 @@ import { Reports } from '@/pages/Reports';
 import { Reviews } from '@/pages/Reviews';
 import { Roles } from '@/pages/Roles';
 import { Settings } from '@/pages/Settings';
+import { SupplierCatalog } from '@/pages/SupplierCatalog';
 import { Team } from '@/pages/Team';
 import { Templates } from '@/pages/Templates';
 import { Time } from '@/pages/Time';
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
       { path: '/reviews', element: <Reviews /> },
       { path: '/roles', element: <Roles /> },
       { path: '/settings', element: <Settings /> },
+      { path: '/supplier-catalog', element: <SupplierCatalog /> },
       { path: '/team', element: <Team /> },
       { path: '/templates', element: <Templates /> },
       { path: '/time', element: <Time /> },

@@ -123,15 +123,26 @@ catalogApp.get('/status', async (c) => {
     limit: 1,
   });
 
-  const [counts] = await db
-    .select({
-      productCount: sql<number>`count(distinct ${supplierCatalogProducts.id})`,
-      colorCount: sql<number>`count(distinct ${supplierCatalogColors.id})`,
-    })
-    .from(supplierCatalogProducts)
-    .leftJoin(supplierCatalogColors, eq(supplierCatalogProducts.supplierId, supplierCatalogColors.supplierId));
+  const [[productCounts], [colorCounts]] = await Promise.all([
+    db
+      .select({ productCount: sql<number>`count(*)` })
+      .from(supplierCatalogProducts)
+      .where(eq(supplierCatalogProducts.isActive, true)),
+    db
+      .select({ colorCount: sql<number>`count(*)` })
+      .from(supplierCatalogColors)
+      .where(eq(supplierCatalogColors.isActive, true)),
+  ]);
 
-  return c.json({ data: { latestRun: latestRun || null, counts } });
+  return c.json({
+    data: {
+      latestRun: latestRun || null,
+      counts: {
+        productCount: productCounts?.productCount || 0,
+        colorCount: colorCounts?.colorCount || 0,
+      },
+    },
+  });
 });
 
 export default catalogApp;

@@ -28,6 +28,7 @@ const navSections = [
       { href: '/reports', label: 'Reports' },
       { href: '/activity', label: 'Activity' },
       { href: '/team', label: 'Team' },
+      { href: '/supplier-catalog', label: 'Supplier Catalog' },
       { href: '/email-templates', label: 'Email Templates' },
       { href: '/settings', label: 'Settings' },
     ],
@@ -66,6 +67,7 @@ function routeTitle(pathname: string) {
   if (pathname.startsWith('/team')) return 'Team';
   if (pathname.startsWith('/email-templates')) return 'Email Templates';
   if (pathname.startsWith('/settings')) return 'Settings';
+  if (pathname.startsWith('/supplier-catalog')) return 'Supplier Catalog';
   if (pathname.startsWith('/notifications')) return 'Notifications';
   if (pathname.startsWith('/onboarding')) return 'Onboarding';
   if (pathname.startsWith('/production-rates')) return 'Production Rates';
