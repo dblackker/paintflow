@@ -9,7 +9,7 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "deploy:api": "cd apps/api && wrangler deploy",
-    "deploy:web": "cd apps/web && astro build && wrangler pages deploy dist",
+    "deploy:web": "pnpm --filter @paintflow/web build && wrangler pages deploy apps/web/dist",
     "db:push": "cd packages/db && drizzle-kit push",
     "db:migrate": "cd packages/db && drizzle-kit migrate",
     "db:studio": "cd packages/db && drizzle-kit studio",

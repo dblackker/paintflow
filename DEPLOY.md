@@ -87,9 +87,8 @@ pnpm deploy:web
 
 Or manually:
 ```bash
-cd apps/web
-astro build
-wrangler pages deploy dist --project-name=paintflow
+pnpm --filter @paintflow/web build
+wrangler pages deploy apps/web/dist --project-name=paintflow
 ```
 
 ## Environment Variables
@@ -176,7 +175,7 @@ pnpm dev
 
 # Or individually
 cd apps/api && wrangler dev
-cd apps/web && astro dev
+cd apps/web && pnpm dev
 ```
 
 Local dev uses:
