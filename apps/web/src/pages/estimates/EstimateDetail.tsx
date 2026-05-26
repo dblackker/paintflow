@@ -80,6 +80,14 @@ interface PublicEstimate {
   sentAt?: string;
   signedName?: string;
   signedAt?: string;
+  contractorSignature?: {
+    name?: string | null;
+    email?: string | null;
+    title?: string | null;
+    companyName?: string | null;
+    signedAt?: string | null;
+    capacity?: string | null;
+  } | null;
   paymentSummary?: {
     paidAmount?: number | string;
     paymentCount?: number;
@@ -412,6 +420,10 @@ export function EstimateDetail() {
   }
 
   function openTerms() {
+    if (!estimate?.contractorSignature?.signedAt) {
+      setMessage({ tone: 'error', text: 'Contractor signature is pending. Ask the contractor to resend the proposal before signing.' });
+      return;
+    }
     setMessage(null);
     setAcknowledgedDisclosure(false);
     setShowTerms(true);
@@ -715,6 +727,8 @@ export function EstimateDetail() {
           onPay={startCheckout}
         />
 
+        <SignatureSummary estimate={estimate} />
+
         <LegalPanel legal={legal} />
 
         {photos.length > 0 && (
@@ -886,6 +900,11 @@ function ActionPanel({
           <div>
             <h3 className="font-semibold text-green-950">Final signed copy</h3>
             <p className="mt-1 text-sm text-green-800">Signed by {estimate.signedName || 'Customer'} on {new Date(estimate.signedAt).toLocaleDateString()}.</p>
+            {estimate.contractorSignature?.signedAt && (
+              <p className="mt-1 text-sm text-green-800">
+                Countersigned by {estimate.contractorSignature.name || estimate.contractorSignature.companyName || 'Contractor'} for {estimate.contractorSignature.companyName || 'the contractor'} on {new Date(estimate.contractorSignature.signedAt).toLocaleDateString()}.
+              </p>
+            )}
             <p className="mt-2 text-sm text-gray-700">{paidAmount > 0 ? `${money(paidAmount)} payment recorded.` : 'No online payment is recorded on this copy yet.'}</p>
             {nextPayment ? (
               <p className="mt-1 text-sm text-gray-700">Next payment: <strong>{nextPayment.label}</strong> {money(num(nextPayment.amount) - num(nextPayment.paidAmount))}.</p>
@@ -910,14 +929,60 @@ function ActionPanel({
     <section className="rounded-lg border border-blue-200 bg-blue-50 p-5" style={{ borderColor: primaryColor }}>
       <h3 className="font-semibold text-gray-900">Ready to proceed?</h3>
       <p className="mt-2 text-gray-700">Approve the proposal to review terms and sign. Any payment due will be shown separately.</p>
+      {estimate.contractorSignature?.signedAt ? (
+        <p className="mt-2 text-sm text-blue-900">
+          This proposal has been countersigned by {estimate.contractorSignature.name || estimate.contractorSignature.companyName || 'the contractor'} on behalf of {estimate.contractorSignature.companyName || 'the painting company'}.
+        </p>
+      ) : (
+        <p className="mt-2 text-sm text-red-800">
+          Contractor signature is pending. Ask the contractor to resend the proposal before signing.
+        </p>
+      )}
       <p className="mt-2 text-sm text-blue-900">
         This link always shows the current proposal{estimate.updatedAt || estimate.sentAt ? `, last updated ${new Date(estimate.updatedAt || estimate.sentAt || '').toLocaleDateString()}` : ''}.
         {' '}Once signed, it becomes the approved agreement and later changes require a change order or a new estimate.
       </p>
       <div className="mt-4">
-        <button type="button" className="w-full rounded-lg px-5 py-3 font-medium text-white hover:opacity-90 sm:w-auto" style={{ backgroundColor: primaryColor }} onClick={onApprove}>
+        <button type="button" className="w-full rounded-lg px-5 py-3 font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto" style={{ backgroundColor: primaryColor }} onClick={onApprove} disabled={!estimate.contractorSignature?.signedAt}>
           Approve and sign - {money(selectedTotal)}
         </button>
+      </div>
+    </section>
+  );
+}
+
+function SignatureSummary({ estimate }: { estimate: PublicEstimate }) {
+  const contractor = estimate.contractorSignature;
+  return (
+    <section className="rounded-lg border bg-white p-5">
+      <h2 className="text-lg font-semibold text-gray-950">Agreement signatures</h2>
+      <p className="mt-1 text-sm text-gray-600">Both the contractor and customer signatures are recorded for the final agreement.</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Contractor</p>
+          {contractor?.signedAt ? (
+            <>
+              <p className="mt-2 font-semibold text-gray-950">{contractor.name || contractor.companyName || 'Authorized representative'}</p>
+              <p className="text-sm text-gray-700">{contractor.capacity || contractor.title || 'Authorized representative'}</p>
+              {contractor.email && <p className="text-sm text-gray-600">{contractor.email}</p>}
+              <p className="mt-2 text-sm text-gray-600">Signed {new Date(contractor.signedAt).toLocaleString()}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-red-800">Pending contractor countersignature</p>
+          )}
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Customer</p>
+          {estimate.signedAt ? (
+            <>
+              <p className="mt-2 font-semibold text-gray-950">{estimate.signedName || 'Customer'}</p>
+              <p className="text-sm text-gray-700">Customer approval</p>
+              <p className="mt-2 text-sm text-gray-600">Signed {new Date(estimate.signedAt).toLocaleString()}</p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-gray-600">Not signed yet</p>
+          )}
+        </div>
       </div>
     </section>
   );

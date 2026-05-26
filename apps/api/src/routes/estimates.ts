@@ -132,6 +132,39 @@ const sendEstimateEmailSchema = z.object({
   reason: z.enum(['sent', 'updated']).optional(),
 });
 
+function contractorSignatureFromMetadata(metadata: unknown) {
+  const raw = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>).contractorSignature
+    : null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const signature = raw as Record<string, unknown>;
+  const name = String(signature.name || '').trim();
+  const companyName = String(signature.companyName || '').trim();
+  const signedAt = String(signature.signedAt || '').trim();
+  if (!name || !signedAt) return null;
+  return {
+    name,
+    email: String(signature.email || '').trim() || null,
+    title: String(signature.title || '').trim() || 'Authorized representative',
+    companyName: companyName || null,
+    signedAt,
+    capacity: String(signature.capacity || '').trim() || (companyName ? `Authorized representative for ${companyName}` : 'Authorized representative'),
+  };
+}
+
+async function estimateContractorSignature(db: ReturnType<typeof createDb>, estimate: typeof estimates.$inferSelect) {
+  const latest = await db.query.auditLogs.findFirst({
+    where: and(
+      eq(auditLogs.orgId, estimate.orgId),
+      eq(auditLogs.entityType, 'estimate'),
+      eq(auditLogs.entityId, estimate.id),
+      inArray(auditLogs.action, ['estimate.email.sent', 'estimate.email.updated']),
+    ),
+    orderBy: (auditLogs, { desc }) => [desc(auditLogs.createdAt)],
+  });
+  return contractorSignatureFromMetadata(latest?.metadata);
+}
+
 function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, packageName: string | undefined, selectedOptions: z.infer<typeof selectedOptionSchema>[]) {
   const packages = Array.isArray(estimate.packages) ? estimate.packages as Array<{ name: string; items?: unknown[]; lineItems?: unknown[] }> : [];
   const pkg = packages.find((item) => item.name === packageName) ?? packages.find((item) => item.name === 'proposal') ?? packages[0];
@@ -224,6 +257,7 @@ estimatesApp.get('/:id/public', async (c) => {
     .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
   const total = estimateContractValue(estimate);
   const paymentSchedule = estimatePaymentSchedule(settings || {}, total, paidAmount);
+  const contractorSignature = await estimateContractorSignature(db, estimate);
   await recordPublicEstimateView(db, c, estimate);
   
   return c.json({ 
@@ -237,6 +271,7 @@ estimatesApp.get('/:id/public', async (c) => {
       sentAt: estimate.sentAt,
       signedName: estimate.signedName,
       signedAt: estimate.signedAt,
+      contractorSignature,
       paymentSummary: {
         paidAmount: Math.max(paidAmount, 0),
         paymentCount: payments.length,
@@ -289,6 +324,11 @@ estimatesApp.post('/:id/sign', async (c) => {
     return c.json({ error: 'This estimate has already been signed' }, 409);
   }
 
+  const contractorSignature = await estimateContractorSignature(db, existing);
+  if (!contractorSignature) {
+    return c.json({ error: 'The contractor has not countersigned this proposal yet. Ask the contractor to send or update the proposal before signing.' }, 409);
+  }
+
   const settings = await db.query.orgSettings.findFirst({
     where: eq(orgSettings.orgId, existing.orgId),
   });
@@ -320,6 +360,7 @@ estimatesApp.post('/:id/sign', async (c) => {
       contractValue: estimateContractValue(estimate, packageName, cleanOptions),
       selectedOptions: cleanOptions,
       awaitingPayment: true,
+      contractorSignature,
       legalSnapshot: legal,
       acknowledgedDisclosure: Boolean(legal.disclosureEnabled && acknowledgedDisclosure),
     },
@@ -912,14 +953,24 @@ estimatesApp.post('/:id/send-email', async (c) => {
   const projectType = estimateProjectType(estimate);
   const templateKey = estimateEmailTemplateKey(projectType);
   const isUpdateEmail = parsed.data.reason === 'updated';
+  const signerName = estimator?.name || estimator?.email || settings?.companyName || branding?.companyName || 'Authorized representative';
+  const companyName = branding?.companyName || settings?.companyName || 'your painting contractor';
+  const contractorSignature = {
+    name: signerName,
+    email: estimator?.email || settings?.email || null,
+    title: 'Authorized representative',
+    companyName,
+    capacity: `Authorized representative for ${companyName}`,
+    signedAt: new Date().toISOString(),
+  };
   const templateOverride = await findEmailTemplateOverride(db, orgId, isUpdateEmail ? 'estimate.updated.sent' : templateKey);
   const renderedEmail = renderEstimateEmail({
     estimateId: estimate.id,
     leadName: lead.name,
     total,
     baseUrl,
-    companyName: branding?.companyName || settings?.companyName || 'your painting contractor',
-    estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
+    companyName,
+    estimatorName: signerName,
     estimatorEmail: settings?.email || estimator?.email || null,
     estimatorPhone: settings?.phone || null,
     estimateType: projectType,
@@ -955,6 +1006,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
       estimateType: projectType,
       link: previewUrl,
       reason: parsed.data.reason || 'sent',
+      contractorSignature,
     },
   });
   await db.insert(auditLogs).values({
@@ -971,6 +1023,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
       templateKey: renderedEmail.templateKey,
       link: previewUrl,
       reason: parsed.data.reason || 'sent',
+      contractorSignature,
     },
   });
 
