@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge, StatusBadge } from '@/components/Badge';
+import { AddressInline } from '@/components/AddressInline';
 import { Card } from '@/components/Card';
-import { Icon } from '@/components/Icon';
 import { Input, Select, Textarea } from '@/components/Input';
 import { Modal, ModalFooter } from '@/components/Modal';
-import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
+import { EstimateActionMenu, EstimateActionMenuEstimate, EstimateActionType } from '@/components/estimates/EstimateActionMenu';
+import { apiJson, formatMoney, formatPhone } from '@/lib/api';
 
 interface EstimatePackage {
   name?: string;
@@ -14,7 +15,7 @@ interface EstimatePackage {
 }
 
 interface Payment {
-  id: string;
+  id?: string;
   amount?: number | string | null;
   refundedAmount?: number | string | null;
   status?: string | null;
@@ -71,14 +72,6 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
 
-function previewHref(estimate: Estimate) {
-  return new URL(estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`, window.location.origin).pathname;
-}
-
-function mapsUrl(address: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-}
-
 function estimateAddress(estimate: Estimate) {
   const street = estimate.leadStreetAddress || '';
   const locality = [estimate.leadCity, estimate.leadState].filter(Boolean).join(', ');
@@ -91,32 +84,6 @@ function paymentSummary(payments: Payment[] = []) {
   const net = Math.max(paid - refunded, 0);
   if (!payments.length) return 'No payments recorded';
   return `${formatMoney(net)} paid${refunded > 0 ? ` - ${formatMoney(refunded)} refunded` : ''}`;
-}
-
-function estimateActions(estimate: Estimate) {
-  const status = String(estimate.status || '').toLowerCase();
-  const canCancel = ['draft', 'sent', 'declined'].includes(status) && !estimate.signedAt;
-  const canEdit = status === 'draft' || (status === 'sent' && !estimate.signedAt);
-  const isSignedAgreement = Boolean(estimate.signedAt) || status === 'accepted';
-  const canReviseAgreement = isSignedAgreement && status === 'accepted';
-  const canVoidAgreement = isSignedAgreement && status === 'accepted';
-  const isInactiveAgreement = ['voided', 'superseded'].includes(status);
-  const canRecordPayment = estimate.id && !['draft', 'canceled', 'voided', 'superseded'].includes(status) && estimateBalance(estimate) > 0.005;
-  const actions: Array<{ key: string; label: string; href?: string; destructive?: boolean; priority?: boolean; action?: string }> = [];
-
-  if (isInactiveAgreement) actions.push({ key: 'details', label: 'View details', href: `/estimates/${estimate.id}/details`, priority: true });
-  if (canEdit) actions.push({ key: 'edit', label: status === 'sent' ? 'Edit sent' : 'Edit draft', href: `/estimates/production?estimateId=${estimate.id}`, priority: true });
-  if (status !== 'draft') actions.push({ key: 'preview', label: 'Preview link', href: previewHref(estimate), priority: !canEdit });
-  if (canRecordPayment) actions.push({ key: 'payment', label: 'Record payment', action: 'payment' });
-  if (canReviseAgreement) actions.push({ key: 'revise', label: 'Create revision', action: 'revise' });
-  if (canCancel) actions.push({ key: 'cancel', label: 'Cancel', action: 'cancel', destructive: true });
-  if (canVoidAgreement) actions.push({ key: 'void', label: 'Void agreement', action: 'void', destructive: true });
-
-  const primary = actions.find((action) => action.priority) || actions[0];
-  const overflow = actions
-    .filter((action) => action !== primary)
-    .sort((a, b) => Number(Boolean(a.destructive)) - Number(Boolean(b.destructive)));
-  return { primary, overflow };
 }
 
 export function EstimatesList() {
@@ -287,12 +254,13 @@ export function EstimatesList() {
     }
   }
 
-  function handleAction(estimate: Estimate, action?: string) {
+  function handleAction(estimate: EstimateActionMenuEstimate, action: EstimateActionType) {
     setOpenMenuId(null);
-    if (action === 'payment') setPaymentEstimate(estimate);
-    if (action === 'cancel') cancelEstimate(estimate);
-    if (action === 'revise') setAgreementAction({ type: 'revise', estimate });
-    if (action === 'void') setAgreementAction({ type: 'void', estimate });
+    const listEstimate = estimate as Estimate;
+    if (action === 'payment') setPaymentEstimate(listEstimate);
+    if (action === 'cancel') cancelEstimate(listEstimate);
+    if (action === 'revise') setAgreementAction({ type: 'revise', estimate: listEstimate });
+    if (action === 'void') setAgreementAction({ type: 'void', estimate: listEstimate });
   }
 
   if (isLoading) {
@@ -311,13 +279,16 @@ export function EstimatesList() {
 
   return (
     <div className="mx-auto max-w-6xl py-5 sm:py-8">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="pf-page-copy max-w-2xl">Track sent, accepted, and declined painting proposals.</p>
+      <div className="mb-5 flex flex-col gap-3 rounded-lg border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="pf-kicker">Sales proposals</p>
+          <p className="pf-page-copy mt-1 max-w-2xl">Track sent, accepted, and declined painting proposals.</p>
+        </div>
         <Link to="/estimates/production" className="btn-primary justify-center sm:w-auto">Start estimate</Link>
       </div>
 
       <section className="mb-4 grid gap-3 md:grid-cols-2">
-        <Link to="/estimates/production" className="block rounded-lg border bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md">
+        <Link to="/estimates/production" className="block rounded-lg border bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="pf-section-title">Production estimate</h3>
@@ -326,7 +297,7 @@ export function EstimatesList() {
             <Badge variant="info">Default</Badge>
           </div>
         </Link>
-        <Link to="/estimates/new" className="block rounded-lg border bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md">
+        <Link to="/estimates/new" className="block rounded-lg border bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="pf-section-title">Quick line-item estimate</h3>
@@ -337,7 +308,7 @@ export function EstimatesList() {
         </Link>
       </section>
 
-      <Card padding="md" className="mb-4">
+      <Card padding="md" className="mb-4 border-gray-200 bg-white/95">
         <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
           <Input
             type="search"
@@ -448,32 +419,21 @@ function EstimateRow({
   estimate: Estimate;
   openMenuId: string | null;
   onMenuChange: (id: string | null) => void;
-  onAction: (estimate: Estimate, action?: string) => void;
+  onAction: (estimate: Estimate, action: EstimateActionType) => void;
 }) {
   const address = estimateAddress(estimate);
   const contact = estimate.leadPhone ? formatPhone(estimate.leadPhone) : estimate.leadEmail || 'No contact';
-  const actions = estimateActions(estimate);
   const menuOpen = openMenuId === estimate.id;
 
   return (
-    <article className="mobile-card-row rounded-lg border bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
+    <article className="mobile-card-row rounded-lg border bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow-md">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="min-w-0 pr-1">
           <div className="min-w-0 rounded-lg pr-2">
             <Link to={estimate.leadId ? `/leads/${estimate.leadId}` : `/estimates/${estimate.id}`} className="pf-row-title block truncate hover:text-blue-700">
               {estimate.leadName || 'Customer'}
             </Link>
-            {address ? (
-              <span className="pf-address-inline pf-copy">
-                <span className="pf-address-text">{address}</span>
-                <a className="pf-address-map-button" href={mapsUrl(address)} target="_blank" rel="noreferrer" aria-label="Open address in maps" title="Open in maps">
-                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" strokeWidth="1.8" />
-                    <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.8" />
-                  </svg>
-                </a>
-              </span>
-            ) : <span className="pf-copy block truncate">No jobsite address</span>}
+            <AddressInline address={address} className="pf-copy" />
             <span className="pf-meta block truncate">{contact}</span>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -486,62 +446,21 @@ function EstimateRow({
             {estimate.signedAt && <div>Signed {formatDate(estimate.signedAt)}</div>}
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 sm:block sm:text-right">
+        <div className="flex items-start justify-between gap-3 rounded-lg bg-gray-50 p-3 sm:block sm:min-w-48 sm:bg-transparent sm:p-0 sm:text-right">
           <div>
             <p className="pf-section-title text-blue-700">{formatMoney(estimateTotal(estimate))}</p>
             <p className="pf-meta">{paymentSummary(estimate.payments || [])}</p>
           </div>
-          <div className="relative mt-2 flex items-center justify-end gap-1">
-            {actions.primary && <ActionButton action={actions.primary} estimate={estimate} onAction={onAction} />}
-            {actions.overflow.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="btn-icon btn-icon-tonal pf-estimate-menu-button"
-                  aria-label="More estimate actions"
-                  aria-expanded={menuOpen}
-                  onClick={() => onMenuChange(menuOpen ? null : estimate.id)}
-                >
-                  <Icon name="more-horizontal" className="h-4 w-4" />
-                </button>
-                {menuOpen && (
-                  <div className="absolute right-0 top-full z-30 mt-2 min-w-44 rounded-lg border bg-white p-1 text-left shadow-lg">
-                    <div className="grid gap-1">
-                      {actions.overflow.map((action) => <ActionButton key={action.key} action={action} estimate={estimate} onAction={onAction} inMenu />)}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          <EstimateActionMenu
+            estimate={estimate}
+            isOpen={menuOpen}
+            onOpenChange={(open) => onMenuChange(open ? estimate.id : null)}
+            onAction={(menuEstimate, action) => onAction(menuEstimate as Estimate, action)}
+          />
         </div>
       </div>
     </article>
   );
-}
-
-function ActionButton({
-  action,
-  estimate,
-  onAction,
-  inMenu = false,
-}: {
-  action: ReturnType<typeof estimateActions>['primary'];
-  estimate: Estimate;
-  onAction: (estimate: Estimate, action?: string) => void;
-  inMenu?: boolean;
-}) {
-  if (!action) return null;
-  const className = `btn-text btn-sm ${action.destructive ? 'text-red-700' : ''} ${inMenu ? 'w-full justify-start' : 'justify-center'}`;
-  if (action.href) {
-    const external = action.key === 'preview';
-    return external ? (
-      <a href={action.href} target="_blank" rel="noreferrer" className={className}>{action.label}</a>
-    ) : (
-      <Link to={action.href} className={className}>{action.label}</Link>
-    );
-  }
-  return <button type="button" className={className} onClick={() => onAction(estimate, action.action)}>{action.label}</button>;
 }
 
 function ManualPaymentModal({

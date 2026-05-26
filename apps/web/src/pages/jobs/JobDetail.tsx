@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { AddressInline } from '@/components/AddressInline';
 import { StatusBadge } from '@/components/Badge';
 import { Card, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -133,10 +134,6 @@ function numberValue(value: unknown) {
 
 function photoSrc(photo: JobPhoto) {
   return photo.id ? `${API_URL}/v1/uploads/photos/file/${encodeURIComponent(photo.id)}` : photo.url || '';
-}
-
-function mapsUrl(address: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
 function streetAddress(job: JobCostingResponse['data']['job']) {
@@ -515,17 +512,7 @@ export function JobDetail() {
                   {job.leadName}
                 </Link>
               )}
-              {address && (
-                <div className="pf-address-inline text-sm text-gray-700">
-                  <span className="pf-address-text">{address}</span>
-                  <a className="pf-address-map-button" href={mapsUrl(address)} target="_blank" rel="noreferrer" aria-label="Open address in maps" title="Open in maps">
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                      <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" stroke="currentColor" strokeWidth="1.8" />
-                      <circle cx="12" cy="10" r="2.4" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
-                  </a>
-                </div>
-              )}
+              <AddressInline address={address} className="text-sm text-gray-700" />
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {job.leadPhone && <a href={`tel:${job.leadPhone}`} className="hover:text-blue-700">{formatPhone(job.leadPhone)}</a>}
                 {job.leadEmail && <a href={`mailto:${job.leadEmail}`} className="hover:text-blue-700">{job.leadEmail}</a>}
