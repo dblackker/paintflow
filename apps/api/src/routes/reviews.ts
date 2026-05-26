@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { reviewRequests, jobs, leads, orgBranding } from '@paintflow/db/schema';
+import { reviewRequests, jobs, leads, orgSettings } from '@paintflow/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -110,6 +110,12 @@ reviews.post('/:id/rate', async (c) => {
       respondedAt: new Date(),
     })
     .where(eq(reviewRequests.id, id));
+
+  const settings = rating >= 4
+    ? await db.query.orgSettings.findFirst({
+      where: eq(orgSettings.orgId, request.orgId),
+    })
+    : null;
   
   // Store feedback separately if needed
   if (feedback && rating < 4) {
@@ -117,7 +123,11 @@ reviews.post('/:id/rate', async (c) => {
     console.log(`Feedback for request ${id}:`, feedback);
   }
   
-  return c.json({ success: true, redirect: rating >= 4 });
+  return c.json({
+    success: true,
+    redirect: rating >= 4,
+    reviewUrl: settings?.googleReviewUrl || settings?.yelpReviewUrl || null,
+  });
 });
 
 // GET /v1/reviews/pending

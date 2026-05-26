@@ -24,6 +24,7 @@ const icons: Record<string, string> = {
   close: '<path d="M18 6L6 18M6 6l12 12" />',
   'chevron-left': '<path d="m15 18-6-6 6-6" />',
   'chevron-right': '<path d="m9 18 6-6-6-6" />',
+  check: '<path d="m20 6-11 11-5-5" />',
   minus: '<path d="M5 12h14" />',
   refresh: '<path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" /><path d="M9 9h6v6" />',
   edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />',
