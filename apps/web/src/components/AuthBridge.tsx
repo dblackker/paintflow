@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { API_URL } from '@/lib/api';
 
 export function AuthBridge() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const configuredApiUrl = API_URL || import.meta.env.PUBLIC_API_URL || import.meta.env.VITE_API_URL || '';
     const allowSessionFallback = import.meta.env.DEV
       || ['localhost', '127.0.0.1'].includes(window.location.hostname)

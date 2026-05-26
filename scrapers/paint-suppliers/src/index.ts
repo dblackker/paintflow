@@ -7,6 +7,7 @@ import { PPGScraper } from './suppliers/ppg';
 import { BenjaminMooreScraper } from './suppliers/benjamin-moore';
 import { Logger } from './utils/logger';
 import { hydratePostgres } from './hydrate-postgres';
+import { baselineCatalog } from './seed/baseline-catalog';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -27,6 +28,7 @@ program
   .option('--force', 'Force re-scrape even if recently scraped')
   .option('--limit <number>', 'Limit number of items per category', parseInt)
   .option('--types <types...>', 'Filter by product types')
+  .option('--no-baseline', 'Do not seed baseline products/colors if live scraping captures no catalog data')
   .action(async (supplier, options) => {
     const db = new DatabaseClient();
     await db.initialize();
@@ -114,9 +116,32 @@ program
         await scraper.cleanup();
       }
 
+      if (options.baseline !== false) {
+        const stats = await db.getStats();
+        const hasCatalogData = stats.some((supplier) => Number(supplier.productCount || 0) > 0 || Number(supplier.colorCount || 0) > 0);
+        if (!hasCatalogData) {
+          logger.warn('Live scrape did not capture catalog data. Seeding validated baseline catalog so PaintFlow has usable products and colors.');
+          await seedBaselineCatalog(db);
+        }
+      }
+
       logger.info('Scraping complete!');
     } finally {
       await browser.close();
+      await db.close();
+    }
+  });
+
+program
+  .command('seed-baseline')
+  .description('Seed a validated baseline paint product/color catalog into the local scraper database')
+  .action(async () => {
+    const db = new DatabaseClient();
+    await db.initialize();
+    try {
+      const result = await seedBaselineCatalog(db);
+      logger.info(`Seeded baseline catalog: ${result.products} products, ${result.colors} colors, ${result.productColors} mappings`);
+    } finally {
       await db.close();
     }
   });
@@ -218,6 +243,35 @@ program
       await db.close();
     }
   });
+
+async function seedBaselineCatalog(db: DatabaseClient) {
+  const catalog = baselineCatalog();
+  await db.saveProducts(catalog.products);
+  await db.savePricing(catalog.pricing);
+  await db.saveColors(catalog.colors);
+  await db.saveProductColors(catalog.productColors);
+
+  const supplierIds = new Set<string>([
+    ...catalog.products.map((product) => product.supplierId),
+    ...catalog.colors.map((color) => color.supplierId),
+  ]);
+
+  for (const supplierId of supplierIds) {
+    const products = catalog.products.filter((product) => product.supplierId === supplierId).length;
+    const colors = catalog.colors.filter((color) => color.supplierId === supplierId).length;
+    await db.logScrape(supplierId, 'baseline-catalog', 'success', {
+      itemsScraped: products + colors,
+      itemsCreated: products + colors,
+      itemsUpdated: 0,
+    });
+  }
+
+  return {
+    products: catalog.products.length,
+    colors: catalog.colors.length,
+    productColors: catalog.productColors.length,
+  };
+}
 
 function convertToCSV(data: any): string {
   // Simple CSV conversion

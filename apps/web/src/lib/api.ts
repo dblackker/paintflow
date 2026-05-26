@@ -11,6 +11,31 @@ function resolveApiUrl() {
 
 export const API_URL = resolveApiUrl();
 
+function storedSessionToken() {
+  if (typeof window === 'undefined') return '';
+  const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('paintflow_session');
+  const searchToken = new URLSearchParams(window.location.search).get('paintflow_session');
+  if (hashToken || searchToken) return hashToken || searchToken || '';
+  try {
+    return localStorage.getItem('paintflow.sessionToken') || '';
+  } catch {
+    return '';
+  }
+}
+
+function shouldAttachSession(url: string) {
+  if (typeof window === 'undefined') return false;
+  try {
+    const requestOrigin = new URL(url, window.location.origin).origin;
+    const configuredOrigin = new URL(API_URL, window.location.origin).origin;
+    const localOrigin = `${window.location.protocol}//${window.location.hostname}:8787`;
+    const demoOrigin = 'https://paintflow-api-demo.danielablack.workers.dev';
+    return requestOrigin === configuredOrigin || requestOrigin === localOrigin || requestOrigin === demoOrigin;
+  } catch {
+    return false;
+  }
+}
+
 export class PaintFlowApiError extends Error {
   status?: number;
   code?: string;
@@ -27,9 +52,15 @@ export class PaintFlowApiError extends Error {
 
 export async function apiJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_URL}${path}`;
+  const token = storedSessionToken();
+  const headers = new Headers(options.headers || {});
+  if (token && shouldAttachSession(url) && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
   let response: Response;
   try {
-    response = await fetch(url, { credentials: 'include', ...options });
+    response = await fetch(url, { credentials: 'include', ...options, headers });
   } catch {
     throw new PaintFlowApiError('PaintFlow API is unreachable. The app loaded, but the service that provides this page data did not respond.', {
       serviceUnavailable: true,

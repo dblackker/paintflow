@@ -185,12 +185,12 @@ async function upsertProductColors(client: PoolClient, catalog: SupplierCatalogE
       `INSERT INTO supplier_catalog_product_colors (
         product_id, color_id, supplier_id, is_available, base_required, recommended_use, last_seen_at, updated_at
       )
-      SELECT p.id, c.id, $1, $2, $3, $4::jsonb, NOW(), NOW()
+      SELECT p.id, c.id, $1::varchar, $2, $3, $4::jsonb, NOW(), NOW()
       FROM supplier_catalog_products p
       JOIN supplier_catalog_colors c
         ON c.supplier_id = p.supplier_id
        AND c.external_id = $6
-      WHERE p.supplier_id = $1
+      WHERE p.supplier_id = $1::varchar
         AND p.external_id = $5
       ON CONFLICT (product_id, color_id) DO UPDATE SET
         is_available = EXCLUDED.is_available,

@@ -20,7 +20,11 @@ export const corsHeaders = async (c: Context, next: Next) => {
   const allowedOrigins = [
     'https://app.paintflow.app',
     'https://paintflow.app',
+    'https://paintflow-demo.pages.dev',
     'http://localhost:4321',
+    'http://127.0.0.1:4321',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
   ];
   
   if (origin && allowedOrigins.includes(origin)) {
