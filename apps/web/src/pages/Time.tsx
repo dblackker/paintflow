@@ -983,6 +983,58 @@ export function Time() {
     }
   }
 
+  const initialLoading = isLoading
+    && !error
+    && !entries.length
+    && !punchStatus.member
+    && !punchStatus.activeSession
+    && !punchStatus.memberResolutionError;
+
+  if (initialLoading) {
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+        <p className="pf-copy mb-5 max-w-2xl">Loading time clock, crew approvals, and weekly timecards.</p>
+        <Card className="mb-5">
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600" />
+            <p className="pf-section-title mt-4">Loading time tracking</p>
+            <p className="pf-copy mt-1 max-w-md">Getting punch status, crew permissions, jobs, and the current week.</p>
+          </div>
+        </Card>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
+          <Card>
+            <div className="animate-pulse space-y-4">
+              <div className="h-4 w-36 rounded bg-gray-200" />
+              <div className="h-20 rounded-xl bg-gray-100" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="h-11 rounded bg-gray-100" />
+                <div className="h-11 rounded bg-gray-100" />
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <div className="animate-pulse space-y-3">
+              <div className="h-4 w-32 rounded bg-gray-200" />
+              <div className="h-16 rounded bg-gray-100" />
+              <div className="h-16 rounded bg-gray-100" />
+            </div>
+          </Card>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+          {['Hours', 'Labor cost', 'Crew', 'Needs review', 'Overrides'].map((label) => (
+            <Card key={label} padding="sm">
+              <div className="animate-pulse space-y-2">
+                <p className="pf-label-small uppercase tracking-wide text-gray-500">{label}</p>
+                <div className="h-7 w-14 rounded bg-gray-100" />
+                <div className="h-3 w-24 rounded bg-gray-100" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
