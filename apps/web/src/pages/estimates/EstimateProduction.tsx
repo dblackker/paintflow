@@ -810,13 +810,14 @@ export function EstimateProduction() {
       window.showToast?.('Select a customer first', 'error');
       return;
     }
+    const effectiveStatus = editingSent ? 'sent' : statusValue;
     const packages = buildPackages();
-    if (statusValue !== 'draft' && !packages.length) {
+    if (effectiveStatus !== 'draft' && !packages.length) {
       window.showToast?.('Add at least one measured substrate.', 'error');
       return;
     }
     setIsSaving(true);
-    setSaveStatus(statusValue === 'draft' ? 'Saving draft estimate...' : editingSent ? 'Sending update email...' : 'Creating and emailing estimate...');
+    setSaveStatus(effectiveStatus === 'draft' ? 'Saving draft estimate...' : editingSent ? 'Sending update email...' : 'Creating and emailing estimate...');
     try {
       const isEditing = Boolean(editingEstimate?.id || estimateId);
       const targetId = editingEstimate?.id || estimateId;
@@ -826,10 +827,10 @@ export function EstimateProduction() {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        body: JSON.stringify({ leadId, ...jobsite, packages, status: editingSent ? 'sent' : statusValue }),
+        body: JSON.stringify({ leadId, ...jobsite, packages, status: effectiveStatus }),
       });
       let sendResult: { previewUrl?: string } | null = null;
-      if (statusValue === 'sent') {
+      if (effectiveStatus === 'sent') {
         const sent = await apiJson<{ data?: { previewUrl?: string } }>(`/v1/estimates/${response.data.id}/send-email`, {
           method: 'POST',
           headers: {
@@ -840,12 +841,12 @@ export function EstimateProduction() {
         });
         sendResult = sent.data || null;
       }
-      window.showToast?.(statusValue === 'draft' ? 'Draft saved' : editingSent ? 'Estimate update emailed' : 'Estimate emailed', 'success');
+      window.showToast?.(effectiveStatus === 'draft' ? 'Draft saved' : editingSent ? 'Estimate update emailed' : 'Estimate emailed', 'success');
       setShowPreview(false);
-      if (statusValue === 'draft') window.location.href = '/estimates?status=draft';
+      if (effectiveStatus === 'draft') window.location.href = '/estimates?status=draft';
       else {
         const previewUrl = sendResult?.previewUrl || response.data.customerPreviewUrl || response.data.publicUrl || `/estimates/${response.data.id}`;
-        window.location.href = new URL(previewUrl, window.location.origin).pathname;
+        window.location.replace(new URL(previewUrl, window.location.origin).pathname);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save estimate';
@@ -1174,7 +1175,9 @@ export function EstimateProduction() {
               <ReadinessRow label="Color selections needed" count={ready.missingColor} />
             </div>
             <div className="mt-4 grid gap-2">
-              <button className="btn-secondary justify-center" disabled={isSaving} onClick={() => persistEstimate('draft')}>{isSaving ? 'Saving...' : 'Save draft'}</button>
+              {!editingSent && (
+                <button className="btn-secondary justify-center" disabled={isSaving} onClick={() => persistEstimate('draft')}>{isSaving ? 'Saving...' : 'Save draft'}</button>
+              )}
               <button className="btn-primary justify-center" disabled={isSaving} onClick={() => {
                 if (!leadId) window.showToast?.('Select a customer first', 'error');
                 else if (!buildPackages().length) window.showToast?.('Add at least one measured substrate.', 'error');
