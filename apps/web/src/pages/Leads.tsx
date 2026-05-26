@@ -95,6 +95,21 @@ export function Leads() {
   const [isModalOpen, setIsModalOpen] = useState(searchParams.get('new') === '1');
   const [form, setForm] = useState<LeadForm>(emptyForm);
 
+  function openLeadModal() {
+    setForm(emptyForm);
+    setIsModalOpen(true);
+  }
+
+  function closeLeadModal() {
+    setForm(emptyForm);
+    setIsModalOpen(false);
+    if (searchParams.get('new') === '1') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }
+
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
     return () => window.clearTimeout(timer);
@@ -205,8 +220,7 @@ export function Leads() {
         body: JSON.stringify(payload),
       });
       window.showToast?.('Lead created', 'success');
-      setForm(emptyForm);
-      setIsModalOpen(false);
+      closeLeadModal();
       setSearchParams(new URLSearchParams(), { replace: true });
       loadLeads();
     } catch (err) {
@@ -225,7 +239,7 @@ export function Leads() {
         <div>
           <p className="pf-page-copy">Capture inquiries, qualify them, and keep follow-up moving.</p>
         </div>
-        <Button fullWidth className="sm:w-auto" onClick={() => setIsModalOpen(true)}>
+        <Button fullWidth className="sm:w-auto" onClick={openLeadModal}>
           <Icon name="plus" className="pf-icon" />
           Add lead
         </Button>
@@ -284,7 +298,7 @@ export function Leads() {
             </Button>
           </Card>
         ) : (
-          <FirstLeadEmptyState onAddLead={() => setIsModalOpen(true)} />
+          <FirstLeadEmptyState onAddLead={openLeadModal} />
         )
       ) : (
         <div className="grid gap-2 sm:gap-3">
@@ -301,13 +315,13 @@ export function Leads() {
           aria-modal="true"
           aria-labelledby="lead-modal-title"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setIsModalOpen(false);
+            if (event.target === event.currentTarget) closeLeadModal();
           }}
         >
           <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-lg bg-white p-5 shadow-xl sm:rounded-lg sm:p-6">
             <div className="mb-4 flex items-center justify-between">
               <h3 id="lead-modal-title" className="pf-section-title">Add lead</h3>
-              <Button variant="ghost" size="sm" onClick={() => setIsModalOpen(false)}>Close</Button>
+              <Button variant="ghost" size="sm" onClick={closeLeadModal}>Close</Button>
             </div>
             <form className="space-y-4" onSubmit={submitLead}>
               <Input
@@ -383,7 +397,7 @@ export function Leads() {
                 ]}
               />
               <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
-                <Button type="button" variant="secondary" fullWidth onClick={() => setIsModalOpen(false)}>Cancel</Button>
+                <Button type="button" variant="secondary" fullWidth onClick={closeLeadModal}>Cancel</Button>
                 <Button type="submit" fullWidth isLoading={isSaving} disabled={!canSaveLead}>Save lead</Button>
               </div>
             </form>
