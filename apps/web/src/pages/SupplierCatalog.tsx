@@ -77,6 +77,15 @@ interface CatalogStatus {
     startedAt?: string | null;
     finishedAt?: string | null;
   } | null;
+  suppliers?: Array<{
+    supplierId: string;
+    supplierName: string;
+    productCount?: number | string | null;
+    colorCount?: number | string | null;
+    lastCatalogSeenAt?: string | null;
+    lastSyncStatus?: string | null;
+    lastSyncAt?: string | null;
+  }> | null;
   counts?: {
     productCount?: number | string | null;
     colorCount?: number | string | null;
@@ -207,7 +216,7 @@ export function SupplierCatalog() {
     return [color.name, color.colorCode, color.collection, color.family, color.supplierName].filter(Boolean).join(' ').toLowerCase().includes(search);
   }), [colors, colorFamily, popularOnly, query, supplierId]);
 
-  async function loadCatalog() {
+  async function loadCatalog(attempt = 0) {
     setIsLoading(true);
     setError(null);
     try {
@@ -218,9 +227,15 @@ export function SupplierCatalog() {
       ]);
       const nextProducts = productsRes.data || [];
       const nextColors = colorsRes.data || [];
+      const nextStatus = statusRes.data || null;
+      if (!nextProducts.length && !nextColors.length && !nextStatus?.latestRun && attempt < 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 400));
+        await loadCatalog(attempt + 1);
+        return;
+      }
       setProducts(nextProducts);
       setColors(nextColors);
-      setStatus(statusRes.data || null);
+      setStatus(nextStatus);
       setSelectedProduct(nextProducts[0] || null);
       setSelectedColor(nextColors[0] || null);
     } catch (err) {
@@ -287,6 +302,8 @@ export function SupplierCatalog() {
         <Metric label="Colors" value={status?.counts?.colorCount ?? colors.length} />
         <Metric label="Last sync" value={dateLabel(status?.latestRun?.finishedAt || status?.latestRun?.startedAt)} help={status?.latestRun?.status ? labelize(status.latestRun.status) : 'No sync run yet'} />
       </div>
+
+      <SupplierSyncStatus suppliers={status?.suppliers || []} />
 
       <Card padding="none">
         <div className="border-b p-4">
@@ -364,6 +381,36 @@ function Metric({ label, value, help }: { label: string; value: unknown; help?: 
       <p className="pf-label-small">{label}</p>
       <p className="pf-metric mt-1">{typeof value === 'number' ? value.toLocaleString() : String(value || '0')}</p>
       {help && <p className="pf-meta mt-1">{help}</p>}
+    </Card>
+  );
+}
+
+function SupplierSyncStatus({ suppliers }: { suppliers: NonNullable<CatalogStatus['suppliers']> }) {
+  if (!suppliers.length) return null;
+  return (
+    <Card padding="sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="pf-section-title">Supplier sync status</h2>
+          <p className="pf-meta">Each supplier can refresh independently as scraper sources change.</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {suppliers.map((supplier) => (
+          <div key={supplier.supplierId} className="rounded-lg border border-gray-200 bg-white p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="pf-row-title truncate">{supplier.supplierName}</p>
+                <p className="pf-meta mt-1">{Number(supplier.productCount || 0).toLocaleString()} products · {Number(supplier.colorCount || 0).toLocaleString()} colors</p>
+              </div>
+              <Badge variant={supplier.lastSyncStatus === 'success' ? 'success' : supplier.lastSyncStatus === 'failed' ? 'danger' : 'warning'} size="sm">
+                {supplier.lastSyncStatus ? labelize(supplier.lastSyncStatus) : 'No Run'}
+              </Badge>
+            </div>
+            <p className="pf-meta mt-3">Last sync: <span className="pf-copy">{dateLabel(supplier.lastSyncAt)}</span></p>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }

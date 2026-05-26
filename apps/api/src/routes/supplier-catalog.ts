@@ -14,6 +14,15 @@ function intParam(value: string | undefined, fallback: number, max: number) {
   return Math.min(parsed, max);
 }
 
+function supplierLabel(supplierId: string) {
+  const labels: Record<string, string> = {
+    'benjamin-moore': 'Benjamin Moore',
+    ppg: 'PPG Paints',
+    'sherwin-williams': 'Sherwin-Williams',
+  };
+  return labels[supplierId] || supplierId;
+}
+
 catalogApp.get('/products', async (c) => {
   const db = createDb(c.env.DATABASE_URL);
   const q = c.req.query('q')?.trim();
@@ -123,7 +132,7 @@ catalogApp.get('/status', async (c) => {
     limit: 1,
   });
 
-  const [[productCounts], [colorCounts]] = await Promise.all([
+  const [[productCounts], [colorCounts], productSuppliers, colorSuppliers, recentRuns] = await Promise.all([
     db
       .select({ productCount: sql<number>`count(*)` })
       .from(supplierCatalogProducts)
@@ -132,11 +141,96 @@ catalogApp.get('/status', async (c) => {
       .select({ colorCount: sql<number>`count(*)` })
       .from(supplierCatalogColors)
       .where(eq(supplierCatalogColors.isActive, true)),
+    db
+      .select({
+        supplierId: supplierCatalogProducts.supplierId,
+        supplierName: supplierCatalogProducts.supplierName,
+        productCount: sql<number>`count(*)`,
+        lastProductSeenAt: sql<Date | null>`max(${supplierCatalogProducts.lastSeenAt})`,
+      })
+      .from(supplierCatalogProducts)
+      .where(eq(supplierCatalogProducts.isActive, true))
+      .groupBy(supplierCatalogProducts.supplierId, supplierCatalogProducts.supplierName),
+    db
+      .select({
+        supplierId: supplierCatalogColors.supplierId,
+        supplierName: supplierCatalogColors.supplierName,
+        colorCount: sql<number>`count(*)`,
+        lastColorSeenAt: sql<Date | null>`max(${supplierCatalogColors.lastSeenAt})`,
+      })
+      .from(supplierCatalogColors)
+      .where(eq(supplierCatalogColors.isActive, true))
+      .groupBy(supplierCatalogColors.supplierId, supplierCatalogColors.supplierName),
+    db.query.supplierCatalogSyncRuns.findMany({
+      orderBy: [desc(supplierCatalogSyncRuns.startedAt)],
+      limit: 25,
+    }),
   ]);
+
+  const suppliers = new Map<string, {
+    supplierId: string;
+    supplierName: string;
+    productCount: number;
+    colorCount: number;
+    lastProductSeenAt: Date | null;
+    lastColorSeenAt: Date | null;
+  }>();
+
+  function ensureSupplier(supplierId: string, supplierName?: string | null) {
+    if (!suppliers.has(supplierId)) {
+      suppliers.set(supplierId, {
+        supplierId,
+        supplierName: supplierName || supplierLabel(supplierId),
+        productCount: 0,
+        colorCount: 0,
+        lastProductSeenAt: null,
+        lastColorSeenAt: null,
+      });
+    }
+    return suppliers.get(supplierId)!;
+  }
+
+  for (const row of productSuppliers) {
+    const supplier = ensureSupplier(row.supplierId, row.supplierName);
+    supplier.productCount = Number(row.productCount || 0);
+    supplier.lastProductSeenAt = row.lastProductSeenAt;
+  }
+
+  for (const row of colorSuppliers) {
+    const supplier = ensureSupplier(row.supplierId, row.supplierName);
+    supplier.colorCount = Number(row.colorCount || 0);
+    supplier.lastColorSeenAt = row.lastColorSeenAt;
+  }
+
+  for (const run of recentRuns) {
+    const runSuppliers = Array.isArray(run.suppliers) ? run.suppliers.map(String) : [];
+    for (const supplierId of runSuppliers) ensureSupplier(supplierId);
+  }
+
+  const supplierStatuses = Array.from(suppliers.values())
+    .map((supplier) => {
+      const latestSupplierRun = recentRuns.find((run) => Array.isArray(run.suppliers) && run.suppliers.map(String).includes(supplier.supplierId));
+      const seenTimes = [supplier.lastProductSeenAt, supplier.lastColorSeenAt]
+        .filter(Boolean)
+        .map((value) => new Date(value as Date).getTime())
+        .filter((value) => Number.isFinite(value));
+      const lastCatalogSeenAt = seenTimes.length ? new Date(Math.max(...seenTimes)) : null;
+      return {
+        supplierId: supplier.supplierId,
+        supplierName: supplier.supplierName,
+        productCount: supplier.productCount,
+        colorCount: supplier.colorCount,
+        lastCatalogSeenAt,
+        lastSyncStatus: latestSupplierRun?.status || null,
+        lastSyncAt: latestSupplierRun?.finishedAt || latestSupplierRun?.startedAt || null,
+      };
+    })
+    .sort((a, b) => a.supplierName.localeCompare(b.supplierName));
 
   return c.json({
     data: {
       latestRun: latestRun || null,
+      suppliers: supplierStatuses,
       counts: {
         productCount: productCounts?.productCount || 0,
         colorCount: colorCounts?.colorCount || 0,
