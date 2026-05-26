@@ -412,14 +412,20 @@ export function Calendar() {
   async function patchJob(jobId: string, body: Partial<Job>, successMessage: string) {
     setSavingJobId(jobId);
     try {
-      await apiJson(`/v1/jobs/${jobId}`, {
+      const response = await apiJson<{ data?: Job }>(`/v1/jobs/${jobId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       setQuickSchedule(null);
+      setBacklogDrafts((current) => {
+        if (!(jobId in current)) return current;
+        const next = { ...current };
+        delete next[jobId];
+        return next;
+      });
+      setJobs((current) => current.map((job) => job.id === jobId ? { ...job, ...body, ...(response.data || {}) } : job));
       window.showToast?.(successMessage, 'success');
-      await loadCalendar();
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to update schedule', 'error');
     } finally {
@@ -703,7 +709,7 @@ export function Calendar() {
           }}
         >
           <div className="mb-2 flex items-start justify-between gap-2">
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-1">
               <p className="pf-emphasis text-sm sm:hidden">{formatDate(day, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
               <p className="hidden text-sm font-semibold text-gray-950 sm:block">{day.getDate()}</p>
               {dayWeather && (
@@ -719,10 +725,14 @@ export function Calendar() {
                   <span>{numberValue(dayWeather.precipProbability)}%</span>
                 </a>
               )}
+              {concerns.length > 0 && (
+                <div>
+                  <Badge variant="warning" size="sm">{concerns[0]}</Badge>
+                </div>
+              )}
             </div>
             <div className="flex shrink-0 gap-1">
               {today && <Badge variant="info" size="sm">Today</Badge>}
-              {concerns.length > 0 && <Badge variant="warning" size="sm">{concerns[0]}</Badge>}
             </div>
           </div>
           <div className="grid gap-1.5">
