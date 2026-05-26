@@ -274,6 +274,25 @@ function mapHref(latitude?: string | number | null, longitude?: string | number 
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
 }
 
+function latLngToWorldPixel(latitude: number, longitude: number, zoom: number) {
+  const sinLat = Math.sin((latitude * Math.PI) / 180);
+  const scale = 256 * 2 ** zoom;
+  return {
+    x: ((longitude + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale,
+  };
+}
+
+function mapZoomForSpan(latSpan: number, lngSpan: number) {
+  const span = Math.max(latSpan, lngSpan);
+  if (span < 0.01) return 16;
+  if (span < 0.03) return 15;
+  if (span < 0.08) return 13;
+  if (span < 0.2) return 11;
+  if (span < 1) return 9;
+  return 6;
+}
+
 function eventTypeLabel(type = '') {
   if (type.includes('clock_out')) return 'Clock out';
   if (type.includes('clock_in')) return 'Clock in';
@@ -331,6 +350,33 @@ function StatusMetric({ label, value, help }: { label: string; value: string | n
       <p className="pf-value mt-1 text-gray-950">{value}</p>
       <p className="pf-helper mt-1">{help}</p>
     </Card>
+  );
+}
+
+function MapLinkButton({
+  latitude,
+  longitude,
+  label,
+}: {
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  label: string;
+}) {
+  const href = mapHref(latitude, longitude);
+  if (!href) return null;
+  return (
+    <Button
+      as="a"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      variant="secondary"
+      size="sm"
+      leftIcon={<Icon name="map-pin" className="h-4 w-4" />}
+      aria-label={`Open ${label} in maps`}
+    >
+      {label}
+    </Button>
   );
 }
 
@@ -937,7 +983,7 @@ export function Time() {
               <Badge variant="success">Clocked in</Badge>
               <p className="pf-value mt-3 text-green-950">{active.jobName || 'Unassigned job'}</p>
               <p className="pf-copy mt-1">
-                Started {formatDateTime(active.startedAtActual)} · {activePunchHours(active).toFixed(2)} hrs
+                Started {formatDateTime(active.startedAtActual)} - {activePunchHours(active).toFixed(2)} hrs
               </p>
               {active.status === 'missed_clock_out' && (
                 <p className="pf-copy mt-2 text-red-700">This shift is past the configured maximum length.</p>
@@ -1051,12 +1097,8 @@ export function Time() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  {mapHref(row.startLatitude, row.startLongitude) && (
-                    <Button as="a" href={mapHref(row.startLatitude, row.startLongitude)} target="_blank" rel="noreferrer" variant="secondary" size="sm">Start GPS</Button>
-                  )}
-                  {mapHref(row.endLatitude, row.endLongitude) && (
-                    <Button as="a" href={mapHref(row.endLatitude, row.endLongitude)} target="_blank" rel="noreferrer" variant="secondary" size="sm">End GPS</Button>
-                  )}
+                  <MapLinkButton latitude={row.startLatitude} longitude={row.startLongitude} label="Start GPS" />
+                  <MapLinkButton latitude={row.endLatitude} longitude={row.endLongitude} label="End GPS" />
                 </div>
               </div>
               {!row.jobId && (
@@ -1101,6 +1143,21 @@ export function Time() {
     }), { minLat: 90, maxLat: -90, minLng: 180, maxLng: -180 });
     const spanLat = Math.max(0.001, bounds.maxLat - bounds.minLat);
     const spanLng = Math.max(0.001, bounds.maxLng - bounds.minLng);
+    const centerLat = events.length ? events.reduce((sum, event) => sum + event.latitude, 0) / events.length : 39.8283;
+    const centerLng = events.length ? events.reduce((sum, event) => sum + event.longitude, 0) / events.length : -98.5795;
+    const zoom = events.length ? mapZoomForSpan(spanLat, spanLng) : 4;
+    const centerTileX = Math.floor(latLngToWorldPixel(centerLat, centerLng, zoom).x / 256);
+    const centerTileY = Math.floor(latLngToWorldPixel(centerLat, centerLng, zoom).y / 256);
+    const tileOriginX = (centerTileX - 1) * 256;
+    const tileOriginY = (centerTileY - 1) * 256;
+    const tileCount = 2 ** zoom;
+    const tiles = [-1, 0, 1].flatMap((yOffset) => [-1, 0, 1].map((xOffset) => ({
+      key: `${xOffset}:${yOffset}`,
+      x: centerTileX + xOffset,
+      y: centerTileY + yOffset,
+      xOffset,
+      yOffset,
+    }))).filter((tile) => tile.y >= 0 && tile.y < tileCount);
 
     return (
       <Card className="mb-5">
@@ -1141,28 +1198,54 @@ export function Time() {
               ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
-              <div className="relative min-h-80 overflow-hidden rounded-xl border border-gray-200 bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0_2px,transparent_3px),linear-gradient(135deg,#f8fafc,#eef2ff)]">
+              <div className="relative min-h-80 overflow-hidden rounded-xl border border-gray-200 bg-slate-100">
                 {isMapLoading ? (
                   <p className="pf-copy p-4">Loading punch locations...</p>
-                ) : events.length ? events.map((event) => {
-                  const left = ((event.longitude - bounds.minLng) / spanLng) * 78 + 11;
-                  const top = (1 - ((event.latitude - bounds.minLat) / spanLat)) * 74 + 13;
-                  const isOut = event.type.includes('clock_out');
-                  return (
+                ) : events.length ? (
+                  <>
+                    <div className="absolute left-1/2 top-1/2 grid h-[768px] w-[768px] -translate-x-1/2 -translate-y-1/2 grid-cols-3 grid-rows-3 opacity-95">
+                      {tiles.map((tile) => (
+                        <img
+                          key={tile.key}
+                          alt=""
+                          className="h-64 w-64 select-none"
+                          draggable={false}
+                          src={`https://tile.openstreetmap.org/${zoom}/${((tile.x % tileCount) + tileCount) % tileCount}/${tile.y}.png`}
+                          style={{ gridColumnStart: tile.xOffset + 2, gridRowStart: tile.yOffset + 2 }}
+                        />
+                      ))}
+                    </div>
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/20" />
+                    {events.map((event) => {
+                      const pixel = latLngToWorldPixel(event.latitude, event.longitude, zoom);
+                      const left = ((pixel.x - tileOriginX) / 768) * 100;
+                      const top = ((pixel.y - tileOriginY) / 768) * 100;
+                      const isOut = event.type.includes('clock_out');
+                      return (
+                        <a
+                          key={event.id}
+                          href={mapHref(event.latitude, event.longitude)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`absolute flex h-9 w-9 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full border-2 border-white text-xs font-semibold shadow-lg ${event.reviewRequired ? 'bg-amber-500 text-white' : isOut ? 'bg-slate-700 text-white' : 'bg-green-600 text-white'}`}
+                          style={{ left: `${left}%`, top: `${top}%` }}
+                          title={`${event.teamMemberName || 'Crew member'} ${eventTypeLabel(event.type)}`}
+                        >
+                          {event.reviewRequired ? '!' : isOut ? 'Out' : 'In'}
+                          <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-inherit" />
+                        </a>
+                      );
+                    })}
                     <a
-                      key={event.id}
-                      href={mapHref(event.latitude, event.longitude)}
+                      href={`https://www.openstreetmap.org/#map=${zoom}/${centerLat}/${centerLng}`}
                       target="_blank"
                       rel="noreferrer"
-                      className={`absolute flex h-9 w-9 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full border-2 border-white text-xs font-semibold shadow-lg ${event.reviewRequired ? 'bg-amber-500 text-white' : isOut ? 'bg-slate-700 text-white' : 'bg-green-600 text-white'}`}
-                      style={{ left: `${left}%`, top: `${top}%` }}
-                      title={`${event.teamMemberName || 'Crew member'} ${eventTypeLabel(event.type)}`}
+                      className="absolute bottom-2 right-2 rounded bg-white/90 px-2 py-1 text-[11px] font-medium text-gray-700 shadow-sm"
                     >
-                      {event.reviewRequired ? '!' : isOut ? 'Out' : 'In'}
-                      <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-inherit" />
+                      Open map
                     </a>
-                  );
-                }) : (
+                  </>
+                ) : (
                   <p className="pf-copy p-4">No GPS punch locations for this day.</p>
                 )}
               </div>
@@ -1177,7 +1260,7 @@ export function Time() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="pf-emphasis truncate">{event.teamMemberName || 'Crew member'}</p>
-                          <p className="pf-helper">{eventTypeLabel(event.type)} · {formatTime(event.occurredAt)}</p>
+                          <p className="pf-helper">{eventTypeLabel(event.type)} - {formatTime(event.occurredAt)}</p>
                         </div>
                         {event.reviewRequired && <Badge variant="warning" size="sm">Review</Badge>}
                       </div>
@@ -1264,12 +1347,12 @@ export function Time() {
       entry.source === 'punch_clock' ? 'Punch clock' : null,
       flagged ? reviewReasonText(entry.reviewReason) : null,
       approvedOverride ? `Approved override: ${reviewReasonText(entry.reviewReason)}` : null,
-    ].filter(Boolean).join(' · ');
+    ].filter(Boolean).join(' - ');
     const date = formatDate(entry.date);
     const mobileTitle = displayViewMode === 'job' ? entry.teamMemberName || 'Crew member' : entry.jobName || 'Job';
     const mobileContext = canManage
-      ? [displayViewMode === 'day' ? entry.teamMemberName : date, `${formatHours(entry.hours)} hrs`, formatMoney(entry.totalCost), detailLine].filter(Boolean).join(' · ')
-      : [displayViewMode === 'job' ? date : entry.jobName, `${formatHours(entry.hours)} hrs`, detailLine].filter(Boolean).join(' · ');
+      ? [displayViewMode === 'day' ? entry.teamMemberName : date, `${formatHours(entry.hours)} hrs`, formatMoney(entry.totalCost), detailLine].filter(Boolean).join(' - ')
+      : [displayViewMode === 'job' ? date : entry.jobName, `${formatHours(entry.hours)} hrs`, detailLine].filter(Boolean).join(' - ');
     const cells: Record<string, JSX.Element> = {
       date: <p className="hidden truncate pf-helper lg:block">{date}</p>,
       job: (
@@ -1313,13 +1396,13 @@ export function Time() {
         )}
         {canManage && entry.source === 'punch_clock' && (
           <details className="col-span-2 rounded-lg bg-gray-50 px-3 py-2 lg:col-span-full">
-            <summary className="cursor-pointer pf-helper">Audit details · {formatTime(entry.actualStartAt)} - {formatTime(entry.actualEndAt)}</summary>
+            <summary className="cursor-pointer pf-helper">Audit details - {formatTime(entry.actualStartAt)} - {formatTime(entry.actualEndAt)}</summary>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               <p className="pf-helper"><span className="block pf-label-small">Actual punch times</span>{formatTime(entry.actualStartAt)} - {formatTime(entry.actualEndAt)}</p>
               <p className="pf-helper"><span className="block pf-label-small">Rounded payroll</span>{formatTime(entry.roundedStartAt)} - {formatTime(entry.roundedEndAt)}</p>
               <p className="flex flex-wrap gap-2">
-                {mapHref(entry.startLatitude, entry.startLongitude) && <Button as="a" href={mapHref(entry.startLatitude, entry.startLongitude)} target="_blank" rel="noreferrer" variant="secondary" size="sm">Start GPS</Button>}
-                {mapHref(entry.endLatitude, entry.endLongitude) && <Button as="a" href={mapHref(entry.endLatitude, entry.endLongitude)} target="_blank" rel="noreferrer" variant="secondary" size="sm">End GPS</Button>}
+                <MapLinkButton latitude={entry.startLatitude} longitude={entry.startLongitude} label="Start GPS" />
+                <MapLinkButton latitude={entry.endLatitude} longitude={entry.endLongitude} label="End GPS" />
               </p>
             </div>
           </details>
@@ -1401,7 +1484,7 @@ export function Time() {
             </label>
           </div>
           <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-            <p className="pf-emphasis text-blue-950">{selectedBulkEntries.length} selected · {bulkAverageHours.toFixed(2).replace(/\.00$/, '')} hr avg · {formatHours(selectedBulkEntries.reduce((sum, row) => sum + row.hours, 0))} total hrs</p>
+            <p className="pf-emphasis text-blue-950">{selectedBulkEntries.length} selected - {bulkAverageHours.toFixed(2).replace(/\.00$/, '')} hr avg - {formatHours(selectedBulkEntries.reduce((sum, row) => sum + row.hours, 0))} total hrs</p>
             {hiddenBulkSelections > 0 && <p className="pf-helper mt-1">{hiddenBulkSelections} selected employee{hiddenBulkSelections === 1 ? '' : 's'} hidden by filters.</p>}
           </div>
           <div className="flex flex-wrap gap-2">

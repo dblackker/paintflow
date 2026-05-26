@@ -11,6 +11,7 @@ const icons: Record<string, string> = {
   'credit-card': '<rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18" />',
   'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M8 13h8M8 17h6" />',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" />',
+  'map-pin': '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="3" />',
   message: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />',
   'more-horizontal': '<circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" />',
   'paint-bucket': '<path d="m19 11-8-8-8 8 8 8 8-8Z" /><path d="m5 9 6 6" /><path d="M19 13c1.3 1.4 2 2.6 2 3.5a2 2 0 0 1-4 0c0-.9.7-2.1 2-3.5Z" />',
