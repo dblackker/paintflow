@@ -177,6 +177,7 @@ export function JobDetail() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [savingBulk, setSavingBulk] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [costFilter, setCostFilter] = useState('all');
   const [completingJob, setCompletingJob] = useState(false);
   const [requestingReview, setRequestingReview] = useState(false);
   const [sendingChangeOrderId, setSendingChangeOrderId] = useState<string | null>(null);
@@ -481,6 +482,19 @@ export function JobDetail() {
     .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())[0];
   const activeCrewCount = teamMembers.filter((member) => member.isActive !== false).length;
   const isCompleted = String(job.status || '').toLowerCase() === 'completed';
+  const costCategoryCounts = detail.lists.costs.reduce<Record<string, number>>((counts, cost) => {
+    const category = String(cost.category || 'other').toLowerCase();
+    counts[category] = (counts[category] || 0) + 1;
+    return counts;
+  }, {});
+  const costCategoryFilters = [
+    ...costCategories.filter((category) => costCategoryCounts[category]),
+    ...Object.keys(costCategoryCounts).filter((category) => !costCategories.includes(category)),
+  ];
+  const activeCostFilter = costCategoryFilters.includes(costFilter) ? costFilter : 'all';
+  const visibleCosts = activeCostFilter === 'all'
+    ? detail.lists.costs
+    : detail.lists.costs.filter((cost) => String(cost.category || 'other').toLowerCase() === activeCostFilter);
 
   return (
     <div className="mx-auto max-w-7xl py-5 sm:py-8">
@@ -564,10 +578,37 @@ export function JobDetail() {
                 Add cost
               </button>
             </div>
+            {costCategoryFilters.length > 1 && (
+              <div className="border-b bg-gray-50 px-4 py-3">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Filter actual costs">
+                  <button
+                    type="button"
+                    className={`btn-sm shrink-0 rounded-full ${activeCostFilter === 'all' ? 'btn-tonal' : 'btn-text bg-white'}`}
+                    onClick={() => setCostFilter('all')}
+                  >
+                    All
+                    <span className="ml-1 text-xs text-gray-500">{detail.lists.costs.length}</span>
+                  </button>
+                  {costCategoryFilters.map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      className={`btn-sm shrink-0 rounded-full ${activeCostFilter === category ? 'btn-tonal' : 'btn-text bg-white'}`}
+                      onClick={() => setCostFilter(category)}
+                    >
+                      {labelize(category)}
+                      <span className="ml-1 text-xs text-gray-500">{costCategoryCounts[category]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="divide-y">
               {detail.lists.costs.length === 0 ? (
                 <div className="p-6 text-sm text-gray-500">No actual job costs have been logged.</div>
-              ) : detail.lists.costs.map((cost) => (
+              ) : visibleCosts.length === 0 ? (
+                <div className="p-6 text-sm text-gray-500">No costs match this filter.</div>
+              ) : visibleCosts.map((cost) => (
                 <div key={cost.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
