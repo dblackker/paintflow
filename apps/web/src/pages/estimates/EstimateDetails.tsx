@@ -11,11 +11,18 @@ interface EstimateLineItem {
   qty?: number;
   rate?: number;
   category?: string;
+  unit?: string;
   notes?: string;
   roomName?: string;
   surfaceName?: string;
   optional?: boolean;
   customerVisible?: boolean;
+  dimensions?: {
+    quantity?: number;
+    unit?: string;
+    width?: number;
+    height?: number;
+  };
   labor?: {
     coats?: number;
     prepLevel?: string;
@@ -126,6 +133,22 @@ function applicationLabel(value?: string) {
   return value ? labels[value] || labelize(value) : '';
 }
 
+function numberLabel(value: unknown) {
+  const parsed = Number(value || 0);
+  return parsed.toLocaleString('en-US', {
+    maximumFractionDigits: Number.isInteger(parsed) ? 0 : 1,
+  });
+}
+
+function unitLabel(value?: string) {
+  const labels: Record<string, string> = {
+    sqft: 'sq ft',
+    linear_ft: 'linear ft',
+    each: 'each',
+  };
+  return value ? labels[value] || labelize(value) : '';
+}
+
 function scopeParts(item: EstimateLineItem) {
   const raw = String(item.desc || 'Scope item');
   const [room, detail] = raw.split(/:\s(.+)/);
@@ -134,6 +157,23 @@ function scopeParts(item: EstimateLineItem) {
     room: item.roomName || (detail ? room : 'Project'),
     surface: surface.replace(/^(Interior|Exterior)\s+/i, '').trim(),
   };
+}
+
+function itemMeasurement(item: EstimateLineItem) {
+  const measuredQuantity = Number(item.dimensions?.quantity || 0);
+  const measuredUnit = item.dimensions?.unit || item.unit || item.category;
+  if (measuredQuantity > 0) {
+    return `${numberLabel(measuredQuantity)} ${unitLabel(measuredUnit)}`.trim();
+  }
+  const quantity = Number(item.qty || 0);
+  const unit = item.unit || item.category;
+  if (quantity === 1 && unit !== 'each' && Number(item.rate || 0) > 100) {
+    return 'Scope total';
+  }
+  if (quantity > 0) {
+    return `${numberLabel(quantity)} ${unitLabel(unit)}`.trim();
+  }
+  return 'Not measured';
 }
 
 function itemDetails(item: EstimateLineItem) {
@@ -442,7 +482,7 @@ function ScopeCard({ includedItems, optionalItems }: { includedItems: EstimateLi
                   <tr>
                     <th className="py-2 pr-3 font-semibold">Substrate</th>
                     <th className="py-2 pr-3 font-semibold">Details</th>
-                    <th className="py-2 pr-3 text-right font-semibold">Qty</th>
+                    <th className="py-2 pr-3 text-right font-semibold">Measurement</th>
                     <th className="py-2 pr-3 text-right font-semibold">Rate</th>
                     <th className="py-2 text-right font-semibold">Amount</th>
                   </tr>
@@ -452,7 +492,7 @@ function ScopeCard({ includedItems, optionalItems }: { includedItems: EstimateLi
                     <tr key={`${parts.surface}-${index}`}>
                       <td className="py-2 pr-3 font-medium text-gray-900">{labelize(parts.surface)}</td>
                       <td className="py-2 pr-3 text-gray-600">{itemDetails(item) || item.notes || 'Included'}</td>
-                      <td className="py-2 pr-3 text-right text-gray-700">{Number(item.qty || 1).toLocaleString('en-US', { maximumFractionDigits: 2 })} {labelize(item.category || '')}</td>
+                      <td className="py-2 pr-3 text-right text-gray-700">{itemMeasurement(item)}</td>
                       <td className="py-2 pr-3 text-right text-gray-700">{formatMoney(item.rate || 0)}</td>
                       <td className="py-2 text-right font-medium text-gray-950">{formatMoney(Number(item.qty || 1) * Number(item.rate || 0))}</td>
                     </tr>
@@ -469,7 +509,7 @@ function ScopeCard({ includedItems, optionalItems }: { includedItems: EstimateLi
               {optionalItems.map((item, index) => (
                 <div key={`${item.desc}-${index}`} className="rounded-md border bg-gray-50 p-3 text-sm">
                   <span className="font-medium">{scopeParts(item).surface}</span>
-                  <span className="text-gray-600"> - {itemDetails(item) || item.notes || 'Optional scope'}</span>
+                  <span className="text-gray-600"> · {itemMeasurement(item)} - {itemDetails(item) || item.notes || 'Optional scope'}</span>
                   <span className="float-right font-semibold">{formatMoney(Number(item.qty || 1) * Number(item.rate || 0))}</span>
                 </div>
               ))}
