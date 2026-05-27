@@ -36,6 +36,19 @@ interface ChangeOrder {
   canceledAt?: string | null;
 }
 
+interface ChangeOrderEmailPreview {
+  to?: string | null;
+  link?: string | null;
+  expiresAt?: string | null;
+  subject?: string | null;
+  preheader?: string | null;
+  html?: string | null;
+  text?: string | null;
+  templateName?: string | null;
+  paymentSchedule?: string | null;
+  changeOrder?: ChangeOrder | null;
+}
+
 interface MaterialPurchase {
   id: string;
   supplier?: string | null;
@@ -207,6 +220,8 @@ export function JobDetail() {
   const [requestingReview, setRequestingReview] = useState(false);
   const [sendingChangeOrderId, setSendingChangeOrderId] = useState<string | null>(null);
   const [updatingChangeOrderId, setUpdatingChangeOrderId] = useState<string | null>(null);
+  const [changeOrderPreview, setChangeOrderPreview] = useState<ChangeOrderEmailPreview | null>(null);
+  const [previewingChangeOrderId, setPreviewingChangeOrderId] = useState<string | null>(null);
 
   async function loadJob() {
     if (!id) return;
@@ -417,13 +432,28 @@ export function JobDetail() {
         }),
       });
       setChangeOrderOpen(false);
-      if (response.data?.approvalLink) setApprovalLink(response.data.approvalLink);
       await loadJob();
-      window.showToast?.('Change order added. Approval link is ready.', 'success');
+      window.showToast?.('Change order added. Review the email before sending.', 'success');
+      if (response.data) await previewChangeOrderEmail(response.data);
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to add change order', 'error');
     } finally {
       setSavingChangeOrder(false);
+    }
+  }
+
+  async function previewChangeOrderEmail(order: ChangeOrder) {
+    setPreviewingChangeOrderId(order.id);
+    try {
+      const response = await apiJson<{ data?: ChangeOrderEmailPreview }>(`/v1/change-orders/${order.id}/email-preview`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      setChangeOrderPreview(response.data || null);
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to preview change order email', 'error');
+    } finally {
+      setPreviewingChangeOrderId(null);
     }
   }
 
@@ -440,6 +470,7 @@ export function JobDetail() {
         if (!copied) setApprovalLink(link);
       }
       await loadJob();
+      setChangeOrderPreview(null);
       window.showToast?.(response.data?.to ? `Change order emailed to ${response.data.to}` : 'Change order email sent', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to send change order', 'error');
@@ -802,8 +833,8 @@ export function JobDetail() {
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
                       {order.status === 'pending' && (
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => sendChangeOrder(order)} disabled={sendingChangeOrderId === order.id}>
-                          {sendingChangeOrderId === order.id ? 'Sending...' : order.sentAt ? 'Resend email' : 'Send for approval'}
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => previewChangeOrderEmail(order)} disabled={previewingChangeOrderId === order.id}>
+                          {previewingChangeOrderId === order.id ? 'Preparing...' : order.sentAt ? 'Preview resend' : 'Preview email'}
                         </button>
                       )}
                       {order.status === 'pending' && (
@@ -1055,6 +1086,56 @@ export function JobDetail() {
           </button>
           <button type="button" className="btn-secondary" onClick={() => setApprovalLink('')}>Close</button>
         </ModalFooter>
+      </Modal>
+
+      <Modal isOpen={Boolean(changeOrderPreview)} onClose={() => setChangeOrderPreview(null)} title="Preview Change Order Email" size="lg">
+        {changeOrderPreview && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="pf-meta">To</p>
+              <p className="pf-copy break-all">{changeOrderPreview.to || job.leadEmail || 'Customer email missing'}</p>
+              <p className="pf-meta mt-3">Subject</p>
+              <p className="pf-row-title">{changeOrderPreview.subject || 'Change order approval request'}</p>
+              {changeOrderPreview.preheader && (
+                <>
+                  <p className="pf-meta mt-3">Preview text</p>
+                  <p className="pf-copy">{changeOrderPreview.preheader}</p>
+                </>
+              )}
+              {changeOrderPreview.paymentSchedule && (
+                <>
+                  <p className="pf-meta mt-3">Payment schedule</p>
+                  <p className="pf-copy">{changeOrderPreview.paymentSchedule}</p>
+                </>
+              )}
+            </div>
+            <iframe
+              title="Change order email preview"
+              className="h-[28rem] w-full rounded-lg border border-gray-200 bg-white"
+              sandbox=""
+              srcDoc={changeOrderPreview.html || '<p>Email preview unavailable.</p>'}
+            />
+            {changeOrderPreview.link && (
+              <label className="block">
+                <span className="form-label">Approval and payment link</span>
+                <input readOnly className="input" value={changeOrderPreview.link} onFocus={(event) => event.currentTarget.select()} />
+              </label>
+            )}
+            <ModalFooter className="-mx-6 -mb-4 mt-4">
+              <button type="button" className="btn-secondary" onClick={() => setChangeOrderPreview(null)}>Cancel</button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={!changeOrderPreview.to || sendingChangeOrderId === changeOrderPreview.changeOrder?.id}
+                onClick={() => {
+                  if (changeOrderPreview.changeOrder) void sendChangeOrder(changeOrderPreview.changeOrder);
+                }}
+              >
+                {sendingChangeOrderId === changeOrderPreview.changeOrder?.id ? 'Sending...' : 'Send email'}
+              </button>
+            </ModalFooter>
+          </div>
+        )}
       </Modal>
     </div>
   );

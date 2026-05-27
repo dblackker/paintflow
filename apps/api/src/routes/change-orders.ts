@@ -48,6 +48,14 @@ function money(value: unknown) {
   return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function paymentSchedule(order: typeof changeOrders.$inferSelect) {
+  if (!order.paymentRequired) return 'No online payment is required at approval.';
+  const due = money(order.paymentDueAmount || order.amount);
+  const percent = Number(order.depositPercent || 100);
+  if (percent >= 100) return `100% due after approval: $${due}.`;
+  return `${percent.toLocaleString('en-US', { maximumFractionDigits: 2 })}% due after approval: $${due}. Remaining balance is due according to the job payment schedule.`;
+}
+
 function jobAddress(job: typeof jobs.$inferSelect, lead: typeof leads.$inferSelect) {
   return [
     job.streetAddress || lead.streetAddress,
@@ -126,6 +134,50 @@ async function createPortalLink(db: ReturnType<typeof createDb>, orgId: string, 
   await db.insert(portalTokens).values({ leadId: lead.id, orgId, token, expiresAt });
 
   return { order, job, lead, token, expiresAt };
+}
+
+async function renderChangeOrderEmailPreview(
+  db: ReturnType<typeof createDb>,
+  env: Env,
+  orgId: string,
+  id: string,
+  userId?: string
+) {
+  const portal = await createPortalLink(db, orgId, id);
+  if (!portal) return null;
+
+  const [branding, settings] = await Promise.all([
+    db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) }),
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+  ]);
+  const estimator = userId ? await db.query.users.findFirst({ where: eq(users.id, userId) }) : null;
+  const baseUrl = env.PUBLIC_URL || 'https://paintflow.app';
+  const portalUrl = `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`;
+  const templateKey = 'change_order.approval.sent';
+  const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
+  const renderedEmail = renderChangeOrderEmail({
+    leadName: portal.lead.name,
+    companyName: branding?.companyName || settings?.companyName || 'your painting contractor',
+    estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
+    estimatorEmail: settings?.email || estimator?.email || null,
+    estimatorPhone: settings?.phone || null,
+    jobName: jobDisplayName(portal.job),
+    jobAddress: jobAddress(portal.job, portal.lead),
+    description: portal.order.description,
+    amount: money(portal.order.amount),
+    paymentRequired: Boolean(portal.order.paymentRequired),
+    paymentDue: portal.order.paymentRequired ? money(portal.order.paymentDueAmount || portal.order.amount) : null,
+    paymentSchedule: paymentSchedule(portal.order),
+    portalUrl,
+  }, templateOverride);
+
+  return {
+    ...portal,
+    portalUrl,
+    renderedEmail,
+    settings,
+    estimator,
+  };
 }
 
 // GET /v1/change-orders?jobId=xxx
@@ -215,46 +267,45 @@ changeOrdersRoute.post('/:id/portal-link', async (c) => {
   return c.json({ data: { link: `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`, token: portal.token, expiresAt: portal.expiresAt, changeOrder: updated } });
 });
 
+changeOrdersRoute.post('/:id/email-preview', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+  const preview = await renderChangeOrderEmailPreview(db, c.env, orgId, id, c.get('userId'));
+  if (!preview) return c.json({ error: 'Change order, job, or customer not found' }, 404);
+
+  return c.json({
+    data: {
+      to: preview.lead.email || null,
+      link: preview.portalUrl,
+      expiresAt: preview.expiresAt,
+      subject: preview.renderedEmail.subject,
+      preheader: preview.renderedEmail.preheader,
+      html: preview.renderedEmail.html,
+      text: preview.renderedEmail.text,
+      templateKey: preview.renderedEmail.templateKey,
+      templateName: preview.renderedEmail.templateName,
+      paymentSchedule: paymentSchedule(preview.order),
+      changeOrder: preview.order,
+    },
+  });
+});
+
 changeOrdersRoute.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
 
-  const portal = await createPortalLink(db, orgId, id);
-  if (!portal) return c.json({ error: 'Change order, job, or customer not found' }, 404);
-  if (!portal.lead.email) return c.json({ error: 'Customer email is required before sending a change order' }, 400);
-
-  const [branding, settings] = await Promise.all([
-    db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) }),
-    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
-  ]);
   const userId = c.get('userId');
-  const estimator = userId
-    ? await db.query.users.findFirst({ where: eq(users.id, userId) })
-    : null;
-  const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
-  const portalUrl = `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`;
+  const preview = await renderChangeOrderEmailPreview(db, c.env, orgId, id, userId);
+  if (!preview) return c.json({ error: 'Change order, job, or customer not found' }, 404);
+  if (!preview.lead.email) return c.json({ error: 'Customer email is required before sending a change order' }, 400);
+
   const countersignature = await contractorSignature(db, orgId, userId);
-  const templateKey = 'change_order.approval.sent';
-  const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
-  const renderedEmail = renderChangeOrderEmail({
-    leadName: portal.lead.name,
-    companyName: branding?.companyName || settings?.companyName || 'your painting contractor',
-    estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
-    estimatorEmail: settings?.email || estimator?.email || null,
-    estimatorPhone: settings?.phone || null,
-    jobName: jobDisplayName(portal.job),
-    jobAddress: jobAddress(portal.job, portal.lead),
-    description: portal.order.description,
-    amount: money(portal.order.amount),
-    paymentRequired: Boolean(portal.order.paymentRequired),
-    paymentDue: portal.order.paymentRequired ? money(portal.order.paymentDueAmount || portal.order.amount) : null,
-    portalUrl,
-  }, templateOverride);
-  const replyTo = settings?.email || estimator?.email || undefined;
-  const providerResult = await sendEmail(c.env, portal.lead.email, renderedEmail.subject, renderedEmail.html, undefined, {
+  const replyTo = preview.settings?.email || preview.estimator?.email || undefined;
+  const providerResult = await sendEmail(c.env, preview.lead.email, preview.renderedEmail.subject, preview.renderedEmail.html, undefined, {
     replyTo,
-    text: renderedEmail.text,
+    text: preview.renderedEmail.text,
   }) as { id?: string; message_id?: string };
   const [updatedOrder] = await db.update(changeOrders)
     .set({
@@ -265,30 +316,31 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     .returning();
   const emailSend = await recordEmailSend(db, {
     orgId,
-    leadId: portal.lead.id,
-    estimateId: portal.order.estimateId,
-    jobId: portal.job.id,
-    changeOrderId: portal.order.id,
-    templateKey: renderedEmail.templateKey,
-    templateName: renderedEmail.templateName,
-    channel: renderedEmail.channel,
-    toEmail: portal.lead.email,
+    leadId: preview.lead.id,
+    estimateId: preview.order.estimateId,
+    jobId: preview.job.id,
+    changeOrderId: preview.order.id,
+    templateKey: preview.renderedEmail.templateKey,
+    templateName: preview.renderedEmail.templateName,
+    channel: preview.renderedEmail.channel,
+    toEmail: preview.lead.email,
     fromEmail: c.env.EMAIL_FROM || 'estimates@paintflow.app',
     replyTo: replyTo || null,
-    subject: renderedEmail.subject,
-    previewText: renderedEmail.preheader,
-    renderedHtml: renderedEmail.html,
-    renderedText: renderedEmail.text,
+    subject: preview.renderedEmail.subject,
+    previewText: preview.renderedEmail.preheader,
+    renderedHtml: preview.renderedEmail.html,
+    renderedText: preview.renderedEmail.text,
     status: 'sent',
     provider: c.env.EMAIL_PROVIDER || (c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'resend'),
     providerMessageId: providerResult?.id || providerResult?.message_id || null,
     sentBy: c.get('userId'),
     metadata: {
-      link: portalUrl,
-      amount: portal.order.amount,
-      jobNumber: portal.job.jobNumber,
-      paymentRequired: portal.order.paymentRequired,
-      expiresAt: portal.expiresAt.toISOString(),
+      link: preview.portalUrl,
+      amount: preview.order.amount,
+      jobNumber: preview.job.jobNumber,
+      paymentRequired: preview.order.paymentRequired,
+      paymentSchedule: paymentSchedule(preview.order),
+      expiresAt: preview.expiresAt.toISOString(),
       contractorSignature: countersignature,
     },
   });
@@ -300,20 +352,20 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     entityType: 'change_order',
     entityId: id,
     metadata: {
-      jobId: portal.job.id,
-      jobNumber: portal.job.jobNumber,
-      leadId: portal.lead.id,
-      email: portal.lead.email,
+      jobId: preview.job.id,
+      jobNumber: preview.job.jobNumber,
+      leadId: preview.lead.id,
+      email: preview.lead.email,
       emailSendId: emailSend?.id,
-      subject: renderedEmail.subject,
-      templateKey: renderedEmail.templateKey,
-      link: portalUrl,
-      expiresAt: portal.expiresAt.toISOString(),
+      subject: preview.renderedEmail.subject,
+      templateKey: preview.renderedEmail.templateKey,
+      link: preview.portalUrl,
+      expiresAt: preview.expiresAt.toISOString(),
       contractorSignature: countersignature,
     },
   });
 
-  return c.json({ data: { sent: true, to: portal.lead.email, emailSendId: emailSend?.id ?? null, link: portalUrl, changeOrder: updatedOrder } });
+  return c.json({ data: { sent: true, to: preview.lead.email, emailSendId: emailSend?.id ?? null, link: preview.portalUrl, changeOrder: updatedOrder } });
 });
 
 // PATCH /v1/change-orders/:id

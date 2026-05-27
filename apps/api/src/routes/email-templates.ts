@@ -46,7 +46,7 @@ function systemTemplates() {
       '<p>Hi {{leadName}},</p>',
       `<p>${template.intro}</p>`,
       template.category === 'change_order'
-        ? '<div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;"><h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Change order summary</h2><p><strong>Job:</strong> {{jobName}}</p><p><strong>Jobsite:</strong> {{jobAddress}}</p><p><strong>Added scope:</strong> {{description}}</p><p><strong>Change order total:</strong> ${{amount}}</p><p style="color: #4b5563;">Payment due: ${{paymentDue}}</p></div>'
+        ? '<div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;"><h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Change order summary</h2><p><strong>Job:</strong> {{jobName}}</p><p><strong>Jobsite:</strong> {{jobAddress}}</p><p><strong>Added scope:</strong> {{description}}</p><p><strong>Change order total:</strong> ${{amount}}</p><p style="color: #4b5563;"><strong>Payment schedule:</strong> {{paymentSchedule}}</p></div>'
         : '<p><strong>Base proposal total: ${{total}}</strong></p>\n{{scopeSummaryHtml}}',
       template.category === 'change_order'
         ? '<p>Use the secure link below to approve the added work. Approval is recorded with the job so the office and field crew can see that the scope is authorized.</p>'
@@ -106,7 +106,7 @@ emailTemplatesRoute.post('/', async (c) => {
       text: data.text || null,
       isActive: data.isActive,
       createdBy: userId,
-      mergeFields: ['companyName', 'leadName', 'total', 'estimatorName', 'estimatorEmail', 'estimatorPhone', 'proposalUrl', 'scopeSummaryHtml'],
+      mergeFields: ['companyName', 'leadName', 'total', 'estimatorName', 'estimatorEmail', 'estimatorPhone', 'proposalUrl', 'scopeSummaryHtml', 'jobName', 'jobAddress', 'description', 'amount', 'paymentDue', 'paymentSchedule', 'portalUrl'],
     })
     .onConflictDoUpdate({
       target: [emailTemplates.orgId, emailTemplates.key],

@@ -206,6 +206,7 @@ type ChangeOrderEmailInput = {
   amount: string;
   paymentRequired?: boolean;
   paymentDue?: string | null;
+  paymentSchedule?: string | null;
   portalUrl: string;
 };
 
@@ -443,6 +444,7 @@ export function renderChangeOrderEmail(input: ChangeOrderEmailInput, override?: 
     description: input.description,
     amount: input.amount,
     paymentDue: input.paymentDue || '',
+    paymentSchedule: input.paymentSchedule || '',
     portalUrl,
     ctaText: template.cta,
   };
@@ -465,7 +467,7 @@ export function renderChangeOrderEmail(input: ChangeOrderEmailInput, override?: 
   const intro = replaceMergeTags(template.intro, mergeFields);
   const outro = replaceMergeTags(template.outro, mergeFields);
   const paymentCopy = input.paymentRequired
-    ? `Payment due after approval: $${paymentDue || amount}. The secure link will take you to payment after approval.`
+    ? (input.paymentSchedule || `Payment due after approval: $${paymentDue || amount}. The secure link will take you to payment after approval.`)
     : 'No online payment is required for this change order right now.';
 
   const html = `
@@ -480,7 +482,7 @@ export function renderChangeOrderEmail(input: ChangeOrderEmailInput, override?: 
     <p style="margin: 0 0 8px;"><strong>Job:</strong> ${jobName}${jobAddress ? ` &mdash; ${jobAddress}` : ''}</p>
     <p style="margin: 0 0 8px;"><strong>Added scope:</strong> ${description}</p>
     <p style="margin: 0 0 8px;"><strong>Change order total:</strong> $${amount}</p>
-    <p style="margin: 0; color: #4b5563;">${escapeHtml(paymentCopy)}</p>
+    <p style="margin: 0; color: #4b5563;"><strong>Payment schedule:</strong> ${escapeHtml(paymentCopy)}</p>
   </div>
   <p>Use the secure link below to approve the added work. Approval is recorded with the job so the office and field crew can see that the scope is authorized.</p>
   <a href="${portalUrl}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${escapeHtml(template.cta)}</a>
