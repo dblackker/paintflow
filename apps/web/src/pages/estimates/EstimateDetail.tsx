@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/Badge';
 import { Modal, ModalFooter } from '@/components/Modal';
 import { Toast } from '@/components/Toast';
 import { API_URL, formatMoney, labelize } from '@/lib/api';
+import { PAYMENT_UNAVAILABLE_TOAST, paymentErrorMessage } from '@/lib/paymentMessages';
 
 type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'canceled' | 'superseded' | 'voided' | string;
 
@@ -556,13 +557,12 @@ export function EstimateDetail() {
       });
       const payload = await response.json().catch(() => ({}));
       if (response.status === 409) {
-        throw new Error('Online card payments are not set up for this contractor yet. Please contact your contractor to arrange payment.');
+        throw new Error(PAYMENT_UNAVAILABLE_TOAST);
       }
       if (!response.ok || !payload.checkoutUrl) throw new Error(payload.error || 'Failed to create payment checkout');
       window.location.href = payload.checkoutUrl;
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Failed to start payment.';
-      setMessage({ tone: 'error', text });
+      const text = paymentErrorMessage(error, 'Failed to start payment.');
       window.showToast?.(text, 'error');
       setIsPaying('');
     }

@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { StatusBadge } from '@/components/Badge';
 import { API_URL, formatMoney, labelize } from '@/lib/api';
+import { paymentErrorMessage } from '@/lib/paymentMessages';
 
 interface Customer {
   name?: string;
@@ -152,7 +153,7 @@ export function Portal() {
       if (!payload.data?.checkoutUrl) throw new Error('Unable to start payment');
       window.location.href = payload.data.checkoutUrl;
     } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Unable to start payment', 'error');
+      window.showToast?.(paymentErrorMessage(err, 'Unable to start payment'), 'error');
       setBusyAction(null);
     }
   }
