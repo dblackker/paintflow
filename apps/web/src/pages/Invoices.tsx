@@ -52,6 +52,21 @@ interface InvoiceImport {
   createdAt?: string | null;
 }
 
+interface InvoiceLearningStat {
+  id: string;
+  supplierKey: string;
+  supplierName?: string | null;
+  sourceType?: string | null;
+  extractionMethod?: string | null;
+  approvedCount?: number | string | null;
+  rejectedCount?: number | string | null;
+  correctedJobCount?: number | string | null;
+  noJobApprovalCount?: number | string | null;
+  avgMatchConfidence?: number | string | null;
+  avgExtractionConfidence?: number | string | null;
+  lastSeenAt?: string | null;
+}
+
 interface Lead {
   id: string;
   name?: string | null;
@@ -346,6 +361,40 @@ function PurchaseCard({ purchase }: { purchase: MaterialPurchase }) {
   );
 }
 
+function LearningStatCard({ stat }: { stat: InvoiceLearningStat }) {
+  const approved = numberValue(stat.approvedCount);
+  const rejected = numberValue(stat.rejectedCount);
+  const reviewed = approved + rejected;
+  const approvalRate = reviewed ? Math.round((approved / reviewed) * 100) : 0;
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="pf-row-title truncate">{stat.supplierName || stat.supplierKey}</p>
+          <p className="pf-helper mt-1">{stat.extractionMethod || 'deterministic_text'} · {formatDate(stat.lastSeenAt)}</p>
+        </div>
+        <Badge variant={approvalRate >= 80 ? 'success' : approvalRate >= 50 ? 'warning' : 'default'} size="sm">
+          {approvalRate}% approved
+        </Badge>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded bg-gray-50 px-2 py-2">
+          <p className="pf-metric-label">Reviews</p>
+          <p className="pf-row-title">{reviewed}</p>
+        </div>
+        <div className="rounded bg-gray-50 px-2 py-2">
+          <p className="pf-metric-label">Corrected</p>
+          <p className="pf-row-title">{numberValue(stat.correctedJobCount)}</p>
+        </div>
+        <div className="rounded bg-gray-50 px-2 py-2">
+          <p className="pf-metric-label">Match avg</p>
+          <p className="pf-row-title">{Math.round(numberValue(stat.avgMatchConfidence) * 100)}%</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function jobOptionLabel(job?: Job) {
   if (!job) return 'Select job...';
   const address = jobAddress(job);
@@ -510,6 +559,7 @@ export function Invoices() {
   const navigate = useNavigate();
   const [purchases, setPurchases] = useState<MaterialPurchase[]>([]);
   const [invoiceImports, setInvoiceImports] = useState<InvoiceImport[]>([]);
+  const [learningStats, setLearningStats] = useState<InvoiceLearningStat[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
@@ -630,9 +680,10 @@ export function Invoices() {
     setIsLoading(true);
     setError('');
     try {
-      const [purchasePayload, importPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
+      const [purchasePayload, importPayload, learningPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
         apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
+        apiJson<{ data?: { stats?: InvoiceLearningStat[] } }>('/v1/invoices/imports/learning').catch(() => ({ data: { stats: [] } })),
         apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
         apiJson<{ data?: ChangeOrder[] }>('/v1/change-orders').catch(() => ({ data: [] })),
@@ -642,6 +693,7 @@ export function Invoices() {
       ]);
       setPurchases(purchasePayload.data || []);
       setInvoiceImports(importPayload.data || []);
+      setLearningStats(learningPayload.data?.stats || []);
       setReviewJobByImport(Object.fromEntries((importPayload.data || []).map((item) => [item.id, item.jobId || item.matchCandidates?.[0]?.id || ''])));
       setEstimates(estimatesPayload.data || []);
       setJobs(jobsPayload.data || []);
@@ -1004,6 +1056,20 @@ export function Invoices() {
                   {purchases.map((purchase) => (
                     <PurchaseCard key={purchase.id} purchase={purchase} />
                   ))}
+                </div>
+              )}
+              {!isLoading && !error && learningStats.length > 0 && (
+                <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="pf-section-title">Automation learning</p>
+                      <p className="pf-helper mt-1">Supplier-specific approval trends help tune future matching without storing receipt text globally.</p>
+                    </div>
+                    <Badge variant="purple" size="sm">Premium</Badge>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {learningStats.slice(0, 4).map((stat) => <LearningStatCard key={stat.id} stat={stat} />)}
+                  </div>
                 </div>
               )}
             </CardContent>

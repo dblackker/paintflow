@@ -1,8 +1,19 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { jobCosts, jobs, leads, materialPurchases, materials, saasPlans, subscriptions, supplierInvoiceImports } from '@paintflow/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import {
+  jobCosts,
+  jobs,
+  leads,
+  materialPurchases,
+  materials,
+  saasPlans,
+  subscriptions,
+  supplierInvoiceImportFeedback,
+  supplierInvoiceImports,
+  supplierInvoiceLearningStats,
+} from '@paintflow/db/schema';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -54,6 +65,8 @@ const rejectSchema = z.object({
   reviewNotes: z.string().trim().optional().nullable(),
 });
 
+type InvoiceImportRecord = typeof supplierInvoiceImports.$inferSelect;
+
 function requireIdempotency(c: any) {
   const key = c.req.header('Idempotency-Key');
   if (!key) return c.json({ error: 'Idempotency-Key required' }, 400);
@@ -75,6 +88,16 @@ function normalizeText(value: unknown) {
 
 function fieldKey(value: unknown) {
   return normalizeText(value).replace(/\s+/g, '_');
+}
+
+function supplierKey(value: unknown) {
+  const normalized = normalizeText(value);
+  return normalized ? normalized.replace(/\s+/g, '_').slice(0, 120) : 'unknown_supplier';
+}
+
+function extractionMethodFor(invoiceImport: InvoiceImportRecord) {
+  const data = invoiceImport.extractedData as { extractionMethod?: string } | null;
+  return data?.extractionMethod || 'deterministic_text';
 }
 
 function splitCsvLine(line: string) {
@@ -310,7 +333,7 @@ async function ensurePremiumAccess(db: ReturnType<typeof createDb>, orgId: strin
 async function applyInvoiceImport(
   db: ReturnType<typeof createDb>,
   orgId: string,
-  invoiceImport: typeof supplierInvoiceImports.$inferSelect,
+  invoiceImport: InvoiceImportRecord,
   jobId: string | null | undefined,
   applyMaterialUpdates: boolean,
 ) {
@@ -380,6 +403,122 @@ async function applyInvoiceImport(
   return purchase;
 }
 
+function buildLearningHints(args: {
+  invoiceImport: InvoiceImportRecord;
+  outcome: 'approved' | 'rejected';
+  finalJobId?: string | null;
+  suggestedJobId?: string | null;
+  matchWasCorrect: boolean;
+}) {
+  const candidates = Array.isArray(args.invoiceImport.matchCandidates) ? args.invoiceImport.matchCandidates as JobCandidate[] : [];
+  return {
+    trustedMatchThreshold: args.outcome === 'approved' && args.matchWasCorrect ? Number(args.invoiceImport.matchConfidence || 0) : null,
+    lastRejectedConfidence: args.outcome === 'rejected' ? Number(args.invoiceImport.matchConfidence || 0) : null,
+    lastCorrection: args.finalJobId && args.suggestedJobId !== args.finalJobId ? {
+      suggestedJobId: args.suggestedJobId,
+      finalJobId: args.finalJobId,
+    } : null,
+    strongestReasons: candidates[0]?.reasons || [],
+  };
+}
+
+async function upsertSupplierLearningStats(
+  db: ReturnType<typeof createDb>,
+  invoiceImport: InvoiceImportRecord,
+  outcome: 'approved' | 'rejected',
+  finalJobId?: string | null,
+) {
+  const key = supplierKey(invoiceImport.supplier);
+  const extractionMethod = extractionMethodFor(invoiceImport);
+  const sourceType = invoiceImport.sourceType || 'upload';
+  const suggestedJobId = invoiceImport.jobId || null;
+  const matchWasCorrect = Boolean(suggestedJobId && finalJobId && suggestedJobId === finalJobId);
+  const matchConfidence = currencyValue(invoiceImport.matchConfidence);
+  const extractionConfidence = currencyValue(invoiceImport.extractionConfidence);
+  const existing = await db.query.supplierInvoiceLearningStats.findFirst({
+    where: and(
+      isNull(supplierInvoiceLearningStats.orgId),
+      eq(supplierInvoiceLearningStats.supplierKey, key),
+      eq(supplierInvoiceLearningStats.sourceType, sourceType),
+      eq(supplierInvoiceLearningStats.extractionMethod, extractionMethod),
+    ),
+  });
+  const hints = buildLearningHints({ invoiceImport, outcome, finalJobId, suggestedJobId, matchWasCorrect });
+
+  if (!existing) {
+    await db.insert(supplierInvoiceLearningStats).values({
+      orgId: null,
+      supplierKey: key,
+      supplierName: invoiceImport.supplier,
+      sourceType,
+      extractionMethod,
+      approvedCount: outcome === 'approved' ? 1 : 0,
+      rejectedCount: outcome === 'rejected' ? 1 : 0,
+      correctedJobCount: finalJobId && suggestedJobId !== finalJobId ? 1 : 0,
+      noJobApprovalCount: outcome === 'approved' && !finalJobId ? 1 : 0,
+      avgMatchConfidence: matchConfidence.toFixed(2),
+      avgExtractionConfidence: extractionConfidence.toFixed(2),
+      hints,
+      lastApprovedAt: outcome === 'approved' ? new Date() : null,
+      lastRejectedAt: outcome === 'rejected' ? new Date() : null,
+    });
+    return;
+  }
+
+  const oldTotal = Number(existing.approvedCount || 0) + Number(existing.rejectedCount || 0);
+  const nextTotal = oldTotal + 1;
+  const avgMatch = ((currencyValue(existing.avgMatchConfidence) * oldTotal) + matchConfidence) / nextTotal;
+  const avgExtraction = ((currencyValue(existing.avgExtractionConfidence) * oldTotal) + extractionConfidence) / nextTotal;
+
+  await db.update(supplierInvoiceLearningStats)
+    .set({
+      supplierName: invoiceImport.supplier || existing.supplierName,
+      approvedCount: Number(existing.approvedCount || 0) + (outcome === 'approved' ? 1 : 0),
+      rejectedCount: Number(existing.rejectedCount || 0) + (outcome === 'rejected' ? 1 : 0),
+      correctedJobCount: Number(existing.correctedJobCount || 0) + (finalJobId && suggestedJobId !== finalJobId ? 1 : 0),
+      noJobApprovalCount: Number(existing.noJobApprovalCount || 0) + (outcome === 'approved' && !finalJobId ? 1 : 0),
+      avgMatchConfidence: avgMatch.toFixed(2),
+      avgExtractionConfidence: avgExtraction.toFixed(2),
+      hints: { ...(existing.hints as Record<string, unknown> || {}), latest: hints },
+      lastApprovedAt: outcome === 'approved' ? new Date() : existing.lastApprovedAt,
+      lastRejectedAt: outcome === 'rejected' ? new Date() : existing.lastRejectedAt,
+      lastSeenAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(supplierInvoiceLearningStats.id, existing.id));
+}
+
+async function recordInvoiceImportFeedback(
+  db: ReturnType<typeof createDb>,
+  orgId: string,
+  invoiceImport: InvoiceImportRecord,
+  outcome: 'approved' | 'rejected',
+  finalJobId?: string | null,
+  reviewNotes?: string | null,
+) {
+  const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems as InvoiceItem[] : [];
+  const suggestedJobId = invoiceImport.jobId || null;
+  await db.insert(supplierInvoiceImportFeedback).values({
+    orgId,
+    importId: invoiceImport.id,
+    supplierKey: supplierKey(invoiceImport.supplier),
+    supplierName: invoiceImport.supplier,
+    sourceType: invoiceImport.sourceType || 'upload',
+    extractionMethod: extractionMethodFor(invoiceImport),
+    outcome,
+    suggestedJobId,
+    finalJobId: finalJobId || null,
+    matchWasCorrect: Boolean(suggestedJobId && finalJobId && suggestedJobId === finalJobId),
+    hadJobSuggestion: Boolean(suggestedJobId),
+    matchConfidence: currencyValue(invoiceImport.matchConfidence).toFixed(2),
+    extractionConfidence: currencyValue(invoiceImport.extractionConfidence).toFixed(2),
+    itemCount: items.length,
+    totalAmount: currencyValue(invoiceImport.totalAmount).toFixed(2),
+    reviewNotes: reviewNotes || null,
+  });
+  await upsertSupplierLearningStats(db, invoiceImport, outcome, finalJobId);
+}
+
 invoicesApp.post('/imports', async (c) => {
   const idempotencyError = requireIdempotency(c);
   if (idempotencyError) return idempotencyError;
@@ -444,6 +583,24 @@ invoicesApp.get('/imports', async (c) => {
   return c.json({ data: imports });
 });
 
+invoicesApp.get('/imports/learning', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const [stats, feedback] = await Promise.all([
+    db.query.supplierInvoiceLearningStats.findMany({
+      where: isNull(supplierInvoiceLearningStats.orgId),
+      orderBy: (table, { desc }) => [desc(table.lastSeenAt)],
+      limit: 25,
+    }),
+    db.query.supplierInvoiceImportFeedback.findMany({
+      where: eq(supplierInvoiceImportFeedback.orgId, orgId),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+      limit: 25,
+    }),
+  ]);
+  return c.json({ data: { stats, feedback } });
+});
+
 invoicesApp.post('/imports/:id/approve', async (c) => {
   const idempotencyError = requireIdempotency(c);
   if (idempotencyError) return idempotencyError;
@@ -478,6 +635,8 @@ invoicesApp.post('/imports/:id/approve', async (c) => {
     .where(and(eq(supplierInvoiceImports.id, invoiceImport.id), eq(supplierInvoiceImports.orgId, orgId)))
     .returning();
 
+  await recordInvoiceImportFeedback(db, orgId, invoiceImport, 'approved', jobId || null, input.reviewNotes);
+
   return c.json({ data: { import: updated, purchase } });
 });
 
@@ -487,6 +646,10 @@ invoicesApp.post('/imports/:id/reject', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
   const input = rejectSchema.parse(await c.req.json());
+  const invoiceImport = await db.query.supplierInvoiceImports.findFirst({
+    where: and(eq(supplierInvoiceImports.id, c.req.param('id')), eq(supplierInvoiceImports.orgId, orgId)),
+  });
+  if (!invoiceImport || invoiceImport.status !== 'needs_review') return c.json({ error: 'Invoice import not found or already reviewed' }, 404);
   const [updated] = await db.update(supplierInvoiceImports)
     .set({
       status: 'rejected',
@@ -501,6 +664,7 @@ invoicesApp.post('/imports/:id/reject', async (c) => {
     ))
     .returning();
   if (!updated) return c.json({ error: 'Invoice import not found or already reviewed' }, 404);
+  await recordInvoiceImportFeedback(db, orgId, invoiceImport, 'rejected', null, input.reviewNotes);
   return c.json({ data: updated });
 });
 

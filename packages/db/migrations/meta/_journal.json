@@ -141,6 +141,13 @@
       "when": 1779166015000,
       "tag": "0019_supplier_invoice_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779166016000,
+      "tag": "0020_supplier_invoice_learning",
+      "breakpoints": true
     }
   ]
 }

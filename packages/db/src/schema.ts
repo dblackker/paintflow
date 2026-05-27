@@ -639,6 +639,48 @@ export const supplierInvoiceImports = pgTable('supplier_invoice_imports', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const supplierInvoiceImportFeedback = pgTable('supplier_invoice_import_feedback', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  importId: uuid('import_id').references(() => supplierInvoiceImports.id).notNull(),
+  supplierKey: varchar('supplier_key', { length: 120 }).notNull(),
+  supplierName: varchar('supplier_name', { length: 255 }),
+  sourceType: varchar('source_type', { length: 50 }).notNull().default('upload'),
+  extractionMethod: varchar('extraction_method', { length: 80 }).notNull().default('deterministic_text'),
+  outcome: varchar('outcome', { length: 50 }).notNull(),
+  suggestedJobId: uuid('suggested_job_id').references(() => jobs.id),
+  finalJobId: uuid('final_job_id').references(() => jobs.id),
+  matchWasCorrect: boolean('match_was_correct').notNull().default(false),
+  hadJobSuggestion: boolean('had_job_suggestion').notNull().default(false),
+  matchConfidence: decimal('match_confidence', { precision: 5, scale: 2 }).notNull().default('0'),
+  extractionConfidence: decimal('extraction_confidence', { precision: 5, scale: 2 }).notNull().default('0'),
+  itemCount: integer('item_count').notNull().default(0),
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull().default('0'),
+  reviewNotes: text('review_notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const supplierInvoiceLearningStats = pgTable('supplier_invoice_learning_stats', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id),
+  supplierKey: varchar('supplier_key', { length: 120 }).notNull(),
+  supplierName: varchar('supplier_name', { length: 255 }),
+  sourceType: varchar('source_type', { length: 50 }).notNull().default('upload'),
+  extractionMethod: varchar('extraction_method', { length: 80 }).notNull().default('deterministic_text'),
+  approvedCount: integer('approved_count').notNull().default(0),
+  rejectedCount: integer('rejected_count').notNull().default(0),
+  correctedJobCount: integer('corrected_job_count').notNull().default(0),
+  noJobApprovalCount: integer('no_job_approval_count').notNull().default(0),
+  avgMatchConfidence: decimal('avg_match_confidence', { precision: 5, scale: 2 }).notNull().default('0'),
+  avgExtractionConfidence: decimal('avg_extraction_confidence', { precision: 5, scale: 2 }).notNull().default('0'),
+  hints: jsonb('hints').notNull().default({}),
+  lastApprovedAt: timestamp('last_approved_at'),
+  lastRejectedAt: timestamp('last_rejected_at'),
+  lastSeenAt: timestamp('last_seen_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const jobCosts = pgTable('job_costs', {
   id: uuid('id').defaultRandom().primaryKey(),
   jobId: uuid('job_id').references(() => jobs.id).notNull(),
