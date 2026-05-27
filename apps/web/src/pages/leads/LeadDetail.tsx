@@ -667,6 +667,14 @@ function EstimatesList({ estimates, payments, onCancel, onAgreementAction, onRec
 }) {
   const [openEstimateMenuId, setOpenEstimateMenuId] = useState<string | null>(null);
 
+  async function copyPreviewLink(estimate: Estimate) {
+    const href = estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`;
+    const link = new URL(href, window.location.origin).href;
+    const copied = await navigator.clipboard?.writeText(link).then(() => true).catch(() => false);
+    window.showToast?.(copied ? 'Estimate preview link copied' : 'Select the link and copy it manually', copied ? 'success' : 'error');
+    setOpenEstimateMenuId(null);
+  }
+
   if (!estimates.length) return <EmptySection>No estimates yet.</EmptySection>;
   return (
     <div className="divide-y">
@@ -708,7 +716,7 @@ function EstimatesList({ estimates, payments, onCancel, onAgreementAction, onRec
                 </button>
                 {openEstimateMenuId === estimate.id && (
                   <div className="absolute right-0 z-30 mt-2 w-48 rounded-lg border bg-white p-1 shadow-lg" role="menu">
-                    {canPreview && <a href={estimate.customerPreviewUrl || estimate.publicUrl || `/estimates/${estimate.id}`} target="_blank" rel="noreferrer" className="btn-text btn-sm w-full justify-start" onClick={() => setOpenEstimateMenuId(null)}>Preview link</a>}
+                    {canPreview && <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => copyPreviewLink(estimate)}>Copy preview link</button>}
                     {canEdit && <Link to={`/estimates/production?estimateId=${estimate.id}`} className="btn-text btn-sm w-full justify-start" onClick={() => setOpenEstimateMenuId(null)}>{status === 'sent' ? 'Edit sent' : 'Edit draft'}</Link>}
                     {!inactive && balance > 0.005 && <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => { setOpenEstimateMenuId(null); onRecordPayment(estimate); }}>Record payment</button>}
                     {signed && status !== 'voided' && status !== 'superseded' && <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => { setOpenEstimateMenuId(null); onAgreementAction(estimate, 'revise'); }}>Create revision</button>}

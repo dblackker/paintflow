@@ -261,6 +261,12 @@ export function EstimateDetails() {
   const netPaid = (estimate?.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
   const canCountersign = Boolean(estimate && !estimate.contractorSignature?.signedAt && !['canceled', 'voided', 'superseded'].includes(estimate.status));
 
+  async function copyPreviewLink() {
+    const link = new URL(previewHref, window.location.origin).href;
+    const copied = await navigator.clipboard?.writeText(link).then(() => true).catch(() => false);
+    window.showToast?.(copied ? 'Estimate preview link copied' : 'Select the link and copy it manually', copied ? 'success' : 'error');
+  }
+
   async function countersignEstimate() {
     if (!estimate) return;
     setIsCountersigning(true);
@@ -343,7 +349,7 @@ export function EstimateDetails() {
                 <p className="pf-copy mt-2">Internal contractor record. Inactive agreements remain available here for scope, payment, and audit history.</p>
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
-                {canPreview && <Button as="a" href={previewHref} variant="secondary" size="sm">Preview link</Button>}
+                {canPreview && <Button type="button" variant="secondary" size="sm" onClick={copyPreviewLink}>Copy preview link</Button>}
                 {(['draft', 'sent'].includes(estimate.status) && !estimate.signedAt) && (
                   <Button as="a" href={`/estimates/production?estimateId=${estimate.id}`} size="sm">Edit estimate</Button>
                 )}

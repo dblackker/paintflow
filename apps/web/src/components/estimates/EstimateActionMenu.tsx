@@ -74,7 +74,7 @@ function buildActions(estimate: EstimateActionMenuEstimate) {
 
   if (isInactiveAgreement) actions.push({ key: 'details', label: 'View details', href: `/estimates/${estimate.id}/details`, priority: true });
   if (canEdit) actions.push({ key: 'edit', label: status === 'sent' ? 'Edit sent' : 'Edit draft', href: `/estimates/production?estimateId=${estimate.id}`, priority: true });
-  if (canPreview) actions.push({ key: 'preview', label: 'Preview link', href: previewHref(estimate), priority: !canEdit });
+  if (canPreview) actions.push({ key: 'preview', label: 'Copy preview link', href: previewHref(estimate), priority: !canEdit });
   if (canRecordPayment) actions.push({ key: 'payment', label: 'Record payment', action: 'payment' });
   if (canReviseAgreement) actions.push({ key: 'revise', label: 'Create revision', action: 'revise' });
   if (canCancel) actions.push({ key: 'cancel', label: 'Cancel', action: 'cancel', destructive: true });
@@ -131,12 +131,22 @@ function ActionButton({
 }) {
   const className = `btn-text btn-sm ${action.destructive ? 'text-red-700' : ''} ${inMenu ? 'w-full justify-start' : 'justify-center'}`;
   if (action.href) {
-    const external = action.key === 'preview';
-    return external ? (
-      <a href={action.href} target="_blank" rel="noreferrer" className={className}>{action.label}</a>
-    ) : (
-      <Link to={action.href} className={className}>{action.label}</Link>
-    );
+    if (action.key === 'preview') {
+      return (
+        <button
+          type="button"
+          className={className}
+          onClick={async () => {
+            const link = new URL(action.href!, window.location.origin).href;
+            const copied = await navigator.clipboard?.writeText(link).then(() => true).catch(() => false);
+            window.showToast?.(copied ? 'Estimate preview link copied' : 'Select the link and copy it manually', copied ? 'success' : 'error');
+          }}
+        >
+          {action.label}
+        </button>
+      );
+    }
+    return <Link to={action.href} className={className}>{action.label}</Link>;
   }
   if (!action.action) return null;
   return <button type="button" className={className} onClick={() => onAction(estimate, action.action!)}>{action.label}</button>;

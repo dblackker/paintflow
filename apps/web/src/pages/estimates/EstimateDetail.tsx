@@ -555,12 +555,14 @@ export function EstimateDetail() {
       });
       const payload = await response.json().catch(() => ({}));
       if (response.status === 409) {
-        throw new Error(payload.error || 'Online payments are not available yet. Please contact your contractor to arrange payment.');
+        throw new Error('Online card payments are not set up for this contractor yet. Please contact your contractor to arrange payment.');
       }
       if (!response.ok || !payload.checkoutUrl) throw new Error(payload.error || 'Failed to create payment checkout');
       window.location.href = payload.checkoutUrl;
     } catch (error) {
-      setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Failed to start payment.' });
+      const text = error instanceof Error ? error.message : 'Failed to start payment.';
+      setMessage({ tone: 'error', text });
+      window.showToast?.(text, 'error');
       setIsPaying('');
     }
   }
