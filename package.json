@@ -17,6 +17,7 @@
     "db:seed:golden": "corepack pnpm --filter @paintflow/db seed:golden",
     "lint:buttons": "node scripts/lint-buttons.mjs --baseline=47 --print-limit=40",
     "lint:typography": "node scripts/lint-typography.mjs --baseline=798 --print-limit=40",
+    "vapid:generate": "node scripts/generate-vapid-keys.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

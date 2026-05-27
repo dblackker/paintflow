@@ -89,6 +89,7 @@ async function subscribeToPush() {
   const publicKey = keyPayload.data?.publicKey;
   if (!publicKey) return false;
 
+  await navigator.serviceWorker.register('/sw.js');
   const registration = await navigator.serviceWorker.ready;
   const existingSubscription = await registration.pushManager.getSubscription();
   const subscription = existingSubscription || await registration.pushManager.subscribe({

@@ -119,6 +119,13 @@ export function BaseLayout() {
   }, [location.pathname]);
 
   useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.warn('Service worker registration failed', error);
+    });
+  }, []);
+
+  useEffect(() => {
     document.body.classList.toggle('pf-nav-drawer-open', isMobileMenuOpen);
     return () => document.body.classList.remove('pf-nav-drawer-open');
   }, [isMobileMenuOpen]);
