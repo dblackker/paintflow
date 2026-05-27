@@ -149,6 +149,7 @@ interface Receivable {
   address?: string;
   estimate?: Estimate;
   changeOrder?: ChangeOrder;
+  usesPaymentSchedule?: boolean;
 }
 
 const emptyUploadForm: UploadFormState = {
@@ -316,7 +317,7 @@ function PurchaseCard({ purchase }: { purchase: MaterialPurchase }) {
 }
 
 function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivable: Receivable; milestones: PaymentMilestone[]; onRecordPayment: (receivable: Receivable) => void }) {
-  const schedule = receivable.kind === 'estimate'
+  const schedule = receivable.usesPaymentSchedule
     ? paymentScheduleFor(receivable.amount, receivable.paid, milestones)
     : [];
   const nextMilestone = schedule.find((item) => item.balance > 0.005 && item.payable !== false);
@@ -449,12 +450,13 @@ export function Invoices() {
           paid,
           balance,
           createdAt: estimate.sentAt || estimate.createdAt,
-          dueLabel: 'Per payment schedule',
+          dueLabel: isQuickInvoice ? 'Due on receipt' : 'Per payment schedule',
           href: `/estimates/${estimate.id}/details`,
           previewHref: estimate.customerPreviewUrl || `/estimates/${estimate.id}`,
           jobHref: job ? `/jobs/${job.id}` : null,
           address: formatAddress(estimate).replace(/\s+\d{5}$/, ''),
           estimate,
+          usesPaymentSchedule: !isQuickInvoice,
         };
       })
       .filter((item) => item.balance > 0.005);
@@ -483,6 +485,7 @@ export function Invoices() {
           jobHref: job ? `/jobs/${job.id}` : null,
           address: jobAddress(job),
           changeOrder: order,
+          usesPaymentSchedule: true,
         };
       })
       .filter((item) => item.balance > 0.005);

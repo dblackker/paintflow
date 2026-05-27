@@ -1489,3 +1489,36 @@ body.pf-nav-drawer-open {
     flex: 0 0 auto;
   }
 }
+
+.time-desktop-grid,
+.time-desktop-block,
+.time-desktop-flex {
+  display: none;
+}
+
+.time-mobile-only {
+  display: block;
+}
+
+.time-mobile-actions {
+  display: flex;
+}
+
+@media (min-width: 1024px) {
+  .time-desktop-grid {
+    display: grid;
+  }
+
+  .time-desktop-block {
+    display: block;
+  }
+
+  .time-desktop-flex {
+    display: flex;
+  }
+
+  .time-mobile-only,
+  .time-mobile-actions {
+    display: none;
+  }
+}

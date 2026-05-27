@@ -1500,7 +1500,7 @@ export function Time() {
         </button>
         {!collapsed && (
           <>
-            <div className={`hidden gap-3 border-b border-gray-200 bg-white px-3 py-1.5 pf-label-small lg:grid ${canManage ? 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_5.5rem]' : 'lg:grid-cols-[minmax(12rem,1fr)_5rem]'}`}>
+            <div className={`time-desktop-grid gap-3 border-b border-gray-200 bg-white px-3 py-1.5 pf-label-small ${canManage ? 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_5.5rem]' : 'lg:grid-cols-[minmax(12rem,1fr)_5rem]'}`}>
               {timeColumns().map((column) => (
                 <span key={column.key} className={column.align === 'right' ? 'text-right' : ''}>{column.label}</span>
               ))}
@@ -1544,20 +1544,20 @@ export function Time() {
       ? [displayViewMode === 'day' ? entry.teamMemberName : date, `${formatHours(entry.hours)} hrs`, formatMoney(entry.totalCost), detailLine].filter(Boolean).join(' - ')
       : [displayViewMode === 'job' ? date : entry.jobName, `${formatHours(entry.hours)} hrs`, detailLine].filter(Boolean).join(' - ');
     const cells: Record<string, JSX.Element> = {
-      date: <p className="hidden truncate pf-helper lg:block">{date}</p>,
+      date: <p className="time-desktop-block truncate pf-helper">{date}</p>,
       job: (
-        <div className="hidden min-w-0 lg:block">
+        <div className="time-desktop-block min-w-0">
           <p className="truncate pf-emphasis">
             {entry.jobName || 'Job'} {flagged && <Badge variant="danger" size="sm">Review</Badge>} {approvedOverride && <Badge size="sm">Override approved</Badge>}
           </p>
           {detailLine && <p className="truncate pf-helper">{detailLine}</p>}
         </div>
       ),
-      employee: <p className="hidden truncate pf-emphasis lg:block">{entry.teamMemberName || 'Crew member'}</p>,
-      hours: <p className="hidden text-right pf-emphasis lg:block">{formatHours(entry.hours)}</p>,
-      cost: <p className="hidden text-right pf-emphasis lg:block">{formatMoney(entry.totalCost)}</p>,
+      employee: <p className="time-desktop-block truncate pf-emphasis">{entry.teamMemberName || 'Crew member'}</p>,
+      hours: <p className="time-desktop-block text-right pf-emphasis">{formatHours(entry.hours)}</p>,
+      cost: <p className="time-desktop-block text-right pf-emphasis">{formatMoney(entry.totalCost)}</p>,
       actions: (
-        <div className="hidden justify-end gap-2 lg:flex">
+        <div className="time-desktop-flex justify-end gap-2">
           <button className="btn-icon btn-icon-tonal" aria-label="Edit time entry" title="Edit" onClick={() => openEditEntry(entry)}>
             <Icon name="edit" className="h-4 w-4" />
           </button>
@@ -1569,13 +1569,13 @@ export function Time() {
     };
     return (
       <article className={`grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-3 py-2 hover:bg-gray-50 lg:items-center lg:gap-3 ${canManage ? 'lg:grid-cols-[minmax(12rem,1.2fr)_minmax(9rem,0.85fr)_5rem_7rem_auto]' : 'lg:grid-cols-[minmax(12rem,1fr)_5rem]'}`}>
-        <div className="min-w-0 lg:hidden">
+        <div className="time-mobile-only min-w-0">
           <p className="truncate pf-emphasis">{mobileTitle}</p>
           <p className="truncate pf-helper">{mobileContext}</p>
         </div>
         {timeColumns().map((column) => <div key={column.key}>{cells[column.key]}</div>)}
         {canManage && (
-          <div className="flex items-center gap-1 lg:hidden">
+          <div className="time-mobile-actions flex items-center gap-1">
             <button className="btn-icon btn-icon-tonal" aria-label="Edit time entry" onClick={() => openEditEntry(entry)}>
               <Icon name="edit" className="h-4 w-4" />
             </button>
