@@ -43,7 +43,13 @@ interface TemplateFormState {
   roomType: string;
   length: string;
   width: string;
-  items: Array<Required<Pick<TemplateItem, 'category' | 'quantity' | 'prepLevel'>> & { id: string; notes: string }>;
+  items: Array<{
+    id: string;
+    category: string;
+    quantity: string;
+    prepLevel: string;
+    notes: string;
+  }>;
 }
 
 const defaultTemplateForm: TemplateFormState = {

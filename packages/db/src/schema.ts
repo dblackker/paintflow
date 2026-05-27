@@ -613,6 +613,32 @@ export const materialPurchases = pgTable('material_purchases', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const supplierInvoiceImports = pgTable('supplier_invoice_imports', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id),
+  materialPurchaseId: uuid('material_purchase_id').references(() => materialPurchases.id),
+  sourceType: varchar('source_type', { length: 50 }).notNull().default('upload'),
+  status: varchar('status', { length: 50 }).notNull().default('needs_review'),
+  supplier: varchar('supplier', { length: 255 }),
+  invoiceNumber: varchar('invoice_number', { length: 100 }),
+  invoiceDate: timestamp('invoice_date'),
+  senderEmail: varchar('sender_email', { length: 255 }),
+  originalFilename: varchar('original_filename', { length: 255 }),
+  rawText: text('raw_text'),
+  extractedData: jsonb('extracted_data').notNull().default({}),
+  extractedItems: jsonb('extracted_items').notNull().default([]),
+  totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull().default('0'),
+  matchCandidates: jsonb('match_candidates').notNull().default([]),
+  matchConfidence: decimal('match_confidence', { precision: 5, scale: 2 }).notNull().default('0'),
+  extractionConfidence: decimal('extraction_confidence', { precision: 5, scale: 2 }).notNull().default('0'),
+  reviewNotes: text('review_notes'),
+  approvedAt: timestamp('approved_at'),
+  rejectedAt: timestamp('rejected_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const jobCosts = pgTable('job_costs', {
   id: uuid('id').defaultRandom().primaryKey(),
   jobId: uuid('job_id').references(() => jobs.id).notNull(),

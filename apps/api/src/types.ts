@@ -34,6 +34,7 @@ export interface Env {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  INVOICE_AUTOMATION_ENABLED?: string;
 }
 
 export type Variables = {

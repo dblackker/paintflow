@@ -26,6 +26,32 @@ interface MaterialPurchase {
   invoiceDate?: string | null;
 }
 
+interface InvoiceImport {
+  id: string;
+  jobId?: string | null;
+  status: 'needs_review' | 'approved' | 'rejected';
+  supplier?: string | null;
+  invoiceNumber?: string | null;
+  totalAmount?: number | string | null;
+  extractedItems?: PurchaseItem[] | null;
+  matchCandidates?: Array<{
+    id: string;
+    name: string;
+    jobNumber?: string | null;
+    streetAddress?: string | null;
+    city?: string | null;
+    state?: string | null;
+    customerName?: string | null;
+    confidence?: number;
+    reasons?: string[];
+  }> | null;
+  matchConfidence?: number | string | null;
+  extractionConfidence?: number | string | null;
+  sourceType?: string | null;
+  senderEmail?: string | null;
+  createdAt?: string | null;
+}
+
 interface Lead {
   id: string;
   name?: string | null;
@@ -110,7 +136,9 @@ interface PaymentMilestone {
 interface UploadFormState {
   supplier: string;
   invoiceNumber: string;
-  csvData: string;
+  jobId: string;
+  senderEmail: string;
+  rawText: string;
 }
 
 interface QuickInvoiceFormState {
@@ -155,7 +183,9 @@ interface Receivable {
 const emptyUploadForm: UploadFormState = {
   supplier: '',
   invoiceNumber: '',
-  csvData: '',
+  jobId: '',
+  senderEmail: '',
+  rawText: '',
 };
 
 const emptyQuickInvoiceForm: QuickInvoiceFormState = {
@@ -316,6 +346,91 @@ function PurchaseCard({ purchase }: { purchase: MaterialPurchase }) {
   );
 }
 
+function jobOptionLabel(job?: Job) {
+  if (!job) return 'Select job...';
+  const address = jobAddress(job);
+  return [job.jobNumber, job.name, address].filter(Boolean).join(' - ');
+}
+
+function ImportReviewCard({
+  invoiceImport,
+  jobs,
+  selectedJobId,
+  onSelectJob,
+  onApprove,
+  onReject,
+  isBusy,
+}: {
+  invoiceImport: InvoiceImport;
+  jobs: Job[];
+  selectedJobId: string;
+  onSelectJob: (jobId: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+  isBusy: boolean;
+}) {
+  const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems : [];
+  const selectedJob = jobs.find((job) => job.id === selectedJobId);
+  const candidate = invoiceImport.matchCandidates?.[0];
+  const matchConfidence = Math.round(numberValue(invoiceImport.matchConfidence) * 100);
+  const extractionConfidence = Math.round(numberValue(invoiceImport.extractionConfidence) * 100);
+  return (
+    <Card padding="sm" className="border-amber-200 bg-amber-50/40 shadow-none">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="warning" size="sm">Needs review</Badge>
+            <Badge variant="purple" size="sm">Premium</Badge>
+            <span className="pf-meta">{formatDate(invoiceImport.createdAt)}</span>
+          </div>
+          <p className="pf-row-title mt-2">{invoiceImport.supplier || 'Supplier invoice'}</p>
+          <p className="pf-copy mt-1">
+            Invoice {invoiceImport.invoiceNumber || 'not detected'} · {items.length} item{items.length === 1 ? '' : 's'} · {formatMoney(invoiceImport.totalAmount)}
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg bg-white p-3">
+              <p className="pf-meta">Extraction confidence</p>
+              <p className="pf-row-title">{extractionConfidence}%</p>
+            </div>
+            <div className="rounded-lg bg-white p-3">
+              <p className="pf-meta">Job match</p>
+              <p className="pf-row-title">{selectedJob ? jobOptionLabel(selectedJob) : candidate ? `${candidate.name} (${matchConfidence}%)` : 'Needs assignment'}</p>
+            </div>
+          </div>
+          {items.length > 0 && (
+            <div className="mt-3 rounded-lg bg-white p-3">
+              <p className="pf-meta">Extracted lines</p>
+              <div className="mt-2 space-y-1">
+                {items.slice(0, 4).map((item, index) => (
+                  <div key={`${invoiceImport.id}-${index}`} className="flex justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate text-gray-700">{item.description || item.sku || 'Material'}</span>
+                    <span className="shrink-0 font-medium text-gray-900">{formatMoney(item.total)}</span>
+                  </div>
+                ))}
+                {items.length > 4 && <p className="pf-helper">+{items.length - 4} more lines</p>}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="space-y-3">
+          <Select label="Assign job" value={selectedJobId} onChange={(event) => onSelectJob(event.target.value)}>
+            <option value="">No job yet</option>
+            {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
+          </Select>
+          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+            <Button type="button" size="sm" fullWidth onClick={onApprove} isLoading={isBusy}>
+              Approve import
+            </Button>
+            <Button type="button" variant="dangerSubtle" size="sm" fullWidth onClick={onReject} disabled={isBusy}>
+              Reject
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivable: Receivable; milestones: PaymentMilestone[]; onRecordPayment: (receivable: Receivable) => void }) {
   const schedule = receivable.usesPaymentSchedule
     ? paymentScheduleFor(receivable.amount, receivable.paid, milestones)
@@ -394,6 +509,7 @@ function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivabl
 export function Invoices() {
   const navigate = useNavigate();
   const [purchases, setPurchases] = useState<MaterialPurchase[]>([]);
+  const [invoiceImports, setInvoiceImports] = useState<InvoiceImport[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
@@ -412,6 +528,8 @@ export function Invoices() {
   const [isUploading, setIsUploading] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+  const [reviewJobByImport, setReviewJobByImport] = useState<Record<string, string>>({});
+  const [busyImportId, setBusyImportId] = useState('');
 
   const jobsByEstimateId = useMemo(() => new Map(jobs.filter((job) => job.estimateId).map((job) => [job.estimateId as string, job])), [jobs]);
   const jobsById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
@@ -499,11 +617,6 @@ export function Invoices() {
     () => purchases.reduce((sum, purchase) => sum + numberValue(purchase.totalAmount), 0),
     [purchases],
   );
-  const itemCount = useMemo(
-    () => purchases.reduce((sum, purchase) => sum + (Array.isArray(purchase.parsedData) ? purchase.parsedData.length : 0), 0),
-    [purchases],
-  );
-
   useEffect(() => {
     loadInvoices();
   }, []);
@@ -517,8 +630,9 @@ export function Invoices() {
     setIsLoading(true);
     setError('');
     try {
-      const [purchasePayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
+      const [purchasePayload, importPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
+        apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
         apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
         apiJson<{ data?: ChangeOrder[] }>('/v1/change-orders').catch(() => ({ data: [] })),
@@ -527,6 +641,8 @@ export function Invoices() {
         apiJson<{ data?: { milestones?: PaymentMilestone[] } }>('/v1/settings/payment-schedule').catch(() => ({ data: { milestones: [] } })),
       ]);
       setPurchases(purchasePayload.data || []);
+      setInvoiceImports(importPayload.data || []);
+      setReviewJobByImport(Object.fromEntries((importPayload.data || []).map((item) => [item.id, item.jobId || item.matchCandidates?.[0]?.id || ''])));
       setEstimates(estimatesPayload.data || []);
       setJobs(jobsPayload.data || []);
       setChangeOrders(changeOrdersPayload.data || []);
@@ -578,24 +694,75 @@ export function Invoices() {
     event.preventDefault();
     setIsUploading(true);
     try {
-      const payload = await apiJson<{ data?: { itemsProcessed?: number; totalAmount?: number } }>('/v1/invoices/upload', {
+      const payload = await apiJson<{ data?: InvoiceImport }>('/v1/invoices/imports', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          sourceType: 'upload',
+          supplier: form.supplier || null,
+          invoiceNumber: form.invoiceNumber || null,
+          senderEmail: form.senderEmail || null,
+          rawText: form.rawText,
+          csvData: form.rawText.includes(',') ? form.rawText : null,
+          jobId: form.jobId || null,
+        }),
       });
       window.showToast?.(
-        `Processed ${(payload.data?.itemsProcessed || 0).toLocaleString('en-US')} items. Total: ${formatMoney(payload.data?.totalAmount)}`,
+        `Invoice ready for review: ${formatMoney(payload.data?.totalAmount)}`,
         'success',
       );
       setUploadModalOpen(false);
       await loadInvoices();
     } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Upload failed', 'error');
+      window.showToast?.(err instanceof Error ? err.message : 'Import failed', 'error');
     } finally {
       setIsUploading(false);
+    }
+  }
+
+  async function approveImport(invoiceImport: InvoiceImport) {
+    setBusyImportId(invoiceImport.id);
+    try {
+      await apiJson(`/v1/invoices/imports/${invoiceImport.id}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          jobId: reviewJobByImport[invoiceImport.id] || null,
+          applyMaterialUpdates: true,
+        }),
+      });
+      window.showToast?.('Supplier invoice approved', 'success');
+      await loadInvoices();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to approve import', 'error');
+    } finally {
+      setBusyImportId('');
+    }
+  }
+
+  async function rejectImport(invoiceImport: InvoiceImport) {
+    setBusyImportId(invoiceImport.id);
+    try {
+      await apiJson(`/v1/invoices/imports/${invoiceImport.id}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({ reviewNotes: 'Rejected from invoice review queue.' }),
+      });
+      window.showToast?.('Supplier invoice rejected', 'success');
+      await loadInvoices();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to reject import', 'error');
+    } finally {
+      setBusyImportId('');
     }
   }
 
@@ -780,8 +947,8 @@ export function Invoices() {
               <p className="pf-metric mt-1">{purchases.length}</p>
             </Card>
             <Card padding="sm" className="shadow-none">
-              <p className="pf-meta">Items</p>
-              <p className="pf-metric mt-1">{itemCount}</p>
+              <p className="pf-meta">Pending</p>
+              <p className="pf-metric mt-1">{invoiceImports.length}</p>
             </Card>
             <Card padding="sm" className="shadow-none">
               <p className="pf-meta">Spend</p>
@@ -793,7 +960,7 @@ export function Invoices() {
             <CardHeader
               className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5"
               title="Supplier purchases"
-              description="Imported supplier invoices can also create job material costs when attached to a job."
+              description="Review supplier invoices before they update material pricing or job costs."
             />
             <CardContent className="p-4">
               {isLoading && <PurchaseSkeleton />}
@@ -804,12 +971,32 @@ export function Invoices() {
                   <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={loadInvoices}>Retry</Button>
                 </div>
               )}
+              {!isLoading && !error && invoiceImports.length > 0 && (
+                <div className="mb-5 space-y-3">
+                  <div>
+                    <p className="pf-section-title">Needs review</p>
+                    <p className="pf-helper mt-1">Approve only after the job match and extracted lines look right.</p>
+                  </div>
+                  {invoiceImports.map((invoiceImport) => (
+                    <ImportReviewCard
+                      key={invoiceImport.id}
+                      invoiceImport={invoiceImport}
+                      jobs={jobs}
+                      selectedJobId={reviewJobByImport[invoiceImport.id] || ''}
+                      onSelectJob={(jobId) => setReviewJobByImport({ ...reviewJobByImport, [invoiceImport.id]: jobId })}
+                      onApprove={() => approveImport(invoiceImport)}
+                      onReject={() => rejectImport(invoiceImport)}
+                      isBusy={busyImportId === invoiceImport.id}
+                    />
+                  ))}
+                </div>
+              )}
               {!isLoading && !error && !purchases.length && (
                 <EmptyState
                   icon={<Icon name="file-text" className="h-5 w-5" />}
                   title="No supplier invoices uploaded yet."
-                  description="Paste a supplier CSV to start tracking material purchases and product cost changes."
-                  action={{ label: 'Upload supplier invoice', onClick: openUploadModal }}
+                  description="Paste invoice text or CSV to stage product costs for review before they hit a job."
+                  action={{ label: 'Review invoice', onClick: openUploadModal }}
                 />
               )}
               {!isLoading && !error && purchases.length > 0 && (
@@ -922,8 +1109,8 @@ export function Invoices() {
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
-                <h2 id="invoice-upload-title" className="pf-section-title">Upload supplier invoice</h2>
-                <p className="pf-copy mt-1">CSV columns: Description, SKU, Quantity, Unit Cost, Total.</p>
+                <h2 id="invoice-upload-title" className="pf-section-title">Review supplier invoice</h2>
+                <p className="pf-copy mt-1">Paste receipt text or CSV. PaintFlow will stage the job match and material costs for approval.</p>
               </div>
               <button type="button" className="btn-icon" aria-label="Close invoice upload" onClick={closeUploadModal}>
                 <Icon name="close" className="h-5 w-5" />
@@ -933,7 +1120,6 @@ export function Invoices() {
             <form className="space-y-4" onSubmit={uploadInvoice}>
               <Select
                 label="Supplier"
-                required
                 value={form.supplier}
                 onChange={(event) => setForm({ ...form, supplier: event.target.value })}
                 options={supplierOptions}
@@ -946,25 +1132,47 @@ export function Invoices() {
                 value={form.invoiceNumber}
                 onChange={(event) => setForm({ ...form, invoiceNumber: event.target.value })}
               />
+              <Select label="Suggested job" value={form.jobId} onChange={(event) => setForm({ ...form, jobId: event.target.value })}>
+                <option value="">Let PaintFlow match it</option>
+                {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
+              </Select>
+              <Input
+                label="Forwarded from"
+                type="email"
+                autoComplete="email"
+                enterKeyHint="next"
+                placeholder="Optional supplier sender"
+                value={form.senderEmail}
+                onChange={(event) => setForm({ ...form, senderEmail: event.target.value })}
+              />
               <Textarea
-                label="CSV data"
+                label="Invoice text or CSV"
                 required
                 rows={8}
                 autoComplete="off"
                 autoCapitalize="off"
                 spellCheck={false}
                 className="font-mono text-sm"
-                placeholder="Paste CSV data here..."
-                value={form.csvData}
-                onChange={(event) => setForm({ ...form, csvData: event.target.value })}
+                placeholder="Paste receipt OCR text or CSV data here..."
+                value={form.rawText}
+                onChange={(event) => setForm({ ...form, rawText: event.target.value })}
               />
               <details className="rounded-lg bg-gray-50 p-3">
-                <summary className="cursor-pointer text-sm font-medium text-gray-700">Example CSV format</summary>
+                <summary className="cursor-pointer text-sm font-medium text-gray-700">Supported CSV format</summary>
                 <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-gray-700">{exampleCsv}</pre>
               </details>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="purple" size="sm">Premium</Badge>
+                  <p className="pf-row-title">Receipt automation path</p>
+                </div>
+                <p className="pf-copy mt-1">
+                  The review queue is designed for a future receipts inbox where approved supplier senders can forward statements and land here before costs are posted.
+                </p>
+              </div>
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <Button type="button" variant="secondary" fullWidth onClick={closeUploadModal}>Cancel</Button>
-                <Button type="submit" fullWidth isLoading={isUploading}>Upload</Button>
+                <Button type="submit" fullWidth isLoading={isUploading}>Stage for review</Button>
               </div>
             </form>
           </div>
