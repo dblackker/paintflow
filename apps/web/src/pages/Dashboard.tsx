@@ -331,7 +331,7 @@ export function Dashboard() {
       <section className="dashboard-metrics mb-6 grid grid-cols-3 gap-2 sm:gap-4 md:gap-6">
         <MetricCard to="/leads" label="Active leads" value={stats.activeLeads} action="Open leads" />
         <MetricCard to="/estimates" label="Estimates sent" value={stats.estimatesSent} action="Review estimates" />
-        <MetricCard to="/jobs" label="Jobs this month" value={stats.jobsThisMonth} action="Open schedule" />
+        <MetricCard to="/calendar" label="Jobs this month" value={stats.jobsThisMonth} action="Open schedule" />
       </section>
 
       {hasNoData && (
