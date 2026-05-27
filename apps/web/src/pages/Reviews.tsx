@@ -146,7 +146,7 @@ export function Reviews() {
           description="Customer feedback and Google/Yelp handoff status."
         >
           <div className="mt-3">
-            <Button as="a" href="/settings#business-settings" variant="ghost" size="sm">Review links</Button>
+            <Link to="/settings#business-settings" className="btn-text btn-sm">Review links</Link>
           </div>
         </CardHeader>
         <CardContent className="divide-y divide-gray-200">

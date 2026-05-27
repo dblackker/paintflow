@@ -41,18 +41,22 @@ import { EmailTemplates } from '@/pages/EmailTemplates';
 import { StripePayments } from '@/pages/payments/StripePayments';
 import { DesignSystem } from '@/pages/dev/DesignSystem';
 import { Landing } from '@/pages/landing/Landing';
+import { ErrorPage } from '@/pages/ErrorPage';
 
 export const router = createBrowserRouter([
   {
     path: '/estimates/:id',
     element: <EstimateDetail />,
+    errorElement: <ErrorPage />,
   },
   {
     path: '/estimates/:id/success',
     element: <EstimateDetail />,
+    errorElement: <ErrorPage />,
   },
   {
     element: <BaseLayout />,
+    errorElement: <ErrorPage />,
     children: [
       { path: '/', element: <Landing /> },
       { path: '/dashboard', element: <Dashboard /> },
@@ -97,9 +101,15 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <Login />,
+    errorElement: <ErrorPage />,
   },
   {
     path: '/signup',
     element: <Signup />,
+    errorElement: <ErrorPage />,
+  },
+  {
+    path: '*',
+    element: <ErrorPage notFound />,
   },
 ]);
