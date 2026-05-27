@@ -783,8 +783,8 @@ export function Calendar() {
         >
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0 space-y-1">
-              <p className="pf-emphasis text-sm sm:hidden">{formatDate(day, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
-              <p className="hidden text-sm font-semibold text-gray-950 sm:block">{day.getDate()}</p>
+              <p className="pf-emphasis text-sm">{formatDate(day, { month: 'short', day: 'numeric' })}</p>
+              <p className="pf-meta sm:hidden">{formatDate(day, { weekday: 'short' })}</p>
               {dayWeather && (
                 <a
                   href={googleWeatherHref(weatherZip)}
