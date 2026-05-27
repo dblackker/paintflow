@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Badge, StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
@@ -391,6 +391,7 @@ function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivabl
 }
 
 export function Invoices() {
+  const navigate = useNavigate();
   const [purchases, setPurchases] = useState<MaterialPurchase[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -638,7 +639,7 @@ export function Invoices() {
       window.showToast?.('Quick invoice created', 'success');
       setQuickInvoiceOpen(false);
       await loadInvoices();
-      if (response.data?.id) window.location.href = `/estimates/${response.data.id}/details`;
+      if (response.data?.id) navigate(`/estimates/${response.data.id}/details`);
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to create invoice', 'error');
     } finally {

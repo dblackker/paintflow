@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -92,6 +92,7 @@ function parseZipCodes(value: string) {
 
 export function Onboarding() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [settings, setSettings] = useState<OrgSettings>({});
   const [zipCodes, setZipCodes] = useState('');
@@ -186,7 +187,7 @@ export function Onboarding() {
         });
       } else if (step.key === 'ready') {
         await saveOrg({ onboardingCompletedAt: new Date().toISOString() });
-        window.location.href = '/dashboard';
+        navigate('/dashboard');
         return;
       }
 

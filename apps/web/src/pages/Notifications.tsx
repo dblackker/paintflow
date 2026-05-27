@@ -225,9 +225,13 @@ export function Notifications() {
 
   async function handleNotificationClick(event: MouseEvent<HTMLAnchorElement>, item: NotificationItem) {
     const href = item.href || '/notifications';
-    if (!item.read) {
+    if (href.startsWith('/')) {
       event.preventDefault();
+    }
+    if (!item.read) {
       await markItemRead(item);
+    }
+    if (href.startsWith('/')) {
       navigate(href);
     }
   }

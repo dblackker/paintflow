@@ -1,4 +1,5 @@
 import { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Icon } from './Icon';
 
 type ButtonAs = 'button' | 'a' | 'span';
@@ -50,6 +51,16 @@ export function Button({
 
   if (as === 'a') {
     const anchorProps = props as AnchorHTMLAttributes<HTMLAnchorElement>;
+    const isInternalHref = Boolean(href?.startsWith('/') && !target && !download);
+    if (isInternalHref && href) {
+      return (
+        <Link className={classes} to={href} {...anchorProps}>
+          {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+          {children}
+          {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+        </Link>
+      );
+    }
     return (
       <a className={classes} href={href} {...anchorProps}>
         {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}

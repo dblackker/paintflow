@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge, StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -127,9 +128,9 @@ function ContactSummary({ event }: { event: ActivityEvent }) {
 
   return (
     <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-      <a href={customerHref} className="pf-row-title hover:text-blue-700">
+      <Link to={customerHref} className="pf-row-title hover:text-blue-700">
         {event.clientName || 'Customer'}
-      </a>
+      </Link>
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-600">
         {address && <span>{address}</span>}
         {event.leadPhone && <span>{formatPhone(event.leadPhone)}</span>}
@@ -158,9 +159,9 @@ function ActivityCard({ event }: { event: ActivityEvent }) {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <a href={event.href || '#'} className="pf-row-title hover:text-blue-700">
+                <Link to={event.href || '#'} className="pf-row-title hover:text-blue-700">
                   {event.title || 'Activity recorded'}
-                </a>
+                </Link>
                 <Badge variant={sourceVariant(event.source)} size="sm">{eventTypeLabel(event)}</Badge>
                 {event.status && <StatusBadge status={event.status} />}
               </div>

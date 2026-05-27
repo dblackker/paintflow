@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -163,6 +164,7 @@ function TemplateCard({
 }
 
 export function Templates() {
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState<EstimateTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -205,7 +207,7 @@ export function Templates() {
       });
       sessionStorage.setItem('templateRooms', JSON.stringify(payload.data?.rooms || []));
       window.showToast?.('Template loaded. Opening production estimator.', 'success');
-      window.location.href = '/estimates/production';
+      navigate('/estimates/production');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to use template', 'error');
     } finally {

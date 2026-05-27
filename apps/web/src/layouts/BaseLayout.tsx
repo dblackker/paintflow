@@ -1,4 +1,4 @@
-import { Outlet, useLocation, Link } from 'react-router-dom';
+import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from '@/components/BottomNav';
 import { Toast } from '@/components/Toast';
@@ -133,6 +133,7 @@ function isActiveRoute(pathname: string, href: string) {
 
 export function BaseLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationPreview[]>([]);
@@ -236,7 +237,7 @@ export function BaseLayout() {
     } catch {
       // Local session cleanup still happens through the API redirect path if the server is unavailable.
     } finally {
-      window.location.href = '/login';
+      navigate('/login');
     }
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/Badge';
 import { Card, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -280,6 +280,7 @@ function packageItems(pkg?: EstimatePackage | null) {
 
 export function EstimateProduction() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const estimateId = params.get('estimateId') || params.get('draft') || '';
   const initialLeadId = params.get('leadId') || '';
   const [rates, setRates] = useState<ProductionRate[]>([]);
@@ -843,10 +844,15 @@ export function EstimateProduction() {
       }
       window.showToast?.(effectiveStatus === 'draft' ? 'Draft saved' : editingSent ? 'Estimate update emailed' : 'Estimate emailed', 'success');
       setShowPreview(false);
-      if (effectiveStatus === 'draft') window.location.href = '/estimates?status=draft';
+      if (effectiveStatus === 'draft') navigate('/estimates?status=draft');
       else {
         const previewUrl = sendResult?.previewUrl || response.data.customerPreviewUrl || response.data.publicUrl || `/estimates/${response.data.id}`;
-        window.location.replace(new URL(previewUrl, window.location.origin).pathname);
+        const nextUrl = new URL(previewUrl, window.location.origin);
+        if (nextUrl.origin === window.location.origin) {
+          navigate(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`, { replace: true });
+        } else {
+          window.location.replace(nextUrl.toString());
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save estimate';

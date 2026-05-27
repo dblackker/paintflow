@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -203,6 +203,7 @@ function followUps(data: LeadDetailResponse['data']) {
 
 export function LeadDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [detail, setDetail] = useState<LeadDetailResponse['data'] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingActivity, setIsSavingActivity] = useState(false);
@@ -352,7 +353,7 @@ export function LeadDetail() {
       });
       window.showToast?.(actionName === 'revise' ? 'Revision created' : 'Agreement voided', 'success');
       if (actionName === 'revise') {
-        window.location.href = response.data?.editUrl || `/estimates/production?estimateId=${response.data?.id || estimate.id}`;
+        navigate(response.data?.editUrl || `/estimates/production?estimateId=${response.data?.id || estimate.id}`);
         return;
       }
       await loadDetail();
@@ -633,11 +634,11 @@ export function LeadDetail() {
 
 function StatTile({ href, label, value, help }: { href: string; label: string; value: string | number; help: string }) {
   return (
-    <a href={href} className="block rounded-lg border bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+    <Link to={href} className="block rounded-lg border bg-white p-4 shadow-sm hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500">
       <p className="pf-metric-label">{label}</p>
       <p className="pf-metric-value mt-1">{value}</p>
       <p className="pf-meta mt-1">{help}</p>
-    </a>
+    </Link>
   );
 }
 
