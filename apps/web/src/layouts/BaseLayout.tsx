@@ -6,13 +6,24 @@ import { AuthBridge } from '@/components/AuthBridge';
 import { Icon } from '@/components/Icon';
 import { API_URL, apiJson } from '@/lib/api';
 
-const navSections = [
+interface NavLink {
+  href: string;
+  label: string;
+}
+
+interface NavSection {
+  label: string;
+  links: NavLink[];
+}
+
+const navSections: NavSection[] = [
   {
     label: 'Sales',
     links: [
-      { href: '/leads', label: 'Leads' },
       { href: '/pipeline', label: 'Pipeline' },
+      { href: '/leads', label: 'Leads' },
       { href: '/estimates', label: 'Estimates' },
+      { href: '/sms', label: 'Messages' },
     ],
   },
   {
@@ -21,18 +32,36 @@ const navSections = [
       { href: '/jobs', label: 'Jobs' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/time', label: 'Time Tracking' },
+      { href: '/team', label: 'Team' },
+      { href: '/payroll', label: 'Payroll' },
+    ],
+  },
+  {
+    label: 'Financials',
+    links: [
       { href: '/invoices', label: 'Payments & Invoices' },
+      { href: '/payments/stripe', label: 'Stripe Payments' },
+      { href: '/billing', label: 'Billing' },
+    ],
+  },
+  {
+    label: 'Insights',
+    links: [
+      { href: '/reports', label: 'Reports' },
+      { href: '/activity', label: 'Activity' },
+      { href: '/reviews', label: 'Reviews' },
     ],
   },
   {
     label: 'Admin',
     links: [
-      { href: '/reports', label: 'Reports' },
-      { href: '/activity', label: 'Activity' },
-      { href: '/team', label: 'Team' },
+      { href: '/settings', label: 'Settings' },
+      { href: '/materials', label: 'Paint Products' },
+      { href: '/production-rates', label: 'Production Rates' },
+      { href: '/templates', label: 'Templates' },
       { href: '/supplier-catalog', label: 'Supplier Catalog' },
       { href: '/email-templates', label: 'Email Templates' },
-      { href: '/settings', label: 'Settings' },
+      { href: '/roles', label: 'Roles & Permissions' },
     ],
   },
 ];
@@ -64,13 +93,18 @@ function routeTitle(pathname: string) {
   if (pathname.startsWith('/calendar')) return 'Calendar';
   if (pathname.startsWith('/time')) return 'Time Tracking';
   if (pathname.startsWith('/invoices')) return 'Payments & Invoices';
+  if (pathname.startsWith('/sms')) return 'Messages';
   if (pathname.startsWith('/portal')) return 'Customer Portal';
   if (pathname.startsWith('/reports') || pathname.startsWith('/reporting')) return 'Reports';
   if (pathname.startsWith('/activity')) return 'Activity';
+  if (pathname.startsWith('/reviews')) return 'Reviews';
   if (pathname.startsWith('/team')) return 'Team';
+  if (pathname.startsWith('/payroll')) return 'Payroll';
+  if (pathname.startsWith('/templates')) return 'Templates';
   if (pathname.startsWith('/email-templates')) return 'Email Templates';
   if (pathname.startsWith('/settings')) return 'Settings';
   if (pathname.startsWith('/supplier-catalog')) return 'Supplier Catalog';
+  if (pathname.startsWith('/roles')) return 'Roles & Permissions';
   if (pathname.startsWith('/notifications')) return 'Notifications';
   if (pathname.startsWith('/onboarding')) return 'Onboarding';
   if (pathname.startsWith('/production-rates')) return 'Production Rates';
@@ -91,6 +125,10 @@ function notificationTime(value?: string) {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return date.toLocaleDateString();
+}
+
+function isActiveRoute(pathname: string, href: string) {
+  return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 }
 
 export function BaseLayout() {
@@ -116,6 +154,7 @@ export function BaseLayout() {
   useEffect(() => {
     setIsMobileMenuOpen(false);
     setNotificationsOpen(false);
+    document.querySelectorAll('.pf-nav-group[open]').forEach((group) => group.removeAttribute('open'));
   }, [location.pathname]);
 
   useEffect(() => {
@@ -240,7 +279,38 @@ export function BaseLayout() {
             >
               <Icon name="menu" className="h-5 w-5" />
             </button>
-            <p className="pf-topbar-title truncate">{title}</p>
+            <div className="flex min-w-0 items-center gap-3">
+              <p className="pf-topbar-title shrink-0 truncate lg:max-w-[10rem] xl:max-w-[13rem]">{title}</p>
+              <div className="hidden min-w-0 items-center gap-1 lg:flex" data-owner-nav>
+                <Link
+                  to="/dashboard"
+                  className={`pf-nav-link text-sm font-semibold ${isActiveRoute(location.pathname, '/dashboard') ? 'is-active' : ''}`}
+                >
+                  Dashboard
+                </Link>
+                {navSections.map((section) => {
+                  const isSectionActive = section.links.some((link) => isActiveRoute(location.pathname, link.href));
+                  return (
+                    <details key={section.label} className="pf-nav-group">
+                      <summary className={`pf-nav-link text-sm font-semibold ${isSectionActive ? 'is-active' : ''}`}>
+                        {section.label}
+                      </summary>
+                      <div className="pf-nav-menu">
+                        {section.links.map((link) => (
+                          <Link
+                            key={link.href}
+                            to={link.href}
+                            className={isActiveRoute(location.pathname, link.href) ? 'is-active' : ''}
+                          >
+                            {link.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <div ref={notificationsRef} className="relative">
                 <button
@@ -317,7 +387,7 @@ export function BaseLayout() {
               <Link
                 to="/dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`block py-2 text-sm ${location.pathname.startsWith('/dashboard') ? 'bg-blue-50 text-blue-700' : ''}`}
+                className={`block py-2 text-sm ${isActiveRoute(location.pathname, '/dashboard') ? 'is-active bg-blue-50 text-blue-700' : ''}`}
               >
                 Dashboard
               </Link>
@@ -326,14 +396,13 @@ export function BaseLayout() {
                   <p>{section.label}</p>
                   <div className="grid grid-cols-1 gap-1">
                     {section.links.map((item) => {
-                      const isActive = location.pathname === item.href ||
-                        (item.href !== '/' && location.pathname.startsWith(`${item.href}/`));
+                      const isActive = isActiveRoute(location.pathname, item.href);
                       return (
                         <Link
                           key={item.label}
                           to={item.href}
                           onClick={() => setIsMobileMenuOpen(false)}
-                          className={`block py-2 text-sm ${isActive ? 'bg-blue-50 text-blue-700' : ''}`}
+                          className={`block py-2 text-sm ${isActive ? 'is-active bg-blue-50 text-blue-700' : ''}`}
                         >
                           {item.label}
                         </Link>

@@ -387,6 +387,11 @@ button[class*="bg-blue"][class*="text-white"]:active {
   color: var(--pf-text);
 }
 
+.pf-nav-link.is-active {
+  background-color: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
+  color: var(--md-sys-color-primary);
+}
+
 .pf-nav-group {
   position: relative;
 }
@@ -415,6 +420,10 @@ button[class*="bg-blue"][class*="text-white"]:active {
 .pf-nav-group[open] summary {
   background-color: var(--pf-surface-tint);
   color: var(--pf-text);
+}
+
+.pf-nav-group[open] summary.is-active {
+  color: var(--md-sys-color-primary);
 }
 
 .pf-nav-group[open] summary::after {
@@ -448,6 +457,11 @@ button[class*="bg-blue"][class*="text-white"]:active {
   background: var(--pf-surface-tint);
   color: var(--pf-text);
   text-decoration: none;
+}
+
+.pf-nav-menu a.is-active {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
+  color: var(--md-sys-color-primary);
 }
 
 .pf-mobile-menu-button {
@@ -548,6 +562,10 @@ body.pf-nav-drawer-open {
 .pf-mobile-nav a:hover {
   background: var(--pf-surface-tint);
   color: var(--pf-text);
+}
+
+.pf-mobile-nav a.is-active {
+  font-weight: 700;
 }
 
 .pf-mobile-nav-section > p {

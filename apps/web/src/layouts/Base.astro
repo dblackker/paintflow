@@ -21,9 +21,10 @@ const navSections = [
   {
     label: 'Sales',
     links: [
-      { href: '/leads', label: 'Leads' },
       { href: '/pipeline', label: 'Pipeline' },
+      { href: '/leads', label: 'Leads' },
       { href: '/estimates', label: 'Estimates' },
+      { href: '/sms', label: 'Messages' },
     ],
   },
   {
@@ -32,17 +33,36 @@ const navSections = [
       { href: '/jobs', label: 'Jobs' },
       { href: '/calendar', label: 'Calendar' },
       { href: '/time', label: 'Time Tracking' },
+      { href: '/team', label: 'Team' },
+      { href: '/payroll', label: 'Payroll' },
+    ],
+  },
+  {
+    label: 'Financials',
+    links: [
       { href: '/invoices', label: 'Payments & Invoices' },
+      { href: '/payments/stripe', label: 'Stripe Payments' },
+      { href: '/billing', label: 'Billing' },
+    ],
+  },
+  {
+    label: 'Insights',
+    links: [
+      { href: '/reports', label: 'Reports' },
+      { href: '/activity', label: 'Activity' },
+      { href: '/reviews', label: 'Reviews' },
     ],
   },
   {
     label: 'Admin',
     links: [
-      { href: '/reports', label: 'Reports' },
-      { href: '/activity', label: 'Activity' },
-      { href: '/team', label: 'Team' },
-      { href: '/email-templates', label: 'Email Templates' },
       { href: '/settings', label: 'Settings' },
+      { href: '/materials', label: 'Paint Products' },
+      { href: '/production-rates', label: 'Production Rates' },
+      { href: '/templates', label: 'Templates' },
+      { href: '/email-templates', label: 'Email Templates' },
+      { href: '/supplier-catalog', label: 'Supplier Catalog' },
+      { href: '/roles', label: 'Roles & Permissions' },
     ],
   },
 ];
@@ -162,8 +182,21 @@ const navSections = [
             </button>
           )}
         </div>
-        <div class="min-w-0">
-          <p id="app-bar-title" class="truncate text-lg font-semibold text-gray-950 sm:text-xl">{shellTitle}</p>
+        <div class="flex min-w-0 items-center gap-3">
+          <p id="app-bar-title" class="pf-topbar-title shrink-0 truncate lg:max-w-[10rem] xl:max-w-[13rem]">{shellTitle}</p>
+          <div class="hidden min-w-0 items-center gap-1 lg:flex" data-owner-nav>
+            <a href="/dashboard" class="pf-nav-link text-sm font-semibold">Dashboard</a>
+            {navSections.map((section) => (
+              <details class="pf-nav-group">
+                <summary class="pf-nav-link text-sm font-semibold">{section.label}</summary>
+                <div class="pf-nav-menu">
+                  {section.links.map((link) => (
+                    <a href={link.href}>{link.label}</a>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <div class="relative" data-owner-nav>
