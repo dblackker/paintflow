@@ -40,6 +40,7 @@ import notificationsRoutes from './routes/notifications';
 import pushRoutes from './routes/push';
 import activitiesRoutes from './routes/activities';
 import pipelineRoutes from './routes/pipeline';
+import leadCaptureRoute from './routes/lead-capture';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -74,14 +75,19 @@ function isAllowedOrigin(origin: string | undefined, configuredOrigins: string[]
 
 app.use('*', async (c, next) => {
   const origin = c.req.raw.headers.get('Origin') || undefined;
+  const isPublicLeadCapture = new URL(c.req.url).pathname.startsWith('/v1/lead-capture/');
   const configuredOrigins = c.env.CORS_ORIGINS
     ? c.env.CORS_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
     : defaultOrigins;
-  const allowedOrigin = isAllowedOrigin(origin, configuredOrigins, c.env.ENVIRONMENT);
+  const allowedOrigin = isPublicLeadCapture && origin
+    ? origin
+    : isAllowedOrigin(origin, configuredOrigins, c.env.ENVIRONMENT);
 
   if (allowedOrigin) {
     c.header('Access-Control-Allow-Origin', allowedOrigin);
-    c.header('Access-Control-Allow-Credentials', 'true');
+    if (!isPublicLeadCapture) {
+      c.header('Access-Control-Allow-Credentials', 'true');
+    }
     c.header('Vary', 'Origin', { append: true });
   }
 
@@ -99,7 +105,9 @@ app.use('*', async (c, next) => {
 
   if (allowedOrigin) {
     c.header('Access-Control-Allow-Origin', allowedOrigin);
-    c.header('Access-Control-Allow-Credentials', 'true');
+    if (!isPublicLeadCapture) {
+      c.header('Access-Control-Allow-Credentials', 'true');
+    }
     c.header('Vary', 'Origin', { append: true });
   }
 });
@@ -111,6 +119,7 @@ app.use('*', requestLogging);
 app.route('/v1/auth', authRoutes);
 app.route('/v1/sms', smsRoutes);
 app.route('/v1/portal', portalRoutes);
+app.route('/v1/lead-capture', leadCaptureRoute);
 
 app.get('/health', (c) => {
   return c.json({ 
