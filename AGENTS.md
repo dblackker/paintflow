@@ -31,6 +31,7 @@ All tables have `org_id`. RLS enforced. Middleware sets `app.current_org_id`.
 - All POST endpoints need Idempotency-Key
 - Add PostHog event for user-facing actions
 - Write tenant isolation tests for new tables
+- Follow `docs/action-copy-guidelines.md` for button, link, and menu copy.
 
 ## Deployment
 - Preview: PR → Cloudflare Pages + Neon branch

@@ -597,22 +597,29 @@ export function JobDetail() {
               <span className="pf-meta">{Number(detail.production.laborHours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} labor hrs</span>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-1">
-              {job.estimateId && <Link to={`/estimates/${job.estimateId}`} className="btn-text btn-sm">Estimate</Link>}
-              <button type="button" className="btn-text btn-sm" onClick={() => setBulkOpen(true)}>
+              <button type="button" className="btn-tonal btn-sm" onClick={() => setBulkOpen(true)}>
                 <Icon name="clock" className="h-4 w-4" />
-                Time
+                Add time
               </button>
-              <button type="button" className="btn-text btn-sm" onClick={() => openCostModal()}>Cost</button>
-              <button type="button" className="btn-text btn-sm" onClick={() => setChangeOrderOpen(true)}>Change</button>
-              {isCompleted ? (
-                <button type="button" className="btn-text btn-sm" onClick={requestReview} disabled={requestingReview}>
-                  {requestingReview ? 'Sending...' : 'Review'}
-                </button>
-              ) : (
-                <button type="button" className="btn-text btn-sm text-green-700" onClick={markComplete} disabled={completingJob}>
-                  {completingJob ? 'Updating...' : 'Complete'}
-                </button>
-              )}
+              <details className="relative">
+                <summary className="btn-icon btn-icon-tonal list-none" aria-label="More job actions" title="More actions">
+                  <Icon name="more-horizontal" className="h-4 w-4" />
+                </summary>
+                <div className="absolute right-0 z-30 mt-2 w-52 rounded-lg border bg-white p-1 shadow-lg">
+                  {job.estimateId && <Link to={`/estimates/${job.estimateId}`} className="btn-text btn-sm w-full justify-start">View estimate</Link>}
+                  <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => openCostModal()}>Add cost</button>
+                  <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => setChangeOrderOpen(true)}>Add change order</button>
+                  {isCompleted ? (
+                    <button type="button" className="btn-text btn-sm w-full justify-start" onClick={requestReview} disabled={requestingReview}>
+                      {requestingReview ? 'Sending request...' : 'Request review'}
+                    </button>
+                  ) : (
+                    <button type="button" className="btn-text btn-sm w-full justify-start text-green-700" onClick={markComplete} disabled={completingJob}>
+                      {completingJob ? 'Marking complete...' : 'Mark job complete'}
+                    </button>
+                  )}
+                </div>
+              </details>
             </div>
           </div>
         </div>
