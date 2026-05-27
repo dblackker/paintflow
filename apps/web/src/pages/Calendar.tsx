@@ -84,6 +84,7 @@ interface DragState {
   startX: number;
   startY: number;
   active: boolean;
+  originDay?: string;
 }
 
 function getWeekStart(date: Date) {
@@ -468,6 +469,13 @@ export function Calendar() {
     if (!job) return;
     const duration = jobHasSchedule(job) ? scheduledWorkDays(job) : estimatedWorkDays(job);
     const dates = scheduleDatesFromDuration(dayKeyValue, duration);
+    if (
+      jobHasSchedule(job)
+      && dateKey(job.scheduledStartAt || '') === dateKey(dates.scheduledStartAt)
+      && dateKey(job.scheduledEndAt || job.scheduledStartAt || '') === dateKey(dates.scheduledEndAt)
+    ) {
+      return;
+    }
     const message = jobHasSchedule(job) ? `${job.name || 'Job'} moved on the calendar.` : `${job.name || 'Job'} added to the calendar.`;
     await scheduleJob(job.id, dates.scheduledStartAt, dates.scheduledEndAt, message);
   }
@@ -526,10 +534,10 @@ export function Calendar() {
     scheduleFromDuration(quickSchedule.jobId, quickSchedule.dayKey, quickSchedule.durationDays);
   }
 
-  function beginPointerDrag(event: PointerEvent<HTMLElement>, jobId: string) {
+  function beginPointerDrag(event: PointerEvent<HTMLElement>, jobId: string, originDay?: string) {
     if (event.pointerType === 'mouse' || event.button !== 0) return;
     if ((event.target as Element).closest('a, button, input, select, textarea, summary, details, label')) return;
-    setDragState({ jobId, startX: event.clientX, startY: event.clientY, active: false });
+    setDragState({ jobId, startX: event.clientX, startY: event.clientY, active: false, originDay });
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
@@ -552,6 +560,7 @@ export function Calendar() {
     setDragState(null);
     setDropTargetDay(null);
     if (!finalDrag.active || !finalTarget) return;
+    if (finalDrag.originDay && finalDrag.originDay === finalTarget) return;
     await scheduleDroppedJob(finalDrag.jobId, finalTarget);
   }
 
@@ -762,7 +771,9 @@ export function Calendar() {
           onDrop={(event) => {
             event.preventDefault();
             const jobId = event.dataTransfer.getData('application/x-paintflow-job-id') || event.dataTransfer.getData('text/plain');
+            const originDay = event.dataTransfer.getData('application/x-paintflow-origin-day');
             setDropTargetDay(null);
+            if (originDay && originDay === key) return;
             if (jobId) scheduleDroppedJob(jobId, key);
           }}
         >
@@ -823,7 +834,9 @@ export function Calendar() {
         onDrop={(event) => {
           event.preventDefault();
           const jobId = event.dataTransfer.getData('application/x-paintflow-job-id') || event.dataTransfer.getData('text/plain');
+          const originDay = event.dataTransfer.getData('application/x-paintflow-origin-day');
           setDropTargetDay(null);
+          if (originDay && originDay === key) return;
           if (jobId) scheduleDroppedJob(jobId, key);
         }}
       >
@@ -893,6 +906,7 @@ export function Calendar() {
           onDragStart={(event) => {
             event.dataTransfer.setData('text/plain', job.id);
             event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
+            event.dataTransfer.setData('application/x-paintflow-origin-day', dateKey(day));
             event.dataTransfer.effectAllowed = 'move';
           }}
           className={`block min-w-0 rounded-md px-2 py-1 text-[0.72rem] font-semibold leading-snug text-blue-950 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${siteConcerns.length ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-blue-50'}`}
@@ -967,9 +981,10 @@ export function Calendar() {
         onDragStart={(event) => {
           event.dataTransfer.setData('text/plain', job.id);
           event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
+          event.dataTransfer.setData('application/x-paintflow-origin-day', dateKey(day));
           event.dataTransfer.effectAllowed = 'move';
         }}
-        onPointerDown={(event) => beginPointerDrag(event, job.id)}
+        onPointerDown={(event) => beginPointerDrag(event, job.id, dateKey(day))}
         onPointerMove={movePointerDrag}
         onPointerUp={endPointerDrag}
         onPointerCancel={() => {
