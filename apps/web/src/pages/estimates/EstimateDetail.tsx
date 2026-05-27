@@ -2,6 +2,7 @@ import { PointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/Badge';
 import { Modal, ModalFooter } from '@/components/Modal';
+import { Toast } from '@/components/Toast';
 import { API_URL, formatMoney, labelize } from '@/lib/api';
 
 type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'canceled' | 'superseded' | 'voided' | string;
@@ -569,39 +570,50 @@ export function EstimateDetail() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 sm:py-10">
-        <div className="mx-auto max-w-5xl rounded-lg border bg-white p-8 text-center">
-          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600" />
-          <p className="mt-4 text-gray-600">Loading estimate...</p>
-        </div>
-      </main>
+      <>
+        <Toast />
+        <main className="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 sm:py-10">
+          <div className="mx-auto max-w-5xl rounded-lg border bg-white p-8 text-center">
+            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600" />
+            <p className="mt-4 text-gray-600">Loading estimate...</p>
+          </div>
+        </main>
+      </>
     );
   }
 
   if (loadError || !estimate || !selectedPackage || !visibleItems.length) {
     return (
-      <main className="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 sm:py-10">
-        <section className="mx-auto max-w-3xl rounded-lg border bg-white p-8 text-center">
-          <p className="font-medium text-red-700">{loadError || 'Estimate not found or expired.'}</p>
-        </section>
-      </main>
+      <>
+        <Toast />
+        <main className="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 sm:py-10">
+          <section className="mx-auto max-w-3xl rounded-lg border bg-white p-8 text-center">
+            <p className="font-medium text-red-700">{loadError || 'Estimate not found or expired.'}</p>
+          </section>
+        </main>
+      </>
     );
   }
 
   const inactive = inactiveMessage(estimate.status);
   if (inactive) {
     return (
-      <main className="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 sm:py-10">
-        <section className={`mx-auto max-w-3xl rounded-lg border bg-white p-8 ${inactive.tone === 'amber' ? 'border-amber-200' : 'border-red-200'}`}>
-          <StatusBadge status={estimate.status} />
-          <p className={`mt-4 font-semibold ${inactive.tone === 'amber' ? 'text-amber-800' : 'text-red-700'}`}>{inactive.title}</p>
-          <p className="mt-2 text-sm text-gray-600">{inactive.copy}</p>
-        </section>
-      </main>
+      <>
+        <Toast />
+        <main className="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 sm:py-10">
+          <section className={`mx-auto max-w-3xl rounded-lg border bg-white p-8 ${inactive.tone === 'amber' ? 'border-amber-200' : 'border-red-200'}`}>
+            <StatusBadge status={estimate.status} />
+            <p className={`mt-4 font-semibold ${inactive.tone === 'amber' ? 'text-amber-800' : 'text-red-700'}`}>{inactive.title}</p>
+            <p className="mt-2 text-sm text-gray-600">{inactive.copy}</p>
+          </section>
+        </main>
+      </>
     );
   }
 
   return (
+    <>
+    <Toast />
     <main className="min-h-screen bg-gray-50 px-3 py-4 sm:px-6 sm:py-10">
       <section className="mx-auto max-w-5xl space-y-5">
         {message && (
@@ -808,6 +820,7 @@ export function EstimateDetail() {
         </ModalFooter>
       </Modal>
     </main>
+    </>
   );
 }
 
