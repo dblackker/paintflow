@@ -872,26 +872,80 @@ export function Calendar() {
 
   function renderMonthJobChip(job: Job, day: Date) {
     const dayInfo = jobWorkDayInfo(job, day);
+    const address = jobAddress(job);
+    const actualHours = actualHoursByJob.get(job.id) || 0;
+    const estimatedHours = numberValue(job.estimatedLaborHours);
+    const remainingHours = Math.max(0, estimatedHours - actualHours);
+    const progress = estimatedHours > 0 ? Math.min(100, (actualHours / estimatedHours) * 100) : 0;
     const siteForecast = jobForecasts.find((forecast) => forecast.zipCode === jobZip(job));
     const siteConcerns = weatherConcerns(weatherForDay(siteForecast, day));
+    const dayOfWeek = day.getDay();
+    const popoverPosition = dayOfWeek === 0 || dayOfWeek >= 5
+      ? 'right-0'
+      : dayOfWeek <= 2
+        ? 'left-0'
+        : 'left-1/2 -translate-x-1/2';
     return (
-      <Link
-        key={job.id}
-        to={`/jobs/${job.id}`}
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData('text/plain', job.id);
-          event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
-          event.dataTransfer.effectAllowed = 'move';
-        }}
-        className={`min-w-0 rounded-md px-2 py-1 text-[0.72rem] font-semibold leading-snug text-blue-950 hover:bg-blue-100 ${siteConcerns.length ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-blue-50'}`}
-        title={siteConcerns.length ? `${job.name || 'Job'} - ${siteConcerns.join(', ')}` : job.name || 'Job'}
-      >
-        <span className="block truncate">{job.name || 'Job'}</span>
-        {dayInfo.totalDays > 1 && dayInfo.dayNumber && (
-          <span className="mt-0.5 block text-[0.65rem] font-medium text-blue-700">Day {dayInfo.dayNumber}/{dayInfo.totalDays}</span>
-        )}
-      </Link>
+      <div key={job.id} className="group relative min-w-0">
+        <Link
+          to={`/jobs/${job.id}`}
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.setData('text/plain', job.id);
+            event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
+            event.dataTransfer.effectAllowed = 'move';
+          }}
+          className={`block min-w-0 rounded-md px-2 py-1 text-[0.72rem] font-semibold leading-snug text-blue-950 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${siteConcerns.length ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-blue-50'}`}
+          aria-describedby={`calendar-job-popover-${job.id}-${dateKey(day)}`}
+        >
+          <span className="block truncate">{job.name || 'Job'}</span>
+          {dayInfo.totalDays > 1 && dayInfo.dayNumber && (
+            <span className="mt-0.5 block text-[0.65rem] font-medium text-blue-700">Day {dayInfo.dayNumber}/{dayInfo.totalDays}</span>
+          )}
+        </Link>
+        <div
+          id={`calendar-job-popover-${job.id}-${dateKey(day)}`}
+          role="tooltip"
+          className={`pointer-events-none absolute top-full z-50 mt-2 hidden w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-3 text-left shadow-xl group-focus-within:block group-hover:block ${popoverPosition}`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate pf-emphasis text-sm">{job.name || 'Job'}</p>
+              <p className="mt-1 pf-helper">
+                {dayInfo.totalDays > 1
+                  ? `${dayInfo.isFirst ? 'Starts' : dayInfo.isLast ? 'Finishes' : 'Continues'} - ${scheduleRange(job)}`
+                  : scheduleRange(job)}
+              </p>
+            </div>
+            <StatusBadge status={job.status || 'scheduled'} />
+          </div>
+          {address && <p className="mt-2 line-clamp-2 pf-helper">{address}</p>}
+          {job.budget && (
+            <div className="mt-3 rounded-lg bg-gray-50 px-2 py-1.5">
+              <p className="pf-metric-label">Budget</p>
+              <p className="pf-row-title">{formatMoney(job.budget)}</p>
+            </div>
+          )}
+          {estimatedHours > 0 ? (
+            <div className="mt-3">
+              <div className="mb-1 flex justify-between gap-2 pf-helper">
+                <span>{actualHours.toFixed(1).replace(/\.0$/, '')}/{estimatedHours.toFixed(1).replace(/\.0$/, '')} hrs logged</span>
+                <span>{remainingHours.toFixed(1).replace(/\.0$/, '')} left</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-full rounded-full bg-blue-600" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 pf-helper">No labor estimate</p>
+          )}
+          {siteConcerns.length > 0 && (
+            <div className="mt-3 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
+              {siteConcerns.join(', ')} at job site{jobZip(job) ? ` (${jobZip(job)})` : ''}
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 
