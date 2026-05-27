@@ -135,6 +135,10 @@ const agreementActionSchema = z.object({
 
 const sendEstimateEmailSchema = z.object({
   reason: z.enum(['sent', 'updated']).optional(),
+  subject: z.string().trim().min(1).max(200).optional(),
+  preheader: z.string().trim().max(300).optional(),
+  html: z.string().trim().min(1).max(50000).optional(),
+  text: z.string().trim().max(10000).optional(),
 });
 
 function contractorSignatureFromMetadata(metadata: unknown) {
@@ -915,6 +919,63 @@ function publicEstimateUrl(baseUrl: string, id: string) {
   return `${baseUrl.replace(/\/$/, '')}/estimates/${id}`;
 }
 
+async function renderEstimateEmailPreview(
+  db: ReturnType<typeof createDb>,
+  env: Env,
+  orgId: string,
+  id: string,
+  userId?: string,
+  reason?: 'sent' | 'updated'
+) {
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+  if (!estimate) return null;
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, estimate.leadId), eq(leads.orgId, orgId)),
+  });
+  if (!lead) return null;
+
+  const [branding, settings] = await Promise.all([
+    db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) }),
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+  ]);
+  const estimator = userId
+    ? await db.query.users.findFirst({ where: eq(users.id, userId) })
+    : null;
+  const baseUrl = env.PUBLIC_URL || 'https://app.paintflow.app';
+  const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const projectType = estimateProjectType(estimate);
+  const isUpdateEmail = reason === 'updated';
+  const templateKey = isUpdateEmail ? 'estimate.updated.sent' : estimateEmailTemplateKey(projectType);
+  const signerName = estimator?.name || estimator?.email || settings?.companyName || branding?.companyName || 'Authorized representative';
+  const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
+  const renderedEmail = renderEstimateEmail({
+    estimateId: estimate.id,
+    leadName: lead.name,
+    total,
+    baseUrl,
+    companyName: branding?.companyName || settings?.companyName || 'your painting contractor',
+    estimatorName: signerName,
+    estimatorEmail: settings?.email || estimator?.email || null,
+    estimatorPhone: settings?.phone || null,
+    estimateType: projectType,
+    scopeSummary: proposalScopeSummary(estimate),
+    isUpdate: isUpdateEmail,
+  }, templateOverride);
+
+  return {
+    estimate,
+    lead,
+    settings,
+    estimator,
+    renderedEmail,
+    projectType,
+    previewUrl: publicEstimateUrl(baseUrl, estimate.id),
+  };
+}
+
 function isMissingRelation(error: unknown) {
   const err = error as { code?: string; message?: string };
   return err?.code === '42P01' || /relation .* does not exist/i.test(err?.message || '');
@@ -1015,6 +1076,32 @@ estimatesApp.post('/:id/countersign', async (c) => {
   });
 });
 
+estimatesApp.post('/:id/email-preview', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const parsed = sendEstimateEmailSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid email request', details: parsed.error.flatten() }, 400);
+  }
+  const db = createDb(c.env.DATABASE_URL);
+  const preview = await renderEstimateEmailPreview(db, c.env, orgId, id, c.get('userId'), parsed.data.reason);
+  if (!preview) return c.json({ error: 'Estimate or customer not found' }, 404);
+
+  return c.json({
+    data: {
+      to: preview.lead.email || null,
+      previewUrl: preview.previewUrl,
+      subject: preview.renderedEmail.subject,
+      preheader: preview.renderedEmail.preheader,
+      html: preview.renderedEmail.html,
+      text: preview.renderedEmail.text,
+      templateKey: preview.renderedEmail.templateKey,
+      templateName: preview.renderedEmail.templateName,
+      estimate: preview.estimate,
+    },
+  });
+});
+
 estimatesApp.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
@@ -1023,59 +1110,39 @@ estimatesApp.post('/:id/send-email', async (c) => {
     return c.json({ error: 'Invalid email request', details: parsed.error.flatten() }, 400);
   }
   const db = createDb(c.env.DATABASE_URL);
-
-  const estimate = await db.query.estimates.findFirst({
-    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
-  });
-
-  if (!estimate) {
-    return c.json({ error: 'Not found' }, 404);
-  }
-
-  const lead = await db.query.leads.findFirst({
-    where: and(eq(leads.id, estimate.leadId), eq(leads.orgId, orgId)),
-  });
+  const userId = c.get('userId');
+  const preview = await renderEstimateEmailPreview(db, c.env, orgId, id, userId, parsed.data.reason);
+  if (!preview) return c.json({ error: 'Estimate or customer not found' }, 404);
+  const { estimate, lead, settings, estimator, renderedEmail, projectType, previewUrl } = preview;
 
   if (!lead?.email) {
     return c.json({ error: 'Lead email is required before sending an estimate' }, 400);
   }
 
-  const branding = await db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) });
-  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) });
-  const userId = c.get('userId');
-  const estimator = userId
-    ? await db.query.users.findFirst({ where: eq(users.id, userId) })
-    : null;
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
-  const previewUrl = publicEstimateUrl(baseUrl, estimate.id);
-  const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const projectType = estimateProjectType(estimate);
-  const templateKey = estimateEmailTemplateKey(projectType);
   const isUpdateEmail = parsed.data.reason === 'updated';
-  const signerName = estimator?.name || estimator?.email || settings?.companyName || branding?.companyName || 'Authorized representative';
-  const companyName = branding?.companyName || settings?.companyName || 'your painting contractor';
   const contractorSignature = await buildContractorSignature(db, orgId, userId);
-  const templateOverride = await findEmailTemplateOverride(db, orgId, isUpdateEmail ? 'estimate.updated.sent' : templateKey);
-  const renderedEmail = renderEstimateEmail({
-    estimateId: estimate.id,
-    leadName: lead.name,
-    total,
-    baseUrl,
-    companyName,
-    estimatorName: signerName,
-    estimatorEmail: settings?.email || estimator?.email || null,
-    estimatorPhone: settings?.phone || null,
-    estimateType: projectType,
-    scopeSummary: proposalScopeSummary(estimate),
-    isUpdate: isUpdateEmail,
-  }, templateOverride);
+  const emailToSend = {
+    ...renderedEmail,
+    subject: parsed.data.subject || renderedEmail.subject,
+    preheader: parsed.data.preheader ?? renderedEmail.preheader,
+    html: parsed.data.html || renderedEmail.html,
+    text: parsed.data.text || renderedEmail.text,
+  };
   const fromEmail = c.env.EMAIL_FROM || 'estimates@paintflow.app';
   const replyTo = settings?.email || estimator?.email || undefined;
 
-  const providerResult = await sendEmail(c.env, lead.email, renderedEmail.subject, renderedEmail.html, undefined, {
+  const providerResult = await sendEmail(c.env, lead.email, emailToSend.subject, emailToSend.html, undefined, {
     replyTo,
-    text: renderedEmail.text,
+    text: emailToSend.text,
   }) as { id?: string; message_id?: string };
+  if (estimate.status === 'draft') {
+    await db.update(estimates)
+      .set({ status: 'sent', sentAt: estimate.sentAt || new Date(), updatedAt: new Date() })
+      .where(and(eq(estimates.id, estimate.id), eq(estimates.orgId, orgId)));
+    await db.update(leads)
+      .set({ status: 'estimate_sent', updatedAt: new Date() })
+      .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
+  }
   const emailSend = await recordEmailSend(db, {
     orgId,
     leadId: lead.id,
@@ -1086,10 +1153,10 @@ estimatesApp.post('/:id/send-email', async (c) => {
     toEmail: lead.email,
     fromEmail,
     replyTo: replyTo || null,
-    subject: renderedEmail.subject,
-    previewText: renderedEmail.preheader,
-    renderedHtml: renderedEmail.html,
-    renderedText: renderedEmail.text,
+    subject: emailToSend.subject,
+    previewText: emailToSend.preheader,
+    renderedHtml: emailToSend.html,
+    renderedText: emailToSend.text,
     status: 'sent',
     provider: c.env.EMAIL_PROVIDER || (c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'resend'),
     providerMessageId: providerResult?.id || providerResult?.message_id || null,
@@ -1099,6 +1166,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
       link: previewUrl,
       reason: parsed.data.reason || 'sent',
       contractorSignature,
+      editedBeforeSend: Boolean(parsed.data.subject || parsed.data.preheader || parsed.data.html || parsed.data.text),
     },
   });
   await db.insert(auditLogs).values({
@@ -1111,11 +1179,12 @@ estimatesApp.post('/:id/send-email', async (c) => {
       leadId: lead.id,
       email: lead.email,
       emailSendId: emailSend?.id,
-      subject: renderedEmail.subject,
+      subject: emailToSend.subject,
       templateKey: renderedEmail.templateKey,
       link: previewUrl,
       reason: parsed.data.reason || 'sent',
       contractorSignature,
+      editedBeforeSend: Boolean(parsed.data.subject || parsed.data.preheader || parsed.data.html || parsed.data.text),
     },
   });
 

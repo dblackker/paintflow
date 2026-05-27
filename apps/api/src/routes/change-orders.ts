@@ -34,6 +34,13 @@ const updateChangeOrderSchema = z.object({
   message: 'At least one field is required',
 });
 
+const editableEmailSchema = z.object({
+  subject: z.string().trim().min(1).max(200).optional(),
+  preheader: z.string().trim().max(300).optional(),
+  html: z.string().trim().min(1).max(50000).optional(),
+  text: z.string().trim().max(10000).optional(),
+});
+
 function paymentDueAmount(amount: number, paymentRequired: boolean, depositPercent: number) {
   return paymentRequired ? Math.round(amount * (depositPercent / 100) * 100) / 100 : null;
 }
@@ -294,6 +301,10 @@ changeOrdersRoute.post('/:id/email-preview', async (c) => {
 changeOrdersRoute.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
+  const parsed = editableEmailSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid email edits', details: parsed.error.flatten() }, 400);
+  }
   const db = createDb(c.env.DATABASE_URL);
 
   const userId = c.get('userId');
@@ -303,9 +314,16 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
 
   const countersignature = await contractorSignature(db, orgId, userId);
   const replyTo = preview.settings?.email || preview.estimator?.email || undefined;
-  const providerResult = await sendEmail(c.env, preview.lead.email, preview.renderedEmail.subject, preview.renderedEmail.html, undefined, {
+  const emailToSend = {
+    ...preview.renderedEmail,
+    subject: parsed.data.subject || preview.renderedEmail.subject,
+    preheader: parsed.data.preheader ?? preview.renderedEmail.preheader,
+    html: parsed.data.html || preview.renderedEmail.html,
+    text: parsed.data.text || preview.renderedEmail.text,
+  };
+  const providerResult = await sendEmail(c.env, preview.lead.email, emailToSend.subject, emailToSend.html, undefined, {
     replyTo,
-    text: preview.renderedEmail.text,
+    text: emailToSend.text,
   }) as { id?: string; message_id?: string };
   const [updatedOrder] = await db.update(changeOrders)
     .set({
@@ -326,10 +344,10 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     toEmail: preview.lead.email,
     fromEmail: c.env.EMAIL_FROM || 'estimates@paintflow.app',
     replyTo: replyTo || null,
-    subject: preview.renderedEmail.subject,
-    previewText: preview.renderedEmail.preheader,
-    renderedHtml: preview.renderedEmail.html,
-    renderedText: preview.renderedEmail.text,
+    subject: emailToSend.subject,
+    previewText: emailToSend.preheader,
+    renderedHtml: emailToSend.html,
+    renderedText: emailToSend.text,
     status: 'sent',
     provider: c.env.EMAIL_PROVIDER || (c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'resend'),
     providerMessageId: providerResult?.id || providerResult?.message_id || null,
@@ -342,6 +360,7 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
       paymentSchedule: paymentSchedule(preview.order),
       expiresAt: preview.expiresAt.toISOString(),
       contractorSignature: countersignature,
+      editedBeforeSend: Boolean(parsed.data.subject || parsed.data.preheader || parsed.data.html || parsed.data.text),
     },
   });
 
@@ -357,11 +376,12 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
       leadId: preview.lead.id,
       email: preview.lead.email,
       emailSendId: emailSend?.id,
-      subject: preview.renderedEmail.subject,
+      subject: emailToSend.subject,
       templateKey: preview.renderedEmail.templateKey,
       link: preview.portalUrl,
       expiresAt: preview.expiresAt.toISOString(),
       contractorSignature: countersignature,
+      editedBeforeSend: Boolean(parsed.data.subject || parsed.data.preheader || parsed.data.html || parsed.data.text),
     },
   });
 

@@ -462,7 +462,16 @@ export function JobDetail() {
     try {
       const response = await apiJson<{ data?: { link?: string; to?: string } }>(`/v1/change-orders/${order.id}/send-email`, {
         method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          subject: changeOrderPreview?.subject,
+          preheader: changeOrderPreview?.preheader,
+          html: changeOrderPreview?.html,
+          text: changeOrderPreview?.text,
+        }),
       });
       const link = response.data?.link || '';
       if (link) {
@@ -1094,20 +1103,39 @@ export function JobDetail() {
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
               <p className="pf-meta">To</p>
               <p className="pf-copy break-all">{changeOrderPreview.to || job.leadEmail || 'Customer email missing'}</p>
-              <p className="pf-meta mt-3">Subject</p>
-              <p className="pf-row-title">{changeOrderPreview.subject || 'Change order approval request'}</p>
-              {changeOrderPreview.preheader && (
-                <>
-                  <p className="pf-meta mt-3">Preview text</p>
-                  <p className="pf-copy">{changeOrderPreview.preheader}</p>
-                </>
-              )}
+              <label className="mt-3 block">
+                <span className="form-label">Subject</span>
+                <input
+                  className="input mt-1"
+                  value={changeOrderPreview.subject || ''}
+                  onChange={(event) => setChangeOrderPreview((current) => current ? { ...current, subject: event.target.value } : current)}
+                />
+              </label>
+              <label className="mt-3 block">
+                <span className="form-label">Preview text</span>
+                <input
+                  className="input mt-1"
+                  value={changeOrderPreview.preheader || ''}
+                  onChange={(event) => setChangeOrderPreview((current) => current ? { ...current, preheader: event.target.value } : current)}
+                />
+              </label>
               {changeOrderPreview.paymentSchedule && (
                 <>
                   <p className="pf-meta mt-3">Payment schedule</p>
                   <p className="pf-copy">{changeOrderPreview.paymentSchedule}</p>
                 </>
               )}
+            </div>
+            <div>
+              <span className="form-label">Email body</span>
+              <div
+                className="mt-1 min-h-56 rounded-lg border border-gray-200 bg-white p-4 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(event) => setChangeOrderPreview((current) => current ? { ...current, html: event.currentTarget.innerHTML } : current)}
+                dangerouslySetInnerHTML={{ __html: changeOrderPreview.html || '' }}
+              />
+              <span className="pf-helper mt-1 block">Click into the email body to personalize this send. The saved email template is unchanged.</span>
             </div>
             <iframe
               title="Change order email preview"
