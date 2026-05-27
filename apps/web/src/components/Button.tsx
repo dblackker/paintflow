@@ -24,6 +24,9 @@ export function Button({
   leftIcon,
   rightIcon,
   fullWidth = false,
+  target,
+  rel,
+  download,
   children,
   className = '',
   disabled,
@@ -62,7 +65,7 @@ export function Button({
       );
     }
     return (
-      <a className={classes} href={href} {...anchorProps}>
+      <a className={classes} href={href} target={target} rel={rel} download={download} {...anchorProps}>
         {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
         {children}
         {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
