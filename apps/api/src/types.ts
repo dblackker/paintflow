@@ -35,6 +35,8 @@ export interface Env {
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
   INVOICE_AUTOMATION_ENABLED?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_OCR_MODEL?: string;
 }
 
 export type Variables = {

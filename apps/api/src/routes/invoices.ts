@@ -29,6 +29,14 @@ type InvoiceItem = {
   category?: string;
 };
 
+type ParsedInvoicePayload = {
+  items: InvoiceItem[];
+  extracted: Record<string, unknown>;
+  confidence: number;
+  rawText: string;
+  metadata?: Record<string, unknown>;
+};
+
 type JobCandidate = {
   id: string;
   name: string;
@@ -54,6 +62,8 @@ const importSchema = z.object({
   csvData: z.string().optional().nullable(),
   jobId: z.string().uuid().optional().nullable(),
 });
+
+const MAX_INVOICE_FILE_BYTES = 15 * 1024 * 1024;
 
 const approveSchema = z.object({
   jobId: z.string().uuid().optional().nullable(),
@@ -98,6 +108,44 @@ function supplierKey(value: unknown) {
 function extractionMethodFor(invoiceImport: InvoiceImportRecord) {
   const data = invoiceImport.extractedData as { extractionMethod?: string } | null;
   return data?.extractionMethod || 'deterministic_text';
+}
+
+function safeFileName(value: string) {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120) || 'invoice';
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function responseText(response: any) {
+  if (typeof response?.output_text === 'string') return response.output_text;
+  const chunks: string[] = [];
+  for (const item of response?.output || []) {
+    for (const content of item?.content || []) {
+      if (typeof content?.text === 'string') chunks.push(content.text);
+      if (typeof content?.output_text === 'string') chunks.push(content.output_text);
+    }
+  }
+  return chunks.join('\n');
+}
+
+function parseJsonObject(text: string) {
+  const trimmed = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(trimmed.slice(start, end + 1));
+    throw new Error('OCR returned unreadable JSON.');
+  }
 }
 
 function splitCsvLine(line: string) {
@@ -203,7 +251,28 @@ function parseTextInvoice(rawText: string): { items: InvoiceItem[]; extracted: R
   };
 }
 
-function parseInvoicePayload(input: z.infer<typeof importSchema>) {
+function normalizeOcrItems(items: unknown): InvoiceItem[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item: any) => {
+      const description = String(item.description || item.item || item.product || item.name || '').trim();
+      const quantity = currencyValue(item.quantity || item.qty || 1) || 1;
+      const unitCost = currencyValue(item.unitCost || item.unit_cost || item.unitPrice || item.unit_price || item.cost);
+      const total = currencyValue(item.total || item.amount || quantity * unitCost);
+      if (!description || total <= 0) return null;
+      return {
+        description,
+        sku: item.sku || item.itemNumber || item.item_number || item.productCode || null,
+        quantity,
+        unitCost: unitCost || total / quantity,
+        total,
+        category: inferCostCategory(description),
+      };
+    })
+    .filter(Boolean) as InvoiceItem[];
+}
+
+function parseInvoicePayload(input: z.infer<typeof importSchema>): ParsedInvoicePayload {
   if (input.csvData?.trim()) {
     const items = parseCSV(input.csvData);
     if (items.length) {
@@ -219,6 +288,141 @@ function parseInvoicePayload(input: z.infer<typeof importSchema>) {
   const rawText = input.rawText?.trim() || input.csvData?.trim() || '';
   const parsed = parseTextInvoice(rawText);
   return { ...parsed, rawText };
+}
+
+async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffer): Promise<ParsedInvoicePayload> {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is required for OCR on PDF or image invoices.');
+  }
+  const mimeType = file.type || 'application/octet-stream';
+  const base64 = arrayBufferToBase64(buffer);
+  const isPdf = mimeType.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
+  const fileContent = isPdf
+    ? { type: 'input_file', filename: file.name || 'invoice.pdf', file_data: `data:${mimeType};base64,${base64}` }
+    : { type: 'input_image', image_url: `data:${mimeType};base64,${base64}`, detail: 'high' };
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: env.OPENAI_OCR_MODEL || 'gpt-4.1-mini',
+      input: [{
+        role: 'user',
+        content: [
+          fileContent,
+          {
+            type: 'input_text',
+            text: [
+              'Extract this painting supplier invoice or statement for job-cost review.',
+              'Return JSON only with keys: supplier, invoiceNumber, invoiceDate, totalAmount, rawText, confidence, items.',
+              'items must be an array of {description, sku, quantity, unitCost, total}.',
+              'Prefer line-item detail for paint products, primer, sundries, rentals, and supplies.',
+              'Use null for unknown values; do not invent values.',
+            ].join(' '),
+          },
+        ],
+      }],
+      max_output_tokens: 1800,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OCR request failed: ${errorText.slice(0, 240)}`);
+  }
+
+  const payload = await response.json();
+  const parsed = parseJsonObject(responseText(payload));
+  const items = normalizeOcrItems(parsed.items);
+  const rawText = String(parsed.rawText || parsed.raw_text || [
+    parsed.supplier,
+    parsed.invoiceNumber,
+    parsed.invoiceDate,
+    ...(items.map((item) => `${item.description} ${item.sku || ''} ${item.quantity} ${item.unitCost} ${item.total}`)),
+  ].filter(Boolean).join('\n'));
+
+  return {
+    items: items.length ? items : parseTextInvoice(rawText).items,
+    extracted: {
+      supplier: parsed.supplier || null,
+      invoiceNumber: parsed.invoiceNumber || parsed.invoice_number || null,
+      invoiceDate: parsed.invoiceDate || parsed.invoice_date || null,
+      totalAmount: parsed.totalAmount || parsed.total_amount || null,
+    },
+    confidence: clampConfidence(Number(parsed.confidence || 0.74)),
+    rawText,
+    metadata: {
+      extractionMethod: isPdf ? 'openai_pdf_ocr' : 'openai_image_ocr',
+      openaiModel: env.OPENAI_OCR_MODEL || 'gpt-4.1-mini',
+      contentType: mimeType,
+      fileName: file.name,
+    },
+  };
+}
+
+async function parseMultipartInvoice(c: any): Promise<{ input: z.infer<typeof importSchema>; parsed: ParsedInvoicePayload; fileMetadata?: Record<string, unknown> }> {
+  const formData = await c.req.formData();
+  const file = formData.get('file') as File | null;
+  const input = importSchema.parse({
+    sourceType: 'upload',
+    supplier: formData.get('supplier') || null,
+    invoiceNumber: formData.get('invoiceNumber') || null,
+    invoiceDate: formData.get('invoiceDate') || null,
+    senderEmail: formData.get('senderEmail') || null,
+    originalFilename: file?.name || null,
+    rawText: formData.get('rawText') || null,
+    csvData: formData.get('csvData') || null,
+    jobId: formData.get('jobId') || null,
+  });
+
+  if (!file || file.size === 0) {
+    return { input, parsed: parseInvoicePayload(input) };
+  }
+  if (file.size > MAX_INVOICE_FILE_BYTES) {
+    throw new Error('Invoice file must be 15 MB or smaller.');
+  }
+
+  const buffer = await file.arrayBuffer();
+  const fileName = safeFileName(file.name || `invoice-${Date.now()}`);
+  const fileKey = `supplier-invoices/${c.get('orgId')}/${Date.now()}-${fileName}`;
+  if (c.env.R2) {
+    await c.env.R2.put(fileKey, buffer, {
+      httpMetadata: { contentType: file.type || 'application/octet-stream' },
+      customMetadata: { originalName: file.name || fileName },
+    });
+  }
+
+  const textLike = /text|csv|json/i.test(file.type) || /\.(csv|txt|json)$/i.test(file.name || '');
+  const fileText = textLike ? new TextDecoder().decode(buffer) : '';
+  const parsed = textLike
+    ? parseInvoicePayload({ ...input, rawText: fileText, csvData: /\.(csv)$/i.test(file.name || '') ? fileText : input.csvData })
+    : await extractInvoiceWithOpenAI(c.env, file, buffer);
+
+  return {
+    input,
+    parsed: {
+      ...parsed,
+      rawText: [input.rawText, parsed.rawText].filter(Boolean).join('\n').trim(),
+      metadata: {
+        ...parsed.metadata,
+        fileKey,
+        fileName: file.name || fileName,
+        fileSize: file.size,
+        contentType: file.type || 'application/octet-stream',
+        storedInR2: Boolean(c.env.R2),
+      },
+    },
+    fileMetadata: {
+      fileKey,
+      fileName: file.name || fileName,
+      fileSize: file.size,
+      contentType: file.type || 'application/octet-stream',
+      storedInR2: Boolean(c.env.R2),
+    },
+  };
 }
 
 function inferCostCategory(description: string) {
@@ -340,6 +544,7 @@ async function applyInvoiceImport(
   const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems as InvoiceItem[] : [];
   const supplier = invoiceImport.supplier || 'Unknown supplier';
   const totalAmount = items.reduce((sum, item) => sum + currencyValue(item.total), 0) || currencyValue(invoiceImport.totalAmount);
+  const extractedData = invoiceImport.extractedData as { fileKey?: string } | null;
 
   const [purchase] = await db.insert(materialPurchases).values({
     orgId,
@@ -348,6 +553,7 @@ async function applyInvoiceImport(
     invoiceNumber: invoiceImport.invoiceNumber || null,
     invoiceDate: invoiceImport.invoiceDate || null,
     totalAmount: totalAmount.toFixed(2),
+    fileUrl: extractedData?.fileKey ? `/v1/invoices/imports/${invoiceImport.id}/file` : null,
     parsedData: items,
   }).returning();
 
@@ -527,8 +733,20 @@ invoicesApp.post('/imports', async (c) => {
   if (!await ensurePremiumAccess(db, orgId, c.env)) {
     return c.json({ error: 'Supplier invoice automation is a premium feature.' }, 402);
   }
-  const input = importSchema.parse(await c.req.json());
-  const parsed = parseInvoicePayload(input);
+  let input: z.infer<typeof importSchema>;
+  let parsed: ParsedInvoicePayload;
+  try {
+    if ((c.req.header('content-type') || '').includes('multipart/form-data')) {
+      const multipart = await parseMultipartInvoice(c);
+      input = multipart.input;
+      parsed = multipart.parsed;
+    } else {
+      input = importSchema.parse(await c.req.json());
+      parsed = parseInvoicePayload(input);
+    }
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Failed to process supplier invoice.' }, 400);
+  }
   if (!parsed.rawText?.trim()) return c.json({ error: 'Paste supplier invoice text or CSV data.' }, 400);
   if (!parsed.items.length) return c.json({ error: 'No invoice line items could be extracted.' }, 400);
 
@@ -553,10 +771,11 @@ invoicesApp.post('/imports', async (c) => {
     originalFilename: input.originalFilename || null,
     rawText: parsed.rawText,
     extractedData: {
-      extractionMethod: input.csvData ? 'csv' : 'deterministic_text',
+      extractionMethod: parsed.metadata?.extractionMethod || (input.csvData ? 'csv' : 'deterministic_text'),
       extractedSupplier,
       invoiceNumber,
       source: input.sourceType,
+      ...parsed.metadata,
     },
     extractedItems: parsed.items,
     totalAmount: totalAmount.toFixed(2),
@@ -599,6 +818,23 @@ invoicesApp.get('/imports/learning', async (c) => {
     }),
   ]);
   return c.json({ data: { stats, feedback } });
+});
+
+invoicesApp.get('/imports/:id/file', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const invoiceImport = await db.query.supplierInvoiceImports.findFirst({
+    where: and(eq(supplierInvoiceImports.id, c.req.param('id')), eq(supplierInvoiceImports.orgId, orgId)),
+  });
+  if (!invoiceImport) return c.json({ error: 'Invoice import not found' }, 404);
+  const data = invoiceImport.extractedData as { fileKey?: string; contentType?: string; fileName?: string } | null;
+  if (!data?.fileKey || !c.env.R2) return c.json({ error: 'Invoice file is not available' }, 404);
+  const object = await c.env.R2.get(data.fileKey);
+  if (!object) return c.json({ error: 'Invoice file is not available' }, 404);
+  const headers = new Headers();
+  headers.set('Content-Type', data.contentType || object.httpMetadata?.contentType || 'application/octet-stream');
+  headers.set('Content-Disposition', `inline; filename="${safeFileName(data.fileName || 'invoice')}"`);
+  return new Response(object.body, { headers });
 });
 
 invoicesApp.post('/imports/:id/approve', async (c) => {

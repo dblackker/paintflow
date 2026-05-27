@@ -580,6 +580,7 @@ export function Invoices() {
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
   const [reviewJobByImport, setReviewJobByImport] = useState<Record<string, string>>({});
   const [busyImportId, setBusyImportId] = useState('');
+  const [selectedInvoiceFile, setSelectedInvoiceFile] = useState<File | null>(null);
 
   const jobsByEstimateId = useMemo(() => new Map(jobs.filter((job) => job.estimateId).map((job) => [job.estimateId as string, job])), [jobs]);
   const jobsById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
@@ -710,6 +711,7 @@ export function Invoices() {
 
   function openUploadModal() {
     setForm(emptyUploadForm);
+    setSelectedInvoiceFile(null);
     setUploadModalOpen(true);
   }
 
@@ -746,7 +748,21 @@ export function Invoices() {
     event.preventDefault();
     setIsUploading(true);
     try {
-      const payload = await apiJson<{ data?: InvoiceImport }>('/v1/invoices/imports', {
+      const fileToUpload = selectedInvoiceFile;
+      const body = fileToUpload ? new FormData() : null;
+      if (body && fileToUpload) {
+        body.set('file', fileToUpload);
+        body.set('supplier', form.supplier || '');
+        body.set('invoiceNumber', form.invoiceNumber || '');
+        body.set('senderEmail', form.senderEmail || '');
+        body.set('rawText', form.rawText || '');
+        body.set('jobId', form.jobId || '');
+      }
+      const payload = await apiJson<{ data?: InvoiceImport }>('/v1/invoices/imports', fileToUpload ? {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+        body,
+      } : {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1176,7 +1192,7 @@ export function Invoices() {
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h2 id="invoice-upload-title" className="pf-section-title">Review supplier invoice</h2>
-                <p className="pf-copy mt-1">Paste receipt text or CSV. PaintFlow will stage the job match and material costs for approval.</p>
+                <p className="pf-copy mt-1">Upload a PDF/image or paste receipt text. PaintFlow will stage the job match and material costs for approval.</p>
               </div>
               <button type="button" className="btn-icon" aria-label="Close invoice upload" onClick={closeUploadModal}>
                 <Icon name="close" className="h-5 w-5" />
@@ -1211,15 +1227,27 @@ export function Invoices() {
                 value={form.senderEmail}
                 onChange={(event) => setForm({ ...form, senderEmail: event.target.value })}
               />
+              <label className="block">
+                <span className="form-label">Invoice file</span>
+                <input
+                  className="input mt-1"
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg,image/webp,text/csv,text/plain,.csv,.txt"
+                  onChange={(event) => setSelectedInvoiceFile(event.target.files?.[0] || null)}
+                />
+                <span className="pf-helper mt-1 block">
+                  PDF and image OCR uses OpenAI when configured. CSV and text files are parsed directly.
+                </span>
+              </label>
               <Textarea
-                label="Invoice text or CSV"
-                required
+                label={selectedInvoiceFile ? 'Notes or fallback text' : 'Invoice text or CSV'}
+                required={!selectedInvoiceFile}
                 rows={8}
                 autoComplete="off"
                 autoCapitalize="off"
                 spellCheck={false}
                 className="font-mono text-sm"
-                placeholder="Paste receipt OCR text or CSV data here..."
+                placeholder={selectedInvoiceFile ? 'Optional: paste any visible text if OCR needs help...' : 'Paste receipt OCR text or CSV data here...'}
                 value={form.rawText}
                 onChange={(event) => setForm({ ...form, rawText: event.target.value })}
               />
@@ -1230,10 +1258,10 @@ export function Invoices() {
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
                 <div className="flex items-center gap-2">
                   <Badge variant="purple" size="sm">Premium</Badge>
-                  <p className="pf-row-title">Receipt automation path</p>
+                  <p className="pf-row-title">OCR and receipt automation</p>
                 </div>
                 <p className="pf-copy mt-1">
-                  The review queue is designed for a future receipts inbox where approved supplier senders can forward statements and land here before costs are posted.
+                  File OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. The review queue is also ready for a future receipts inbox where approved supplier senders can forward statements.
                 </p>
               </div>
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">

@@ -111,6 +111,9 @@ Set in Cloudflare dashboard or wrangler.toml:
 - `EMAIL_FROM_NAME` - Sender display name
 - `MAILCHANNELS_API_KEY` - MailChannels Email API key
 - `RESEND_API_KEY` - Optional fallback email API key when using `EMAIL_PROVIDER=resend`
+- `OPENAI_API_KEY` - Optional secret for supplier invoice PDF/image OCR
+- `OPENAI_OCR_MODEL` - Optional OCR model override, defaults to `gpt-4.1-mini`
+- `INVOICE_AUTOMATION_ENABLED` - Optional feature flag for supplier invoice automation outside paid plans
 - `CF_ACCOUNT_ID` - Cloudflare account ID
 - `CF_API_TOKEN` - Cloudflare API token
 
