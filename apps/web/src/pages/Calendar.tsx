@@ -520,6 +520,10 @@ export function Calendar() {
       setQuickSchedule(null);
       return;
     }
+    if (!unscheduledJobs.length) {
+      window.showToast?.('No unscheduled jobs.', 'info');
+      return;
+    }
     const firstJob = unscheduledJobs[0];
     setQuickSchedule({
       dayKey: dayKeyValue,
@@ -1111,12 +1115,7 @@ export function Calendar() {
 
   function renderQuickSchedule(dayKeyValue: string) {
     if (!unscheduledJobs.length) {
-      return (
-        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
-          <p className="pf-emphasis">No unscheduled jobs right now.</p>
-          <p className="pf-helper mt-1">Use Unschedule on a scheduled job card to move it back into Needs scheduling and try the flow.</p>
-        </div>
-      );
+      return null;
     }
     return (
       <form className="mt-3 grid gap-2 rounded-lg border border-blue-100 bg-blue-50 p-3" onSubmit={handleQuickSchedule}>
