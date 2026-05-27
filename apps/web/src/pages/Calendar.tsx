@@ -588,18 +588,12 @@ export function Calendar() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+      <div className="mb-4">
         <div>
           <p className="pf-copy max-w-2xl">
             Put accepted jobs on the production calendar, spot jobs missing dates, and keep Google Calendar as an optional external sync.
           </p>
           <div className="mt-3">{renderCompactStats()}</div>
-        </div>
-        <div className="lg:justify-self-end">
-          <div className="pf-segmented-group" aria-label="Calendar view">
-            <button type="button" aria-pressed={viewMode === 'week'} onClick={() => setViewMode('week')}>Week</button>
-            <button type="button" aria-pressed={viewMode === 'month'} onClick={() => setViewMode('month')}>Month</button>
-          </div>
         </div>
       </div>
 
@@ -617,30 +611,36 @@ export function Calendar() {
 
       {renderWeatherPanel()}
 
-      <Card className="sticky top-[4.4rem] z-20 mb-5 bg-white/95 backdrop-blur lg:ml-auto lg:max-w-md" padding="sm">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
-          <button
-            type="button"
-            className="btn-icon btn-icon-outlined"
-            aria-label={viewMode === 'month' ? 'Previous month' : 'Previous week'}
-            onClick={() => shiftCalendar(-1)}
-          >
-            <Icon name="chevron-left" className="h-4 w-4" />
-          </button>
-          <div className="min-w-0 text-center">
-            <p className="pf-emphasis truncate">{calendarTitle()}</p>
-            <button type="button" className="mt-1 text-sm font-medium text-blue-700 hover:text-blue-800" onClick={resetCalendar}>
-              Today
+      <Card className="sticky top-[4.4rem] z-20 mb-5 bg-white/95 backdrop-blur" padding="sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="pf-segmented-group w-full sm:w-auto" aria-label="Calendar view">
+            <button type="button" aria-pressed={viewMode === 'week'} onClick={() => setViewMode('week')}>Week</button>
+            <button type="button" aria-pressed={viewMode === 'month'} onClick={() => setViewMode('month')}>Month</button>
+          </div>
+          <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:min-w-80">
+            <button
+              type="button"
+              className="btn-icon btn-icon-outlined"
+              aria-label={viewMode === 'month' ? 'Previous month' : 'Previous week'}
+              onClick={() => shiftCalendar(-1)}
+            >
+              <Icon name="chevron-left" className="h-4 w-4" />
+            </button>
+            <div className="min-w-0 text-center">
+              <p className="pf-emphasis truncate">{calendarTitle()}</p>
+              <button type="button" className="mt-1 text-sm font-medium text-blue-700 hover:text-blue-800" onClick={resetCalendar}>
+                Today
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn-icon btn-icon-outlined"
+              aria-label={viewMode === 'month' ? 'Next month' : 'Next week'}
+              onClick={() => shiftCalendar(1)}
+            >
+              <Icon name="chevron-right" className="h-4 w-4" />
             </button>
           </div>
-          <button
-            type="button"
-            className="btn-icon btn-icon-outlined"
-            aria-label={viewMode === 'month' ? 'Next month' : 'Next week'}
-            onClick={() => shiftCalendar(1)}
-          >
-            <Icon name="chevron-right" className="h-4 w-4" />
-          </button>
         </div>
       </Card>
 
