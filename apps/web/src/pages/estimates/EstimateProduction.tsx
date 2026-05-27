@@ -71,17 +71,6 @@ interface Estimate {
   publicUrl?: string | null;
 }
 
-interface EstimateEmailPreview {
-  to?: string | null;
-  previewUrl?: string | null;
-  subject?: string | null;
-  preheader?: string | null;
-  html?: string | null;
-  text?: string | null;
-  templateName?: string | null;
-  estimate?: Estimate | null;
-}
-
 interface EstimatePackage {
   name?: string;
   estimateType?: EstimateType | string;
@@ -310,8 +299,6 @@ export function EstimateProduction() {
   const [starterCollapsed, setStarterCollapsed] = useState(false);
   const [starterSkipped, setStarterSkipped] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [emailPreview, setEmailPreview] = useState<EstimateEmailPreview | null>(null);
-  const [emailReason, setEmailReason] = useState<'sent' | 'updated'>('sent');
   const [isLoading, setIsLoading] = useState(true);
   const [setupError, setSetupError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -818,20 +805,19 @@ export function EstimateProduction() {
     }];
   }
 
-  async function persistEstimate(statusValue: 'draft' | 'sent', options?: { prepareEmail?: boolean }) {
+  async function persistEstimate(statusValue: 'draft' | 'sent') {
     if (!leadId) {
       window.showToast?.('Select a customer first', 'error');
       return;
     }
-    const preparingEmail = Boolean(options?.prepareEmail);
-    const effectiveStatus = preparingEmail && !editingSent ? 'draft' : editingSent ? 'sent' : statusValue;
+    const effectiveStatus = editingSent ? 'sent' : statusValue;
     const packages = buildPackages();
-    if ((statusValue === 'sent' || effectiveStatus !== 'draft') && !packages.length) {
+    if (effectiveStatus !== 'draft' && !packages.length) {
       window.showToast?.('Add at least one measured substrate.', 'error');
       return;
     }
     setIsSaving(true);
-    setSaveStatus(preparingEmail ? 'Preparing email preview...' : effectiveStatus === 'draft' ? 'Saving draft estimate...' : editingSent ? 'Sending update email...' : 'Creating and emailing estimate...');
+    setSaveStatus(effectiveStatus === 'draft' ? 'Saving draft estimate...' : editingSent ? 'Sending update email...' : 'Creating and emailing estimate...');
     try {
       const isEditing = Boolean(editingEstimate?.id || estimateId);
       const targetId = editingEstimate?.id || estimateId;
@@ -843,23 +829,6 @@ export function EstimateProduction() {
         },
         body: JSON.stringify({ leadId, ...jobsite, packages, status: effectiveStatus }),
       });
-      setEditingEstimate(response.data);
-      if (preparingEmail) {
-        const reason = editingSent ? 'updated' : 'sent';
-        const preview = await apiJson<{ data?: EstimateEmailPreview }>(`/v1/estimates/${response.data.id}/email-preview`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Idempotency-Key': crypto.randomUUID(),
-          },
-          body: JSON.stringify({ reason }),
-        });
-        setEmailReason(reason);
-        setEmailPreview(preview.data || null);
-        setShowPreview(false);
-        setSaveStatus('');
-        return;
-      }
       let sendResult: { previewUrl?: string } | null = null;
       if (effectiveStatus === 'sent') {
         const sent = await apiJson<{ data?: { previewUrl?: string } }>(`/v1/estimates/${response.data.id}/send-email`, {
@@ -881,37 +850,6 @@ export function EstimateProduction() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save estimate';
-      setSaveStatus(message);
-      window.showToast?.(message, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function sendEstimateEmail() {
-    if (!emailPreview?.estimate?.id) return;
-    setIsSaving(true);
-    setSaveStatus(emailReason === 'updated' ? 'Sending update email...' : 'Sending estimate email...');
-    try {
-      const sent = await apiJson<{ data?: { previewUrl?: string; to?: string } }>(`/v1/estimates/${emailPreview.estimate.id}/send-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-        body: JSON.stringify({
-          reason: emailReason,
-          subject: emailPreview.subject,
-          preheader: emailPreview.preheader,
-          html: emailPreview.html,
-          text: emailPreview.text,
-        }),
-      });
-      window.showToast?.(sent.data?.to ? `Estimate emailed to ${sent.data.to}` : 'Estimate emailed', 'success');
-      const previewUrl = sent.data?.previewUrl || emailPreview.previewUrl || `/estimates/${emailPreview.estimate.id}`;
-      window.location.replace(new URL(previewUrl, window.location.origin).pathname);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to send estimate email';
       setSaveStatus(message);
       window.showToast?.(message, 'error');
     } finally {
@@ -1260,65 +1198,9 @@ export function EstimateProduction() {
           editingSent={Boolean(editingSent)}
           totals={totals}
           onCancel={() => setShowPreview(false)}
-          onSend={() => persistEstimate('sent', { prepareEmail: true })}
+          onSend={() => persistEstimate('sent')}
           isSaving={isSaving}
         />
-      </Modal>
-
-      <Modal isOpen={Boolean(emailPreview)} onClose={() => setEmailPreview(null)} title={emailReason === 'updated' ? 'Preview Update Email' : 'Preview Estimate Email'} size="xl">
-        {emailPreview && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <p className="pf-meta">To</p>
-              <p className="pf-copy break-all">{emailPreview.to || selectedLead?.email || 'Customer email missing'}</p>
-              <label className="mt-3 block">
-                <span className="form-label">Subject</span>
-                <input
-                  className="input mt-1"
-                  value={emailPreview.subject || ''}
-                  onChange={(event) => setEmailPreview((current) => current ? { ...current, subject: event.target.value } : current)}
-                />
-              </label>
-              <label className="mt-3 block">
-                <span className="form-label">Preview text</span>
-                <input
-                  className="input mt-1"
-                  value={emailPreview.preheader || ''}
-                  onChange={(event) => setEmailPreview((current) => current ? { ...current, preheader: event.target.value } : current)}
-                />
-              </label>
-            </div>
-            <div>
-              <span className="form-label">Email body</span>
-              <div
-                className="mt-1 min-h-56 rounded-lg border border-gray-200 bg-white p-4 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                contentEditable
-                suppressContentEditableWarning
-                onBlur={(event) => setEmailPreview((current) => current ? { ...current, html: event.currentTarget.innerHTML } : current)}
-                dangerouslySetInnerHTML={{ __html: emailPreview.html || '' }}
-              />
-              <span className="pf-helper mt-1 block">Click into the email body to personalize this send. The saved email template is unchanged.</span>
-            </div>
-            <iframe
-              title="Estimate email preview"
-              className="h-[30rem] w-full rounded-lg border border-gray-200 bg-white"
-              sandbox=""
-              srcDoc={emailPreview.html || '<p>Email preview unavailable.</p>'}
-            />
-            {emailPreview.previewUrl && (
-              <label className="block">
-                <span className="form-label">Customer preview link</span>
-                <input readOnly className="input mt-1" value={emailPreview.previewUrl} onFocus={(event) => event.currentTarget.select()} />
-              </label>
-            )}
-            <ModalFooter className="-mx-6 -mb-4 mt-4">
-              <button type="button" className="btn-secondary" onClick={() => setEmailPreview(null)}>Keep editing</button>
-              <button type="button" className="btn-primary" disabled={!emailPreview.to || isSaving} onClick={sendEstimateEmail}>
-                {isSaving ? 'Sending...' : emailReason === 'updated' ? 'Send update email' : 'Send email'}
-              </button>
-            </ModalFooter>
-          </div>
-        )}
       </Modal>
     </div>
   );
