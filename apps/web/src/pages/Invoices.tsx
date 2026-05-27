@@ -519,7 +519,7 @@ export function Invoices() {
         apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
         apiJson<{ data?: ChangeOrder[] }>('/v1/change-orders').catch(() => ({ data: [] })),
-        apiJson<{ data?: Payment[] }>('/v1/billing/history').catch(() => ({ data: [] })),
+        apiJson<{ data?: Payment[] }>('/v1/payments/history').catch(() => ({ data: [] })),
         apiJson<{ data?: Lead[] }>('/v1/leads?limit=200').catch(() => ({ data: [] })),
         apiJson<{ data?: { milestones?: PaymentMilestone[] } }>('/v1/settings/payment-schedule').catch(() => ({ data: { milestones: [] } })),
       ]);
@@ -659,7 +659,7 @@ export function Invoices() {
     if (confirmAdditionalPayment && !window.confirm(`This customer already has ${formatMoney(paymentReceivable.paid)} recorded. Confirm this is an additional payment and not a duplicate.`)) return;
     setIsRecordingPayment(true);
     try {
-      await apiJson('/v1/billing/manual', {
+      await apiJson('/v1/payments/manual', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

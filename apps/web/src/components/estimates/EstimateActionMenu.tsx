@@ -67,13 +67,14 @@ function buildActions(estimate: EstimateActionMenuEstimate) {
   const isSignedAgreement = Boolean(estimate.signedAt) || status === 'accepted';
   const canReviseAgreement = isSignedAgreement && status === 'accepted';
   const canVoidAgreement = isSignedAgreement && status === 'accepted';
-  const isInactiveAgreement = ['voided', 'superseded'].includes(status);
+  const isInactiveAgreement = ['canceled', 'voided', 'superseded'].includes(status);
+  const canPreview = !['draft', 'canceled'].includes(status);
   const canRecordPayment = estimate.id && !['draft', 'canceled', 'voided', 'superseded'].includes(status) && estimateBalance(estimate) > 0.005;
   const actions: EstimateActionDefinition[] = [];
 
   if (isInactiveAgreement) actions.push({ key: 'details', label: 'View details', href: `/estimates/${estimate.id}/details`, priority: true });
   if (canEdit) actions.push({ key: 'edit', label: status === 'sent' ? 'Edit sent' : 'Edit draft', href: `/estimates/production?estimateId=${estimate.id}`, priority: true });
-  if (status !== 'draft') actions.push({ key: 'preview', label: 'Preview link', href: previewHref(estimate), priority: !canEdit });
+  if (canPreview) actions.push({ key: 'preview', label: 'Preview link', href: previewHref(estimate), priority: !canEdit });
   if (canRecordPayment) actions.push({ key: 'payment', label: 'Record payment', action: 'payment' });
   if (canReviseAgreement) actions.push({ key: 'revise', label: 'Create revision', action: 'revise' });
   if (canCancel) actions.push({ key: 'cancel', label: 'Cancel', action: 'cancel', destructive: true });

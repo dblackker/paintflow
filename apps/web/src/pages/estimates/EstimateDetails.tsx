@@ -257,6 +257,7 @@ export function EstimateDetails() {
   const optionalItems = useMemo(() => packageItems(pkg).filter((item) => item.customerVisible !== false && item.optional), [pkg]);
   const previewPath = estimate?.customerPreviewUrl || estimate?.publicUrl || (estimate ? `/estimates/${estimate.id}` : '/estimates');
   const previewHref = previewPath.startsWith('http') ? new URL(previewPath).pathname : previewPath;
+  const canPreview = Boolean(estimate && !['draft', 'canceled'].includes(estimate.status));
   const netPaid = (estimate?.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
   const canCountersign = Boolean(estimate && !estimate.contractorSignature?.signedAt && !['canceled', 'voided', 'superseded'].includes(estimate.status));
 
@@ -339,10 +340,10 @@ export function EstimateDetails() {
                   <h1 className="pf-section-title">Estimate {estimate.id.slice(0, 8)}</h1>
                   <StatusBadge status={estimate.status} />
                 </div>
-                <p className="pf-copy mt-2">Internal contractor record. Customer preview links for voided or superseded agreements remain inactive.</p>
+                <p className="pf-copy mt-2">Internal contractor record. Inactive agreements remain available here for scope, payment, and audit history.</p>
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
-                <Button as="a" href={previewHref} variant="secondary" size="sm">Preview link</Button>
+                {canPreview && <Button as="a" href={previewHref} variant="secondary" size="sm">Preview link</Button>}
                 {(['draft', 'sent'].includes(estimate.status) && !estimate.signedAt) && (
                   <Button as="a" href={`/estimates/production?estimateId=${estimate.id}`} size="sm">Edit estimate</Button>
                 )}
