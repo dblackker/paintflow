@@ -113,6 +113,11 @@ function scheduleLabel(job: Job) {
   return 'Needs date';
 }
 
+function laborHoursLabel(value: unknown) {
+  const hours = numberValue(value);
+  return `${hours.toLocaleString(undefined, { maximumFractionDigits: 1 })} labor hr${hours === 1 ? '' : 's'}`;
+}
+
 export function JobsList() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -340,71 +345,71 @@ function JobCard({
   const completed = String(job.status || '').toLowerCase() === 'completed';
 
   return (
-    <article className="rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md">
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_220px]">
-        <div className="min-w-0">
-          <div className="p-4 sm:p-5">
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <Link to={`/jobs/${job.id}`} className="pf-row-title block truncate hover:text-blue-700">
-                  {displayJobName(job)}
-                </Link>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  {job.leadName && (
-                    <Link to={job.leadId ? `/leads/${job.leadId}` : `/jobs/${job.id}`} className="pf-copy truncate hover:text-blue-700">
-                      {job.leadName}
-                    </Link>
-                  )}
-                  {job.jobNumber && <Badge size="sm" variant="default">{job.jobNumber}</Badge>}
-                </div>
-              </div>
-              <div className={`inline-flex w-fit items-baseline gap-1 rounded-lg border px-3 py-2 ${marginTone(margin)}`}>
-                <span className="pf-section-title">{margin.toFixed(1)}%</span>
-                <span className="pf-meta">margin</span>
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-              <AddressInline address={address} className="pf-copy" />
-              <Link to="/calendar" className="btn-text btn-sm justify-start sm:justify-end" title="Open calendar">
-                <Icon name="calendar" className="h-4 w-4" />
-                {scheduleLabel(job)}
+    <article className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md">
+      <div className="p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Link to={`/jobs/${job.id}`} className="pf-row-title min-w-0 truncate hover:text-blue-700">
+                {displayJobName(job)}
               </Link>
+              {job.jobNumber && <Badge size="sm" variant="default">{job.jobNumber}</Badge>}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {job.leadName && (
+                <Link to={job.leadId ? `/leads/${job.leadId}` : `/jobs/${job.id}`} className="pf-copy truncate hover:text-blue-700">
+                  {job.leadName}
+                </Link>
+              )}
+              <span className="pf-meta">{laborHoursLabel(laborHours)}</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-2 border-t bg-gray-50/60 p-3 sm:gap-3 sm:px-5">
-            <MiniMetric label="Revenue" value={formatMoney(revenue)} />
-            <MiniMetric label="Actual Cost" value={formatMoney(actualCost)} />
-            <MiniMetric label="Profit" value={formatMoney(profit)} />
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <StatusBadge status={String(job.status || 'scheduled')} />
+            <div className={`inline-flex w-fit items-baseline gap-1 rounded-lg border px-2.5 py-1.5 ${marginTone(margin)}`}>
+              <span className="pf-row-title">{margin.toFixed(1)}%</span>
+              <span className="pf-meta">margin</span>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col justify-between gap-3 border-t p-3 sm:flex-row sm:items-center lg:border-l lg:border-t-0 lg:p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link to="/calendar" className="inline-flex" title="Open calendar">
-              <StatusBadge status={String(job.status || 'scheduled')} />
-            </Link>
-            <span className="pf-meta">{Number(laborHours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} labor hrs</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-1">
-            <button type="button" className="btn-text btn-sm" onClick={onLogTime}>
-              <Icon name="clock" className="h-4 w-4" />
-              Time
+        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <AddressInline address={address} className="pf-copy" />
+          <Link to="/calendar" className="btn-text btn-sm justify-start sm:justify-end" title="Open schedule">
+            <Icon name="calendar" className="h-4 w-4" />
+            {scheduleLabel(job)}
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 border-y bg-gray-50/60 p-3 sm:gap-3 sm:px-5">
+        <MiniMetric label="Revenue" value={formatMoney(revenue)} />
+        <MiniMetric label="Actual Cost" value={formatMoney(actualCost)} />
+        <MiniMetric label="Profit" value={formatMoney(profit)} />
+      </div>
+
+      <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="pf-meta">
+          {completed ? 'Completed work' : 'Active production work'}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Link to={`/jobs/${job.id}`} className="btn-primary btn-sm">
+            View job
+            <Icon name="arrow-right" className="h-4 w-4" />
+          </Link>
+          <button type="button" className="btn-text btn-sm" onClick={onLogTime}>
+            <Icon name="clock" className="h-4 w-4" />
+            Add time
+          </button>
+          {completed ? (
+            <button type="button" className="btn-text btn-sm" onClick={onRequestReview} disabled={isRequestingReview}>
+              {isRequestingReview ? 'Sending...' : 'Request review'}
             </button>
-            {completed ? (
-              <button type="button" className="btn-text btn-sm" onClick={onRequestReview} disabled={isRequestingReview}>
-                {isRequestingReview ? 'Sending...' : 'Review'}
-              </button>
-            ) : (
-              <button type="button" className="btn-text btn-sm text-green-700" onClick={onMarkComplete} disabled={isUpdating}>
-                {isUpdating ? 'Updating...' : 'Complete'}
-              </button>
-            )}
-            <Link to={`/jobs/${job.id}`} className="btn-icon btn-icon-tonal" aria-label="Open job" title="Open job">
-              <Icon name="arrow-right" className="h-4 w-4" />
-            </Link>
-          </div>
+          ) : (
+            <button type="button" className="btn-text btn-sm text-green-700" onClick={onMarkComplete} disabled={isUpdating}>
+              {isUpdating ? 'Updating...' : 'Mark complete'}
+            </button>
+          )}
         </div>
       </div>
     </article>
@@ -413,7 +418,7 @@ function JobCard({
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-2 sm:p-3">
+    <div className="min-w-0 rounded-lg border border-gray-200 bg-white p-2 sm:p-3">
       <p className="pf-metric-label truncate">{labelize(label)}</p>
       <p className="pf-row-title mt-1 truncate">{value}</p>
     </div>
