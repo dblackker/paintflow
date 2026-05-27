@@ -1,37 +1,27 @@
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/Card';
+import { Icon } from '@/components/Icon';
 
 export function Help() {
   const sections = [
-    { id: 'getting-started', icon: '🚀', title: 'Getting Started', desc: 'Set up your account and send your first estimate' },
-    { id: 'estimates', icon: '💰', title: 'Estimates', desc: 'Create Good/Better/Best pricing' },
-    { id: 'scheduling', icon: '📅', title: 'Scheduling', desc: 'Manage jobs and calendar' },
-    { id: 'billing', icon: '💳', title: 'Billing', desc: 'Stripe, QuickBooks, and payments' },
+    { id: 'getting-started', icon: 'check', title: 'Getting Started', desc: 'Set up your account and send your first estimate' },
+    { id: 'estimates', icon: 'file-text', title: 'Estimates', desc: 'Create and send painting proposals' },
+    { id: 'scheduling', icon: 'calendar', title: 'Scheduling', desc: 'Manage jobs and calendar' },
+    { id: 'billing', icon: 'credit-card', title: 'Billing', desc: 'Stripe, QuickBooks, and payments' },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold">P</div>
-              <span className="text-xl font-semibold">PaintFlow</span>
-            </Link>
-            <Link to="/login" className="text-blue-600 font-medium">Sign In</Link>
-          </div>
-        </div>
-      </nav>
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h1 className="text-4xl font-bold mb-8">Help Center</h1>
+    <div className="mx-auto max-w-4xl py-6 sm:py-8">
+      <main>
+        <h1 className="pf-page-title mb-8">Help Center</h1>
         
         <div className="grid md:grid-cols-2 gap-6 mb-12">
           {sections.map(section => (
             <a key={section.id} href={`#${section.id}`}>
               <Card className="h-full hover:shadow-md transition-shadow cursor-pointer">
                 <CardContent className="p-6">
-                  <h3 className="font-semibold mb-2">{section.icon} {section.title}</h3>
-                  <p className="text-sm text-gray-600">{section.desc}</p>
+                  <h3 className="pf-row-title mb-2 flex items-center gap-2"><Icon name={section.icon} className="h-4 w-4 text-blue-700" />{section.title}</h3>
+                  <p className="pf-copy">{section.desc}</p>
                 </CardContent>
               </Card>
             </a>

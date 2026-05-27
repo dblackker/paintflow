@@ -288,15 +288,15 @@ function jobWorkDayInfo(job: Job, day: Date) {
 }
 
 function weatherMeta(code?: number | null) {
-  if (code === 0) return { icon: '☀️', label: 'Sunny' };
-  if ([1, 2].includes(Number(code))) return { icon: '🌤️', label: 'Partly cloudy' };
-  if (code === 3) return { icon: '☁️', label: 'Cloudy' };
-  if ([45, 48].includes(Number(code))) return { icon: '🌫️', label: 'Fog' };
-  if ([51, 53, 55, 56, 57].includes(Number(code))) return { icon: '🌦️', label: 'Drizzle' };
-  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(Number(code))) return { icon: '🌧️', label: 'Rain' };
-  if ([71, 73, 75, 77, 85, 86].includes(Number(code))) return { icon: '❄️', label: 'Snow' };
-  if ([95, 96, 99].includes(Number(code))) return { icon: '⛈️', label: 'Storms' };
-  return { icon: '🌡️', label: 'Forecast' };
+  if (code === 0) return { icon: 'sun', label: 'Sunny' };
+  if ([1, 2].includes(Number(code))) return { icon: 'cloud-sun', label: 'Partly cloudy' };
+  if (code === 3) return { icon: 'cloud', label: 'Cloudy' };
+  if ([45, 48].includes(Number(code))) return { icon: 'cloud-fog', label: 'Fog' };
+  if ([51, 53, 55, 56, 57].includes(Number(code))) return { icon: 'cloud-drizzle', label: 'Drizzle' };
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(Number(code))) return { icon: 'cloud-rain', label: 'Rain' };
+  if ([71, 73, 75, 77, 85, 86].includes(Number(code))) return { icon: 'snowflake', label: 'Snow' };
+  if ([95, 96, 99].includes(Number(code))) return { icon: 'cloud-lightning', label: 'Storms' };
+  return { icon: 'thermometer', label: 'Forecast' };
 }
 
 function weatherForDay(forecast: WeatherForecast | null | undefined, day: Date | string) {
@@ -1100,7 +1100,7 @@ export function Calendar() {
                   title={meta.label}
                 >
                   <p className="pf-meta">{formatDate(day.date, { weekday: 'short' })}</p>
-                  <p className="mt-1 text-xl" aria-label={meta.label}>{meta.icon}</p>
+                  <Icon name={meta.icon} className="mx-auto mt-1 h-5 w-5 text-blue-700" />
                   <p className="pf-meta mt-0.5 truncate">{meta.label}</p>
                   <p className="mt-1 text-sm font-semibold text-gray-950">{Math.round(numberValue(day.high))}°/{Math.round(numberValue(day.low))}°</p>
                   <p className="pf-meta mt-1">{numberValue(day.precipProbability)}% precip</p>

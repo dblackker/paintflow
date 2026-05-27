@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from '@/components/BottomNav';
 import { Toast } from '@/components/Toast';
 import { AuthBridge } from '@/components/AuthBridge';
+import { Icon } from '@/components/Icon';
 import { API_URL, apiJson } from '@/lib/api';
 
 const navSections = [
@@ -230,11 +231,9 @@ export function BaseLayout() {
               aria-expanded={isMobileMenuOpen}
               onClick={() => setIsMobileMenuOpen(true)}
             >
-              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
+              <Icon name="menu" className="h-5 w-5" />
             </button>
-            <p className="truncate text-lg font-semibold text-gray-950 sm:text-xl">{title}</p>
+            <p className="pf-topbar-title truncate">{title}</p>
             <div className="flex items-center gap-2">
               <div ref={notificationsRef} className="relative">
                 <button
@@ -245,9 +244,7 @@ export function BaseLayout() {
                   aria-haspopup="menu"
                   onClick={() => setNotificationsOpen((open) => !open)}
                 >
-                  <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0a3 3 0 0 1-6 0m6 0H9" />
-                  </svg>
+                  <Icon name="bell" className="h-5 w-5" />
                   {unreadCount > 0 && <span className="pf-notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
                 </button>
                 {notificationsOpen && (
@@ -298,7 +295,7 @@ export function BaseLayout() {
             <div className="flex items-center justify-between gap-3 border-b px-4 py-4">
               <Link to="/dashboard" className="flex items-center gap-3" onClick={() => setIsMobileMenuOpen(false)}>
                 <span className="pf-brand-mark">P</span>
-                <span className="text-lg font-semibold text-gray-950">PaintFlow</span>
+                <span className="pf-section-title">PaintFlow</span>
               </Link>
               <button
                 type="button"
@@ -306,9 +303,7 @@ export function BaseLayout() {
                 aria-label="Close navigation"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
+                <Icon name="close" className="h-5 w-5" />
               </button>
             </div>
             <div className="space-y-4 px-4 py-3">
