@@ -148,6 +148,13 @@
       "when": 1779166016000,
       "tag": "0020_supplier_invoice_learning",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779166017000,
+      "tag": "0021_supplier_invoice_sender_rules",
+      "breakpoints": true
     }
   ]
 }

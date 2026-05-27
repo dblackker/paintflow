@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { Input, Select, Textarea } from '@/components/Input';
-import { apiJson, formatAddress, formatMoney } from '@/lib/api';
+import { API_URL, apiJson, formatAddress, formatMoney } from '@/lib/api';
 
 interface PurchaseItem {
   description?: string;
@@ -47,9 +47,24 @@ interface InvoiceImport {
   }> | null;
   matchConfidence?: number | string | null;
   extractionConfidence?: number | string | null;
+  extractedData?: {
+    fileKey?: string | null;
+    fileName?: string | null;
+    extractionMethod?: string | null;
+    senderRuleMatched?: boolean;
+  } | null;
   sourceType?: string | null;
   senderEmail?: string | null;
   createdAt?: string | null;
+}
+
+interface InvoiceSenderRule {
+  id: string;
+  supplierKey: string;
+  supplierName?: string | null;
+  senderEmail: string;
+  autoStage?: boolean | null;
+  isActive?: boolean | null;
 }
 
 interface InvoiceLearningStat {
@@ -401,21 +416,29 @@ function jobOptionLabel(job?: Job) {
   return [job.jobNumber, job.name, address].filter(Boolean).join(' - ');
 }
 
+function supplierRuleKey(value?: string | null) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '_') || 'unknown_supplier';
+}
+
 function ImportReviewCard({
   invoiceImport,
   jobs,
+  senderRules,
   selectedJobId,
   onSelectJob,
   onApprove,
   onReject,
+  onTrustSender,
   isBusy,
 }: {
   invoiceImport: InvoiceImport;
   jobs: Job[];
+  senderRules: InvoiceSenderRule[];
   selectedJobId: string;
   onSelectJob: (jobId: string) => void;
   onApprove: () => void;
   onReject: () => void;
+  onTrustSender: () => void;
   isBusy: boolean;
 }) {
   const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems : [];
@@ -423,6 +446,13 @@ function ImportReviewCard({
   const candidate = invoiceImport.matchCandidates?.[0];
   const matchConfidence = Math.round(numberValue(invoiceImport.matchConfidence) * 100);
   const extractionConfidence = Math.round(numberValue(invoiceImport.extractionConfidence) * 100);
+  const fileHref = invoiceImport.extractedData?.fileKey ? `${API_URL}/v1/invoices/imports/${invoiceImport.id}/file` : '';
+  const trustedSender = Boolean(invoiceImport.extractedData?.senderRuleMatched)
+    || senderRules.some((rule) => (
+      rule.isActive !== false
+      && rule.senderEmail.toLowerCase() === String(invoiceImport.senderEmail || '').toLowerCase()
+      && rule.supplierKey === supplierRuleKey(invoiceImport.supplier)
+    ));
   return (
     <Card padding="sm" className="border-amber-200 bg-amber-50/40 shadow-none">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
@@ -436,6 +466,21 @@ function ImportReviewCard({
           <p className="pf-copy mt-1">
             Invoice {invoiceImport.invoiceNumber || 'not detected'} · {items.length} item{items.length === 1 ? '' : 's'} · {formatMoney(invoiceImport.totalAmount)}
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {invoiceImport.extractedData?.extractionMethod && (
+              <Badge variant="info" size="sm">{invoiceImport.extractedData.extractionMethod.replace(/_/g, ' ')}</Badge>
+            )}
+            {invoiceImport.senderEmail && (
+              <Badge variant={trustedSender ? 'success' : 'default'} size="sm">
+                {trustedSender ? 'Trusted sender' : invoiceImport.senderEmail}
+              </Badge>
+            )}
+            {fileHref && (
+              <Button as="a" href={fileHref} target="_blank" rel="noreferrer" variant="ghost" size="sm" leftIcon={<Icon name="file-text" className="h-4 w-4" />}>
+                View file
+              </Button>
+            )}
+          </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <div className="rounded-lg bg-white p-3">
               <p className="pf-meta">Extraction confidence</p>
@@ -467,6 +512,11 @@ function ImportReviewCard({
             {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
           </Select>
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+            {invoiceImport.senderEmail && invoiceImport.supplier && !trustedSender && (
+              <Button type="button" variant="secondary" size="sm" fullWidth onClick={onTrustSender} disabled={isBusy}>
+                Trust sender
+              </Button>
+            )}
             <Button type="button" size="sm" fullWidth onClick={onApprove} isLoading={isBusy}>
               Approve import
             </Button>
@@ -560,6 +610,7 @@ export function Invoices() {
   const [purchases, setPurchases] = useState<MaterialPurchase[]>([]);
   const [invoiceImports, setInvoiceImports] = useState<InvoiceImport[]>([]);
   const [learningStats, setLearningStats] = useState<InvoiceLearningStat[]>([]);
+  const [senderRules, setSenderRules] = useState<InvoiceSenderRule[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
@@ -681,10 +732,11 @@ export function Invoices() {
     setIsLoading(true);
     setError('');
     try {
-      const [purchasePayload, importPayload, learningPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
+      const [purchasePayload, importPayload, learningPayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
         apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
         apiJson<{ data?: { stats?: InvoiceLearningStat[] } }>('/v1/invoices/imports/learning').catch(() => ({ data: { stats: [] } })),
+        apiJson<{ data?: InvoiceSenderRule[] }>('/v1/invoices/imports/sender-rules').catch(() => ({ data: [] })),
         apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
         apiJson<{ data?: ChangeOrder[] }>('/v1/change-orders').catch(() => ({ data: [] })),
@@ -695,6 +747,7 @@ export function Invoices() {
       setPurchases(purchasePayload.data || []);
       setInvoiceImports(importPayload.data || []);
       setLearningStats(learningPayload.data?.stats || []);
+      setSenderRules(senderRulesPayload.data || []);
       setReviewJobByImport(Object.fromEntries((importPayload.data || []).map((item) => [item.id, item.jobId || item.matchCandidates?.[0]?.id || ''])));
       setEstimates(estimatesPayload.data || []);
       setJobs(jobsPayload.data || []);
@@ -829,6 +882,32 @@ export function Invoices() {
       await loadInvoices();
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to reject import', 'error');
+    } finally {
+      setBusyImportId('');
+    }
+  }
+
+  async function trustInvoiceSender(invoiceImport: InvoiceImport) {
+    if (!invoiceImport.senderEmail || !invoiceImport.supplier) return;
+    setBusyImportId(invoiceImport.id);
+    try {
+      await apiJson('/v1/invoices/imports/sender-rules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          supplier: invoiceImport.supplier,
+          senderEmail: invoiceImport.senderEmail,
+          autoStage: true,
+          isActive: true,
+        }),
+      });
+      window.showToast?.('Supplier sender trusted', 'success');
+      await loadInvoices();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to trust sender', 'error');
     } finally {
       setBusyImportId('');
     }
@@ -1050,10 +1129,12 @@ export function Invoices() {
                       key={invoiceImport.id}
                       invoiceImport={invoiceImport}
                       jobs={jobs}
+                      senderRules={senderRules}
                       selectedJobId={reviewJobByImport[invoiceImport.id] || ''}
                       onSelectJob={(jobId) => setReviewJobByImport({ ...reviewJobByImport, [invoiceImport.id]: jobId })}
                       onApprove={() => approveImport(invoiceImport)}
                       onReject={() => rejectImport(invoiceImport)}
+                      onTrustSender={() => trustInvoiceSender(invoiceImport)}
                       isBusy={busyImportId === invoiceImport.id}
                     />
                   ))}

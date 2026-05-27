@@ -12,6 +12,7 @@ import {
   supplierInvoiceImportFeedback,
   supplierInvoiceImports,
   supplierInvoiceLearningStats,
+  supplierInvoiceSenderRules,
 } from '@paintflow/db/schema';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
@@ -73,6 +74,13 @@ const approveSchema = z.object({
 
 const rejectSchema = z.object({
   reviewNotes: z.string().trim().optional().nullable(),
+});
+
+const senderRuleSchema = z.object({
+  supplier: z.string().trim().min(1),
+  senderEmail: z.string().trim().email(),
+  autoStage: z.boolean().default(true),
+  isActive: z.boolean().default(true),
 });
 
 type InvoiceImportRecord = typeof supplierInvoiceImports.$inferSelect;
@@ -758,6 +766,16 @@ invoicesApp.post('/imports', async (c) => {
   const extractedSupplier = input.supplier || String(parsed.extracted.supplier || '').trim() || null;
   const invoiceNumber = input.invoiceNumber || String(parsed.extracted.invoiceNumber || '').trim() || null;
   const totalAmount = parsed.items.reduce((sum, item) => sum + currencyValue(item.total), 0);
+  const senderRule = input.senderEmail
+    ? await db.query.supplierInvoiceSenderRules.findFirst({
+      where: and(
+        eq(supplierInvoiceSenderRules.orgId, orgId),
+        eq(supplierInvoiceSenderRules.senderEmail, input.senderEmail.toLowerCase()),
+        eq(supplierInvoiceSenderRules.supplierKey, supplierKey(extractedSupplier)),
+        eq(supplierInvoiceSenderRules.isActive, true),
+      ),
+    })
+    : null;
 
   const [invoiceImport] = await db.insert(supplierInvoiceImports).values({
     orgId,
@@ -775,6 +793,8 @@ invoicesApp.post('/imports', async (c) => {
       extractedSupplier,
       invoiceNumber,
       source: input.sourceType,
+      senderRuleMatched: Boolean(senderRule),
+      trustedSenderRuleId: senderRule?.id || null,
       ...parsed.metadata,
     },
     extractedItems: parsed.items,
@@ -818,6 +838,55 @@ invoicesApp.get('/imports/learning', async (c) => {
     }),
   ]);
   return c.json({ data: { stats, feedback } });
+});
+
+invoicesApp.get('/imports/sender-rules', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const rules = await db.query.supplierInvoiceSenderRules.findMany({
+    where: eq(supplierInvoiceSenderRules.orgId, orgId),
+    orderBy: (table, { desc }) => [desc(table.updatedAt)],
+    limit: 100,
+  });
+  return c.json({ data: rules });
+});
+
+invoicesApp.post('/imports/sender-rules', async (c) => {
+  const idempotencyError = requireIdempotency(c);
+  if (idempotencyError) return idempotencyError;
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const input = senderRuleSchema.parse(await c.req.json());
+  const key = supplierKey(input.supplier);
+  const email = input.senderEmail.toLowerCase();
+  const existing = await db.query.supplierInvoiceSenderRules.findFirst({
+    where: and(
+      eq(supplierInvoiceSenderRules.orgId, orgId),
+      eq(supplierInvoiceSenderRules.senderEmail, email),
+      eq(supplierInvoiceSenderRules.supplierKey, key),
+    ),
+  });
+  if (existing) {
+    const [updated] = await db.update(supplierInvoiceSenderRules)
+      .set({
+        supplierName: input.supplier,
+        autoStage: input.autoStage,
+        isActive: input.isActive,
+        updatedAt: new Date(),
+      })
+      .where(eq(supplierInvoiceSenderRules.id, existing.id))
+      .returning();
+    return c.json({ data: updated });
+  }
+  const [rule] = await db.insert(supplierInvoiceSenderRules).values({
+    orgId,
+    supplierKey: key,
+    supplierName: input.supplier,
+    senderEmail: email,
+    autoStage: input.autoStage,
+    isActive: input.isActive,
+  }).returning();
+  return c.json({ data: rule }, 201);
 });
 
 invoicesApp.get('/imports/:id/file', async (c) => {

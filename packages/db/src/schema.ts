@@ -681,6 +681,18 @@ export const supplierInvoiceLearningStats = pgTable('supplier_invoice_learning_s
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const supplierInvoiceSenderRules = pgTable('supplier_invoice_sender_rules', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  supplierKey: varchar('supplier_key', { length: 120 }).notNull(),
+  supplierName: varchar('supplier_name', { length: 255 }),
+  senderEmail: varchar('sender_email', { length: 255 }).notNull(),
+  autoStage: boolean('auto_stage').notNull().default(true),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const jobCosts = pgTable('job_costs', {
   id: uuid('id').defaultRandom().primaryKey(),
   jobId: uuid('job_id').references(() => jobs.id).notNull(),
