@@ -421,7 +421,7 @@ export function EstimateDetail() {
 
   function openTerms() {
     if (!estimate?.contractorSignature?.signedAt) {
-      setMessage({ tone: 'error', text: 'Contractor signature is pending. Ask the contractor to resend the proposal before signing.' });
+      setMessage({ tone: 'error', text: 'Contractor signature is pending. Ask the contractor to countersign this proposal before signing.' });
       return;
     }
     setMessage(null);
@@ -935,7 +935,7 @@ function ActionPanel({
         </p>
       ) : (
         <p className="mt-2 text-sm text-red-800">
-          Contractor signature is pending. Ask the contractor to resend the proposal before signing.
+          Contractor signature is pending. Ask the contractor to countersign this proposal before signing.
         </p>
       )}
       <p className="mt-2 text-sm text-blue-900">

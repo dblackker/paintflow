@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { Badge, StatusBadge } from '@/components/Badge';
@@ -67,6 +67,14 @@ interface Estimate {
   updatedAt?: string;
   publicUrl?: string;
   customerPreviewUrl?: string;
+  contractorSignature?: {
+    name?: string;
+    email?: string | null;
+    title?: string;
+    companyName?: string | null;
+    capacity?: string;
+    signedAt?: string;
+  } | null;
 }
 
 interface Customer {
@@ -170,36 +178,39 @@ export function EstimateDetails() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCountersigning, setIsCountersigning] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!id) return;
-      setIsLoading(true);
-      setError('');
-      try {
-        const estimatePayload = await apiJson<{ data: Estimate }>(`/v1/estimates/${id}`);
-        const loadedEstimate = estimatePayload.data;
-        const [leadPayload, activityPayload] = await Promise.all([
-          loadedEstimate.leadId ? apiJson<{ data?: { customer?: Customer } }>(`/v1/leads/${loadedEstimate.leadId}`).catch(() => null) : Promise.resolve(null),
-          apiJson<{ data?: Activity[] }>(`/v1/estimates/${loadedEstimate.id}/activity`).catch(() => ({ data: [] })),
-        ]);
-        if (cancelled) return;
-        setEstimate(loadedEstimate);
-        setCustomer(leadPayload?.data?.customer || null);
-        setActivity(activityPayload?.data || []);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Estimate details could not be loaded');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
+  const loadEstimate = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!id) return;
+    if (!options.silent) setIsLoading(true);
+    setError('');
+    try {
+      const estimatePayload = await apiJson<{ data: Estimate }>(`/v1/estimates/${id}`);
+      const loadedEstimate = estimatePayload.data;
+      const [leadPayload, activityPayload] = await Promise.all([
+        loadedEstimate.leadId ? apiJson<{ data?: { customer?: Customer } }>(`/v1/leads/${loadedEstimate.leadId}`).catch(() => null) : Promise.resolve(null),
+        apiJson<{ data?: Activity[] }>(`/v1/estimates/${loadedEstimate.id}/activity`).catch(() => ({ data: [] })),
+      ]);
+      setEstimate(loadedEstimate);
+      setCustomer(leadPayload?.data?.customer || null);
+      setActivity(activityPayload?.data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Estimate details could not be loaded');
+    } finally {
+      if (!options.silent) setIsLoading(false);
     }
-    void load();
-    return () => {
-      cancelled = true;
-    };
   }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    loadEstimate().finally(() => {
+      if (!active) return;
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadEstimate]);
 
   const pkg = useMemo(() => proposalPackage(estimate), [estimate]);
   const includedItems = useMemo(() => packageItems(pkg).filter((item) => item.customerVisible !== false && !item.optional), [pkg]);
@@ -207,6 +218,28 @@ export function EstimateDetails() {
   const previewPath = estimate?.customerPreviewUrl || estimate?.publicUrl || (estimate ? `/estimates/${estimate.id}` : '/estimates');
   const previewHref = previewPath.startsWith('http') ? new URL(previewPath).pathname : previewPath;
   const netPaid = (estimate?.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+  const canCountersign = Boolean(estimate && !estimate.contractorSignature?.signedAt && !['canceled', 'voided', 'superseded'].includes(estimate.status));
+
+  async function countersignEstimate() {
+    if (!estimate) return;
+    setIsCountersigning(true);
+    try {
+      await apiJson(`/v1/estimates/${estimate.id}/countersign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `estimate-countersign-${estimate.id}`,
+        },
+        body: JSON.stringify({}),
+      });
+      window.showToast?.('Proposal countersigned', 'success');
+      await loadEstimate({ silent: true });
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to countersign proposal', 'error');
+    } finally {
+      setIsCountersigning(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -243,6 +276,18 @@ export function EstimateDetails() {
           <Card className="border-amber-200 bg-amber-50" padding="sm">
             <p className="font-semibold text-amber-950">This signed agreement was superseded by a revision.</p>
             <p className="mt-1 text-sm text-amber-900">Use this page for the historical record. Customers should use the latest proposal link for approval or payment.</p>
+          </Card>
+        )}
+
+        {canCountersign && (
+          <Card className="border-amber-200 bg-amber-50" padding="sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-amber-950">Contractor countersignature is missing.</p>
+                <p className="mt-1 text-sm text-amber-900">Customers cannot sign until an authorized company representative countersigns this proposal.</p>
+              </div>
+              <Button size="sm" onClick={countersignEstimate} isLoading={isCountersigning}>Countersign proposal</Button>
+            </div>
           </Card>
         )}
 

@@ -13,6 +13,7 @@ import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
+const CONTRACTOR_SIGNATURE_ACTIONS = ['estimate.email.sent', 'estimate.email.updated', 'estimate.contractor.countersigned'];
 
 const selectedOptionSchema = z.object({
   desc: z.string().trim().min(1).max(500),
@@ -162,11 +163,29 @@ async function estimateContractorSignature(db: ReturnType<typeof createDb>, esti
       eq(auditLogs.orgId, estimate.orgId),
       eq(auditLogs.entityType, 'estimate'),
       eq(auditLogs.entityId, estimate.id),
-      inArray(auditLogs.action, ['estimate.email.sent', 'estimate.email.updated']),
+      inArray(auditLogs.action, CONTRACTOR_SIGNATURE_ACTIONS),
     ),
     orderBy: (auditLogs, { desc }) => [desc(auditLogs.createdAt)],
   });
   return contractorSignatureFromMetadata(latest?.metadata);
+}
+
+async function buildContractorSignature(db: ReturnType<typeof createDb>, orgId: string, userId?: string | null) {
+  const [branding, settings, estimator] = await Promise.all([
+    db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) }),
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+    userId ? db.query.users.findFirst({ where: eq(users.id, userId) }) : Promise.resolve(null),
+  ]);
+  const signerName = estimator?.name || estimator?.email || settings?.companyName || branding?.companyName || 'Authorized representative';
+  const companyName = branding?.companyName || settings?.companyName || 'your painting contractor';
+  return {
+    name: signerName,
+    email: estimator?.email || settings?.email || null,
+    title: 'Authorized representative',
+    companyName,
+    capacity: `Authorized representative for ${companyName}`,
+    signedAt: new Date().toISOString(),
+  };
 }
 
 function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, packageName: string | undefined, selectedOptions: z.infer<typeof selectedOptionSchema>[]) {
@@ -559,7 +578,8 @@ estimatesApp.get('/:id', async (c) => {
   const payments = await optionalPaymentRows(db.select().from(customerPayments)
     .where(and(eq(customerPayments.orgId, orgId), eq(customerPayments.estimateId, estimate.id)))
     .orderBy(desc(customerPayments.receivedAt)));
-  return c.json({ data: { ...estimate, payments, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
+  const contractorSignature = await estimateContractorSignature(db, estimate);
+  return c.json({ data: { ...estimate, payments, contractorSignature, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
 });
 
 estimatesApp.post('/:id/cancel', async (c) => {
@@ -939,6 +959,62 @@ async function optionalPaymentRows<T>(query: Promise<T[]>) {
   }
 }
 
+estimatesApp.post('/:id/countersign', async (c) => {
+  const orgId = c.get('orgId');
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const estimate = await db.query.estimates.findFirst({
+    where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
+  });
+
+  if (!estimate) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  if (['canceled', 'voided', 'superseded'].includes(estimate.status)) {
+    return c.json({ error: 'Only active or signed estimate agreements can be countersigned.' }, 409);
+  }
+
+  const existingSignature = await estimateContractorSignature(db, estimate);
+  if (existingSignature) {
+    const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+    return c.json({
+      data: {
+        contractorSignature: existingSignature,
+        alreadySigned: true,
+        publicUrl: publicEstimateUrl(baseUrl, estimate.id),
+        customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id),
+      },
+    });
+  }
+
+  const contractorSignature = await buildContractorSignature(db, orgId, userId);
+  await db.insert(auditLogs).values({
+    orgId,
+    userId,
+    action: 'estimate.contractor.countersigned',
+    entityType: 'estimate',
+    entityId: estimate.id,
+    metadata: {
+      leadId: estimate.leadId,
+      status: estimate.status,
+      contractorSignature,
+    },
+  });
+
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  return c.json({
+    data: {
+      contractorSignature,
+      alreadySigned: false,
+      publicUrl: publicEstimateUrl(baseUrl, estimate.id),
+      customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id),
+    },
+  });
+});
+
 estimatesApp.post('/:id/send-email', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
@@ -964,12 +1040,8 @@ estimatesApp.post('/:id/send-email', async (c) => {
     return c.json({ error: 'Lead email is required before sending an estimate' }, 400);
   }
 
-  const branding = await db.query.orgBranding.findFirst({
-    where: eq(orgBranding.orgId, orgId),
-  });
-  const settings = await db.query.orgSettings.findFirst({
-    where: eq(orgSettings.orgId, orgId),
-  });
+  const branding = await db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) });
+  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) });
   const userId = c.get('userId');
   const estimator = userId
     ? await db.query.users.findFirst({ where: eq(users.id, userId) })
@@ -982,14 +1054,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
   const isUpdateEmail = parsed.data.reason === 'updated';
   const signerName = estimator?.name || estimator?.email || settings?.companyName || branding?.companyName || 'Authorized representative';
   const companyName = branding?.companyName || settings?.companyName || 'your painting contractor';
-  const contractorSignature = {
-    name: signerName,
-    email: estimator?.email || settings?.email || null,
-    title: 'Authorized representative',
-    companyName,
-    capacity: `Authorized representative for ${companyName}`,
-    signedAt: new Date().toISOString(),
-  };
+  const contractorSignature = await buildContractorSignature(db, orgId, userId);
   const templateOverride = await findEmailTemplateOverride(db, orgId, isUpdateEmail ? 'estimate.updated.sent' : templateKey);
   const renderedEmail = renderEstimateEmail({
     estimateId: estimate.id,
