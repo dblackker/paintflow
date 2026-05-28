@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import {
+  aiUsageEvents,
   jobCosts,
   jobs,
   leads,
@@ -14,7 +15,7 @@ import {
   supplierInvoiceLearningStats,
   supplierInvoiceSenderRules,
 } from '@paintflow/db/schema';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -36,6 +37,15 @@ type ParsedInvoicePayload = {
   confidence: number;
   rawText: string;
   metadata?: Record<string, unknown>;
+};
+
+type AiUsageEstimate = {
+  provider: 'openai';
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
 };
 
 type JobCandidate = {
@@ -65,6 +75,15 @@ const importSchema = z.object({
 });
 
 const MAX_INVOICE_FILE_BYTES = 15 * 1024 * 1024;
+const OCR_FEATURE_KEY = 'supplier_invoice_ocr';
+const DEFAULT_OCR_BURST_LIMIT_PER_MINUTE = 5;
+const DEFAULT_OCR_DAILY_LIMIT = 25;
+const DEFAULT_OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = 50;
+const OPENAI_PRICE_PER_MILLION_TOKENS: Record<string, { input: number; output: number }> = {
+  'gpt-4.1-mini': { input: 0.4, output: 1.6 },
+  'gpt-4.1-nano': { input: 0.1, output: 0.4 },
+  'gpt-4.1': { input: 2, output: 8 },
+};
 
 const approveSchema = z.object({
   jobId: z.string().uuid().optional().nullable(),
@@ -94,6 +113,11 @@ function requireIdempotency(c: any) {
 function currencyValue(value: unknown) {
   const parsed = Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function envNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function clampConfidence(value: number) {
@@ -142,6 +166,71 @@ function responseText(response: any) {
     }
   }
   return chunks.join('\n');
+}
+
+function estimateOpenAiCost(model: string, inputTokens: number, outputTokens: number) {
+  const pricing = OPENAI_PRICE_PER_MILLION_TOKENS[model] || OPENAI_PRICE_PER_MILLION_TOKENS['gpt-4.1-mini'];
+  return (inputTokens / 1_000_000 * pricing.input) + (outputTokens / 1_000_000 * pricing.output);
+}
+
+function usageFromOpenAiResponse(response: any, model: string, fallbackInputTokens: number): AiUsageEstimate {
+  const usage = response?.usage || {};
+  const inputTokens = Number(usage.input_tokens || usage.prompt_tokens || fallbackInputTokens || 0);
+  const outputTokens = Number(usage.output_tokens || usage.completion_tokens || 0);
+  const totalTokens = Number(usage.total_tokens || inputTokens + outputTokens);
+  return {
+    provider: 'openai',
+    model,
+    inputTokens: Number.isFinite(inputTokens) ? Math.max(0, Math.round(inputTokens)) : 0,
+    outputTokens: Number.isFinite(outputTokens) ? Math.max(0, Math.round(outputTokens)) : 0,
+    totalTokens: Number.isFinite(totalTokens) ? Math.max(0, Math.round(totalTokens)) : 0,
+    estimatedCostUsd: estimateOpenAiCost(model, inputTokens, outputTokens),
+  };
+}
+
+function monthStart() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function dayStart() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+async function enforceOcrBudget(c: any, db: ReturnType<typeof createDb>, orgId: string) {
+  const burstLimit = envNumber(c.env.OCR_BURST_LIMIT_PER_MINUTE, DEFAULT_OCR_BURST_LIMIT_PER_MINUTE);
+  const dailyLimit = envNumber(c.env.OCR_DAILY_LIMIT, DEFAULT_OCR_DAILY_LIMIT);
+  const monthlyCostLimit = envNumber(c.env.OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD, DEFAULT_OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD);
+
+  const burstKey = `rate:${orgId}:${OCR_FEATURE_KEY}:${Math.floor(Date.now() / 60_000)}`;
+  const burstCount = Number(await c.env.KV.get(burstKey) || '0');
+  if (burstCount >= burstLimit) {
+    throw new Error(`OCR is temporarily rate limited. Try again in a minute.`);
+  }
+  await c.env.KV.put(burstKey, String(burstCount + 1), { expirationTtl: 90 });
+
+  const [daily] = await db.select({
+    count: sql<number>`count(*)`,
+  }).from(aiUsageEvents).where(and(
+    eq(aiUsageEvents.orgId, orgId),
+    eq(aiUsageEvents.feature, OCR_FEATURE_KEY),
+    gte(aiUsageEvents.createdAt, dayStart()),
+  ));
+  if (Number(daily?.count || 0) >= dailyLimit) {
+    throw new Error(`Daily OCR limit reached for this contractor. Try again tomorrow or increase the limit.`);
+  }
+
+  const [monthly] = await db.select({
+    estimatedCostUsd: sql<number>`coalesce(sum(${aiUsageEvents.estimatedCostUsd}), 0)`,
+  }).from(aiUsageEvents).where(and(
+    eq(aiUsageEvents.orgId, orgId),
+    eq(aiUsageEvents.feature, OCR_FEATURE_KEY),
+    gte(aiUsageEvents.createdAt, monthStart()),
+  ));
+  if (Number(monthly?.estimatedCostUsd || 0) >= monthlyCostLimit) {
+    throw new Error(`Monthly OCR budget reached for this contractor. Increase the limit before running more OCR.`);
+  }
 }
 
 function parseJsonObject(text: string) {
@@ -305,6 +394,8 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
   const mimeType = file.type || 'application/octet-stream';
   const base64 = arrayBufferToBase64(buffer);
   const isPdf = mimeType.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
+  const model = env.OPENAI_OCR_MODEL || 'gpt-4.1-mini';
+  const fallbackInputTokens = Math.ceil(base64.length / 4) + 600;
   const fileContent = isPdf
     ? { type: 'input_file', filename: file.name || 'invoice.pdf', file_data: `data:${mimeType};base64,${base64}` }
     : { type: 'input_image', image_url: `data:${mimeType};base64,${base64}`, detail: 'high' };
@@ -316,7 +407,7 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: env.OPENAI_OCR_MODEL || 'gpt-4.1-mini',
+      model,
       input: [{
         role: 'user',
         content: [
@@ -343,6 +434,7 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
   }
 
   const payload = await response.json();
+  const usage = usageFromOpenAiResponse(payload, model, fallbackInputTokens);
   const parsed = parseJsonObject(responseText(payload));
   const items = normalizeOcrItems(parsed.items);
   const rawText = String(parsed.rawText || parsed.raw_text || [
@@ -364,14 +456,15 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
     rawText,
     metadata: {
       extractionMethod: isPdf ? 'openai_pdf_ocr' : 'openai_image_ocr',
-      openaiModel: env.OPENAI_OCR_MODEL || 'gpt-4.1-mini',
+      openaiModel: model,
+      aiUsage: usage,
       contentType: mimeType,
       fileName: file.name,
     },
   };
 }
 
-async function parseMultipartInvoice(c: any): Promise<{ input: z.infer<typeof importSchema>; parsed: ParsedInvoicePayload; fileMetadata?: Record<string, unknown> }> {
+async function parseMultipartInvoice(c: any, db: ReturnType<typeof createDb>, orgId: string): Promise<{ input: z.infer<typeof importSchema>; parsed: ParsedInvoicePayload; fileMetadata?: Record<string, unknown> }> {
   const formData = await c.req.formData();
   const file = formData.get('file') as File | null;
   const input = importSchema.parse({
@@ -419,6 +512,9 @@ async function parseMultipartInvoice(c: any): Promise<{ input: z.infer<typeof im
 
   const textLike = /text|csv|json/i.test(file.type) || /\.(csv|txt|json)$/i.test(file.name || '');
   const fileText = textLike ? new TextDecoder().decode(buffer) : '';
+  if (!textLike) {
+    await enforceOcrBudget(c, db, orgId);
+  }
   const parsed = textLike
     ? parseInvoicePayload({ ...input, rawText: fileText, csvData: /\.(csv)$/i.test(file.name || '') ? fileText : input.csvData })
     : await extractInvoiceWithOpenAI(c.env, file, buffer);
@@ -763,7 +859,7 @@ invoicesApp.post('/imports', async (c) => {
   let parsed: ParsedInvoicePayload;
   try {
     if ((c.req.header('content-type') || '').includes('multipart/form-data')) {
-      const multipart = await parseMultipartInvoice(c);
+      const multipart = await parseMultipartInvoice(c, db, orgId);
       input = multipart.input;
       parsed = multipart.parsed;
     } else {
@@ -822,6 +918,29 @@ invoicesApp.post('/imports', async (c) => {
     extractionConfidence: clampConfidence(parsed.confidence).toFixed(2),
   }).returning();
 
+  const aiUsage = parsed.metadata?.aiUsage as AiUsageEstimate | undefined;
+  if (aiUsage) {
+    await db.insert(aiUsageEvents).values({
+      orgId,
+      userId: c.get('userId') || null,
+      feature: OCR_FEATURE_KEY,
+      provider: aiUsage.provider,
+      model: aiUsage.model,
+      entityType: 'supplier_invoice_import',
+      entityId: invoiceImport.id,
+      inputTokens: aiUsage.inputTokens,
+      outputTokens: aiUsage.outputTokens,
+      totalTokens: aiUsage.totalTokens,
+      estimatedCostUsd: aiUsage.estimatedCostUsd.toFixed(6),
+      metadata: {
+        sourceType: input.sourceType,
+        contentType: parsed.metadata?.contentType,
+        fileName: parsed.metadata?.fileName,
+        extractionMethod: parsed.metadata?.extractionMethod,
+      },
+    });
+  }
+
   return c.json({ data: invoiceImport }, 201);
 });
 
@@ -856,6 +975,51 @@ invoicesApp.get('/imports/learning', async (c) => {
     }),
   ]);
   return c.json({ data: { stats, feedback } });
+});
+
+invoicesApp.get('/imports/ai-usage', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const [today, month, recent] = await Promise.all([
+    db.select({
+      requests: sql<number>`count(*)`,
+      totalTokens: sql<number>`coalesce(sum(${aiUsageEvents.totalTokens}), 0)`,
+      estimatedCostUsd: sql<number>`coalesce(sum(${aiUsageEvents.estimatedCostUsd}), 0)`,
+    }).from(aiUsageEvents).where(and(
+      eq(aiUsageEvents.orgId, orgId),
+      eq(aiUsageEvents.feature, OCR_FEATURE_KEY),
+      gte(aiUsageEvents.createdAt, dayStart()),
+    )),
+    db.select({
+      requests: sql<number>`count(*)`,
+      inputTokens: sql<number>`coalesce(sum(${aiUsageEvents.inputTokens}), 0)`,
+      outputTokens: sql<number>`coalesce(sum(${aiUsageEvents.outputTokens}), 0)`,
+      totalTokens: sql<number>`coalesce(sum(${aiUsageEvents.totalTokens}), 0)`,
+      estimatedCostUsd: sql<number>`coalesce(sum(${aiUsageEvents.estimatedCostUsd}), 0)`,
+    }).from(aiUsageEvents).where(and(
+      eq(aiUsageEvents.orgId, orgId),
+      eq(aiUsageEvents.feature, OCR_FEATURE_KEY),
+      gte(aiUsageEvents.createdAt, monthStart()),
+    )),
+    db.query.aiUsageEvents.findMany({
+      where: and(eq(aiUsageEvents.orgId, orgId), eq(aiUsageEvents.feature, OCR_FEATURE_KEY)),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+      limit: 10,
+    }),
+  ]);
+  return c.json({
+    data: {
+      feature: OCR_FEATURE_KEY,
+      limits: {
+        burstPerMinute: envNumber(c.env.OCR_BURST_LIMIT_PER_MINUTE, DEFAULT_OCR_BURST_LIMIT_PER_MINUTE),
+        dailyRequests: envNumber(c.env.OCR_DAILY_LIMIT, DEFAULT_OCR_DAILY_LIMIT),
+        monthlyEstimatedCostUsd: envNumber(c.env.OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD, DEFAULT_OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD),
+      },
+      today: today[0] || { requests: 0, totalTokens: 0, estimatedCostUsd: 0 },
+      month: month[0] || { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0 },
+      recent,
+    },
+  });
 });
 
 invoicesApp.get('/imports/sender-rules', async (c) => {

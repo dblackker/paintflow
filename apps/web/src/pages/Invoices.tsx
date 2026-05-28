@@ -85,6 +85,33 @@ interface InvoiceLearningStat {
   lastSeenAt?: string | null;
 }
 
+interface AiUsageSummary {
+  limits?: {
+    burstPerMinute?: number | string;
+    dailyRequests?: number | string;
+    monthlyEstimatedCostUsd?: number | string;
+  };
+  today?: {
+    requests?: number | string;
+    totalTokens?: number | string;
+    estimatedCostUsd?: number | string;
+  };
+  month?: {
+    requests?: number | string;
+    inputTokens?: number | string;
+    outputTokens?: number | string;
+    totalTokens?: number | string;
+    estimatedCostUsd?: number | string;
+  };
+  recent?: Array<{
+    id: string;
+    model?: string | null;
+    totalTokens?: number | string | null;
+    estimatedCostUsd?: number | string | null;
+    createdAt?: string | null;
+  }>;
+}
+
 interface Lead {
   id: string;
   name?: string | null;
@@ -254,6 +281,12 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatAiCost(value: unknown) {
+  const cost = numberValue(value);
+  if (cost > 0 && cost < 0.01) return `$${cost.toFixed(4)}`;
+  return formatMoney(cost);
+}
+
 function netPayment(payment: Payment) {
   if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(String(payment.status || 'succeeded'))) return 0;
   return numberValue(payment.amount) - numberValue(payment.refundedAmount);
@@ -401,6 +434,48 @@ function LearningStatCard({ stat }: { stat: InvoiceLearningStat }) {
         <div className="rounded bg-gray-50 px-2 py-2">
           <p className="pf-metric-label">Match avg</p>
           <p className="pf-row-title">{Math.round(numberValue(stat.avgMatchConfidence) * 100)}%</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AiUsageCard({ usage }: { usage: AiUsageSummary }) {
+  const monthRequests = numberValue(usage.month?.requests);
+  const dailyLimit = numberValue(usage.limits?.dailyRequests);
+  const monthlyCostLimit = numberValue(usage.limits?.monthlyEstimatedCostUsd);
+  const monthlyCost = numberValue(usage.month?.estimatedCostUsd);
+  const dailyRequests = numberValue(usage.today?.requests);
+  const dailyPercent = dailyLimit ? Math.min(100, Math.round((dailyRequests / dailyLimit) * 100)) : 0;
+  const costPercent = monthlyCostLimit ? Math.min(100, Math.round((monthlyCost / monthlyCostLimit) * 100)) : 0;
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="pf-section-title">AI usage guardrails</p>
+          <p className="pf-helper mt-1">OCR calls are throttled per contractor and tracked for estimated OpenAI spend.</p>
+        </div>
+        <Badge variant="info" size="sm">Cost controls</Badge>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg bg-gray-50 p-3">
+          <p className="pf-metric-label">Today</p>
+          <p className="pf-row-title">{dailyRequests} / {dailyLimit || '-'}</p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
+            <div className="h-full rounded-full bg-blue-600" style={{ width: `${dailyPercent}%` }} />
+          </div>
+        </div>
+        <div className="rounded-lg bg-gray-50 p-3">
+          <p className="pf-metric-label">This month</p>
+          <p className="pf-row-title">{monthRequests} OCR run{monthRequests === 1 ? '' : 's'}</p>
+          <p className="pf-helper mt-1">{numberValue(usage.month?.totalTokens).toLocaleString()} tokens</p>
+        </div>
+        <div className="rounded-lg bg-gray-50 p-3">
+          <p className="pf-metric-label">Estimated cost</p>
+          <p className="pf-row-title">{formatAiCost(monthlyCost)} / {formatAiCost(monthlyCostLimit)}</p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
+            <div className="h-full rounded-full bg-emerald-600" style={{ width: `${costPercent}%` }} />
+          </div>
         </div>
       </div>
     </div>
@@ -616,6 +691,7 @@ export function Invoices() {
   const [purchases, setPurchases] = useState<MaterialPurchase[]>([]);
   const [invoiceImports, setInvoiceImports] = useState<InvoiceImport[]>([]);
   const [learningStats, setLearningStats] = useState<InvoiceLearningStat[]>([]);
+  const [aiUsage, setAiUsage] = useState<AiUsageSummary | null>(null);
   const [senderRules, setSenderRules] = useState<InvoiceSenderRule[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -738,10 +814,11 @@ export function Invoices() {
     setIsLoading(true);
     setError('');
     try {
-      const [purchasePayload, importPayload, learningPayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
+      const [purchasePayload, importPayload, learningPayload, usagePayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
         apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
         apiJson<{ data?: { stats?: InvoiceLearningStat[] } }>('/v1/invoices/imports/learning').catch(() => ({ data: { stats: [] } })),
+        apiJson<{ data?: AiUsageSummary }>('/v1/invoices/imports/ai-usage').catch(() => ({ data: null })),
         apiJson<{ data?: InvoiceSenderRule[] }>('/v1/invoices/imports/sender-rules').catch(() => ({ data: [] })),
         apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
@@ -753,6 +830,7 @@ export function Invoices() {
       setPurchases(purchasePayload.data || []);
       setInvoiceImports(importPayload.data || []);
       setLearningStats(learningPayload.data?.stats || []);
+      setAiUsage(usagePayload.data || null);
       setSenderRules(senderRulesPayload.data || []);
       setReviewJobByImport(Object.fromEntries((importPayload.data || []).map((item) => [item.id, item.jobId || item.matchCandidates?.[0]?.id || ''])));
       setEstimates(estimatesPayload.data || []);
@@ -1094,6 +1172,8 @@ export function Invoices() {
               <p className="pf-metric mt-1">{formatMoney(totalSpend)}</p>
             </Card>
           </div>
+
+          {!isLoading && !error && aiUsage && <AiUsageCard usage={aiUsage} />}
 
           <Card padding="none">
             <CardHeader

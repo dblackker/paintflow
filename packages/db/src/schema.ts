@@ -693,6 +693,23 @@ export const supplierInvoiceSenderRules = pgTable('supplier_invoice_sender_rules
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const aiUsageEvents = pgTable('ai_usage_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  userId: uuid('user_id').references(() => users.id),
+  feature: varchar('feature', { length: 100 }).notNull(),
+  provider: varchar('provider', { length: 50 }).notNull().default('openai'),
+  model: varchar('model', { length: 120 }),
+  entityType: varchar('entity_type', { length: 80 }),
+  entityId: uuid('entity_id'),
+  inputTokens: integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  totalTokens: integer('total_tokens').notNull().default(0),
+  estimatedCostUsd: decimal('estimated_cost_usd', { precision: 10, scale: 6 }).notNull().default('0'),
+  metadata: jsonb('metadata').notNull().default({}),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const jobCosts = pgTable('job_costs', {
   id: uuid('id').defaultRandom().primaryKey(),
   jobId: uuid('job_id').references(() => jobs.id).notNull(),

@@ -37,6 +37,9 @@ export interface Env {
   INVOICE_AUTOMATION_ENABLED?: string;
   OPENAI_API_KEY?: string;
   OPENAI_OCR_MODEL?: string;
+  OCR_BURST_LIMIT_PER_MINUTE?: string;
+  OCR_DAILY_LIMIT?: string;
+  OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD?: string;
 }
 
 export type Variables = {
