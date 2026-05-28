@@ -18,6 +18,9 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    concurrency:
+      group: supplier-catalog-sync
+      cancel-in-progress: false
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DATABASE_PATH: ./data/suppliers.db
@@ -46,15 +49,23 @@ jobs:
       - name: Scrape suppliers
         working-directory: scrapers/paint-suppliers
         run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL secret is required for supplier catalog hydration." >&2
+            exit 1
+          fi
           SUPPLIER="${{ inputs.supplier }}"
           LIMIT="${{ inputs.limit }}"
           ARGS="all"
           if [ -n "$SUPPLIER" ]; then ARGS="$SUPPLIER"; fi
           if [ -n "$LIMIT" ]; then
-            node dist/index.js scrape "$ARGS" --limit "$LIMIT"
+            node dist/index.js scrape "$ARGS" --force --limit "$LIMIT"
           else
-            node dist/index.js scrape "$ARGS"
+            node dist/index.js scrape "$ARGS" --force
           fi
+
+      - name: Show local catalog summary
+        working-directory: scrapers/paint-suppliers
+        run: node dist/index.js list
 
       - name: Hydrate Neon catalog
         working-directory: scrapers/paint-suppliers

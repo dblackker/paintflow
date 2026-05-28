@@ -4,6 +4,8 @@ import { Logger } from './utils/logger';
 
 const logger = new Logger('hydrate-postgres');
 
+type Queryable = Pick<Pool | PoolClient, 'query'>;
+
 function parseJsonArray(value: unknown): string[] {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -37,7 +39,7 @@ function issuePayload(catalog: SupplierCatalogExport) {
   }));
 }
 
-async function startSyncRun(client: PoolClient, catalog: SupplierCatalogExport) {
+async function startSyncRun(client: Queryable, catalog: SupplierCatalogExport) {
   const suppliers = catalog.suppliers.map((supplier) => supplier.id);
   const result = await client.query<{ id: string }>(
     `INSERT INTO supplier_catalog_sync_runs (status, suppliers, issues)
@@ -49,7 +51,7 @@ async function startSyncRun(client: PoolClient, catalog: SupplierCatalogExport) 
 }
 
 async function finishSyncRun(
-  client: PoolClient,
+  client: Queryable,
   syncRunId: string,
   status: 'success' | 'partial' | 'failed',
   stats: { products: number; colors: number; productColors: number },
@@ -227,32 +229,35 @@ export async function hydratePostgres(options: { supplier?: string; type?: strin
     connectionString,
     ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
   });
-  const client = await pool.connect();
   let syncRunId: string | null = null;
+  let client: PoolClient | null = null;
 
   try {
+    syncRunId = await startSyncRun(pool, catalog);
+    client = await pool.connect();
     await client.query('BEGIN');
-    syncRunId = await startSyncRun(client, catalog);
     const products = await upsertProducts(client, catalog);
     const colors = await upsertColors(client, catalog);
     const productColors = await upsertProductColors(client, catalog);
     const issues = issuePayload(catalog);
     const status = issues.some((issue) => ['high', 'critical'].includes(issue.severity)) ? 'partial' : 'success';
-    await finishSyncRun(client, syncRunId, status, { products, colors, productColors }, issues);
     await client.query('COMMIT');
+    await finishSyncRun(pool, syncRunId, status, { products, colors, productColors }, issues);
 
     logger.info(`Hydrated supplier catalog: ${products} products, ${colors} colors, ${productColors} product-color mappings`);
     return { syncRunId, products, colors, productColors, issues };
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) {
+      await client.query('ROLLBACK').catch(() => undefined);
+    }
     if (syncRunId) {
-      await finishSyncRun(client, syncRunId, 'failed', { products: 0, colors: 0, productColors: 0 }, [
+      await finishSyncRun(pool, syncRunId, 'failed', { products: 0, colors: 0, productColors: 0 }, [
         { severity: 'critical', description: error instanceof Error ? error.message : String(error) },
       ]);
     }
     throw error;
   } finally {
-    client.release();
+    client?.release();
     await pool.end();
   }
 }

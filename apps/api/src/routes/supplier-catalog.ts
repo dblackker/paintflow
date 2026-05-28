@@ -230,6 +230,18 @@ catalogApp.get('/status', async (c) => {
   return c.json({
     data: {
       latestRun: latestRun || null,
+      recentRuns: recentRuns.map((run) => ({
+        id: run.id,
+        source: run.source,
+        status: run.status,
+        suppliers: run.suppliers,
+        productsUpserted: run.productsUpserted,
+        colorsUpserted: run.colorsUpserted,
+        productColorsUpserted: run.productColorsUpserted,
+        issues: run.issues,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+      })),
       suppliers: supplierStatuses,
       counts: {
         productCount: productCounts?.productCount || 0,

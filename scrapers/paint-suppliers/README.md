@@ -132,7 +132,15 @@ DATABASE_URL=postgres://... node dist/index.js hydrate-postgres
 The scraper writes to SQLite first, validates the data, then upserts products,
 colors, and product-color availability into Postgres. Retailer pages can change
 without notice, so the sync records `supplier_catalog_sync_runs.issues` instead
-of blocking the app when a supplier is slow or stale.
+of blocking the app when a supplier is slow or stale. The `/supplier-catalog`
+screen shows the latest PaintFlow-level run history and per-supplier sync
+status; these rows are global catalog health records, not contractor tenant
+records.
+
+If a supplier page fails or returns no usable catalog data, the command keeps
+processing the remaining suppliers and fills missing suppliers from the
+validated baseline catalog. That keeps estimators usable while making the
+failure visible in the run history.
 
 Estimator behavior should use `/v1/supplier-catalog/*` as an optional catalog.
 If the catalog is empty or unavailable, manual product and color entry should

@@ -448,13 +448,48 @@ export class DatabaseClient {
       options.supplier ? [options.supplier] : []
     );
 
+    const dataIssues = await this.validateData();
+    const scrapeIssues = await this.scrapeLogIssues(options.supplier);
+
     return {
       suppliers,
       products,
       colors,
       productColors,
-      issues: await this.validateData(),
+      issues: [...dataIssues, ...scrapeIssues],
     };
+  }
+
+  private async scrapeLogIssues(supplierId?: string): Promise<DataIssue[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const params: any[] = [];
+    let filter = `WHERE status IN ('failed', 'partial')`;
+    if (supplierId) {
+      filter += ' AND supplier_id = ?';
+      params.push(supplierId);
+    }
+
+    const logs = await this.db.all(
+      `SELECT supplier_id as supplierId, scrape_type as scrapeType, status, error_message as errorMessage, started_at as startedAt
+       FROM scrape_logs
+       ${filter}
+       ORDER BY started_at DESC
+       LIMIT 25`,
+      params
+    );
+
+    return logs.map((log) => ({
+      supplierId: log.supplierId,
+      issueType: `scrape_${log.status}`,
+      severity: log.status === 'failed' ? 'high' : 'medium',
+      entityType: 'scrape_log',
+      entityId: `${log.supplierId}:${log.scrapeType}:${log.startedAt}`,
+      description: [
+        `${log.scrapeType} catalog refresh ${log.status}`,
+        log.errorMessage ? `: ${log.errorMessage}` : '',
+      ].join(''),
+    }));
   }
 
   async getStats(): Promise<any[]> {
@@ -464,8 +499,8 @@ export class DatabaseClient {
       SELECT 
         s.id,
         s.name,
-        s.last_scraped_at,
-        s.last_successful_scrape_at,
+        s.last_scraped_at as lastScraped,
+        s.last_successful_scrape_at as lastSuccessfulScrape,
         COUNT(DISTINCT p.id) as productCount,
         COUNT(DISTINCT c.id) as colorCount,
         COUNT(DISTINCT su.id) as sundryCount

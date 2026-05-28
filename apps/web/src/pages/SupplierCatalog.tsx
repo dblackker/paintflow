@@ -77,6 +77,18 @@ interface CatalogStatus {
     startedAt?: string | null;
     finishedAt?: string | null;
   } | null;
+  recentRuns?: Array<{
+    id: string;
+    source?: string | null;
+    status?: string | null;
+    suppliers?: string[] | null;
+    productsUpserted?: number | null;
+    colorsUpserted?: number | null;
+    productColorsUpserted?: number | null;
+    issues?: Array<{ severity?: string; description?: string }> | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+  }> | null;
   suppliers?: Array<{
     supplierId: string;
     supplierName: string;
@@ -300,6 +312,7 @@ export function SupplierCatalog() {
       </div>
 
       <SupplierSyncStatus suppliers={status?.suppliers || []} />
+      <SyncRunHistory runs={status?.recentRuns || []} />
 
       <Card padding="none">
         <div className="border-b p-4">
@@ -385,6 +398,45 @@ function Metric({ label, value, help }: { label: string; value: unknown; help?: 
       <p className="pf-label-small">{label}</p>
       <p className="pf-metric mt-1">{typeof value === 'number' ? value.toLocaleString() : String(value || '0')}</p>
       {help && <p className="pf-meta mt-1">{help}</p>}
+    </Card>
+  );
+}
+
+function SyncRunHistory({ runs }: { runs: NonNullable<CatalogStatus['recentRuns']> }) {
+  if (!runs.length) return null;
+  return (
+    <Card padding="sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="pf-section-title">Catalog run history</h2>
+          <p className="pf-meta">PaintFlow-level sync results for the supplier catalog.</p>
+        </div>
+      </div>
+      <div className="mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+        {runs.slice(0, 5).map((run) => {
+          const issueCount = Array.isArray(run.issues) ? run.issues.length : 0;
+          const status = run.status || 'unknown';
+          return (
+            <div key={run.id} className="grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={status === 'success' ? 'success' : status === 'failed' ? 'danger' : 'warning'} size="sm">
+                    {labelize(status)}
+                  </Badge>
+                  <p className="pf-row-title truncate">{dateLabel(run.finishedAt || run.startedAt)}</p>
+                </div>
+                <p className="pf-meta mt-1">
+                  {(run.suppliers || []).map(labelize).join(', ') || 'All suppliers'}
+                  {issueCount > 0 ? ` - ${issueCount} issue${issueCount === 1 ? '' : 's'}` : ''}
+                </p>
+              </div>
+              <p className="pf-meta sm:text-right">
+                {Number(run.productsUpserted || 0).toLocaleString()} products - {Number(run.colorsUpserted || 0).toLocaleString()} colors - {Number(run.productColorsUpserted || 0).toLocaleString()} mappings
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }
