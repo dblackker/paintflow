@@ -19,6 +19,7 @@ import {
 import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { createNotificationAndPush } from '../lib/web-push';
 
 const invoicesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -1105,12 +1106,19 @@ function inboundOrgSlug(value: unknown) {
   for (const raw of addresses) {
     const address = emailAddress(raw);
     const local = address.split('@')[0] || '';
+    const domain = address.split('@')[1] || '';
     const plusMatch = local.match(/^(?:receipts|invoices)[+-]([a-z0-9-]+)$/i);
     if (plusMatch?.[1]) return plusMatch[1].toLowerCase();
     const dotMatch = local.match(/^([a-z0-9-]+)[._-](?:receipts|invoices)$/i);
     if (dotMatch?.[1]) return dotMatch[1].toLowerCase();
+    const inboundSubdomainMatch = domain.match(/^(?:receipts|invoices)\./i);
+    if (inboundSubdomainMatch && /^[a-z0-9-]+$/i.test(local)) return local.toLowerCase();
   }
   return null;
+}
+
+function inboundEmailDomain(env: Env) {
+  return (env.INBOUND_INVOICE_EMAIL_DOMAIN || 'receipts.paintflow.app').replace(/^@+/, '').trim();
 }
 
 function fileFromBase64(attachment: z.infer<typeof inboundEmailSchema>['attachments'][number]) {
@@ -1215,10 +1223,47 @@ invoicesApp.post('/imports/email-forward', async (c) => {
     }
   }
 
+  if (imports.length) {
+    await Promise.all(imports.map((invoiceImport) => createNotificationAndPush(c.env, {
+      orgId: org.id,
+      type: 'supplier_invoice.imported',
+      title: 'Supplier invoice ready for review',
+      body: `${invoiceImport.supplier || trustedRule.supplierName || 'Supplier invoice'} from ${sender} was staged for review.`,
+      href: '/invoices?mode=supplier',
+      sourceType: 'supplier_invoice_import',
+      sourceId: invoiceImport.id,
+      metadata: {
+        sourceType: 'email_forward',
+        sender,
+        subject: payload.subject,
+        originalFilename: invoiceImport.originalFilename,
+        invoiceNumber: invoiceImport.invoiceNumber,
+      },
+    }))).catch((err) => console.error('Supplier invoice notification failed:', err));
+  }
+
   return c.json({ data: { imports, duplicates, ignoredAttachments: payload.attachments.length - supportedAttachments.length } }, 202);
 });
 
 invoicesApp.use('*', authMiddleware);
+
+invoicesApp.get('/inbound-email-config', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const org = await db.query.organizations.findFirst({ where: eq(organizations.id, orgId) });
+  const slug = org?.slug || 'workspace-slug';
+  const domain = inboundEmailDomain(c.env);
+  return c.json({
+    data: {
+      enabled: Boolean(c.env.INBOUND_INVOICE_EMAIL_SECRET),
+      domain,
+      workspaceSlug: slug,
+      forwardingAddress: `receipts+${slug}@${domain}`,
+      alternateAddress: `${slug}@${domain}`,
+      requiresTrustedSender: true,
+    },
+  });
+});
 
 invoicesApp.post('/imports', async (c) => {
   const idempotencyError = requireIdempotency(c);

@@ -41,6 +41,7 @@ export interface Env {
   OCR_DAILY_LIMIT?: string;
   OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD?: string;
   INBOUND_INVOICE_EMAIL_SECRET?: string;
+  INBOUND_INVOICE_EMAIL_DOMAIN?: string;
 }
 
 export type Variables = {

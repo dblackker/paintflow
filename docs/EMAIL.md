@@ -127,12 +127,20 @@ Example:
 receipts+golden-brush@receipts.paintflow.app
 ```
 
+The API also exposes `GET /v1/invoices/inbound-email-config` so the Invoices screen can show the exact forwarding address for the current workspace. If the Cloudflare route is configured as a catch-all on a receipts subdomain, `<workspace-slug>@receipts.paintflow.app` is also accepted by the parser.
+
 Required Worker secret:
 
 ```powershell
 cd apps/api
 wrangler secret put INBOUND_INVOICE_EMAIL_SECRET --env demo
 wrangler secret put INBOUND_INVOICE_EMAIL_SECRET --env production
+```
+
+Optional Worker variable:
+
+```powershell
+INBOUND_INVOICE_EMAIL_DOMAIN=receipts.paintflow.app
 ```
 
 Cloudflare dashboard setup:
@@ -142,6 +150,7 @@ Cloudflare dashboard setup:
 3. Add a catch-all or custom address route for `receipts+*@receipts.paintflow.app`.
 4. Route matching emails to the `paintflow-api` Worker.
 5. In PaintFlow, trust supplier sender addresses before forwarding supplier invoices. Untrusted senders are rejected.
+6. Confirm the Invoices screen shows the workspace forwarding address as configured.
 
 Do not run an SMTP server for this. Cloudflare owns the MX/mail receiving layer, and the Worker owns parsing and staging.
 

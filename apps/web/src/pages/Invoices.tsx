@@ -86,6 +86,15 @@ interface InvoiceSenderRule {
   isActive?: boolean | null;
 }
 
+interface InboundEmailConfig {
+  enabled: boolean;
+  domain: string;
+  workspaceSlug: string;
+  forwardingAddress: string;
+  alternateAddress?: string | null;
+  requiresTrustedSender: boolean;
+}
+
 interface InvoiceLearningStat {
   id: string;
   supplierKey: string;
@@ -751,6 +760,7 @@ export function Invoices() {
   const [invoiceImports, setInvoiceImports] = useState<InvoiceImport[]>([]);
   const [learningStats, setLearningStats] = useState<InvoiceLearningStat[]>([]);
   const [aiUsage, setAiUsage] = useState<AiUsageSummary | null>(null);
+  const [inboundEmailConfig, setInboundEmailConfig] = useState<InboundEmailConfig | null>(null);
   const [senderRules, setSenderRules] = useState<InvoiceSenderRule[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -873,11 +883,12 @@ export function Invoices() {
     setIsLoading(true);
     setError('');
     try {
-      const [purchasePayload, importPayload, learningPayload, usagePayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
+      const [purchasePayload, importPayload, learningPayload, usagePayload, inboundEmailPayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
         apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
         apiJson<{ data?: { stats?: InvoiceLearningStat[] } }>('/v1/invoices/imports/learning').catch(() => ({ data: { stats: [] } })),
         apiJson<{ data?: AiUsageSummary }>('/v1/invoices/imports/ai-usage').catch(() => ({ data: null })),
+        apiJson<{ data?: InboundEmailConfig }>('/v1/invoices/inbound-email-config').catch(() => ({ data: null })),
         apiJson<{ data?: InvoiceSenderRule[] }>('/v1/invoices/imports/sender-rules').catch(() => ({ data: [] })),
         apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
@@ -890,6 +901,7 @@ export function Invoices() {
       setInvoiceImports(importPayload.data || []);
       setLearningStats(learningPayload.data?.stats || []);
       setAiUsage(usagePayload.data || null);
+      setInboundEmailConfig(inboundEmailPayload.data || null);
       setSenderRules(senderRulesPayload.data || []);
       setReviewJobByImport(Object.fromEntries((importPayload.data || []).map((item) => [item.id, item.jobId || item.matchCandidates?.[0]?.id || ''])));
       setEstimates(estimatesPayload.data || []);
@@ -1247,6 +1259,9 @@ export function Invoices() {
                 <div className="flex items-center gap-2">
                   <p className="pf-section-title">Forward supplier receipts</p>
                   <Badge variant="purple" size="sm">Premium</Badge>
+                  <Badge variant={inboundEmailConfig?.enabled ? 'success' : 'warning'} size="sm">
+                    {inboundEmailConfig?.enabled ? 'Configured' : 'Needs Worker secret'}
+                  </Badge>
                 </div>
                 <p className="pf-helper mt-1">
                   Forwarded supplier emails are accepted only from trusted sender addresses, then staged here for review before they update job costs.
@@ -1257,8 +1272,15 @@ export function Invoices() {
               </Button>
             </div>
             <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <p className="pf-meta">Forwarding address format</p>
-              <p className="pf-copy mt-1 font-mono text-xs">receipts+workspace-slug@your-inbound-domain</p>
+              <p className="pf-meta">Forwarding address</p>
+              <p className="pf-copy mt-1 break-all font-mono text-xs">
+                {inboundEmailConfig?.forwardingAddress || 'receipts+workspace-slug@receipts.paintflow.app'}
+              </p>
+              {inboundEmailConfig?.alternateAddress && (
+                <p className="pf-helper mt-1 break-all">
+                  Alternate catch-all route: <span className="font-mono text-xs">{inboundEmailConfig.alternateAddress}</span>
+                </p>
+              )}
             </div>
           </Card>
 

@@ -275,7 +275,7 @@ async function handleInboundInvoiceEmail(message: any, env: Env, ctx: ExecutionC
       subject: parsed.subject,
       error: body.slice(0, 300),
     });
-    if ([400, 401, 403, 404].includes(response.status)) {
+    if ([400, 401, 402, 403, 404].includes(response.status)) {
       message.setReject?.('PaintFlow could not accept this invoice email.');
     }
     return;
