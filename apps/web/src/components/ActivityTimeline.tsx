@@ -6,6 +6,7 @@ export interface ActivityTimelineItem {
   title: string;
   meta?: string;
   description?: string;
+  details?: Array<string | ReactNode>;
   href?: string;
   tone?: 'default' | 'info' | 'warning' | 'danger' | 'success';
   accessory?: ReactNode;
@@ -42,6 +43,15 @@ export function ActivityTimeline({ items, className = '', empty }: ActivityTimel
               {item.accessory}
             </div>
             {item.description && <p className="pf-copy mt-1">{item.description}</p>}
+            {Boolean(item.details?.length) && (
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+                {item.details?.map((detail, detailIndex) => (
+                  <span key={detailIndex} className="min-w-0 max-w-full truncate whitespace-nowrap">
+                    {detail}
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         );
 

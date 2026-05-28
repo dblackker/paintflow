@@ -415,17 +415,17 @@ export function Dashboard() {
             <ActivityTimeline
               items={recentActivity.map((activity, index) => {
                 const address = formatAddress(activity);
-                const contact = [
+                const contactDetails = [
                   activity.clientName || 'Customer',
                   address,
                   activity.leadPhone ? formatPhone(activity.leadPhone) : '',
                   activity.leadEmail || '',
-                ].filter(Boolean).join(' · ');
+                ].filter(Boolean);
                 return {
                   id: `${activity.id}-${activity.occurredAt || activity.activityAt || activity.createdAt || index}`,
                   title: activityText(activity),
                   meta: relativeDate(activity.occurredAt || activity.activityAt || activity.sentAt || activity.createdAt),
-                  description: contact,
+                  details: contactDetails,
                   href: activity.href || `/estimates/${activity.id}`,
                   tone: activity.status === 'accepted' ? 'success' : activity.status === 'declined' ? 'danger' : index === 0 ? 'info' : 'default',
                   accessory: <StatusBadge status={String(activity.status || activity.source || 'activity')} />,
