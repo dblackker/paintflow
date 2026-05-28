@@ -448,7 +448,7 @@ export class DatabaseClient {
       options.supplier ? [options.supplier] : []
     );
 
-    const dataIssues = await this.validateData();
+    const dataIssues = await this.validateData(options.supplier);
     const scrapeIssues = await this.scrapeLogIssues(options.supplier);
 
     return {
@@ -514,10 +514,14 @@ export class DatabaseClient {
     return stats;
   }
 
-  async validateData(): Promise<DataIssue[]> {
+  async validateData(supplierId?: string): Promise<DataIssue[]> {
     if (!this.db) throw new Error('Database not initialized');
 
     const issues: DataIssue[] = [];
+    const supplierParams = supplierId ? [supplierId] : [];
+    const productSupplierFilter = supplierId ? 'AND p.supplier_id = ?' : '';
+    const colorSupplierFilter = supplierId ? 'AND supplier_id = ?' : '';
+    const staleSupplierFilter = supplierId ? 'AND id = ?' : '';
 
     // Check for products without pricing
     const productsWithoutPricing = await this.db.all(`
@@ -525,7 +529,8 @@ export class DatabaseClient {
       FROM products p
       LEFT JOIN pricing pr ON p.id = pr.product_id AND pr.is_current = 1
       WHERE p.is_active = 1 AND pr.id IS NULL
-    `);
+      ${productSupplierFilter}
+    `, supplierParams);
 
     for (const product of productsWithoutPricing) {
       issues.push({
@@ -543,7 +548,8 @@ export class DatabaseClient {
       SELECT id, name, supplier_id
       FROM colors
       WHERE is_active = 1 AND hex_code IS NULL
-    `);
+      ${colorSupplierFilter}
+    `, supplierParams);
 
     for (const color of colorsWithoutHex) {
       issues.push({
@@ -560,9 +566,10 @@ export class DatabaseClient {
     const staleSuppliers = await this.db.all(`
       SELECT id, name, last_successful_scrape_at
       FROM suppliers
-      WHERE last_successful_scrape_at < datetime('now', '-14 days')
-         OR last_successful_scrape_at IS NULL
-    `);
+      WHERE (last_successful_scrape_at < datetime('now', '-14 days')
+         OR last_successful_scrape_at IS NULL)
+      ${staleSupplierFilter}
+    `, supplierParams);
 
     for (const supplier of staleSuppliers) {
       issues.push({

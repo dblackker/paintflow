@@ -5,11 +5,8 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
   supplierName = 'Benjamin Moore';
   baseUrl = 'https://www.benjaminmoore.com';
 
-  private productCategories = [
-    { type: 'interior', url: '/en-us/interior-paints-stains' },
-    { type: 'exterior', url: '/en-us/exterior-paints-stains' },
-    { type: 'primer', url: '/en-us/primers' },
-  ];
+  private productCatalogUrl = '/en-us/product-catalog';
+  private colorCatalogUrl = '/en-us/paint-colors';
 
   async scrapeProducts(options?: ScrapeOptions): Promise<ScrapeResult<Product>> {
     this.logScrapeStart('products');
@@ -19,49 +16,55 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
     let created = 0, failed = 0;
 
     try {
-      for (const category of this.productCategories) {
-        if (options?.types && !options.types.includes(category.type)) continue;
+      this.logger.info('Scraping product catalog...');
 
-        this.logger.info(`Scraping ${category.type} products...`);
-        
-        try {
-          await this.navigate(`${this.baseUrl}${category.url}`);
-          
-          // Benjamin Moore uses React with data attributes
-          const hasProductGrid = await this.waitForAnySelector('[data-testid="product-card"], .product-tile, a[href*="/product/"], a[href*="/interior-paints-stains/"], a[href*="/exterior-paints-stains/"]');
-          if (!hasProductGrid) {
-            failed++;
-            continue;
-          }
+      try {
+        await this.navigate(`${this.baseUrl}${this.productCatalogUrl}`);
 
-          // Scroll to load all products
-          await this.page!.evaluate(() => {
-            window.scrollTo(0, document.body.scrollHeight);
-          });
-          await this.page!.waitForTimeout(2000);
+        const hasProductLinks = await this.waitForAnySelector('a[href*="/en-us/product/"], a[href*="/product/"]');
+        if (!hasProductLinks) {
+          failed++;
+        } else {
+          await this.page!.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await this.page!.waitForTimeout(1000);
 
-          const productLinks = await this.page!.$$eval(
-            '[data-testid="product-card"] a, .product-tile a, [href*="/product/"], a[href*="/interior-paints-stains/"], a[href*="/exterior-paints-stains/"]',
-            links => {
-              const seen = new Set<string>();
-              return links.map(a => {
-                const anchor = a as HTMLAnchorElement;
-                return { url: anchor.href, label: anchor.textContent?.trim() || '' };
-              }).filter((item) => {
-                if (!item.url || seen.has(item.url)) return false;
-                seen.add(item.url);
-                return true;
-              });
+          const productLinks = await this.page!.$$eval('a[href*="/en-us/product/"], a[href*="/product/"]', links => {
+            const scoreLabel = (label: string) => {
+              const normalized = label.trim();
+              if (!normalized) return 0;
+              if (/^[A-Z]?\d{3,4}$/i.test(normalized)) return 1;
+              if (/^\d+(\.\d+)?\s*out of/i.test(normalized)) return 1;
+              if (/data sheets?|learn more|view product/i.test(normalized)) return 1;
+              let score = normalized.length;
+              if (/paint|stain|primer|sealer|enamel|coating|caulk/i.test(normalized)) score += 100;
+              if (/[A-Z]\d{3}|^\d{3,4}\s+/i.test(normalized)) score += 20;
+              return score;
+            };
+
+            const byUrl = new Map<string, { url: string; label: string; score: number }>();
+            for (const link of links) {
+              const anchor = link as HTMLAnchorElement;
+              const url = anchor.href;
+              const label = anchor.textContent?.replace(/\s+/g, ' ').trim() || '';
+              if (!url || !/\/en-us\/product\//.test(url)) continue;
+              const score = scoreLabel(label);
+              const existing = byUrl.get(url);
+              if (!existing || score > existing.score) byUrl.set(url, { url, label, score });
             }
-          );
+            return Array.from(byUrl.values()).map(({ url, label }) => ({ url, label }));
+          });
 
-          this.logger.info(`Found ${productLinks.length} products`);
+          this.logger.info(`Found ${productLinks.length} product links`);
 
           for (const productLink of productLinks.slice(0, options?.limit)) {
             try {
+              const listingProduct = this.productFromListing(productLink.url, productLink.label);
+              if (!listingProduct) continue;
+              if (options?.types && !options.types.includes(listingProduct.type)) continue;
+
               const product = process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true'
-                ? await this.scrapeProductDetail(productLink.url, category.type)
-                : this.productFromListing(productLink.url, productLink.label, category.type);
+                ? await this.scrapeProductDetail(productLink.url, listingProduct.type)
+                : listingProduct;
               if (product) {
                 products.push(product);
                 created++;
@@ -75,10 +78,10 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
               await this.rateLimit();
             }
           }
-        } catch (error) {
-          errors.push(error as Error);
-          this.logger.error(`Failed to scrape category ${category.type}:`, error);
         }
+      } catch (error) {
+        errors.push(error as Error);
+        this.logger.error('Failed to scrape product catalog:', error);
       }
 
       const duration = Date.now() - startTime;
@@ -100,21 +103,66 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
     }
   }
 
-  private productFromListing(url: string, label: string, type: string): Product | null {
-    const slug = new URL(url).pathname.split('/').filter(Boolean).pop() || '';
-    const name = label.replace(/\s+/g, ' ').trim() || this.nameFromSlug(slug);
-    if (!name || name.length < 3 || /how can we help/i.test(name)) return null;
-    const sku = slug || this.generateId('bm', name);
+  private productFromListing(url: string, label: string): Product | null {
+    const pathParts = new URL(url).pathname.split('/').filter(Boolean);
+    const sku = pathParts[pathParts.length - 1] || this.generateId('bm', label);
+    const slug = pathParts[pathParts.length - 2] || '';
+    const name = this.cleanProductName(label, slug, sku);
+    if (!name) return null;
+    const type = this.productTypeFromName(name);
     return this.validateProduct({
       id: this.generateId(this.supplierId, sku),
       supplierId: this.supplierId,
       sku,
       name,
-      productLine: name.split(/\s+/).slice(0, 2).join(' '),
-      type: this.normalizeProductType(type),
+      productLine: this.productLineFromName(name),
+      type,
       category: 'paint',
+      sheens: this.parseSheens(name),
       url,
     });
+  }
+
+  private cleanProductName(label: string, slug: string, sku: string): string | null {
+    const normalized = label.replace(/\s+/g, ' ').trim();
+    const skuPattern = new RegExp(`^${sku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const badLabel = !normalized ||
+      skuPattern.test(normalized) ||
+      /^[A-Z]?\d{3,4}$/i.test(normalized) ||
+      /^\d+(\.\d+)?\s*out of/i.test(normalized) ||
+      /how can we help|data sheets?|learn more|view product/i.test(normalized);
+    const name = badLabel ? this.nameFromSlug(slug) : normalized.replace(new RegExp(`^${sku}\\s+`, 'i'), '');
+    if (!name || name.length < 3 || /how can we help/i.test(name)) return null;
+    return name;
+  }
+
+  private productTypeFromName(name: string): Product['type'] {
+    return this.normalizeProductType(name);
+  }
+
+  private productLineFromName(name: string): string {
+    const withoutSku = name.replace(/^[A-Z]?\d{3,4}\s+/, '').trim();
+    const match = withoutSku.match(/^(.+?)(?:\s+-|\s+Interior|\s+Exterior|\s+Paint|\s+Primer|\s+Stain|\s+Waterborne|\s+Alkyd|$)/i);
+    return (match?.[1] || withoutSku.split(/\s+/).slice(0, 3).join(' ')).trim();
+  }
+
+  private parseSheens(name: string): string[] | undefined {
+    const sheens = [
+      'high gloss',
+      'semi-gloss',
+      'soft gloss',
+      'low lustre',
+      'eggshell',
+      'satin',
+      'pearl',
+      'matte',
+      'flat',
+      'gloss',
+    ];
+    const found = sheens
+      .filter((sheen) => new RegExp(`\\b${sheen.replace('-', '[-\\s]?')}\\b`, 'i').test(name))
+      .map((sheen) => this.normalizeSheen(sheen));
+    return found.length ? Array.from(new Set(found)) : undefined;
   }
 
   private nameFromSlug(slug: string) {
@@ -202,86 +250,50 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
     const errors: Error[] = [];
 
     try {
-      // Benjamin Moore color families
-      await this.navigate(`${this.baseUrl}/en-us/color-overview`);
-      const hasColorLinks = await this.waitForAnySelector('[href*="/color/"], [data-color], .color-swatch');
+      await this.navigate(`${this.baseUrl}${this.colorCatalogUrl}`);
+      const hasColorLinks = await this.waitForAnySelector('a[href*="/paint-colors/color/"]');
       if (!hasColorLinks) {
-        errors.push(new Error('Benjamin Moore color overview selectors were not found'));
+        errors.push(new Error('Benjamin Moore paint color links were not found'));
       }
 
-      // Get color family links
-      const familyLinks = await this.page!.$$eval(
-        'a[href*="/color/"]',
-        links => [...new Set(links
-          .map(a => ({
-            url: (a as HTMLAnchorElement).href,
-            name: a.textContent?.trim()
-          }))
-          .filter(l => l.url && l.name && l.url.includes('/color/'))
-        )]
+      const colorLinks = await this.page!.$$eval(
+        'a[href*="/paint-colors/color/"]',
+        links => {
+          const byCode = new Map<string, { url: string; label: string; code: string; slug: string }>();
+          for (const link of links) {
+            const anchor = link as HTMLAnchorElement;
+            const url = anchor.href;
+            const match = url.match(/\/paint-colors\/color\/([^/]+)\/([^/?#]+)/i);
+            if (!match) continue;
+            const code = decodeURIComponent(match[1]);
+            const slug = decodeURIComponent(match[2]);
+            const label = anchor.textContent?.replace(/\s+/g, ' ').trim() || '';
+            if (!byCode.has(code)) byCode.set(code, { url, label, code, slug });
+          }
+          return Array.from(byCode.values());
+        }
       );
 
-      this.logger.info(`Found ${familyLinks.length} color families`);
+      this.logger.info(`Found ${colorLinks.length} color links`);
 
-      // Limit to main color families
-      const mainFamilies = familyLinks.filter(f => 
-        !f.url.includes('collection') && 
-        !f.url.includes('inspiration')
-      ).slice(0, 8);
-
-      for (const family of mainFamilies) {
+      for (const colorData of colorLinks.slice(0, options?.limit)) {
         try {
-          await this.navigate(family.url);
-          const hasSwatches = await this.waitForAnySelector('[data-color], .color-swatch', 3000);
-          if (!hasSwatches) continue;
+          const name = this.cleanColorName(colorData.label, colorData.slug, colorData.code);
+          const id = this.generateId(this.supplierId, colorData.code);
+          const color: Color = {
+            id,
+            supplierId: this.supplierId,
+            colorCode: colorData.code,
+            name,
+            family: this.inferColorFamily(name),
+            isPopular: false,
+          };
 
-          // Scroll to load all colors
-          await this.page!.evaluate(() => {
-            window.scrollTo(0, document.body.scrollHeight);
-          });
-          await this.page!.waitForTimeout(2000);
-
-          const familyColors = await this.page!.$$eval(
-            '[data-color], .color-swatch, [data-testid="color-card"]',
-            (swatches, familyName) => {
-              return swatches.map(swatch => {
-                const el = swatch as HTMLElement;
-                const name = el.querySelector('.color-name, [data-color-name]')?.textContent?.trim() || '';
-                const code = el.getAttribute('data-color-code') || 
-                            el.querySelector('.color-code')?.textContent?.trim() || '';
-                const hex = el.getAttribute('data-color-hex') || 
-                           el.style.backgroundColor || '';
-                const collection = el.getAttribute('data-collection') || '';
-                
-                return { name, code, hex, collection, family: familyName };
-              }).filter(c => c.name);
-            },
-            family.name
-          );
-
-          for (const colorData of familyColors) {
-            const code = colorData.code || this.generateId('bm', colorData.name);
-            const id = this.generateId(this.supplierId, code);
-            
-            const color: Color = {
-              id,
-              supplierId: this.supplierId,
-              colorCode: code,
-              name: colorData.name,
-              hexCode: this.normalizeHex(colorData.hex),
-              collection: colorData.collection || undefined,
-              family: this.inferColorFamily(colorData.name),
-              isPopular: false,
-            };
-
-            const validated = this.validateColor(color);
-            if (validated) colors.push(validated);
-          }
-
-          await this.rateLimit();
+          const validated = this.validateColor(color);
+          if (validated) colors.push(validated);
         } catch (error) {
           errors.push(error as Error);
-          this.logger.warn(`Failed to scrape family ${family.name}:`, error);
+          this.logger.warn(`Failed to parse color ${colorData.url}:`, error);
         }
       }
 
@@ -317,6 +329,17 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
       }
     }
     return undefined;
+  }
+
+  private cleanColorName(label: string, slug: string, code: string): string {
+    const normalized = label.replace(/\s+/g, ' ').trim();
+    const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const withoutCode = normalized
+      .replace(new RegExp(`\\s*${escapedCode}\\s*$`, 'i'), '')
+      .replace(new RegExp(`\\b${escapedCode}\\b`, 'i'), '')
+      .trim();
+    if (withoutCode && withoutCode.length > 2) return withoutCode;
+    return this.nameFromSlug(slug);
   }
 
   private inferColorFamily(colorName: string): string {
