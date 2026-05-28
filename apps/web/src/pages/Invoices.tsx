@@ -52,6 +52,9 @@ interface InvoiceImport {
     fileName?: string | null;
     extractionMethod?: string | null;
     senderRuleMatched?: boolean;
+    storedInR2?: boolean | null;
+    fileRetentionStatus?: 'stored' | 'not_configured' | 'failed' | string | null;
+    fileRetentionError?: string | null;
   } | null;
   sourceType?: string | null;
   senderEmail?: string | null;
@@ -440,7 +443,9 @@ function ImportReviewCard({
   const candidate = invoiceImport.matchCandidates?.[0];
   const matchConfidence = Math.round(numberValue(invoiceImport.matchConfidence) * 100);
   const extractionConfidence = Math.round(numberValue(invoiceImport.extractionConfidence) * 100);
-  const fileHref = invoiceImport.extractedData?.fileKey ? `${API_URL}/v1/invoices/imports/${invoiceImport.id}/file` : '';
+  const fileRetained = Boolean(invoiceImport.extractedData?.storedInR2 && invoiceImport.extractedData?.fileKey);
+  const fileRetentionStatus = invoiceImport.extractedData?.fileRetentionStatus;
+  const fileHref = fileRetained ? `${API_URL}/v1/invoices/imports/${invoiceImport.id}/file` : '';
   const trustedSender = Boolean(invoiceImport.extractedData?.senderRuleMatched)
     || senderRules.some((rule) => (
       rule.isActive !== false
@@ -463,6 +468,13 @@ function ImportReviewCard({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {invoiceImport.extractedData?.extractionMethod && (
               <Badge variant="info" size="sm">{invoiceImport.extractedData.extractionMethod.replace(/_/g, ' ')}</Badge>
+            )}
+            {fileRetained && <Badge variant="success" size="sm">File retained</Badge>}
+            {!fileRetained && fileRetentionStatus === 'failed' && (
+              <Badge variant="warning" size="sm">File not retained</Badge>
+            )}
+            {!fileRetained && fileRetentionStatus === 'not_configured' && (
+              <Badge variant="default" size="sm">OCR only</Badge>
             )}
             {invoiceImport.senderEmail && (
               <Badge variant={trustedSender ? 'success' : 'default'} size="sm">
@@ -1312,7 +1324,7 @@ export function Invoices() {
                   <p className="pf-row-title">OCR and receipt automation</p>
                 </div>
                 <p className="pf-copy mt-1">
-                  OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. The review queue is also ready for a future receipts inbox where approved supplier senders can forward statements.
+                  OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. R2 is optional; without it, PaintFlow can stage the invoice for review but will not retain the original file.
                 </p>
               </div>
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">

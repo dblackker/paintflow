@@ -395,12 +395,26 @@ async function parseMultipartInvoice(c: any): Promise<{ input: z.infer<typeof im
 
   const buffer = await file.arrayBuffer();
   const fileName = safeFileName(file.name || `invoice-${Date.now()}`);
-  const fileKey = `supplier-invoices/${c.get('orgId')}/${Date.now()}-${fileName}`;
+  let fileKey: string | null = null;
+  let fileRetentionStatus: 'stored' | 'not_configured' | 'failed' = c.env.R2 ? 'stored' : 'not_configured';
+  let fileRetentionError: string | null = null;
   if (c.env.R2) {
-    await c.env.R2.put(fileKey, buffer, {
-      httpMetadata: { contentType: file.type || 'application/octet-stream' },
-      customMetadata: { originalName: file.name || fileName },
-    });
+    const candidateKey = `supplier-invoices/${c.get('orgId')}/${Date.now()}-${fileName}`;
+    try {
+      await c.env.R2.put(candidateKey, buffer, {
+        httpMetadata: { contentType: file.type || 'application/octet-stream' },
+        customMetadata: { originalName: file.name || fileName },
+      });
+      fileKey = candidateKey;
+    } catch (error) {
+      fileRetentionStatus = 'failed';
+      fileRetentionError = error instanceof Error ? error.message : 'R2 file retention failed';
+      console.warn('Supplier invoice file retention failed', {
+        orgId: c.get('orgId'),
+        fileName: file.name || fileName,
+        error: fileRetentionError,
+      });
+    }
   }
 
   const textLike = /text|csv|json/i.test(file.type) || /\.(csv|txt|json)$/i.test(file.name || '');
@@ -420,7 +434,9 @@ async function parseMultipartInvoice(c: any): Promise<{ input: z.infer<typeof im
         fileName: file.name || fileName,
         fileSize: file.size,
         contentType: file.type || 'application/octet-stream',
-        storedInR2: Boolean(c.env.R2),
+        storedInR2: Boolean(fileKey),
+        fileRetentionStatus,
+        fileRetentionError: fileRetentionError || undefined,
       },
     },
     fileMetadata: {
@@ -428,7 +444,9 @@ async function parseMultipartInvoice(c: any): Promise<{ input: z.infer<typeof im
       fileName: file.name || fileName,
       fileSize: file.size,
       contentType: file.type || 'application/octet-stream',
-      storedInR2: Boolean(c.env.R2),
+      storedInR2: Boolean(fileKey),
+      fileRetentionStatus,
+      fileRetentionError: fileRetentionError || undefined,
     },
   };
 }
@@ -552,7 +570,7 @@ async function applyInvoiceImport(
   const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems as InvoiceItem[] : [];
   const supplier = invoiceImport.supplier || 'Unknown supplier';
   const totalAmount = items.reduce((sum, item) => sum + currencyValue(item.total), 0) || currencyValue(invoiceImport.totalAmount);
-  const extractedData = invoiceImport.extractedData as { fileKey?: string } | null;
+  const extractedData = invoiceImport.extractedData as { fileKey?: string; storedInR2?: boolean } | null;
 
   const [purchase] = await db.insert(materialPurchases).values({
     orgId,
@@ -561,7 +579,7 @@ async function applyInvoiceImport(
     invoiceNumber: invoiceImport.invoiceNumber || null,
     invoiceDate: invoiceImport.invoiceDate || null,
     totalAmount: totalAmount.toFixed(2),
-    fileUrl: extractedData?.fileKey ? `/v1/invoices/imports/${invoiceImport.id}/file` : null,
+    fileUrl: extractedData?.storedInR2 && extractedData?.fileKey ? `/v1/invoices/imports/${invoiceImport.id}/file` : null,
     parsedData: items,
   }).returning();
 
@@ -897,7 +915,7 @@ invoicesApp.get('/imports/:id/file', async (c) => {
   });
   if (!invoiceImport) return c.json({ error: 'Invoice import not found' }, 404);
   const data = invoiceImport.extractedData as { fileKey?: string; contentType?: string; fileName?: string } | null;
-  if (!data?.fileKey || !c.env.R2) return c.json({ error: 'Invoice file is not available' }, 404);
+  if (!data?.fileKey || !c.env.R2) return c.json({ error: 'Original invoice file was not retained for this import' }, 404);
   const object = await c.env.R2.get(data.fileKey);
   if (!object) return c.json({ error: 'Invoice file is not available' }, 404);
   const headers = new Headers();
