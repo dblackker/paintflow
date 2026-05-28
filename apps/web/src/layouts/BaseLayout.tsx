@@ -268,7 +268,7 @@ export function BaseLayout() {
       <AuthBridge />
 
       <nav className="pf-app-nav sticky top-0 z-50 border-b shadow-sm">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[100rem] px-4 sm:px-6 lg:px-8 2xl:px-10">
           <div className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
             <button
               type="button"
@@ -419,7 +419,7 @@ export function BaseLayout() {
       )}
 
       <main className="py-6 pb-24 lg:pb-6">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[100rem] px-4 sm:px-6 lg:px-8 2xl:px-10">
           <Outlet />
         </div>
       </main>
