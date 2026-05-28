@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import PostalMime from 'postal-mime';
 import { securityHeaders } from './middleware/security';
 import { tenantMiddleware } from './middleware/tenant';
 import { requestLogging } from './middleware/request-logging';
@@ -203,11 +204,92 @@ async function runScheduledJobs(env: Env) {
   };
 }
 
+function emailAddressList(addresses: any[] | undefined) {
+  return (addresses || [])
+    .flatMap((address) => address?.group || address)
+    .map((address) => address?.address)
+    .filter(Boolean);
+}
+
+function uniqueValues(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.filter(Boolean).map((value) => String(value))));
+}
+
+function base64FromContent(content: string | ArrayBuffer | Uint8Array) {
+  if (typeof content === 'string') return content;
+  const bytes = content instanceof Uint8Array ? content : new Uint8Array(content);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function handleInboundInvoiceEmail(message: any, env: Env, ctx: ExecutionContext) {
+  if (!env.INBOUND_INVOICE_EMAIL_SECRET) {
+    message.setReject?.('Inbound invoice email is not configured.');
+    return;
+  }
+
+  const parsed = await PostalMime.parse(message.raw, { attachmentEncoding: 'base64' });
+  const from = typeof message.from === 'string'
+    ? message.from
+    : (parsed.from as any)?.address || (parsed.sender as any)?.address || '';
+  const recipients = uniqueValues([
+    typeof message.to === 'string' ? message.to : null,
+    parsed.deliveredTo,
+    ...emailAddressList(parsed.to as any[] | undefined),
+    ...emailAddressList(parsed.cc as any[] | undefined),
+  ]);
+
+  const payload = {
+    from,
+    to: recipients,
+    subject: parsed.subject || '',
+    text: parsed.text || '',
+    html: typeof parsed.html === 'string' ? parsed.html : '',
+    attachments: (parsed.attachments || []).map((attachment) => ({
+      filename: attachment.filename || 'invoice',
+      contentType: attachment.mimeType || 'application/octet-stream',
+      contentBase64: base64FromContent(attachment.content),
+    })),
+  };
+
+  const request = new Request('https://paintflow.internal/v1/invoices/imports/email-forward', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${env.INBOUND_INVOICE_EMAIL_SECRET}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const response = await app.fetch(request, env, ctx);
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    console.warn('Inbound invoice email was not accepted', {
+      status: response.status,
+      from,
+      to: recipients,
+      subject: parsed.subject,
+      error: body.slice(0, 300),
+    });
+    if ([400, 401, 403, 404].includes(response.status)) {
+      message.setReject?.('PaintFlow could not accept this invoice email.');
+    }
+    return;
+  }
+}
+
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
   },
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runScheduledJobs(env));
+  },
+  async email(message: any, env: Env, ctx: ExecutionContext) {
+    await handleInboundInvoiceEmail(message, env, ctx);
   },
 };

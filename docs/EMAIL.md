@@ -104,6 +104,47 @@ Daily summary reports:
 - Include counts and links, not every raw record.
 - Send only to users with owner/admin roles.
 
+## Inbound Supplier Receipt Email
+
+PaintFlow can receive supplier invoices through Cloudflare Email Routing to the API Worker. This is for supplier receipts/statements only, not customer communication.
+
+Flow:
+
+1. Cloudflare Email Routing receives the message.
+2. The Worker `email()` handler parses the MIME email and attachments.
+3. The Worker calls `POST /v1/invoices/imports/email-forward` internally using `INBOUND_INVOICE_EMAIL_SECRET`.
+4. PaintFlow routes by recipient address, verifies the sender is whitelisted for that contractor, checks duplicates, runs OCR when needed, and stages the import for review.
+
+Recipient address format:
+
+```text
+receipts+<workspace-slug>@<inbound-domain>
+```
+
+Example:
+
+```text
+receipts+golden-brush@receipts.paintflow.app
+```
+
+Required Worker secret:
+
+```powershell
+cd apps/api
+wrangler secret put INBOUND_INVOICE_EMAIL_SECRET --env demo
+wrangler secret put INBOUND_INVOICE_EMAIL_SECRET --env production
+```
+
+Cloudflare dashboard setup:
+
+1. Add or choose a Cloudflare-managed inbound domain such as `receipts.paintflow.app`.
+2. Enable Email Routing for that zone and complete DNS setup.
+3. Add a catch-all or custom address route for `receipts+*@receipts.paintflow.app`.
+4. Route matching emails to the `paintflow-api` Worker.
+5. In PaintFlow, trust supplier sender addresses before forwarding supplier invoices. Untrusted senders are rejected.
+
+Do not run an SMTP server for this. Cloudflare owns the MX/mail receiving layer, and the Worker owns parsing and staging.
+
 Drip marketing:
 
 - Store contact-level consent and unsubscribe state before sending.
