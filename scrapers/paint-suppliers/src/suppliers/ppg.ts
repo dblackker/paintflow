@@ -26,19 +26,35 @@ export class PPGScraper extends BaseSupplierScraper {
         
         try {
           await this.navigate(`${this.baseUrl}${category.url}`);
-          await this.page!.waitForSelector('.product-card, .product-item', { timeout: 10000 });
+          const hasProductGrid = await this.waitForAnySelector('.product-card, .product-item, a[href*="/products/"]');
+          if (!hasProductGrid) {
+            failed++;
+            continue;
+          }
 
           // PPG uses a grid layout
           const productLinks = await this.page!.$$eval(
-            '.product-card a, .product-item a',
-            links => links.map(a => (a as HTMLAnchorElement).href).filter(Boolean)
+            '.product-card a, .product-item a, a[href*="/products/"]',
+            links => {
+              const seen = new Set<string>();
+              return links.map(a => {
+                const anchor = a as HTMLAnchorElement;
+                return { url: anchor.href, label: anchor.textContent?.trim() || '' };
+              }).filter((item) => {
+                if (!item.url || seen.has(item.url)) return false;
+                seen.add(item.url);
+                return true;
+              });
+            }
           );
 
           this.logger.info(`Found ${productLinks.length} products`);
 
-          for (const link of productLinks.slice(0, options?.limit)) {
+          for (const productLink of productLinks.slice(0, options?.limit)) {
             try {
-              const product = await this.scrapeProductDetail(link, category.type);
+              const product = process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true'
+                ? await this.scrapeProductDetail(productLink.url, category.type)
+                : this.productFromListing(productLink.url, productLink.label, category.type);
               if (product) {
                 products.push(product);
                 created++;
@@ -47,7 +63,9 @@ export class PPGScraper extends BaseSupplierScraper {
               errors.push(error as Error);
               failed++;
             }
-            await this.rateLimit();
+            if (process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true') {
+              await this.rateLimit();
+            }
           }
         } catch (error) {
           errors.push(error as Error);
@@ -72,6 +90,31 @@ export class PPGScraper extends BaseSupplierScraper {
         stats: { total: products.length, created, updated: 0, unchanged: 0, failed: failed + 1 }
       };
     }
+  }
+
+  private productFromListing(url: string, label: string, type: string): Product | null {
+    const slug = new URL(url).pathname.split('/').filter(Boolean).pop() || '';
+    const name = label.replace(/\s+/g, ' ').trim() || this.nameFromSlug(slug);
+    if (!name || name.length < 3) return null;
+    const sku = slug || this.generateId('ppg', name);
+    return this.validateProduct({
+      id: this.generateId(this.supplierId, sku),
+      supplierId: this.supplierId,
+      sku,
+      name,
+      productLine: name.split(/\s+/).slice(0, 2).join(' '),
+      type: this.normalizeProductType(type),
+      category: 'paint',
+      url,
+    });
+  }
+
+  private nameFromSlug(slug: string) {
+    return slug
+      .split('-')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   }
 
   private async scrapeProductDetail(url: string, type: string): Promise<Product | null> {
@@ -133,7 +176,10 @@ export class PPGScraper extends BaseSupplierScraper {
     try {
       // PPG color palette
       await this.navigate(`${this.baseUrl}/color`);
-      await this.page!.waitForSelector('.color-swatch, .color-card', { timeout: 10000 });
+      const hasColorPage = await this.waitForAnySelector('.color-swatch, .color-card, .color-family a, .palette-section a, a[href*="/color"]');
+      if (!hasColorPage) {
+        errors.push(new Error('PPG color selectors were not found'));
+      }
 
       // Get color families
       const families = await this.page!.$$eval(
@@ -149,7 +195,8 @@ export class PPGScraper extends BaseSupplierScraper {
       for (const family of families.slice(0, 5)) { // Limit for demo
         try {
           await this.navigate(family.url);
-          await this.page!.waitForSelector('.color-swatch', { timeout: 5000 });
+          const hasSwatches = await this.waitForAnySelector('.color-swatch', 3000);
+          if (!hasSwatches) continue;
 
           const familyColors = await this.page!.$$eval(
             '.color-swatch',
@@ -229,6 +276,17 @@ export class PPGScraper extends BaseSupplierScraper {
     const mappings: ProductColorMapping[] = [];
     const errors: Error[] = [];
 
+    if (process.env.SUPPLIER_DEEP_PRODUCT_COLOR_MAPPING !== 'true') {
+      this.logger.info('Skipping deep product-color mapping scrape; baseline compatibility mappings will be used when needed.');
+      this.logScrapeComplete('product-color mappings', 0, Date.now() - startTime);
+      return {
+        success: true,
+        data: mappings,
+        errors,
+        stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 },
+      };
+    }
+
     try {
       this.logger.info('Scraping product-color relationships for PPG');
 
@@ -242,7 +300,8 @@ export class PPGScraper extends BaseSupplierScraper {
       for (const productInfo of productPaths) {
         try {
           await this.navigate(`${this.baseUrl}${productInfo.path}`);
-          await this.page!.waitForSelector('h1, .product-title', { timeout: 10000 });
+          const hasProductTitle = await this.waitForAnySelector('h1, .product-title');
+          if (!hasProductTitle) continue;
 
           const productData = await this.page!.$eval('body', () => {
             const name = document.querySelector('h1, .product-title')?.textContent?.trim() || '';
@@ -269,7 +328,10 @@ export class PPGScraper extends BaseSupplierScraper {
 
       // Scrape colors
       await this.navigate(`${this.baseUrl}/color`);
-      await this.page!.waitForSelector('.color-swatch', { timeout: 10000 });
+      const hasSwatches = await this.waitForAnySelector('.color-swatch', 3000);
+      if (!hasSwatches) {
+        errors.push(new Error('PPG product-color mapping color swatches were not found'));
+      }
 
       const colors = await this.page!.$$eval(
         '.color-swatch',

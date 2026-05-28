@@ -32,20 +32,36 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
           await this.navigate(`${this.baseUrl}${category.url}`);
           
           // Wait for product grid to load
-          await this.page!.waitForSelector('[data-testid="product-card"], .product-tile', { timeout: 10000 });
+          const hasProductGrid = await this.waitForAnySelector('[data-testid="product-card"], .product-tile, a[href*="/products/"]');
+          if (!hasProductGrid) {
+            failed++;
+            continue;
+          }
           
           // Get all product links
           const productLinks = await this.page!.$$eval(
-            '[data-testid="product-card"] a, .product-tile a',
-            links => links.map(a => (a as HTMLAnchorElement).href).filter(Boolean)
+            '[data-testid="product-card"] a, .product-tile a, a[href*="/products/"]',
+            links => {
+              const seen = new Set<string>();
+              return links.map(a => {
+                const anchor = a as HTMLAnchorElement;
+                return { url: anchor.href, label: anchor.textContent?.trim() || '' };
+              }).filter((item) => {
+                if (!item.url || seen.has(item.url)) return false;
+                seen.add(item.url);
+                return true;
+              });
+            }
           );
 
           this.logger.info(`Found ${productLinks.length} products in ${category.type}`);
 
           // Scrape each product
-          for (const link of productLinks.slice(0, options?.limit)) {
+          for (const productLink of productLinks.slice(0, options?.limit)) {
             try {
-              const product = await this.scrapeProductDetail(link, category.type);
+              const product = process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true'
+                ? await this.scrapeProductDetail(productLink.url, category.type)
+                : this.productFromListing(productLink.url, productLink.label, category.type);
               if (product) {
                 products.push(product);
                 created++;
@@ -53,10 +69,12 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
             } catch (error) {
               errors.push(error as Error);
               failed++;
-              this.logger.warn(`Failed to scrape product ${link}:`, error);
+              this.logger.warn(`Failed to scrape product ${productLink.url}:`, error);
             }
             
-            await this.rateLimit();
+            if (process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true') {
+              await this.rateLimit();
+            }
           }
         } catch (error) {
           errors.push(error as Error);
@@ -87,6 +105,35 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
         stats: { total: products.length, created, updated, unchanged, failed: failed + 1 }
       };
     }
+  }
+
+  private productFromListing(url: string, label: string, type: string): Product | null {
+    const slug = new URL(url).pathname.split('/').filter(Boolean).pop() || '';
+    const name = this.cleanListingName(label) || this.nameFromSlug(slug);
+    if (!name || ['Products', 'Paints & Supplies'].includes(name)) return null;
+    const sku = slug || this.generateId('sw', name);
+    return this.validateProduct({
+      id: this.generateId(this.supplierId, sku),
+      supplierId: this.supplierId,
+      sku,
+      name,
+      productLine: name.split(/\s+/).slice(0, 2).join(' '),
+      type: this.normalizeProductType(type),
+      category: 'paint',
+      url,
+    });
+  }
+
+  private cleanListingName(label: string) {
+    return label.replace(/\s+/g, ' ').trim();
+  }
+
+  private nameFromSlug(slug: string) {
+    return slug
+      .split('-')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   }
 
   private async scrapeProductDetail(url: string, type: string): Promise<Product | null> {
@@ -179,11 +226,14 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
     try {
       // Navigate to color collections
       await this.navigate(`${this.baseUrl}/homeowners/color`);
-      await this.page!.waitForSelector('.color-collection, [data-testid="color-swatch"]', { timeout: 10000 });
+      const hasColorCollections = await this.waitForAnySelector('.color-collection, [data-testid="color-swatch"], a[href*="/homeowners/color/"]');
+      if (!hasColorCollections) {
+        errors.push(new Error('Sherwin-Williams color collection selectors were not found'));
+      }
 
       // Get color collection links
       const collectionLinks = await this.page!.$$eval(
-        '.color-collection a, [data-testid="collection-link"]',
+        '.color-collection a, [data-testid="collection-link"], a[href*="/homeowners/color/"]',
         links => links.map(a => ({
           url: (a as HTMLAnchorElement).href,
           name: a.textContent?.trim()
@@ -195,7 +245,8 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
       for (const collection of collectionLinks.slice(0, 10)) { // Limit for demo
         try {
           await this.navigate(collection.url);
-          await this.page!.waitForSelector('.color-swatch, [data-testid="color-card"]', { timeout: 5000 });
+          const hasSwatches = await this.waitForAnySelector('.color-swatch, [data-testid="color-card"]', 3000);
+          if (!hasSwatches) continue;
 
           const collectionColors = await this.page!.$$eval(
             '.color-swatch, [data-testid="color-card"]',
@@ -299,6 +350,17 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
     const mappings: ProductColorMapping[] = [];
     const errors: Error[] = [];
 
+    if (process.env.SUPPLIER_DEEP_PRODUCT_COLOR_MAPPING !== 'true') {
+      this.logger.info('Skipping deep product-color mapping scrape; baseline compatibility mappings will be used when needed.');
+      this.logScrapeComplete('product-color mappings', 0, Date.now() - startTime);
+      return {
+        success: true,
+        data: mappings,
+        errors,
+        stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 },
+      };
+    }
+
     try {
       this.logger.info('Scraping product-color relationships for Sherwin-Williams');
 
@@ -314,7 +376,8 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
       for (const productInfo of productPaths.slice(0, options?.limit || 3)) {
         try {
           await this.navigate(`${this.baseUrl}${productInfo.path}`);
-          await this.page!.waitForSelector('h1, [data-testid="product-title"]', { timeout: 10000 });
+          const hasProductTitle = await this.waitForAnySelector('h1, [data-testid="product-title"]');
+          if (!hasProductTitle) continue;
 
           const productData = await this.page!.$eval('body', () => {
             const name = document.querySelector('h1, [data-testid="product-title"]')?.textContent?.trim() || '';
@@ -355,18 +418,22 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
 
       // Scrape colors - get from color collections
       await this.navigate(`${this.baseUrl}/homeowners/color`);
-      await this.page!.waitForSelector('.color-collection', { timeout: 10000 });
+      const hasColorCollections = await this.waitForAnySelector('.color-collection, a[href*="/homeowners/color/"]');
+      if (!hasColorCollections) {
+        errors.push(new Error('Sherwin-Williams color collections were not found'));
+      }
 
       const colors = [];
       const collectionLinks = await this.page!.$$eval(
-        '.color-collection a',
+        '.color-collection a, a[href*="/homeowners/color/"]',
         links => links.slice(0, 2).map(a => (a as HTMLAnchorElement).href)
       );
 
       for (const link of collectionLinks) {
         try {
           await this.navigate(link);
-          await this.page!.waitForSelector('.color-swatch', { timeout: 5000 });
+          const hasSwatches = await this.waitForAnySelector('.color-swatch', 3000);
+          if (!hasSwatches) continue;
 
           const collectionColors = await this.page!.$$eval(
             '.color-swatch',

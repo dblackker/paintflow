@@ -28,7 +28,11 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
           await this.navigate(`${this.baseUrl}${category.url}`);
           
           // Benjamin Moore uses React with data attributes
-          await this.page!.waitForSelector('[data-testid="product-card"], .product-tile', { timeout: 15000 });
+          const hasProductGrid = await this.waitForAnySelector('[data-testid="product-card"], .product-tile, a[href*="/product/"], a[href*="/interior-paints-stains/"], a[href*="/exterior-paints-stains/"]');
+          if (!hasProductGrid) {
+            failed++;
+            continue;
+          }
 
           // Scroll to load all products
           await this.page!.evaluate(() => {
@@ -37,15 +41,27 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
           await this.page!.waitForTimeout(2000);
 
           const productLinks = await this.page!.$$eval(
-            '[data-testid="product-card"] a, .product-tile a, [href*="/product/"]',
-            links => [...new Set(links.map(a => (a as HTMLAnchorElement).href))].filter(Boolean)
+            '[data-testid="product-card"] a, .product-tile a, [href*="/product/"], a[href*="/interior-paints-stains/"], a[href*="/exterior-paints-stains/"]',
+            links => {
+              const seen = new Set<string>();
+              return links.map(a => {
+                const anchor = a as HTMLAnchorElement;
+                return { url: anchor.href, label: anchor.textContent?.trim() || '' };
+              }).filter((item) => {
+                if (!item.url || seen.has(item.url)) return false;
+                seen.add(item.url);
+                return true;
+              });
+            }
           );
 
           this.logger.info(`Found ${productLinks.length} products`);
 
-          for (const link of productLinks.slice(0, options?.limit)) {
+          for (const productLink of productLinks.slice(0, options?.limit)) {
             try {
-              const product = await this.scrapeProductDetail(link, category.type);
+              const product = process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true'
+                ? await this.scrapeProductDetail(productLink.url, category.type)
+                : this.productFromListing(productLink.url, productLink.label, category.type);
               if (product) {
                 products.push(product);
                 created++;
@@ -53,9 +69,11 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
             } catch (error) {
               errors.push(error as Error);
               failed++;
-              this.logger.warn(`Failed to scrape product:`, error);
+              this.logger.warn(`Failed to scrape product ${productLink.url}:`, error);
             }
-            await this.rateLimit();
+            if (process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true') {
+              await this.rateLimit();
+            }
           }
         } catch (error) {
           errors.push(error as Error);
@@ -82,11 +100,37 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
     }
   }
 
+  private productFromListing(url: string, label: string, type: string): Product | null {
+    const slug = new URL(url).pathname.split('/').filter(Boolean).pop() || '';
+    const name = label.replace(/\s+/g, ' ').trim() || this.nameFromSlug(slug);
+    if (!name || name.length < 3 || /how can we help/i.test(name)) return null;
+    const sku = slug || this.generateId('bm', name);
+    return this.validateProduct({
+      id: this.generateId(this.supplierId, sku),
+      supplierId: this.supplierId,
+      sku,
+      name,
+      productLine: name.split(/\s+/).slice(0, 2).join(' '),
+      type: this.normalizeProductType(type),
+      category: 'paint',
+      url,
+    });
+  }
+
+  private nameFromSlug(slug: string) {
+    return slug
+      .split('-')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
   private async scrapeProductDetail(url: string, type: string): Promise<Product | null> {
     await this.navigate(url);
     
     // Wait for product details to load
-    await this.page!.waitForSelector('h1, [data-testid="product-name"]', { timeout: 10000 });
+    const hasProductDetail = await this.waitForAnySelector('h1, [data-testid="product-name"]');
+    if (!hasProductDetail) return null;
 
     const productData = await this.page!.$eval('body', () => {
       // Try multiple selectors
@@ -160,7 +204,10 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
     try {
       // Benjamin Moore color families
       await this.navigate(`${this.baseUrl}/en-us/color-overview`);
-      await this.page!.waitForSelector('[href*="/color/"]', { timeout: 10000 });
+      const hasColorLinks = await this.waitForAnySelector('[href*="/color/"], [data-color], .color-swatch');
+      if (!hasColorLinks) {
+        errors.push(new Error('Benjamin Moore color overview selectors were not found'));
+      }
 
       // Get color family links
       const familyLinks = await this.page!.$$eval(
@@ -185,7 +232,8 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
       for (const family of mainFamilies) {
         try {
           await this.navigate(family.url);
-          await this.page!.waitForSelector('[data-color], .color-swatch', { timeout: 10000 });
+          const hasSwatches = await this.waitForAnySelector('[data-color], .color-swatch', 3000);
+          if (!hasSwatches) continue;
 
           // Scroll to load all colors
           await this.page!.evaluate(() => {
@@ -295,6 +343,17 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
     const mappings: ProductColorMapping[] = [];
     const errors: Error[] = [];
 
+    if (process.env.SUPPLIER_DEEP_PRODUCT_COLOR_MAPPING !== 'true') {
+      this.logger.info('Skipping deep product-color mapping scrape; baseline compatibility mappings will be used when needed.');
+      this.logScrapeComplete('product-color mappings', 0, Date.now() - startTime);
+      return {
+        success: true,
+        data: mappings,
+        errors,
+        stats: { total: 0, created: 0, updated: 0, unchanged: 0, failed: 0 },
+      };
+    }
+
     try {
       // Benjamin Moore strategy:
       // 1. Scrape product pages to get available bases
@@ -316,7 +375,8 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
       for (const productInfo of productSlugs.slice(0, options?.limit || 3)) {
         try {
           await this.navigate(`${this.baseUrl}${productInfo.path}`);
-          await this.page!.waitForSelector('h1, [data-testid="product-name"]', { timeout: 10000 });
+          const hasProductTitle = await this.waitForAnySelector('h1, [data-testid="product-name"]');
+          if (!hasProductTitle) continue;
 
           const productData = await this.page!.$eval('body', () => {
             const name = document.querySelector('h1, [data-testid="product-name"]')?.textContent?.trim() || '';
@@ -361,7 +421,10 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
       // Now scrape colors to understand their characteristics
       // We'll get a sample of colors with different LRVs
       await this.navigate(`${this.baseUrl}/en-us/color-overview`);
-      await this.page!.waitForSelector('[href*="/color/"]', { timeout: 10000 });
+      const hasColorLinks = await this.waitForAnySelector('[href*="/color/"], [data-color], .color-swatch');
+      if (!hasColorLinks) {
+        errors.push(new Error('Benjamin Moore product-color mapping color links were not found'));
+      }
 
       // Get a color family page
       const colorFamilyLinks = await this.page!.$$eval(
@@ -377,7 +440,8 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
       for (const familyUrl of colorFamilyLinks) {
         try {
           await this.navigate(familyUrl);
-          await this.page!.waitForSelector('[data-color], .color-swatch', { timeout: 10000 });
+          const hasSwatches = await this.waitForAnySelector('[data-color], .color-swatch', 3000);
+          if (!hasSwatches) continue;
 
           // Extract colors with LRV info
           const familyColors = await this.page!.$$eval(

@@ -86,6 +86,8 @@ export abstract class BaseSupplierScraper {
   protected logger: Logger;
   protected page: Page | null = null;
   protected rateLimitMs: number = 1000;
+  protected navigationTimeoutMs: number = Number(process.env.SUPPLIER_NAV_TIMEOUT_MS || 15000);
+  protected selectorTimeoutMs: number = Number(process.env.SUPPLIER_SELECTOR_TIMEOUT_MS || 5000);
   
   constructor() {
     this.logger = new Logger('scraper');
@@ -132,6 +134,8 @@ export abstract class BaseSupplierScraper {
     
     // Set viewport
     await this.page.setViewportSize({ width: 1920, height: 1080 });
+    this.page.setDefaultNavigationTimeout(this.navigationTimeoutMs);
+    this.page.setDefaultTimeout(this.selectorTimeoutMs);
     
     // Block unnecessary resources
     await this.page.route('**/*', (route) => {
@@ -145,19 +149,38 @@ export abstract class BaseSupplierScraper {
   }
 
   // Navigate with retry logic
-  protected async navigate(url: string, retries = 3): Promise<void> {
+  protected async navigate(url: string, retries = 1): Promise<void> {
     if (!this.page) throw new Error('Page not initialized');
     
     await RetryHelper.withRetry(
       async () => {
         await this.page!.goto(url, { 
-          waitUntil: 'networkidle',
-          timeout: 30000 
+          waitUntil: 'domcontentloaded',
+          timeout: this.navigationTimeoutMs,
         });
+        await this.page!.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => undefined);
         await this.rateLimit();
       },
-      { maxRetries: retries, delayMs: 2000 }
+      {
+        maxRetries: retries,
+        delayMs: 1500,
+        shouldRetry: (error) => !/Target page, context or browser has been closed/i.test(error.message),
+      }
     );
+  }
+
+  protected async waitForAnySelector(selectors: string, timeoutMs = this.selectorTimeoutMs): Promise<boolean> {
+    if (!this.page) throw new Error('Page not initialized');
+    try {
+      if (await this.page.locator(selectors).count() > 0) {
+        return true;
+      }
+      await this.page.waitForSelector(selectors, { timeout: timeoutMs, state: 'attached' });
+      return true;
+    } catch (error) {
+      this.logger.warn(`Selector not found within ${timeoutMs}ms: ${selectors}`, error);
+      return false;
+    }
   }
 
   // Rate limiting
