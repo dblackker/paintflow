@@ -121,6 +121,7 @@ function envNumber(value: string | undefined, fallback: number) {
 }
 
 function clampConfidence(value: number) {
+  if (!Number.isFinite(value)) return 0.74;
   return Math.max(0, Math.min(0.99, Number(value.toFixed(2))));
 }
 

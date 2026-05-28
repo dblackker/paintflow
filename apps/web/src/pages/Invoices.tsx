@@ -281,6 +281,11 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function percentValue(value: unknown) {
+  const percent = Math.round(numberValue(value) * 100);
+  return Number.isFinite(percent) ? percent : 0;
+}
+
 function formatAiCost(value: unknown) {
   const cost = numberValue(value);
   if (cost > 0 && cost < 0.01) return `$${cost.toFixed(4)}`;
@@ -433,7 +438,7 @@ function LearningStatCard({ stat }: { stat: InvoiceLearningStat }) {
         </div>
         <div className="rounded bg-gray-50 px-2 py-2">
           <p className="pf-metric-label">Match avg</p>
-          <p className="pf-row-title">{Math.round(numberValue(stat.avgMatchConfidence) * 100)}%</p>
+          <p className="pf-row-title">{percentValue(stat.avgMatchConfidence)}%</p>
         </div>
       </div>
     </div>
@@ -516,8 +521,8 @@ function ImportReviewCard({
   const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems : [];
   const selectedJob = jobs.find((job) => job.id === selectedJobId);
   const candidate = invoiceImport.matchCandidates?.[0];
-  const matchConfidence = Math.round(numberValue(invoiceImport.matchConfidence) * 100);
-  const extractionConfidence = Math.round(numberValue(invoiceImport.extractionConfidence) * 100);
+  const matchConfidence = percentValue(invoiceImport.matchConfidence);
+  const extractionConfidence = percentValue(invoiceImport.extractionConfidence);
   const fileRetained = Boolean(invoiceImport.extractedData?.storedInR2 && invoiceImport.extractedData?.fileKey);
   const fileRetentionStatus = invoiceImport.extractedData?.fileRetentionStatus;
   const fileHref = fileRetained ? `${API_URL}/v1/invoices/imports/${invoiceImport.id}/file` : '';
