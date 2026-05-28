@@ -31,6 +31,10 @@ type InvoiceItem = {
   size?: string | null;
   colorName?: string | null;
   colorCode?: string | null;
+  sourceInvoiceNumber?: string | null;
+  poNumber?: string | null;
+  purchaseDate?: string | null;
+  storeNumber?: string | null;
   quantity: number;
   unitCost: number;
   total: number;
@@ -368,7 +372,8 @@ function normalizeOcrItems(items: unknown): InvoiceItem[] {
       const rawGallons = currencyValue(item.gallons || item.gallonQuantity || item.gallon_quantity);
       const quantity = currencyValue(item.quantity || item.qty || rawGallons || 1) || 1;
       const isGallonSized = /\b(gallon|gallons|gal)\b/i.test(size || '');
-      const gallons = rawGallons || (isGallonSized ? quantity : 0);
+      const gallonMultiplier = isGallonSized ? currencyValue(String(size).match(/(\d+(?:\.\d+)?)\s*(?:gal|gallon)/i)?.[1]) || 1 : 0;
+      const gallons = rawGallons || (isGallonSized ? quantity * gallonMultiplier : 0);
       const pricePerGallon = currencyValue(item.pricePerGallon || item.price_per_gallon || item.gallonPrice || item.gallon_price);
       const unitCost = currencyValue(item.unitCost || item.unit_cost || item.unitPrice || item.unit_price || item.cost || pricePerGallon);
       const total = currencyValue(item.total || item.amount || item.value || quantity * unitCost);
@@ -383,6 +388,10 @@ function normalizeOcrItems(items: unknown): InvoiceItem[] {
         size,
         colorName: String(item.colorName || item.color_name || item.color || '').trim() || null,
         colorCode: String(item.colorCode || item.color_code || '').trim() || null,
+        sourceInvoiceNumber: item.sourceInvoiceNumber || item.source_invoice_number || item.invoiceNumber || item.invoice_number || null,
+        poNumber: item.poNumber || item.po_number || item.po || null,
+        purchaseDate: item.purchaseDate || item.purchase_date || item.invoiceDate || item.invoice_date || null,
+        storeNumber: item.storeNumber || item.store_number || item.store || null,
         quantity,
         unitCost: unitCost || total / quantity,
         total,
@@ -443,9 +452,11 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
             text: [
               'Extract this painting supplier invoice or statement for job-cost review.',
               'Return JSON only with keys: supplier, invoiceNumber, invoiceDate, totalAmount, rawText, confidence, items.',
-              'items must be an array of {description, sku, salesNumber, productCode, productName, size, colorName, colorCode, quantity, unitCost, gallons, pricePerGallon, total, category, isFee}.',
+              'items must be an array of {description, sku, salesNumber, productCode, productName, size, colorName, colorCode, sourceInvoiceNumber, poNumber, purchaseDate, storeNumber, quantity, unitCost, gallons, pricePerGallon, total, category, isFee}.',
+              'Sherwin-Williams PDFs may contain multiple CHARGE INVOICE sections in one file. Extract each merchandise or fee row as its own item and preserve the item sourceInvoiceNumber, purchaseDate, storeNumber, and PO# as poNumber.',
               'For Sherwin-Williams rows, map SALES NUMBER to salesNumber, PRODUCT to productCode, DESCRIPTION to description, QTY to quantity, PRICE to unitCost and pricePerGallon when SIZE is GALLON, and VALUE to total.',
-              'If SIZE is GALLON, quantity is the number of gallons and gallons must equal quantity. Preserve paint colors such as SWISS COFFEE and color codes such as Custom/Color Cast values when visible.',
+              'If SIZE is GALLON or 5 GAL, quantity is the number of gallons or buckets shown and gallons must reflect the actual gallon count when clear. For example, 5 GAL with QTY 1 is 5 gallons; GALLON with QTY 4 is 4 gallons.',
+              'Preserve paint colors such as SWISS COFFEE, HALE NAVY, WHITE DOVE, GRAY DECK, or CEILING MATCH and color codes such as Custom, B010, OC-17, HC-154, or Color Cast values when visible.',
               'Separate fees such as paint care, environmental, disposal, tax, or government imposed paint fees as category "fees" with isFee true.',
               'Prefer line-item detail for paint products, primer, sundries, rentals, supplies, colors, gallons, and price per gallon.',
               'Use null for unknown values; do not invent values.',
@@ -453,7 +464,7 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
           },
         ],
       }],
-      max_output_tokens: 1800,
+      max_output_tokens: 3000,
     }),
   });
 
@@ -470,7 +481,7 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
     parsed.supplier,
     parsed.invoiceNumber,
     parsed.invoiceDate,
-    ...(items.map((item) => `${item.description} ${item.sku || ''} ${item.quantity} ${item.unitCost} ${item.total}`)),
+    ...(items.map((item) => `${item.description} ${item.productCode || ''} ${item.colorName || ''} ${item.sku || ''} ${item.quantity} ${item.unitCost} ${item.total}`)),
   ].filter(Boolean).join('\n'));
 
   return {

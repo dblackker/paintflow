@@ -17,6 +17,10 @@ interface PurchaseItem {
   size?: string | null;
   colorName?: string | null;
   colorCode?: string | null;
+  sourceInvoiceNumber?: string | null;
+  poNumber?: string | null;
+  purchaseDate?: string | null;
+  storeNumber?: string | null;
   quantity?: number;
   unitCost?: number;
   total?: number;
@@ -309,6 +313,8 @@ function invoiceItemDetails(item: PurchaseItem) {
   const details = [
     item.salesNumber ? `Sales ${item.salesNumber}` : '',
     item.productCode ? `Product ${item.productCode}` : '',
+    item.sourceInvoiceNumber ? `Invoice ${item.sourceInvoiceNumber}` : '',
+    item.poNumber ? `PO ${item.poNumber}` : '',
     item.colorName || '',
     item.colorCode ? `Color ${item.colorCode}` : '',
     item.gallons ? `${numberValue(item.gallons).toLocaleString()} gal` : '',
