@@ -339,6 +339,14 @@ function materialProductLabel(item: EstimateLineItem) {
   return [item.material?.brand, item.material?.name].filter(Boolean).join(' ') || 'Selected paint product';
 }
 
+function colorGroupKey(item: EstimateLineItem) {
+  return [
+    item.material?.brand || '',
+    item.material?.name || '',
+    item.material?.supplier || '',
+  ].join('|').toLowerCase() || 'selected-paint-product';
+}
+
 function useBodyTitle(title?: string | null) {
   useEffect(() => {
     if (!title) return;
@@ -363,6 +371,7 @@ export function EstimateDetail() {
   const [colorDrafts, setColorDrafts] = useState<Record<number, ColorDraft>>({});
   const [colorSuggestions, setColorSuggestions] = useState<CatalogColor[]>([]);
   const [colorQuery, setColorQuery] = useState('');
+  const [useGroupedColors, setUseGroupedColors] = useState(false);
   const [isSavingColors, setIsSavingColors] = useState(false);
   const [signerName, setSignerName] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
@@ -464,6 +473,24 @@ export function EstimateDetail() {
   const photos = estimate?.photos || [];
   const colorDraftTargetKey = colorTargets.map(({ index, item }) => `${index}:${item.material?.colorName || ''}:${item.material?.colorCode || ''}`).join('|');
   const allColorTargetsSelected = colorTargets.length > 0 && colorTargets.every(({ index }) => colorDrafts[index]?.colorName?.trim());
+  const colorGroups = useMemo(() => {
+    const groups = new Map<string, {
+      key: string;
+      product: string;
+      indexes: number[];
+      targets: Array<{ item: EstimateLineItem; index: number; parts: ScopeParts }>;
+    }>();
+    colorTargets.forEach(({ item, index }) => {
+      const key = colorGroupKey(item);
+      if (!groups.has(key)) {
+        groups.set(key, { key, product: materialProductLabel(item), indexes: [], targets: [] });
+      }
+      const group = groups.get(key)!;
+      group.indexes.push(index);
+      group.targets.push({ item, index, parts: scopeParts(item) });
+    });
+    return Array.from(groups.values());
+  }, [colorTargets]);
 
   useEffect(() => {
     setColorDrafts((current) => {
@@ -522,6 +549,19 @@ export function EstimateDetail() {
     }));
   }
 
+  function updateColorDrafts(itemIndexes: number[], patch: Partial<ColorDraft>) {
+    setColorDrafts((current) => {
+      const next = { ...current };
+      itemIndexes.forEach((itemIndex) => {
+        next[itemIndex] = {
+          ...(next[itemIndex] || { colorName: '', colorCode: '' }),
+          ...patch,
+        };
+      });
+      return next;
+    });
+  }
+
   function applySuggestedColor(itemIndex: number, value: string) {
     const suggestion = colorSuggestions.find((color) => colorOptionLabel(color) === value || color.name === value || color.colorCode === value);
     if (!suggestion) {
@@ -537,6 +577,39 @@ export function EstimateDetail() {
       catalogColorId: suggestion.id,
     });
     setColorQuery(suggestion.name);
+  }
+
+  function applySuggestedColorToIndexes(itemIndexes: number[], value: string) {
+    const suggestion = colorSuggestions.find((color) => colorOptionLabel(color) === value || color.name === value || color.colorCode === value);
+    if (!suggestion) {
+      updateColorDrafts(itemIndexes, { colorName: value, catalogColorId: undefined });
+      setColorQuery(value);
+      return;
+    }
+    updateColorDrafts(itemIndexes, {
+      colorName: suggestion.name,
+      colorCode: suggestion.colorCode || '',
+      supplierId: suggestion.supplierId,
+      supplierName: suggestion.supplierName || suggestion.supplierId,
+      catalogColorId: suggestion.id,
+    });
+    setColorQuery(suggestion.name);
+  }
+
+  function toggleGroupedColors(checked: boolean) {
+    setUseGroupedColors(checked);
+    if (!checked) return;
+    setColorDrafts((current) => {
+      const next = { ...current };
+      colorGroups.forEach((group) => {
+        const sourceIndex = group.indexes.find((index) => current[index]?.colorName?.trim()) ?? group.indexes[0];
+        const source = current[sourceIndex] || colorDraftFromItem(group.targets[0]?.item);
+        group.indexes.forEach((index) => {
+          next[index] = { ...(next[index] || { colorName: '', colorCode: '' }), ...source };
+        });
+      });
+      return next;
+    });
   }
 
   async function submitColorSelections() {
@@ -886,8 +959,67 @@ export function EstimateDetail() {
                       </option>
                     ))}
                   </datalist>
+                  {colorTargets.length > 1 && (
+                    <label className="mt-4 flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950">
+                      <input
+                        type="checkbox"
+                        className="mt-1 rounded border-blue-300"
+                        checked={useGroupedColors}
+                        onChange={(event) => toggleGroupedColors(event.target.checked)}
+                      />
+                      <span>
+                        <span className="block font-medium">Use one color per paint product</span>
+                        <span className="mt-1 block text-blue-800">Best for whole-home repaints where the same wall or exterior product uses one color across many spaces.</span>
+                      </span>
+                    </label>
+                  )}
                   <div className="mt-4 space-y-3">
-                    {colorTargets.map(({ item, index }) => {
+                    {useGroupedColors ? colorGroups.map((group) => {
+                      const draft = colorDrafts[group.indexes[0]] || colorDraftFromItem(group.targets[0].item);
+                      const spaces = Array.from(new Set(group.targets.map((target) => `${target.parts.space} - ${target.parts.surface}`)));
+                      return (
+                        <div key={group.key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <div className="mb-3">
+                            <p className="font-medium text-gray-950">{group.product}</p>
+                            <p className="mt-1 text-sm text-gray-600">Applies to {group.targets.length} substrate{group.targets.length === 1 ? '' : 's'}: {spaces.slice(0, 5).join(', ')}{spaces.length > 5 ? `, +${spaces.length - 5} more` : ''}</p>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                            <label>
+                              <span className="pf-field-label">Color name</span>
+                              <input
+                                className="input mt-1"
+                                list="customer-paint-color-options"
+                                value={draft.colorName}
+                                onChange={(event) => applySuggestedColorToIndexes(group.indexes, event.target.value)}
+                                onFocus={(event) => setColorQuery(event.currentTarget.value)}
+                                placeholder="Search library or type swatch name"
+                                autoComplete="off"
+                              />
+                            </label>
+                            <label>
+                              <span className="pf-field-label">Color code</span>
+                              <input
+                                className="input mt-1"
+                                value={draft.colorCode}
+                                onChange={(event) => updateColorDrafts(group.indexes, { colorCode: event.target.value })}
+                                placeholder="SW 7005, OC-17"
+                                autoComplete="off"
+                              />
+                            </label>
+                          </div>
+                          <label className="mt-2 block">
+                            <span className="pf-field-label">Note for contractor</span>
+                            <input
+                              className="input mt-1"
+                              value={draft.notes || ''}
+                              onChange={(event) => updateColorDrafts(group.indexes, { notes: event.target.value })}
+                              placeholder="Optional: confirm sample location or special request"
+                              autoComplete="off"
+                            />
+                          </label>
+                        </div>
+                      );
+                    }) : colorTargets.map(({ item, index }) => {
                       const parts = scopeParts(item);
                       const draft = colorDrafts[index] || colorDraftFromItem(item);
                       return (
