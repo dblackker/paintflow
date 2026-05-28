@@ -607,6 +607,7 @@ export const materialPurchases = pgTable('material_purchases', {
   supplier: varchar('supplier', { length: 255 }).notNull(),
   invoiceNumber: varchar('invoice_number', { length: 100 }),
   invoiceDate: timestamp('invoice_date'),
+  documentHash: varchar('document_hash', { length: 64 }),
   totalAmount: decimal('total_amount', { precision: 10, scale: 2 }),
   fileUrl: text('file_url'), // PDF/CSV
   parsedData: jsonb('parsed_data'), // Line items
@@ -625,6 +626,8 @@ export const supplierInvoiceImports = pgTable('supplier_invoice_imports', {
   invoiceDate: timestamp('invoice_date'),
   senderEmail: varchar('sender_email', { length: 255 }),
   originalFilename: varchar('original_filename', { length: 255 }),
+  documentHash: varchar('document_hash', { length: 64 }),
+  duplicateOfImportId: uuid('duplicate_of_import_id'),
   rawText: text('raw_text'),
   extractedData: jsonb('extracted_data').notNull().default({}),
   extractedItems: jsonb('extracted_items').notNull().default([]),

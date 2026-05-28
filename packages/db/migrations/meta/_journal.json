@@ -169,6 +169,13 @@
       "when": 1779166019000,
       "tag": "0023_job_cost_transaction_date",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1779166020000,
+      "tag": "0024_supplier_invoice_dedupe",
+      "breakpoints": true
     }
   ]
 }

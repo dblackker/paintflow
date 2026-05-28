@@ -130,6 +130,18 @@ const inboundEmailSchema = z.object({
 
 type InvoiceImportRecord = typeof supplierInvoiceImports.$inferSelect;
 
+class DuplicateSupplierInvoiceError extends Error {
+  invoiceImport?: InvoiceImportRecord;
+  purchase?: typeof materialPurchases.$inferSelect;
+
+  constructor(message: string, payload: { invoiceImport?: InvoiceImportRecord; purchase?: typeof materialPurchases.$inferSelect }) {
+    super(message);
+    this.name = 'DuplicateSupplierInvoiceError';
+    this.invoiceImport = payload.invoiceImport;
+    this.purchase = payload.purchase;
+  }
+}
+
 function requireIdempotency(c: any) {
   const key = c.req.header('Idempotency-Key');
   if (!key) return c.json({ error: 'Idempotency-Key required' }, 400);
@@ -187,6 +199,18 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
   return btoa(binary);
+}
+
+async function sha256Hex(value: ArrayBuffer | string) {
+  const data = typeof value === 'string' ? new TextEncoder().encode(value) : value;
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function normalizedDocumentText(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function responseText(response: any) {
@@ -556,6 +580,14 @@ async function parseInvoiceFile(
   }
 
   const buffer = await file.arrayBuffer();
+  const documentHash = await sha256Hex(buffer);
+  const duplicateImport = await db.query.supplierInvoiceImports.findFirst({
+    where: and(eq(supplierInvoiceImports.orgId, orgId), eq(supplierInvoiceImports.documentHash, documentHash)),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+  if (duplicateImport) {
+    throw new DuplicateSupplierInvoiceError('This supplier invoice was already uploaded.', { invoiceImport: duplicateImport });
+  }
   const fileName = safeFileName(file.name || `invoice-${Date.now()}`);
   let fileKey: string | null = null;
   let fileRetentionStatus: 'stored' | 'not_configured' | 'failed' = c.env.R2 ? 'stored' : 'not_configured';
@@ -596,6 +628,7 @@ async function parseInvoiceFile(
       metadata: {
         ...parsed.metadata,
         fileKey,
+        documentHash,
         fileName: file.name || fileName,
         fileSize: file.size,
         contentType: file.type || 'application/octet-stream',
@@ -606,6 +639,7 @@ async function parseInvoiceFile(
     },
     fileMetadata: {
       fileKey,
+      documentHash,
       fileName: file.name || fileName,
       fileSize: file.size,
       contentType: file.type || 'application/octet-stream',
@@ -736,8 +770,26 @@ async function applyInvoiceImport(
   const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems as InvoiceItem[] : [];
   const supplier = invoiceImport.supplier || 'Unknown supplier';
   const totalAmount = items.reduce((sum, item) => sum + currencyValue(item.total), 0) || currencyValue(invoiceImport.totalAmount);
-  const extractedData = invoiceImport.extractedData as { fileKey?: string; storedInR2?: boolean } | null;
+  const extractedData = invoiceImport.extractedData as { fileKey?: string; storedInR2?: boolean; documentHash?: string } | null;
   const invoiceCostDate = dateValue(invoiceImport.invoiceDate) || dateValue(invoiceImport.createdAt) || new Date();
+  const documentHash = invoiceImport.documentHash || extractedData?.documentHash || null;
+
+  const duplicatePurchase = documentHash
+    ? await db.query.materialPurchases.findFirst({
+      where: and(eq(materialPurchases.orgId, orgId), eq(materialPurchases.documentHash, documentHash)),
+    })
+    : invoiceImport.invoiceNumber
+      ? await db.query.materialPurchases.findFirst({
+        where: and(
+          eq(materialPurchases.orgId, orgId),
+          eq(materialPurchases.supplier, supplier),
+          eq(materialPurchases.invoiceNumber, invoiceImport.invoiceNumber),
+        ),
+      })
+      : null;
+  if (duplicatePurchase) {
+    throw new DuplicateSupplierInvoiceError('This supplier invoice has already been approved.', { purchase: duplicatePurchase });
+  }
 
   const [purchase] = await db.insert(materialPurchases).values({
     orgId,
@@ -745,6 +797,7 @@ async function applyInvoiceImport(
     supplier,
     invoiceNumber: invoiceImport.invoiceNumber || null,
     invoiceDate: invoiceImport.invoiceDate || null,
+    documentHash,
     totalAmount: totalAmount.toFixed(2),
     fileUrl: extractedData?.storedInR2 && extractedData?.fileKey ? `/v1/invoices/imports/${invoiceImport.id}/file` : null,
     parsedData: items,
@@ -941,6 +994,35 @@ async function stageSupplierInvoiceImport(
   const invoiceNumber = input.invoiceNumber || String(parsed.extracted.invoiceNumber || '').trim() || null;
   const invoiceDate = dateValue(input.invoiceDate) || dateValue(parsed.extracted.invoiceDate);
   const totalAmount = parsed.items.reduce((sum, item) => sum + currencyValue(item.total), 0);
+  const documentHash = String(parsed.metadata?.documentHash || '').trim()
+    || await sha256Hex(normalizedDocumentText(parsed.rawText));
+  const duplicateImport = await db.query.supplierInvoiceImports.findFirst({
+    where: and(eq(supplierInvoiceImports.orgId, orgId), eq(supplierInvoiceImports.documentHash, documentHash)),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+  });
+  if (duplicateImport) {
+    throw new DuplicateSupplierInvoiceError('This supplier invoice was already uploaded.', { invoiceImport: duplicateImport });
+  }
+  const duplicatePurchase = documentHash
+    ? await db.query.materialPurchases.findFirst({
+      where: and(eq(materialPurchases.orgId, orgId), eq(materialPurchases.documentHash, documentHash)),
+    })
+    : null;
+  if (duplicatePurchase) {
+    throw new DuplicateSupplierInvoiceError('This supplier invoice has already been approved.', { purchase: duplicatePurchase });
+  }
+  if (extractedSupplier && invoiceNumber) {
+    const invoiceNumberPurchase = await db.query.materialPurchases.findFirst({
+      where: and(
+        eq(materialPurchases.orgId, orgId),
+        eq(materialPurchases.supplier, extractedSupplier),
+        eq(materialPurchases.invoiceNumber, invoiceNumber),
+      ),
+    });
+    if (invoiceNumberPurchase) {
+      throw new DuplicateSupplierInvoiceError('This supplier invoice number has already been approved.', { purchase: invoiceNumberPurchase });
+    }
+  }
   const senderRule = input.senderEmail
     ? await db.query.supplierInvoiceSenderRules.findFirst({
       where: and(
@@ -962,6 +1044,7 @@ async function stageSupplierInvoiceImport(
     invoiceDate,
     senderEmail: input.senderEmail || null,
     originalFilename: input.originalFilename || null,
+    documentHash,
     rawText: parsed.rawText,
     extractedData: {
       extractionMethod: parsed.metadata?.extractionMethod || (input.csvData ? 'csv' : 'deterministic_text'),
@@ -1084,17 +1167,26 @@ invoicesApp.post('/imports/email-forward', async (c) => {
   }
 
   const imports = [];
+  const duplicates = [];
   for (const attachment of supportedAttachments.slice(0, 5)) {
-    const file = fileFromBase64(attachment);
-    const input = importSchema.parse({
-      sourceType: 'email_forward',
-      supplier: trustedRule.supplierName || trustedRule.supplierKey,
-      senderEmail: sender,
-      originalFilename: attachment.filename,
-      rawText: [payload.subject, payload.text].filter(Boolean).join('\n'),
-    });
-    const { parsed } = await parseInvoiceFile(c, db, org.id, input, file);
-    imports.push(await stageSupplierInvoiceImport(c, db, org.id, input, parsed, null));
+    try {
+      const file = fileFromBase64(attachment);
+      const input = importSchema.parse({
+        sourceType: 'email_forward',
+        supplier: trustedRule.supplierName || trustedRule.supplierKey,
+        senderEmail: sender,
+        originalFilename: attachment.filename,
+        rawText: [payload.subject, payload.text].filter(Boolean).join('\n'),
+      });
+      const { parsed } = await parseInvoiceFile(c, db, org.id, input, file);
+      imports.push(await stageSupplierInvoiceImport(c, db, org.id, input, parsed, null));
+    } catch (err) {
+      if (err instanceof DuplicateSupplierInvoiceError) {
+        duplicates.push({ filename: attachment.filename, id: err.invoiceImport?.id || err.purchase?.id || null, type: err.invoiceImport ? 'import' : 'purchase' });
+        continue;
+      }
+      throw err;
+    }
   }
 
   if (!imports.length && payload.text?.trim()) {
@@ -1104,10 +1196,18 @@ invoicesApp.post('/imports/email-forward', async (c) => {
       senderEmail: sender,
       rawText: [payload.subject, payload.text].filter(Boolean).join('\n'),
     });
-    imports.push(await stageSupplierInvoiceImport(c, db, org.id, input, parseInvoicePayload(input), null));
+    try {
+      imports.push(await stageSupplierInvoiceImport(c, db, org.id, input, parseInvoicePayload(input), null));
+    } catch (err) {
+      if (err instanceof DuplicateSupplierInvoiceError) {
+        duplicates.push({ filename: null, id: err.invoiceImport?.id || err.purchase?.id || null, type: err.invoiceImport ? 'import' : 'purchase' });
+      } else {
+        throw err;
+      }
+    }
   }
 
-  return c.json({ data: { imports, ignoredAttachments: payload.attachments.length - supportedAttachments.length } }, 202);
+  return c.json({ data: { imports, duplicates, ignoredAttachments: payload.attachments.length - supportedAttachments.length } }, 202);
 });
 
 invoicesApp.use('*', authMiddleware);
@@ -1132,12 +1232,33 @@ invoicesApp.post('/imports', async (c) => {
       parsed = parseInvoicePayload(input);
     }
   } catch (err) {
+    if (err instanceof DuplicateSupplierInvoiceError) {
+      return c.json({
+        error: err.message,
+        duplicate: true,
+        data: err.invoiceImport || err.purchase,
+        duplicateType: err.invoiceImport ? 'import' : 'purchase',
+      }, 409);
+    }
     return c.json({ error: err instanceof Error ? err.message : 'Failed to process supplier invoice.' }, 400);
   }
   if (!parsed.rawText?.trim()) return c.json({ error: 'Paste supplier invoice text or CSV data.' }, 400);
   if (!parsed.items.length) return c.json({ error: 'No invoice line items could be extracted.' }, 400);
 
-  const invoiceImport = await stageSupplierInvoiceImport(c, db, orgId, input, parsed, c.get('userId') || null);
+  let invoiceImport: InvoiceImportRecord;
+  try {
+    invoiceImport = await stageSupplierInvoiceImport(c, db, orgId, input, parsed, c.get('userId') || null);
+  } catch (err) {
+    if (err instanceof DuplicateSupplierInvoiceError) {
+      return c.json({
+        error: err.message,
+        duplicate: true,
+        data: err.invoiceImport || err.purchase,
+        duplicateType: err.invoiceImport ? 'import' : 'purchase',
+      }, 409);
+    }
+    throw err;
+  }
 
   return c.json({ data: invoiceImport }, 201);
 });
@@ -1307,7 +1428,29 @@ invoicesApp.post('/imports/:id/approve', async (c) => {
     if (!job) return c.json({ error: 'Selected job was not found' }, 404);
   }
 
-  const purchase = await applyInvoiceImport(db, orgId, invoiceImport, jobId, input.applyMaterialUpdates);
+  let purchase: typeof materialPurchases.$inferSelect;
+  try {
+    purchase = await applyInvoiceImport(db, orgId, invoiceImport, jobId, input.applyMaterialUpdates);
+  } catch (err) {
+    if (err instanceof DuplicateSupplierInvoiceError) {
+      const [updated] = await db.update(supplierInvoiceImports)
+        .set({
+          status: 'duplicate',
+          reviewNotes: input.reviewNotes || err.message,
+          duplicateOfImportId: err.invoiceImport?.id || null,
+          materialPurchaseId: err.purchase?.id || null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(supplierInvoiceImports.id, invoiceImport.id), eq(supplierInvoiceImports.orgId, orgId)))
+        .returning();
+      return c.json({
+        error: err.message,
+        duplicate: true,
+        data: { import: updated, purchase: err.purchase || null, duplicateImport: err.invoiceImport || null },
+      }, 409);
+    }
+    throw err;
+  }
   const [updated] = await db.update(supplierInvoiceImports)
     .set({
       status: 'approved',
@@ -1366,12 +1509,22 @@ invoicesApp.post('/upload', async (c) => {
 
   const totalAmount = parsed.items.reduce((sum, item) => sum + item.total, 0);
   const invoiceCostDate = dateValue(input.invoiceDate) || new Date();
+  const documentHash = await sha256Hex(normalizedDocumentText(input.csvData || input.rawText || JSON.stringify(parsed.items)));
+  const existingPurchase = await db.query.materialPurchases.findFirst({
+    where: input.invoiceNumber
+      ? and(eq(materialPurchases.orgId, orgId), eq(materialPurchases.supplier, input.supplier), eq(materialPurchases.invoiceNumber, input.invoiceNumber))
+      : and(eq(materialPurchases.orgId, orgId), eq(materialPurchases.documentHash, documentHash)),
+  });
+  if (existingPurchase) {
+    return c.json({ error: 'This supplier invoice has already been imported.', duplicate: true, data: existingPurchase }, 409);
+  }
   const [purchase] = await db.insert(materialPurchases).values({
     orgId,
     jobId: input.jobId || null,
     supplier: input.supplier,
     invoiceNumber: input.invoiceNumber || null,
     invoiceDate: invoiceCostDate,
+    documentHash,
     totalAmount: totalAmount.toFixed(2),
     parsedData: parsed.items,
   }).returning();
