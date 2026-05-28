@@ -168,7 +168,6 @@ interface UploadFormState {
   invoiceNumber: string;
   jobId: string;
   senderEmail: string;
-  rawText: string;
 }
 
 interface QuickInvoiceFormState {
@@ -215,7 +214,6 @@ const emptyUploadForm: UploadFormState = {
   invoiceNumber: '',
   jobId: '',
   senderEmail: '',
-  rawText: '',
 };
 
 const emptyQuickInvoiceForm: QuickInvoiceFormState = {
@@ -242,10 +240,6 @@ const supplierOptions = [
   { value: 'Lowes', label: 'Lowes' },
   { value: 'Other', label: 'Other' },
 ];
-
-const exampleCsv = `Description,SKU,Quantity,Unit Cost,Total
-SuperPaint Interior,SW-123,5,65.00,325.00
-Primer,SW-456,2,25.00,50.00`;
 
 function formatDate(value?: string | null) {
   if (!value) return 'Not set';
@@ -799,37 +793,23 @@ export function Invoices() {
 
   async function uploadInvoice(event: FormEvent) {
     event.preventDefault();
+    const fileToUpload = selectedInvoiceFile;
+    if (!fileToUpload) {
+      window.showToast?.('Upload a supplier invoice first.', 'error');
+      return;
+    }
     setIsUploading(true);
     try {
-      const fileToUpload = selectedInvoiceFile;
-      const body = fileToUpload ? new FormData() : null;
-      if (body && fileToUpload) {
-        body.set('file', fileToUpload);
-        body.set('supplier', form.supplier || '');
-        body.set('invoiceNumber', form.invoiceNumber || '');
-        body.set('senderEmail', form.senderEmail || '');
-        body.set('rawText', form.rawText || '');
-        body.set('jobId', form.jobId || '');
-      }
-      const payload = await apiJson<{ data?: InvoiceImport }>('/v1/invoices/imports', fileToUpload ? {
+      const body = new FormData();
+      body.set('file', fileToUpload);
+      body.set('supplier', form.supplier || '');
+      body.set('invoiceNumber', form.invoiceNumber || '');
+      body.set('senderEmail', form.senderEmail || '');
+      body.set('jobId', form.jobId || '');
+      const payload = await apiJson<{ data?: InvoiceImport }>('/v1/invoices/imports', {
         method: 'POST',
         headers: { 'Idempotency-Key': crypto.randomUUID() },
         body,
-      } : {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-        body: JSON.stringify({
-          sourceType: 'upload',
-          supplier: form.supplier || null,
-          invoiceNumber: form.invoiceNumber || null,
-          senderEmail: form.senderEmail || null,
-          rawText: form.rawText,
-          csvData: form.rawText.includes(',') ? form.rawText : null,
-          jobId: form.jobId || null,
-        }),
       });
       window.showToast?.(
         `Invoice ready for review: ${formatMoney(payload.data?.totalAmount)}`,
@@ -1144,7 +1124,7 @@ export function Invoices() {
                 <EmptyState
                   icon={<Icon name="file-text" className="h-5 w-5" />}
                   title="No supplier invoices uploaded yet."
-                  description="Paste invoice text or CSV to stage product costs for review before they hit a job."
+                  description="Upload a supplier invoice and PaintFlow will stage extracted material costs for review before they hit a job."
                   action={{ label: 'Review invoice', onClick: openUploadModal }}
                 />
               )}
@@ -1261,7 +1241,7 @@ export function Invoices() {
 
       {uploadModalOpen && (
         <div
-          className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+          className="mobile-sheet fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="invoice-upload-title"
@@ -1269,11 +1249,11 @@ export function Invoices() {
             if (event.target === event.currentTarget) closeUploadModal();
           }}
         >
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
+          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl sm:p-6">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h2 id="invoice-upload-title" className="pf-section-title">Review supplier invoice</h2>
-                <p className="pf-copy mt-1">Upload a PDF/image or paste receipt text. PaintFlow will stage the job match and material costs for approval.</p>
+                <p className="pf-copy mt-1">Upload a supplier invoice. PaintFlow will extract the lines, suggest a job match, and stage it for approval.</p>
               </div>
               <button type="button" className="btn-icon" aria-label="Close invoice upload" onClick={closeUploadModal}>
                 <Icon name="close" className="h-5 w-5" />
@@ -1281,60 +1261,50 @@ export function Invoices() {
             </div>
 
             <form className="space-y-4" onSubmit={uploadInvoice}>
-              <Select
-                label="Supplier"
-                value={form.supplier}
-                onChange={(event) => setForm({ ...form, supplier: event.target.value })}
-                options={supplierOptions}
-              />
-              <Input
-                label="Invoice #"
-                autoComplete="off"
-                enterKeyHint="next"
-                placeholder="Optional"
-                value={form.invoiceNumber}
-                onChange={(event) => setForm({ ...form, invoiceNumber: event.target.value })}
-              />
-              <Select label="Suggested job" value={form.jobId} onChange={(event) => setForm({ ...form, jobId: event.target.value })}>
-                <option value="">Let PaintFlow match it</option>
-                {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
-              </Select>
-              <Input
-                label="Forwarded from"
-                type="email"
-                autoComplete="email"
-                enterKeyHint="next"
-                placeholder="Optional supplier sender"
-                value={form.senderEmail}
-                onChange={(event) => setForm({ ...form, senderEmail: event.target.value })}
-              />
               <label className="block">
-                <span className="form-label">Invoice file</span>
+                <span className="form-label">Supplier invoice</span>
                 <input
-                  className="input mt-1"
+                  className="input mt-1 py-3"
                   type="file"
-                  accept="application/pdf,image/png,image/jpeg,image/webp,text/csv,text/plain,.csv,.txt"
+                  accept="application/pdf,image/png,image/jpeg,image/webp"
                   onChange={(event) => setSelectedInvoiceFile(event.target.files?.[0] || null)}
                 />
                 <span className="pf-helper mt-1 block">
-                  PDF and image OCR uses OpenAI when configured. CSV and text files are parsed directly.
+                  Use a PDF or photo of the supplier receipt. The imported costs will wait for approval before affecting the job.
                 </span>
               </label>
-              <Textarea
-                label={selectedInvoiceFile ? 'Notes or fallback text' : 'Invoice text or CSV'}
-                required={!selectedInvoiceFile}
-                rows={8}
-                autoComplete="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                className="font-mono text-sm"
-                placeholder={selectedInvoiceFile ? 'Optional: paste any visible text if OCR needs help...' : 'Paste receipt OCR text or CSV data here...'}
-                value={form.rawText}
-                onChange={(event) => setForm({ ...form, rawText: event.target.value })}
-              />
-              <details className="rounded-lg bg-gray-50 p-3">
-                <summary className="cursor-pointer text-sm font-medium text-gray-700">Supported CSV format</summary>
-                <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-xs text-gray-700">{exampleCsv}</pre>
+
+              <details className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <summary className="cursor-pointer text-sm font-medium text-gray-700">Optional matching details</summary>
+                <div className="mt-3 space-y-3">
+                  <Select
+                    label="Supplier"
+                    value={form.supplier}
+                    onChange={(event) => setForm({ ...form, supplier: event.target.value })}
+                    options={supplierOptions}
+                  />
+                  <Input
+                    label="Invoice #"
+                    autoComplete="off"
+                    enterKeyHint="next"
+                    placeholder="Optional"
+                    value={form.invoiceNumber}
+                    onChange={(event) => setForm({ ...form, invoiceNumber: event.target.value })}
+                  />
+                  <Select label="Suggested job" value={form.jobId} onChange={(event) => setForm({ ...form, jobId: event.target.value })}>
+                    <option value="">Let PaintFlow match it</option>
+                    {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
+                  </Select>
+                  <Input
+                    label="Supplier sender email"
+                    type="email"
+                    autoComplete="email"
+                    enterKeyHint="next"
+                    placeholder="Optional"
+                    value={form.senderEmail}
+                    onChange={(event) => setForm({ ...form, senderEmail: event.target.value })}
+                  />
+                </div>
               </details>
               <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
                 <div className="flex items-center gap-2">
@@ -1342,7 +1312,7 @@ export function Invoices() {
                   <p className="pf-row-title">OCR and receipt automation</p>
                 </div>
                 <p className="pf-copy mt-1">
-                  File OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. The review queue is also ready for a future receipts inbox where approved supplier senders can forward statements.
+                  OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. The review queue is also ready for a future receipts inbox where approved supplier senders can forward statements.
                 </p>
               </div>
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
