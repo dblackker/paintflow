@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { ServiceErrorState } from '@/components/ServiceErrorState';
+import { ActivityTimeline } from '@/components/ActivityTimeline';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface DashboardStats {
@@ -411,30 +412,26 @@ export function Dashboard() {
               <Link to="/leads?new=1" className="btn-primary btn-sm mt-4">Add lead</Link>
             </div>
           ) : (
-            <div className="grid gap-3">
-              {recentActivity.map((activity) => {
+            <ActivityTimeline
+              items={recentActivity.map((activity, index) => {
                 const address = formatAddress(activity);
-                return (
-                  <Link key={activity.id} to={activity.href || `/estimates/${activity.id}`} className="dashboard-activity-card block rounded-lg border border-gray-200 bg-white p-4 hover:border-blue-300 hover:bg-blue-50/40">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="pf-row-title leading-5">{activityText(activity)}</p>
-                        <p className="pf-meta mt-0.5">{relativeDate(activity.occurredAt || activity.activityAt || activity.sentAt || activity.createdAt)}</p>
-                        <div className="mt-2 text-sm text-gray-600">
-                          <p className="font-medium text-gray-900">{activity.clientName || 'Customer'}</p>
-                          {address && <p className="truncate">{address}</p>}
-                          <div className="flex flex-wrap gap-x-3">
-                            {activity.leadPhone && <span>{formatPhone(activity.leadPhone)}</span>}
-                            {activity.leadEmail && <span>{activity.leadEmail}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      <StatusBadge status={String(activity.status || activity.source || 'activity')} />
-                    </div>
-                  </Link>
-                );
+                const contact = [
+                  activity.clientName || 'Customer',
+                  address,
+                  activity.leadPhone ? formatPhone(activity.leadPhone) : '',
+                  activity.leadEmail || '',
+                ].filter(Boolean).join(' · ');
+                return {
+                  id: `${activity.id}-${activity.occurredAt || activity.activityAt || activity.createdAt || index}`,
+                  title: activityText(activity),
+                  meta: relativeDate(activity.occurredAt || activity.activityAt || activity.sentAt || activity.createdAt),
+                  description: contact,
+                  href: activity.href || `/estimates/${activity.id}`,
+                  tone: activity.status === 'accepted' ? 'success' : activity.status === 'declined' ? 'danger' : index === 0 ? 'info' : 'default',
+                  accessory: <StatusBadge status={String(activity.status || activity.source || 'activity')} />,
+                };
               })}
-            </div>
+            />
           )}
         </div>
 

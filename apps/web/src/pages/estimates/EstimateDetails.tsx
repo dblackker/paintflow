@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Badge, StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
+import { ActivityTimeline } from '@/components/ActivityTimeline';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface EstimateLineItem {
@@ -408,18 +409,15 @@ export function EstimateDetails() {
               <CardHeader title="Activity Log" />
               <CardContent>
                 {activity.length ? (
-                  <div className="divide-y">
-                    {activity.map((item) => (
-                      <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-950">{labelize(String(item.action || '').replace(/\./g, ' '))}</p>
-                          <p className="mt-1 text-xs text-gray-500">{dateTime(item.createdAt)}</p>
-                          {item.metadata?.reason && <p className="mt-1 text-sm text-gray-600">{item.metadata.reason}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <ActivityTimeline
+                    items={activity.map((item, index) => ({
+                      id: item.id,
+                      title: labelize(String(item.action || 'Activity').replace(/\./g, ' ')),
+                      meta: dateTime(item.createdAt),
+                      description: item.metadata?.reason ? String(item.metadata.reason) : undefined,
+                      tone: index === 0 ? 'info' : String(item.action || '').includes('accepted') ? 'success' : 'default',
+                    }))}
+                  />
                 ) : (
                   <p className="text-sm text-gray-500">No estimate activity has been recorded yet.</p>
                 )}

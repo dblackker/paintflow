@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { Input, Select, Textarea } from '@/components/Input';
+import { ActivityTimeline } from '@/components/ActivityTimeline';
 import { API_URL, apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface Lead {
@@ -844,16 +845,15 @@ function AuditActivityList({ activity, lead }: { activity: Activity[]; lead: Lea
     ...(lead.updatedAt && lead.updatedAt !== lead.createdAt ? [{ id: 'updated', action: 'lead.updated', createdAt: lead.updatedAt }] : []),
   ];
   return (
-    <div className="divide-y">
-      {items.map((item) => (
-        <div key={item.id} className="flex items-start gap-3 p-4">
-          <div className="mt-1 h-2 w-2 rounded-full bg-blue-600" />
-          <div>
-            <p className="pf-row-title">{labelize(String(item.action || item.type || 'Activity').replace(/\./g, ' '))}</p>
-            <p className="pf-meta">{formatDate(item.createdAt)}</p>
-          </div>
-        </div>
-      ))}
+    <div className="p-4">
+      <ActivityTimeline
+        items={items.map((item, index) => ({
+          id: item.id,
+          title: labelize(String(item.action || item.type || 'Activity').replace(/\./g, ' ')),
+          meta: formatDate(item.createdAt),
+          tone: index === 0 ? 'info' : 'default',
+        }))}
+      />
     </div>
   );
 }
