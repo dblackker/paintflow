@@ -133,7 +133,7 @@ export class PPGScraper extends BaseSupplierScraper {
   }
 
   private productLineFromName(name: string): string {
-    const cleaned = name.replace(/[®™]/g, '').trim();
+    const cleaned = name.replace(/[^\x00-\x7F]/g, '').trim();
     const match = cleaned.match(/^(.+?)(?:\s+Interior|\s+Exterior|\s+Latex|\s+Paint|\s+Primer|\s+Stain|$)/i);
     return (match?.[1] || cleaned.split(/\s+/).slice(0, 3).join(' ')).trim();
   }
@@ -232,8 +232,10 @@ export class PPGScraper extends BaseSupplierScraper {
 
           this.logger.info(`Found ${colorLinks.length} ${familyPage.family} color links`);
 
+          const detailsByUrl = await this.fetchColorDetails(colorLinks.map((color) => color.url));
+
           for (const colorLink of colorLinks) {
-            const parsed = this.colorFromLink(colorLink.url, colorLink.label, familyPage.family);
+            const parsed = this.colorFromLink(colorLink.url, colorLink.label, familyPage.family, detailsByUrl.get(colorLink.url));
             if (!parsed) continue;
             byCode.set(parsed.colorCode.toLowerCase(), parsed);
             if (options?.limit && byCode.size >= options.limit) break;
@@ -284,7 +286,94 @@ export class PPGScraper extends BaseSupplierScraper {
     return undefined;
   }
 
-  private colorFromLink(url: string, label: string, family?: string): Color | null {
+  private async fetchColorDetails(urls: string[]): Promise<Map<string, { rgbR?: number; rgbG?: number; rgbB?: number; hexCode?: string; lrv?: number }>> {
+    const details = new Map<string, { rgbR?: number; rgbG?: number; rgbB?: number; hexCode?: string; lrv?: number }>();
+    const concurrency = Math.max(1, Number(process.env.SUPPLIER_COLOR_DETAIL_CONCURRENCY || 8));
+    let nextIndex = 0;
+    let failed = 0;
+
+    const worker = async () => {
+      while (nextIndex < urls.length) {
+        const url = urls[nextIndex++];
+        if (details.has(url)) continue;
+        try {
+          const detail = await this.fetchColorDetail(url);
+          if (detail) details.set(url, detail);
+        } catch (error) {
+          failed++;
+          this.logger.warn(`Failed to enrich PPG color ${url}:`, error);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker));
+
+    this.logger.info(`Enriched ${details.size}/${urls.length} PPG colors with detail metadata${failed ? ` (${failed} failed)` : ''}`);
+    return details;
+  }
+
+  private async fetchColorDetail(url: string): Promise<{ rgbR?: number; rgbG?: number; rgbB?: number; hexCode?: string; lrv?: number } | null> {
+    const response = await this.fetchWithTimeout(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const html = await response.text();
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const match = text.match(/\bR:\s*(\d{1,3})\s*G:\s*(\d{1,3})\s*B:\s*(\d{1,3})\s*LRV:\s*(\d{1,3})\b/i);
+    if (!match) return null;
+
+    const rgbR = this.parseByte(match[1]);
+    const rgbG = this.parseByte(match[2]);
+    const rgbB = this.parseByte(match[3]);
+    const lrv = this.parseLrv(match[4]);
+    if (rgbR == null || rgbG == null || rgbB == null) return { lrv };
+
+    return {
+      rgbR,
+      rgbG,
+      rgbB,
+      hexCode: this.rgbToHex(rgbR, rgbG, rgbB),
+      lrv,
+    };
+  }
+
+  private async fetchWithTimeout(url: string): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutMs = Number(process.env.SUPPLIER_COLOR_DETAIL_TIMEOUT_MS || 10000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'user-agent': this.getRandomUserAgent(),
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private parseByte(value: string): number | undefined {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 255) return undefined;
+    return parsed;
+  }
+
+  private parseLrv(value: string): number | undefined {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) return undefined;
+    return parsed;
+  }
+
+  private rgbToHex(r: number, g: number, b: number): string {
+    return `#${[r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+  }
+
+  private colorFromLink(
+    url: string,
+    label: string,
+    family?: string,
+    details?: { rgbR?: number; rgbG?: number; rgbB?: number; hexCode?: string; lrv?: number }
+  ): Color | null {
     const slug = new URL(url).pathname.split('/').filter(Boolean).pop() || '';
     const codeMatch = label.match(/([A-Z]{2,5}\d{2,4}|PPG\d{4}-\d|MTL\d{3})$/i);
     const colorCode = codeMatch?.[1] || slug.toUpperCase();
@@ -295,7 +384,12 @@ export class PPGScraper extends BaseSupplierScraper {
       supplierId: this.supplierId,
       colorCode,
       name,
+      hexCode: details?.hexCode,
+      rgbR: details?.rgbR,
+      rgbG: details?.rgbG,
+      rgbB: details?.rgbB,
       family: family || this.inferColorFamily(name),
+      lrv: details?.lrv,
       isPopular: false,
     };
   }

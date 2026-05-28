@@ -144,6 +144,13 @@ function colorLabel(color: CatalogColor) {
   return [color.name, color.colorCode ? `(${color.colorCode})` : ''].filter(Boolean).join(' ') || 'Paint color';
 }
 
+function lrvLabel(lrv?: number | null) {
+  if (lrv == null) return 'LRV not listed';
+  if (lrv >= 75) return `LRV ${lrv} - Light`;
+  if (lrv >= 40) return `LRV ${lrv} - Mid-tone`;
+  return `LRV ${lrv} - Dark`;
+}
+
 function supplierOptions(products: CatalogProduct[], colors: CatalogColor[]) {
   const suppliers = new Map<string, string>();
   products.forEach((product) => suppliers.set(product.supplierId, product.supplierName || product.supplierId));
@@ -347,10 +354,15 @@ export function SupplierCatalog() {
             </div>
           </div>
           {tab === 'colors' && (
-            <label className="pf-inline-option mt-3">
-              <input type="checkbox" checked={popularOnly} onChange={(event) => setPopularOnly(event.target.checked)} />
-              Popular colors only
-            </label>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <label className="pf-inline-option">
+                <input type="checkbox" checked={popularOnly} onChange={(event) => setPopularOnly(event.target.checked)} />
+                Popular colors only
+              </label>
+              <p className="pf-meta max-w-xl">
+                LRV is Light Reflectance Value: 0 is darkest, 100 is brightest. It helps compare how light or dark a paint color will feel.
+              </p>
+            </div>
           )}
         </div>
 
@@ -498,7 +510,7 @@ function ColorRow({ color, selected, onSelect }: { color: CatalogColor; selected
       <div className="min-w-0">
         <p className="pf-row-title truncate">{colorLabel(color)}</p>
         <p className="pf-copy mt-1">{[color.supplierName, color.family ? labelize(color.family) : '', color.collection].filter(Boolean).join(' - ')}</p>
-        <p className="pf-meta mt-1">{color.lrv != null ? `LRV ${color.lrv}` : 'LRV not listed'}{color.isPopular ? ' - Popular' : ''}</p>
+        <p className="pf-meta mt-1">{lrvLabel(color.lrv)}{color.isPopular ? ' - Popular' : ''}</p>
       </div>
     </button>
   );
@@ -554,7 +566,7 @@ function ColorDetail({ color, products, loading }: { color: CatalogColor | null;
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Signal label="Hex" value={color.hexCode || 'Not captured'} />
-        <Signal label="LRV" value={color.lrv == null ? 'Not listed' : color.lrv} />
+        <Signal label="LRV" value={lrvLabel(color.lrv)} />
         <Signal label="Code" value={color.colorCode || 'Not listed'} />
         <Signal label="Popularity" value={color.isPopular ? 'Popular' : 'Standard'} />
       </div>

@@ -276,16 +276,22 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
 
       this.logger.info(`Found ${colorLinks.length} color links`);
 
-      for (const colorData of colorLinks.slice(0, options?.limit)) {
+      const selectedColorLinks = colorLinks.slice(0, options?.limit);
+      const detailsByUrl = await this.fetchColorDetails(selectedColorLinks.map((color) => color.url));
+
+      for (const colorData of selectedColorLinks) {
         try {
           const name = this.cleanColorName(colorData.label, colorData.slug, colorData.code);
+          const details = detailsByUrl.get(colorData.url);
           const id = this.generateId(this.supplierId, colorData.code);
           const color: Color = {
             id,
             supplierId: this.supplierId,
             colorCode: colorData.code,
             name,
-            family: this.inferColorFamily(name),
+            collection: details?.collection,
+            family: details?.family || this.inferColorFamily(name),
+            lrv: details?.lrv,
             isPopular: false,
           };
 
@@ -329,6 +335,121 @@ export class BenjaminMooreScraper extends BaseSupplierScraper {
       }
     }
     return undefined;
+  }
+
+  private async fetchColorDetails(urls: string[]): Promise<Map<string, { collection?: string; family?: string; lrv?: number }>> {
+    const details = new Map<string, { collection?: string; family?: string; lrv?: number }>();
+    const concurrency = Math.max(1, Number(process.env.SUPPLIER_COLOR_DETAIL_CONCURRENCY || 2));
+    let nextIndex = 0;
+    let failed = 0;
+
+    const worker = async () => {
+      while (nextIndex < urls.length) {
+        const url = urls[nextIndex++];
+        try {
+          const detail = await this.fetchColorDetail(url);
+          if (detail) details.set(url, detail);
+        } catch (error) {
+          failed++;
+          this.logger.warn(`Failed to enrich Benjamin Moore color ${url}:`, error);
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker));
+
+    this.logger.info(`Enriched ${details.size}/${urls.length} Benjamin Moore colors with detail metadata${failed ? ` (${failed} failed)` : ''}`);
+    return details;
+  }
+
+  private async fetchColorDetail(url: string): Promise<{ collection?: string; family?: string; lrv?: number } | null> {
+    const response = await this.fetchWithTimeout(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const html = await response.text();
+    const lrv = this.parseLrv(this.extractMetaContent(html, 'LRV Value'));
+    const collection = this.extractMetaContent(html, 'Color Collection');
+    const family = this.normalizeFamily(this.extractMetaContent(html, 'Primary Color Family'));
+    return { collection, family, lrv };
+  }
+
+  private async fetchWithTimeout(url: string): Promise<Response> {
+    const timeoutMs = Number(process.env.SUPPLIER_COLOR_DETAIL_TIMEOUT_MS || 10000);
+    const maxAttempts = Math.max(1, Number(process.env.SUPPLIER_COLOR_DETAIL_RETRIES || 3));
+    let lastResponse: Response | undefined;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            accept: 'text/html,application/xhtml+xml',
+            'accept-language': 'en-US,en;q=0.9',
+            'cache-control': 'no-cache',
+            'user-agent': this.getRandomUserAgent(),
+          },
+        });
+        lastResponse = response;
+        if (![403, 429, 500, 502, 503, 504].includes(response.status) || attempt === maxAttempts) {
+          return response;
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
+
+    throw new Error('No response received from supplier color detail page');
+  }
+
+  private extractMetaContent(html: string, name: string): string | undefined {
+    const metas = html.match(/<meta\b[^>]*>/gi) || [];
+    for (const meta of metas) {
+      if (this.extractAttribute(meta, 'name')?.toLowerCase() !== name.toLowerCase()) continue;
+      return this.decodeHtml(this.extractAttribute(meta, 'content') || '').trim() || undefined;
+    }
+    return undefined;
+  }
+
+  private extractAttribute(tag: string, attr: string): string | undefined {
+    const match = tag.match(new RegExp(`\\b${attr}=["']([^"']*)["']`, 'i'));
+    return match?.[1];
+  }
+
+  private decodeHtml(value: string): string {
+    return value
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+
+  private parseLrv(value?: string): number | undefined {
+    const parsed = value == null ? NaN : Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) return undefined;
+    return Math.max(0, Math.min(100, Math.round(parsed)));
+  }
+
+  private normalizeFamily(value?: string): string | undefined {
+    if (!value) return undefined;
+    const normalized = value.trim().toLowerCase().replace(/\s+/g, '-');
+    const map: Record<string, string> = {
+      white: 'whites',
+      gray: 'grays',
+      grey: 'grays',
+      neutral: 'neutrals',
+      blue: 'blues',
+      green: 'greens',
+      red: 'reds',
+      yellow: 'yellows',
+      brown: 'browns',
+      black: 'blacks',
+      purple: 'purples',
+      orange: 'oranges',
+    };
+    return map[normalized] || normalized;
   }
 
   private cleanColorName(label: string, slug: string, code: string): string {
