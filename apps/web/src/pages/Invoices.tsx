@@ -35,14 +35,17 @@ interface MaterialPurchase {
   invoiceNumber?: string | null;
   totalAmount?: number | string | null;
   parsedData?: PurchaseItem[] | null;
+  fileUrl?: string | null;
   createdAt?: string | null;
   invoiceDate?: string | null;
 }
 
+type InvoiceImportStatus = 'needs_review' | 'approved' | 'rejected' | 'duplicate';
+
 interface InvoiceImport {
   id: string;
   jobId?: string | null;
-  status: 'needs_review' | 'approved' | 'rejected';
+  status: InvoiceImportStatus;
   supplier?: string | null;
   invoiceNumber?: string | null;
   totalAmount?: number | string | null;
@@ -410,6 +413,7 @@ function PurchaseSkeleton() {
 
 function PurchaseCard({ purchase }: { purchase: MaterialPurchase }) {
   const items = Array.isArray(purchase.parsedData) ? purchase.parsedData : [];
+  const retainedFileHref = purchase.fileUrl ? `${API_URL}${purchase.fileUrl}` : '';
   return (
     <Card padding="sm">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
@@ -433,6 +437,13 @@ function PurchaseCard({ purchase }: { purchase: MaterialPurchase }) {
                 ))}
                 {items.length > 3 && <p className="pf-helper">+{items.length - 3} more items</p>}
               </div>
+            </div>
+          )}
+          {retainedFileHref && (
+            <div className="mt-3">
+              <Button as="a" href={retainedFileHref} target="_blank" rel="noreferrer" variant="secondary" size="sm" leftIcon={<Icon name="file-text" className="h-4 w-4" />}>
+                View source file
+              </Button>
             </div>
           )}
         </div>
@@ -555,6 +566,7 @@ function ImportReviewCard({
   const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems : [];
   const selectedJob = jobs.find((job) => job.id === selectedJobId);
   const candidate = invoiceImport.matchCandidates?.[0];
+  const canApprove = Boolean(selectedJobId);
   const matchConfidence = percentValue(invoiceImport.matchConfidence);
   const extractionConfidence = percentValue(invoiceImport.extractionConfidence);
   const fileRetained = Boolean(invoiceImport.extractedData?.storedInR2 && invoiceImport.extractedData?.fileKey);
@@ -631,16 +643,21 @@ function ImportReviewCard({
         </div>
         <div className="space-y-3">
           <Select label="Assign job" value={selectedJobId} onChange={(event) => onSelectJob(event.target.value)}>
-            <option value="">No job yet</option>
+            <option value="">Select job...</option>
             {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
           </Select>
+          {!canApprove && (
+            <p className="pf-helper rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+              A job is required so approved supplier costs are posted to the right project.
+            </p>
+          )}
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
             {invoiceImport.senderEmail && invoiceImport.supplier && !trustedSender && (
               <Button type="button" variant="secondary" size="sm" fullWidth onClick={onTrustSender} disabled={isBusy}>
                 Trust sender
               </Button>
             )}
-            <Button type="button" size="sm" fullWidth onClick={onApprove} isLoading={isBusy}>
+            <Button type="button" size="sm" fullWidth onClick={onApprove} isLoading={isBusy} disabled={!canApprove || isBusy}>
               Approve import
             </Button>
             <Button type="button" variant="dangerSubtle" size="sm" fullWidth onClick={onReject} disabled={isBusy}>
@@ -951,12 +968,18 @@ export function Invoices() {
       await loadInvoices();
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Import failed', 'error');
+      await loadInvoices();
     } finally {
       setIsUploading(false);
     }
   }
 
   async function approveImport(invoiceImport: InvoiceImport) {
+    const jobId = reviewJobByImport[invoiceImport.id] || invoiceImport.jobId || '';
+    if (!jobId) {
+      window.showToast?.('Select a job before approving this supplier invoice.', 'error');
+      return;
+    }
     setBusyImportId(invoiceImport.id);
     try {
       await apiJson(`/v1/invoices/imports/${invoiceImport.id}/approve`, {
@@ -966,7 +989,7 @@ export function Invoices() {
           'Idempotency-Key': crypto.randomUUID(),
         },
         body: JSON.stringify({
-          jobId: reviewJobByImport[invoiceImport.id] || null,
+          jobId,
           applyMaterialUpdates: true,
         }),
       });
@@ -974,6 +997,7 @@ export function Invoices() {
       await loadInvoices();
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to approve import', 'error');
+      await loadInvoices();
     } finally {
       setBusyImportId('');
     }
@@ -1265,7 +1289,7 @@ export function Invoices() {
                       invoiceImport={invoiceImport}
                       jobs={jobs}
                       senderRules={senderRules}
-                      selectedJobId={reviewJobByImport[invoiceImport.id] || ''}
+                      selectedJobId={reviewJobByImport[invoiceImport.id] || invoiceImport.jobId || ''}
                       onSelectJob={(jobId) => setReviewJobByImport({ ...reviewJobByImport, [invoiceImport.id]: jobId })}
                       onApprove={() => approveImport(invoiceImport)}
                       onReject={() => rejectImport(invoiceImport)}

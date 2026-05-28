@@ -187,6 +187,14 @@ function extractionMethodFor(invoiceImport: InvoiceImportRecord) {
   return data?.extractionMethod || 'deterministic_text';
 }
 
+function duplicateImportMessage(invoiceImport: InvoiceImportRecord) {
+  if (invoiceImport.status === 'needs_review') return 'This supplier invoice is already waiting in Needs review.';
+  if (invoiceImport.status === 'approved') return 'This supplier invoice was already approved and moved into Supplier purchases.';
+  if (invoiceImport.status === 'duplicate') return 'This supplier invoice was already marked as a duplicate.';
+  if (invoiceImport.status === 'rejected') return 'This supplier invoice was previously rejected.';
+  return 'This supplier invoice was already uploaded.';
+}
+
 function safeFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120) || 'invoice';
 }
@@ -586,7 +594,7 @@ async function parseInvoiceFile(
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
   if (duplicateImport) {
-    throw new DuplicateSupplierInvoiceError('This supplier invoice was already uploaded.', { invoiceImport: duplicateImport });
+    throw new DuplicateSupplierInvoiceError(duplicateImportMessage(duplicateImport), { invoiceImport: duplicateImport });
   }
   const fileName = safeFileName(file.name || `invoice-${Date.now()}`);
   let fileKey: string | null = null;
@@ -1001,7 +1009,7 @@ async function stageSupplierInvoiceImport(
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
   if (duplicateImport) {
-    throw new DuplicateSupplierInvoiceError('This supplier invoice was already uploaded.', { invoiceImport: duplicateImport });
+    throw new DuplicateSupplierInvoiceError(duplicateImportMessage(duplicateImport), { invoiceImport: duplicateImport });
   }
   const duplicatePurchase = documentHash
     ? await db.query.materialPurchases.findFirst({
@@ -1420,13 +1428,22 @@ invoicesApp.post('/imports/:id/approve', async (c) => {
     where: and(eq(supplierInvoiceImports.id, c.req.param('id')), eq(supplierInvoiceImports.orgId, orgId)),
   });
   if (!invoiceImport) return c.json({ error: 'Invoice import not found' }, 404);
-  if (invoiceImport.status !== 'needs_review') return c.json({ error: 'Invoice import has already been reviewed' }, 409);
+  if (invoiceImport.status !== 'needs_review') {
+    const reviewedCopy: Record<string, string> = {
+      approved: 'This supplier invoice was already approved and moved into Supplier purchases.',
+      rejected: 'This supplier invoice was already rejected and removed from Needs review.',
+      duplicate: 'This supplier invoice was marked as a duplicate and removed from Needs review.',
+    };
+    return c.json({
+      error: reviewedCopy[invoiceImport.status] || 'This supplier invoice has already left Needs review. Refresh the page to see the latest status.',
+      status: invoiceImport.status,
+    }, 409);
+  }
 
   const jobId = input.jobId || invoiceImport.jobId;
-  if (jobId) {
-    const job = await db.query.jobs.findFirst({ where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)) });
-    if (!job) return c.json({ error: 'Selected job was not found' }, 404);
-  }
+  if (!jobId) return c.json({ error: 'Select a job before approving this supplier invoice.' }, 400);
+  const job = await db.query.jobs.findFirst({ where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)) });
+  if (!job) return c.json({ error: 'Selected job was not found' }, 404);
 
   let purchase: typeof materialPurchases.$inferSelect;
   try {
