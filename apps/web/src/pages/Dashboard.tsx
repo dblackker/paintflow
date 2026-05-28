@@ -157,12 +157,14 @@ function activityText(event: Activity) {
 
 function recommendationTone(type?: string) {
   if (type === 'job_in_production') return 'Operational';
+  if (type === 'job_readiness') return 'Readiness';
   if (type === 'estimate_follow_up') return 'Sales follow-up';
   return 'Lead nurture';
 }
 
 function recommendationIcon(type?: string) {
   if (type === 'job_in_production') return 'briefcase';
+  if (type === 'job_readiness') return 'warning';
   if (type === 'estimate_follow_up') return 'file-text';
   return 'message';
 }

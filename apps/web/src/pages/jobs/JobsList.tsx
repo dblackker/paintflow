@@ -38,7 +38,16 @@ interface Job {
   leadState?: string | null;
   leadPostalCode?: string | null;
   estimatedLaborHours?: number | string | null;
+  colorReadiness?: ColorReadiness | null;
   costing?: JobCosting | null;
+}
+
+interface ColorReadiness {
+  required: number;
+  selected: number;
+  missing: number;
+  complete: boolean;
+  missingItems?: Array<{ label?: string; product?: string }>;
 }
 
 interface JobCosting {
@@ -343,6 +352,8 @@ function JobCard({
   const profit = job.costing?.profitability?.grossProfit ?? numberValue(revenue) - numberValue(actualCost);
   const laborHours = job.costing?.production?.laborHours ?? job.estimatedLaborHours ?? 0;
   const completed = String(job.status || '').toLowerCase() === 'completed';
+  const colorReadiness = job.colorReadiness;
+  const needsColors = Boolean(colorReadiness && colorReadiness.required > 0 && !colorReadiness.complete);
 
   return (
     <article className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md">
@@ -380,6 +391,19 @@ function JobCard({
             {scheduleLabel(job)}
           </Link>
         </div>
+        {needsColors && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <div className="flex items-start gap-2">
+              <Icon name="warning" className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div>
+                <p className="font-medium">Color selections needed</p>
+                <p className="mt-0.5 text-amber-800">
+                  {colorReadiness?.missing} of {colorReadiness?.required} paint color selection{colorReadiness?.required === 1 ? '' : 's'} still need confirmation before ordering paint.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-2 border-y bg-gray-50/60 p-3 sm:gap-3 sm:px-5">

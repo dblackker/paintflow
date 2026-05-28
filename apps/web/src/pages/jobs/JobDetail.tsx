@@ -115,6 +115,7 @@ interface JobCostingResponse {
       leadState?: string | null;
       leadPostalCode?: string | null;
       completedAt?: string | null;
+      colorReadiness?: ColorReadiness | null;
     };
     revenue: { contract: number; approvedChangeOrders: number; total: number };
     costs: { labor: number; materials: number; supplies: number; expenses: number; total: number };
@@ -127,6 +128,14 @@ interface JobCostingResponse {
       materialPurchases: MaterialPurchase[];
     };
   };
+}
+
+interface ColorReadiness {
+  required: number;
+  selected: number;
+  missing: number;
+  complete: boolean;
+  missingItems?: Array<{ label?: string; product?: string }>;
 }
 
 const costCategories = ['materials', 'supplies', 'labor', 'subcontractor', 'equipment', 'other'];
@@ -590,6 +599,8 @@ export function JobDetail() {
   const visibleCosts = activeCostFilter === 'all'
     ? detail.lists.costs
     : detail.lists.costs.filter((cost) => String(cost.category || 'other').toLowerCase() === activeCostFilter);
+  const colorReadiness = job.colorReadiness;
+  const needsColors = Boolean(colorReadiness && colorReadiness.required > 0 && !colorReadiness.complete);
 
   return (
     <div className="mx-auto max-w-7xl py-5 sm:py-8">
@@ -620,6 +631,22 @@ export function JobDetail() {
                 {scheduleLabel(job)}
               </Link>
             </div>
+            {needsColors && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                <div className="flex items-start gap-2">
+                  <Icon name="warning" className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <div>
+                    <p className="font-medium">Color selections needed before production</p>
+                    <p className="mt-0.5 text-amber-800">
+                      {colorReadiness?.missing} of {colorReadiness?.required} paint color selection{colorReadiness?.required === 1 ? '' : 's'} still need customer confirmation.
+                    </p>
+                    {colorReadiness?.missingItems?.length ? (
+                      <p className="mt-1 text-amber-800">Missing: {colorReadiness.missingItems.map((item) => item.label).join(', ')}</p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex flex-col justify-between gap-3 border-t p-3 sm:flex-row sm:items-center lg:border-l lg:border-t-0 lg:p-4">
             <div className="flex flex-wrap items-center gap-2">

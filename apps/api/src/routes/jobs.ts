@@ -5,6 +5,7 @@ import { changeOrders, estimateMaterials, estimates, jobCosts, jobs, leads, mate
 import { eq, and, desc, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { estimateColorReadiness } from '../lib/color-readiness';
 
 const jobsApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 jobsApp.use('*', authMiddleware);
@@ -94,6 +95,7 @@ jobsApp.get('/', async (c) => {
     data: allJobs.map(({ estimatePackages, ...job }) => ({
       ...job,
       estimatedLaborHours: estimatedLaborHoursFromPackage(estimatePackages ? { packages: estimatePackages } as typeof estimates.$inferSelect : undefined),
+      colorReadiness: estimateColorReadiness(estimatePackages),
     })),
   });
 });
@@ -246,6 +248,7 @@ jobsApp.get('/:id/costing', async (c) => {
         leadCity: lead?.city,
         leadState: lead?.state,
         leadPostalCode: lead?.postalCode,
+        colorReadiness: estimateColorReadiness(estimate?.packages),
       },
       revenue: {
         contract: contractValue,

@@ -4,6 +4,7 @@ import { activities, emailSends, estimates, jobs, leads, messages, timeEntries }
 import { eq, and, gte, count, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { estimateColorReadiness } from '../lib/color-readiness';
 
 const dashboard = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -123,6 +124,7 @@ dashboard.get('/recommendations', async (c) => {
   ]);
 
   const estimatesByLead = new Map<string, typeof estimateRows>();
+  const estimatesById = new Map(estimateRows.map((estimate) => [estimate.id, estimate]));
   const jobsByLead = new Map<string, typeof jobRows>();
   const activitiesByLead = new Map<string, typeof activityRows>();
   const outboundMessagesByLead = new Map<string, typeof messageRows>();
@@ -228,6 +230,41 @@ dashboard.get('/recommendations', async (c) => {
   }
 
   for (const job of jobRows) {
+    const estimate = job.estimateId ? estimatesById.get(job.estimateId) : undefined;
+    const colorReadiness = estimateColorReadiness(estimate?.packages);
+    if (['scheduled', 'in_progress'].includes(job.status) && colorReadiness.required > 0 && !colorReadiness.complete) {
+      const lead = leadRows.find((item) => item.id === job.leadId);
+      const scheduledSoon = job.scheduledStartAt ? new Date(job.scheduledStartAt).getTime() - Date.now() <= 7 * 86_400_000 : false;
+      recommendations.push({
+        id: `job-colors-needed:${job.id}`,
+        priority: scheduledSoon || job.status === 'in_progress' ? 98 : 86,
+        type: 'job_readiness',
+        title: `Confirm colors for ${job.name}`,
+        body: `${colorReadiness.missing} of ${colorReadiness.required} paint color selection${colorReadiness.required === 1 ? '' : 's'} still need customer confirmation${job.scheduledStartAt ? ' before the scheduled start date' : ''}.`,
+        impact: 'Avoids production delays and last-minute paint ordering changes.',
+        entityLabel: lead?.name || job.name,
+        href: `/jobs/${job.id}`,
+        primaryAction: {
+          label: 'Create color follow-up',
+          method: 'POST',
+          path: '/v1/activities',
+          successMessage: 'Color follow-up created',
+          body: {
+            leadId: job.leadId,
+            estimateId: job.estimateId,
+            jobId: job.id,
+            type: 'follow_up',
+            title: `Confirm paint colors for ${job.name}`,
+            notes: `Customer color selections are incomplete: ${colorReadiness.missingItems.map((item) => item.label).join(', ')}.\n\nSuggested follow-up: ask the customer to open their proposal link and confirm colors for each paint product before paint is ordered.`,
+            status: 'open',
+            dueAt: todayAt().toISOString(),
+            metadata: { source: 'dashboard_recommendation', recommendationType: 'job_colors_needed', colorReadiness },
+          },
+        },
+        secondaryAction: { label: 'Open job', href: `/jobs/${job.id}` },
+      });
+    }
+
     const hours = hoursByJob.get(job.id) || 0;
     if (job.status === 'scheduled' && hours > 0) {
       const lead = leadRows.find((item) => item.id === job.leadId);
