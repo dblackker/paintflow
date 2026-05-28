@@ -8,6 +8,7 @@ import {
   leads,
   materialPurchases,
   materials,
+  organizations,
   saasPlans,
   subscriptions,
   supplierInvoiceImportFeedback,
@@ -20,7 +21,6 @@ import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
 const invoicesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
-invoicesApp.use('*', authMiddleware);
 
 type InvoiceItem = {
   description: string;
@@ -115,6 +115,19 @@ const senderRuleSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+const inboundEmailSchema = z.object({
+  from: z.string().trim().email(),
+  to: z.union([z.string().trim(), z.array(z.string().trim())]).optional(),
+  subject: z.string().trim().optional().nullable(),
+  text: z.string().optional().nullable(),
+  html: z.string().optional().nullable(),
+  attachments: z.array(z.object({
+    filename: z.string().trim().min(1),
+    contentType: z.string().trim().optional().nullable(),
+    contentBase64: z.string().min(1),
+  })).default([]),
+});
+
 type InvoiceImportRecord = typeof supplierInvoiceImports.$inferSelect;
 
 function requireIdempotency(c: any) {
@@ -126,6 +139,12 @@ function requireIdempotency(c: any) {
 function currencyValue(value: unknown) {
   const parsed = Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function dateValue(value: unknown) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function envNumber(value: string | undefined, fallback: number) {
@@ -522,6 +541,16 @@ async function parseMultipartInvoice(c: any, db: ReturnType<typeof createDb>, or
   if (!file || file.size === 0) {
     return { input, parsed: parseInvoicePayload(input) };
   }
+  return parseInvoiceFile(c, db, orgId, input, file);
+}
+
+async function parseInvoiceFile(
+  c: any,
+  db: ReturnType<typeof createDb>,
+  orgId: string,
+  input: z.infer<typeof importSchema>,
+  file: File,
+): Promise<{ input: z.infer<typeof importSchema>; parsed: ParsedInvoicePayload; fileMetadata?: Record<string, unknown> }> {
   if (file.size > MAX_INVOICE_FILE_BYTES) {
     throw new Error('Invoice file must be 15 MB or smaller.');
   }
@@ -532,7 +561,7 @@ async function parseMultipartInvoice(c: any, db: ReturnType<typeof createDb>, or
   let fileRetentionStatus: 'stored' | 'not_configured' | 'failed' = c.env.R2 ? 'stored' : 'not_configured';
   let fileRetentionError: string | null = null;
   if (c.env.R2) {
-    const candidateKey = `supplier-invoices/${c.get('orgId')}/${Date.now()}-${fileName}`;
+    const candidateKey = `supplier-invoices/${orgId}/${Date.now()}-${fileName}`;
     try {
       await c.env.R2.put(candidateKey, buffer, {
         httpMetadata: { contentType: file.type || 'application/octet-stream' },
@@ -543,7 +572,7 @@ async function parseMultipartInvoice(c: any, db: ReturnType<typeof createDb>, or
       fileRetentionStatus = 'failed';
       fileRetentionError = error instanceof Error ? error.message : 'R2 file retention failed';
       console.warn('Supplier invoice file retention failed', {
-        orgId: c.get('orgId'),
+        orgId,
         fileName: file.name || fileName,
         error: fileRetentionError,
       });
@@ -708,6 +737,7 @@ async function applyInvoiceImport(
   const supplier = invoiceImport.supplier || 'Unknown supplier';
   const totalAmount = items.reduce((sum, item) => sum + currencyValue(item.total), 0) || currencyValue(invoiceImport.totalAmount);
   const extractedData = invoiceImport.extractedData as { fileKey?: string; storedInR2?: boolean } | null;
+  const invoiceCostDate = dateValue(invoiceImport.invoiceDate) || dateValue(invoiceImport.createdAt) || new Date();
 
   const [purchase] = await db.insert(materialPurchases).values({
     orgId,
@@ -767,6 +797,7 @@ async function applyInvoiceImport(
         unitCost: unitCost.toFixed(2),
         totalCost: currencyValue(item.total || currencyValue(item.quantity || 1) * unitCost).toFixed(2),
         materialPurchaseId: purchase.id,
+        costDate: dateValue(item.purchaseDate) || invoiceCostDate,
       });
     }
   }
@@ -890,6 +921,197 @@ async function recordInvoiceImportFeedback(
   await upsertSupplierLearningStats(db, invoiceImport, outcome, finalJobId);
 }
 
+async function stageSupplierInvoiceImport(
+  c: any,
+  db: ReturnType<typeof createDb>,
+  orgId: string,
+  input: z.infer<typeof importSchema>,
+  parsed: ParsedInvoicePayload,
+  userId?: string | null,
+) {
+  if (!parsed.rawText?.trim()) throw new Error('Paste supplier invoice text or upload a supplier invoice file.');
+  if (!parsed.items.length) throw new Error('No invoice line items could be extracted.');
+
+  const matchCandidates = input.jobId
+    ? []
+    : await getJobCandidates(db, orgId, [parsed.rawText, input.supplier, input.invoiceNumber].filter(Boolean).join(' '));
+  const bestMatch = input.jobId ? { id: input.jobId, confidence: 0.99 } : matchCandidates[0];
+  const suggestedJobId = bestMatch && bestMatch.confidence >= 0.65 ? bestMatch.id : null;
+  const extractedSupplier = input.supplier || String(parsed.extracted.supplier || '').trim() || null;
+  const invoiceNumber = input.invoiceNumber || String(parsed.extracted.invoiceNumber || '').trim() || null;
+  const invoiceDate = dateValue(input.invoiceDate) || dateValue(parsed.extracted.invoiceDate);
+  const totalAmount = parsed.items.reduce((sum, item) => sum + currencyValue(item.total), 0);
+  const senderRule = input.senderEmail
+    ? await db.query.supplierInvoiceSenderRules.findFirst({
+      where: and(
+        eq(supplierInvoiceSenderRules.orgId, orgId),
+        eq(supplierInvoiceSenderRules.senderEmail, input.senderEmail.toLowerCase()),
+        eq(supplierInvoiceSenderRules.supplierKey, supplierKey(extractedSupplier)),
+        eq(supplierInvoiceSenderRules.isActive, true),
+      ),
+    })
+    : null;
+
+  const [invoiceImport] = await db.insert(supplierInvoiceImports).values({
+    orgId,
+    jobId: suggestedJobId,
+    sourceType: input.sourceType,
+    status: 'needs_review',
+    supplier: extractedSupplier,
+    invoiceNumber,
+    invoiceDate,
+    senderEmail: input.senderEmail || null,
+    originalFilename: input.originalFilename || null,
+    rawText: parsed.rawText,
+    extractedData: {
+      extractionMethod: parsed.metadata?.extractionMethod || (input.csvData ? 'csv' : 'deterministic_text'),
+      extractedSupplier,
+      invoiceNumber,
+      source: input.sourceType,
+      senderRuleMatched: Boolean(senderRule),
+      trustedSenderRuleId: senderRule?.id || null,
+      ...parsed.metadata,
+    },
+    extractedItems: parsed.items,
+    totalAmount: totalAmount.toFixed(2),
+    matchCandidates,
+    matchConfidence: clampConfidence(bestMatch?.confidence || 0).toFixed(2),
+    extractionConfidence: clampConfidence(parsed.confidence).toFixed(2),
+  }).returning();
+
+  const aiUsage = parsed.metadata?.aiUsage as AiUsageEstimate | undefined;
+  if (aiUsage) {
+    await db.insert(aiUsageEvents).values({
+      orgId,
+      userId: userId || null,
+      feature: OCR_FEATURE_KEY,
+      provider: aiUsage.provider,
+      model: aiUsage.model,
+      entityType: 'supplier_invoice_import',
+      entityId: invoiceImport.id,
+      inputTokens: aiUsage.inputTokens,
+      outputTokens: aiUsage.outputTokens,
+      totalTokens: aiUsage.totalTokens,
+      estimatedCostUsd: aiUsage.estimatedCostUsd.toFixed(6),
+      metadata: {
+        sourceType: input.sourceType,
+        contentType: parsed.metadata?.contentType,
+        fileName: parsed.metadata?.fileName,
+        extractionMethod: parsed.metadata?.extractionMethod,
+      },
+    });
+  }
+
+  return invoiceImport;
+}
+
+function emailAddress(value: string) {
+  return value.match(/<([^>]+)>/)?.[1]?.trim().toLowerCase() || value.trim().toLowerCase();
+}
+
+function inboundOrgSlug(value: unknown) {
+  const addresses = Array.isArray(value) ? value : value ? [String(value)] : [];
+  for (const raw of addresses) {
+    const address = emailAddress(raw);
+    const local = address.split('@')[0] || '';
+    const plusMatch = local.match(/^(?:receipts|invoices)[+-]([a-z0-9-]+)$/i);
+    if (plusMatch?.[1]) return plusMatch[1].toLowerCase();
+    const dotMatch = local.match(/^([a-z0-9-]+)[._-](?:receipts|invoices)$/i);
+    if (dotMatch?.[1]) return dotMatch[1].toLowerCase();
+  }
+  return null;
+}
+
+function fileFromBase64(attachment: z.infer<typeof inboundEmailSchema>['attachments'][number]) {
+  const binary = atob(attachment.contentBase64.replace(/^data:[^;]+;base64,/, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new File([bytes], attachment.filename, {
+    type: attachment.contentType || 'application/octet-stream',
+  });
+}
+
+async function requireInboundSecret(c: any) {
+  const expected = c.env.INBOUND_INVOICE_EMAIL_SECRET;
+  const provided = c.req.header('x-paintflow-inbound-secret')
+    || c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+  return Boolean(expected && provided && provided === expected);
+}
+
+invoicesApp.post('/imports/email-forward', async (c) => {
+  if (!await requireInboundSecret(c)) {
+    return c.json({ error: 'Inbound invoice email is not configured or the request is unauthorized.' }, 401);
+  }
+
+  const parsedBody = inboundEmailSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsedBody.success) {
+    return c.json({ error: 'Invalid inbound email payload', details: parsedBody.error.flatten() }, 400);
+  }
+
+  const payload = parsedBody.data;
+  const slug = inboundOrgSlug(payload.to);
+  if (!slug) {
+    return c.json({ error: 'Forward to receipts+workspace-slug@your-domain so PaintFlow can route the invoice.' }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const org = await db.query.organizations.findFirst({ where: eq(organizations.slug, slug) });
+  if (!org) return c.json({ error: 'No contractor workspace matched the forwarding address.' }, 404);
+  if (!await ensurePremiumAccess(db, org.id, c.env)) {
+    return c.json({ error: 'Supplier invoice automation is a premium feature.' }, 402);
+  }
+
+  const sender = emailAddress(payload.from);
+  const trustedRule = await db.query.supplierInvoiceSenderRules.findFirst({
+    where: and(
+      eq(supplierInvoiceSenderRules.orgId, org.id),
+      eq(supplierInvoiceSenderRules.senderEmail, sender),
+      eq(supplierInvoiceSenderRules.isActive, true),
+    ),
+  });
+  if (!trustedRule) {
+    return c.json({ error: 'Sender is not whitelisted for supplier invoice forwarding.' }, 403);
+  }
+
+  const supportedAttachments = payload.attachments.filter((attachment) => (
+    /pdf|image|text|csv|json/i.test(attachment.contentType || '')
+    || /\.(pdf|png|jpe?g|webp|csv|txt|json)$/i.test(attachment.filename)
+  ));
+  if (!supportedAttachments.length && !payload.text?.trim()) {
+    return c.json({ error: 'No supported invoice attachment or plain text body was found.' }, 400);
+  }
+
+  const imports = [];
+  for (const attachment of supportedAttachments.slice(0, 5)) {
+    const file = fileFromBase64(attachment);
+    const input = importSchema.parse({
+      sourceType: 'email_forward',
+      supplier: trustedRule.supplierName || trustedRule.supplierKey,
+      senderEmail: sender,
+      originalFilename: attachment.filename,
+      rawText: [payload.subject, payload.text].filter(Boolean).join('\n'),
+    });
+    const { parsed } = await parseInvoiceFile(c, db, org.id, input, file);
+    imports.push(await stageSupplierInvoiceImport(c, db, org.id, input, parsed, null));
+  }
+
+  if (!imports.length && payload.text?.trim()) {
+    const input = importSchema.parse({
+      sourceType: 'email_forward',
+      supplier: trustedRule.supplierName || trustedRule.supplierKey,
+      senderEmail: sender,
+      rawText: [payload.subject, payload.text].filter(Boolean).join('\n'),
+    });
+    imports.push(await stageSupplierInvoiceImport(c, db, org.id, input, parseInvoicePayload(input), null));
+  }
+
+  return c.json({ data: { imports, ignoredAttachments: payload.attachments.length - supportedAttachments.length } }, 202);
+});
+
+invoicesApp.use('*', authMiddleware);
+
 invoicesApp.post('/imports', async (c) => {
   const idempotencyError = requireIdempotency(c);
   if (idempotencyError) return idempotencyError;
@@ -915,74 +1137,7 @@ invoicesApp.post('/imports', async (c) => {
   if (!parsed.rawText?.trim()) return c.json({ error: 'Paste supplier invoice text or CSV data.' }, 400);
   if (!parsed.items.length) return c.json({ error: 'No invoice line items could be extracted.' }, 400);
 
-  const matchCandidates = input.jobId
-    ? []
-    : await getJobCandidates(db, orgId, [parsed.rawText, input.supplier, input.invoiceNumber].filter(Boolean).join(' '));
-  const bestMatch = input.jobId ? { id: input.jobId, confidence: 0.99 } : matchCandidates[0];
-  const suggestedJobId = bestMatch && bestMatch.confidence >= 0.65 ? bestMatch.id : null;
-  const extractedSupplier = input.supplier || String(parsed.extracted.supplier || '').trim() || null;
-  const invoiceNumber = input.invoiceNumber || String(parsed.extracted.invoiceNumber || '').trim() || null;
-  const totalAmount = parsed.items.reduce((sum, item) => sum + currencyValue(item.total), 0);
-  const senderRule = input.senderEmail
-    ? await db.query.supplierInvoiceSenderRules.findFirst({
-      where: and(
-        eq(supplierInvoiceSenderRules.orgId, orgId),
-        eq(supplierInvoiceSenderRules.senderEmail, input.senderEmail.toLowerCase()),
-        eq(supplierInvoiceSenderRules.supplierKey, supplierKey(extractedSupplier)),
-        eq(supplierInvoiceSenderRules.isActive, true),
-      ),
-    })
-    : null;
-
-  const [invoiceImport] = await db.insert(supplierInvoiceImports).values({
-    orgId,
-    jobId: suggestedJobId,
-    sourceType: input.sourceType,
-    status: 'needs_review',
-    supplier: extractedSupplier,
-    invoiceNumber,
-    invoiceDate: input.invoiceDate ? new Date(input.invoiceDate) : null,
-    senderEmail: input.senderEmail || null,
-    originalFilename: input.originalFilename || null,
-    rawText: parsed.rawText,
-    extractedData: {
-      extractionMethod: parsed.metadata?.extractionMethod || (input.csvData ? 'csv' : 'deterministic_text'),
-      extractedSupplier,
-      invoiceNumber,
-      source: input.sourceType,
-      senderRuleMatched: Boolean(senderRule),
-      trustedSenderRuleId: senderRule?.id || null,
-      ...parsed.metadata,
-    },
-    extractedItems: parsed.items,
-    totalAmount: totalAmount.toFixed(2),
-    matchCandidates,
-    matchConfidence: clampConfidence(bestMatch?.confidence || 0).toFixed(2),
-    extractionConfidence: clampConfidence(parsed.confidence).toFixed(2),
-  }).returning();
-
-  const aiUsage = parsed.metadata?.aiUsage as AiUsageEstimate | undefined;
-  if (aiUsage) {
-    await db.insert(aiUsageEvents).values({
-      orgId,
-      userId: c.get('userId') || null,
-      feature: OCR_FEATURE_KEY,
-      provider: aiUsage.provider,
-      model: aiUsage.model,
-      entityType: 'supplier_invoice_import',
-      entityId: invoiceImport.id,
-      inputTokens: aiUsage.inputTokens,
-      outputTokens: aiUsage.outputTokens,
-      totalTokens: aiUsage.totalTokens,
-      estimatedCostUsd: aiUsage.estimatedCostUsd.toFixed(6),
-      metadata: {
-        sourceType: input.sourceType,
-        contentType: parsed.metadata?.contentType,
-        fileName: parsed.metadata?.fileName,
-        extractionMethod: parsed.metadata?.extractionMethod,
-      },
-    });
-  }
+  const invoiceImport = await stageSupplierInvoiceImport(c, db, orgId, input, parsed, c.get('userId') || null);
 
   return c.json({ data: invoiceImport }, 201);
 });
@@ -1210,11 +1365,13 @@ invoicesApp.post('/upload', async (c) => {
   }
 
   const totalAmount = parsed.items.reduce((sum, item) => sum + item.total, 0);
+  const invoiceCostDate = dateValue(input.invoiceDate) || new Date();
   const [purchase] = await db.insert(materialPurchases).values({
     orgId,
     jobId: input.jobId || null,
     supplier: input.supplier,
     invoiceNumber: input.invoiceNumber || null,
+    invoiceDate: invoiceCostDate,
     totalAmount: totalAmount.toFixed(2),
     parsedData: parsed.items,
   }).returning();
@@ -1240,6 +1397,7 @@ invoicesApp.post('/upload', async (c) => {
         unitCost: unitCost.toFixed(2),
         totalCost: item.total.toFixed(2),
         materialPurchaseId: purchase.id,
+        costDate: dateValue(item.purchaseDate) || invoiceCostDate,
       });
     }
   }

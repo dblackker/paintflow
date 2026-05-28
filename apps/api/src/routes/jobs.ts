@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
 import { changeOrders, estimateMaterials, estimates, jobCosts, jobs, leads, materialPurchases } from '@paintflow/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -13,6 +13,12 @@ const money = (value: unknown) => Number(value || 0);
 
 function sumBy<T>(items: T[], pick: (item: T) => unknown) {
   return items.reduce((total, item) => total + money(pick(item)), 0);
+}
+
+function dateValue(value: unknown) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function selectedEstimatePackage(estimate: typeof estimates.$inferSelect | undefined) {
@@ -157,7 +163,7 @@ jobsApp.get('/:id/costs', async (c) => {
   
   const costs = await db.query.jobCosts.findMany({
     where: and(eq(jobCosts.jobId, id), eq(jobCosts.orgId, orgId)),
-    orderBy: (jobCosts, { desc }) => [desc(jobCosts.createdAt)],
+    orderBy: () => [desc(sql`coalesce(${jobCosts.costDate}, ${jobCosts.createdAt})`)],
   });
   
   return c.json({ data: costs });
@@ -180,7 +186,7 @@ jobsApp.get('/:id/costing', async (c) => {
   const [costs, orders, purchases, estimatedMaterials] = await Promise.all([
     db.query.jobCosts.findMany({
       where: and(eq(jobCosts.jobId, id), eq(jobCosts.orgId, orgId)),
-      orderBy: (jobCosts, { desc }) => [desc(jobCosts.createdAt)],
+      orderBy: () => [desc(sql`coalesce(${jobCosts.costDate}, ${jobCosts.createdAt})`)],
     }),
     db.query.changeOrders.findMany({
       where: and(eq(changeOrders.jobId, id), eq(changeOrders.orgId, orgId)),
@@ -281,6 +287,7 @@ const createCostSchema = z.object({
   description: z.string().min(1),
   quantity: z.coerce.number().positive(),
   unitCost: z.coerce.number().positive(),
+  costDate: z.string().optional().nullable(),
 });
 
 const updateCostSchema = createCostSchema.partial().refine((value) => Object.keys(value).length > 0, {
@@ -310,6 +317,7 @@ jobsApp.post('/:id/costs', async (c) => {
     quantity: data.quantity.toString(),
     unitCost: data.unitCost.toString(),
     totalCost: totalCost.toString(),
+    costDate: dateValue(data.costDate) || new Date(),
   }).returning();
   
   return c.json({ data: cost }, 201);
@@ -341,6 +349,7 @@ jobsApp.patch('/:id/costs/:costId', async (c) => {
       ...('description' in parsed.data ? { description: parsed.data.description } : {}),
       ...('quantity' in parsed.data ? { quantity: quantity.toString() } : {}),
       ...('unitCost' in parsed.data ? { unitCost: unitCost.toString() } : {}),
+      ...('costDate' in parsed.data ? { costDate: dateValue(parsed.data.costDate) } : {}),
       totalCost: (quantity * unitCost).toString(),
     })
     .where(and(eq(jobCosts.id, costId), eq(jobCosts.jobId, jobId), eq(jobCosts.orgId, orgId)))
@@ -393,6 +402,7 @@ jobsApp.post('/:id/time-entries', async (c) => {
     quantity: parsed.data.hours.toString(),
     unitCost: parsed.data.rate.toString(),
     totalCost: totalCost.toString(),
+    costDate: dateValue(parsed.data.date) || new Date(),
   }).returning();
 
   return c.json({ data: cost }, 201);

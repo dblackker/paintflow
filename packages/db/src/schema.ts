@@ -720,6 +720,7 @@ export const jobCosts = pgTable('job_costs', {
   unitCost: decimal('unit_cost', { precision: 10, scale: 2 }).notNull(),
   totalCost: decimal('total_cost', { precision: 10, scale: 2 }).notNull(),
   materialPurchaseId: uuid('material_purchase_id').references(() => materialPurchases.id),
+  costDate: timestamp('cost_date'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

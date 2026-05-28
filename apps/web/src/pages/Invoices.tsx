@@ -1217,6 +1217,27 @@ export function Invoices() {
 
           {!isLoading && !error && aiUsage && <AiUsageCard usage={aiUsage} />}
 
+          <Card padding="sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="pf-section-title">Forward supplier receipts</p>
+                  <Badge variant="purple" size="sm">Premium</Badge>
+                </div>
+                <p className="pf-helper mt-1">
+                  Forwarded supplier emails are accepted only from trusted sender addresses, then staged here for review before they update job costs.
+                </p>
+              </div>
+              <Button type="button" variant="secondary" size="sm" onClick={openUploadModal}>
+                Manage sender
+              </Button>
+            </div>
+            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="pf-meta">Forwarding address format</p>
+              <p className="pf-copy mt-1 font-mono text-xs">receipts+workspace-slug@your-inbound-domain</p>
+            </div>
+          </Card>
+
           <Card padding="none">
             <CardHeader
               className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5"

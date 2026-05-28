@@ -302,7 +302,7 @@ teamApp.post('/punch/out', async (c) => {
     endAccuracyMeters: meters(data.accuracyMeters),
   }).returning();
 
-  await createLaborCostForEntry(db, orgId, session.jobId, resolved.member.name, description, roundedHours, burdenedRate, totalCost);
+  await createLaborCostForEntry(db, orgId, session.jobId, resolved.member.name, description, roundedHours, burdenedRate, totalCost, roundedStart);
 
   const [updated] = await db.update(timePunchSessions)
     .set({
@@ -398,7 +398,7 @@ teamApp.post('/punch/switch-job', async (c) => {
     endAccuracyMeters: meters(data.accuracyMeters),
   }).returning();
 
-  await createLaborCostForEntry(db, orgId, session.jobId, resolved.member.name, description, roundedHours, burdenedRate, totalCost);
+  await createLaborCostForEntry(db, orgId, session.jobId, resolved.member.name, description, roundedHours, burdenedRate, totalCost, roundedStart);
 
   await db.update(timePunchSessions)
     .set({
@@ -508,6 +508,7 @@ teamApp.patch('/punch/review/:id', async (c) => {
         Number(existingEntry.hours || 0),
         Number(existingEntry.hourlyRate || 0),
         Number(existingEntry.totalCost || 0),
+        existingEntry.date,
       );
     }
   }
@@ -729,6 +730,7 @@ async function createLaborCostForEntry(
   hours: number,
   burdenedRate: number,
   totalCost: number,
+  costDate?: Date,
 ) {
   if (!jobId) return;
   await db.insert(jobCosts).values({
@@ -739,6 +741,7 @@ async function createLaborCostForEntry(
     quantity: hours.toFixed(2),
     unitCost: burdenedRate.toFixed(2),
     totalCost: totalCost.toFixed(2),
+    costDate: costDate || new Date(),
   });
 }
 
@@ -765,6 +768,7 @@ function laborCostAdjustmentRow(
   hours: number,
   hourlyRate: number,
   totalCost: number,
+  costDate?: Date,
 ) {
   return {
     orgId,
@@ -774,6 +778,7 @@ function laborCostAdjustmentRow(
     quantity: hours.toFixed(2),
     unitCost: hourlyRate.toFixed(2),
     totalCost: totalCost.toFixed(2),
+    costDate: costDate || new Date(),
   };
 }
 
@@ -813,6 +818,7 @@ teamApp.post('/time', async (c) => {
   const burdenRate = parseFloat(member.burdenRate || '30');
   const burdenedRate = hourlyRate * (1 + burdenRate / 100);
   const totalCost = data.hours * burdenedRate;
+  const entryDate = new Date(data.date);
   
   const [entry] = await db.insert(timeEntries).values({
     orgId,
@@ -822,7 +828,7 @@ teamApp.post('/time', async (c) => {
     description: data.description,
     hourlyRate: burdenedRate.toString(),
     totalCost: totalCost.toString(),
-    date: new Date(data.date),
+    date: entryDate,
   }).returning();
   
   await db.insert(jobCosts).values({
@@ -833,6 +839,7 @@ teamApp.post('/time', async (c) => {
     quantity: data.hours.toString(),
     unitCost: burdenedRate.toString(),
     totalCost: totalCost.toString(),
+    costDate: entryDate,
   });
   
   return c.json({ data: entry }, 201);
@@ -898,6 +905,7 @@ teamApp.post('/timecards', async (c) => {
       quantity: row.hours,
       unitCost: row.hourlyRate,
       totalCost: row.totalCost,
+      costDate: row.date,
     };
   }));
 
@@ -1129,9 +1137,10 @@ teamApp.patch('/time/:id', async (c) => {
     .returning();
 
   if (existing.jobId !== jobId) {
+    const adjustmentDate = data.date ? new Date(data.date) : existing.date;
     const adjustments = [
-      existing.jobId ? laborCostAdjustmentRow(orgId, existing.jobId, 'Time entry moved out', -oldHours, oldHourlyRate, -oldTotalCost) : null,
-      laborCostAdjustmentRow(orgId, jobId, `Time entry moved in - ${member.name}`, hours, burdenedRate, totalCost),
+      existing.jobId ? laborCostAdjustmentRow(orgId, existing.jobId, 'Time entry moved out', -oldHours, oldHourlyRate, -oldTotalCost, adjustmentDate) : null,
+      laborCostAdjustmentRow(orgId, jobId, `Time entry moved in - ${member.name}`, hours, burdenedRate, totalCost, adjustmentDate),
     ].filter(Boolean);
     if (adjustments.length) await db.insert(jobCosts).values(adjustments);
   } else {
@@ -1139,7 +1148,7 @@ teamApp.patch('/time/:id', async (c) => {
     if (Math.abs(delta) >= 0.01) {
       const deltaHours = burdenedRate ? delta / burdenedRate : 0;
       await db.insert(jobCosts).values(
-        laborCostAdjustmentRow(orgId, jobId, `Time entry adjusted - ${member.name}`, deltaHours, burdenedRate, delta),
+        laborCostAdjustmentRow(orgId, jobId, `Time entry adjusted - ${member.name}`, deltaHours, burdenedRate, delta, data.date ? new Date(data.date) : existing.date),
       );
     }
   }
@@ -1175,6 +1184,7 @@ teamApp.delete('/time/:id', async (c) => {
         -Number(existing.hours),
         Number(existing.hourlyRate),
         -Number(existing.totalCost),
+        existing.date,
       ),
     );
   }

@@ -162,6 +162,13 @@
       "when": 1779166018000,
       "tag": "0022_ai_usage_events",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1779166019000,
+      "tag": "0023_job_cost_transaction_date",
+      "breakpoints": true
     }
   ]
 }

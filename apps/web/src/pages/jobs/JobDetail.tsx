@@ -15,6 +15,7 @@ interface JobCost {
   quantity?: string | number | null;
   unitCost?: string | number | null;
   totalCost?: string | number | null;
+  costDate?: string | null;
   createdAt?: string | null;
 }
 
@@ -728,7 +729,7 @@ export function JobDetail() {
                       <StatusBadge status={String(cost.category || 'other')} />
                     </div>
                     <p className="mt-1 text-sm text-gray-600">
-                      {numberValue(cost.quantity).toFixed(2)} x {formatMoney(cost.unitCost || 0)} - {formatDate(cost.createdAt)}
+                      {numberValue(cost.quantity).toFixed(2)} x {formatMoney(cost.unitCost || 0)} - {formatDate(cost.costDate || cost.createdAt)}
                     </p>
                   </div>
                   <div className="flex items-center justify-between gap-3 sm:justify-end sm:text-right">

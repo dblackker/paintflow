@@ -296,9 +296,9 @@ async function seed(db: Db) {
   }).returning();
 
   await db.insert(jobCosts).values([
-    { orgId: org.id, jobId: robertJob.id, category: 'materials', description: 'Exterior paint and primer order', quantity: '1.00', unitCost: '1850.00', totalCost: '1850.00' },
-    { orgId: org.id, jobId: robertJob.id, category: 'supplies', description: 'Masking, caulk, sundries', quantity: '1.00', unitCost: '415.00', totalCost: '415.00' },
-    { orgId: org.id, jobId: harperJob.id, category: 'materials', description: 'Deposit material order', quantity: '1.00', unitCost: '980.00', totalCost: '980.00' },
+    { orgId: org.id, jobId: robertJob.id, category: 'materials', description: 'Exterior paint and primer order', quantity: '1.00', unitCost: '1850.00', totalCost: '1850.00', costDate: daysAgo(5) },
+    { orgId: org.id, jobId: robertJob.id, category: 'supplies', description: 'Masking, caulk, sundries', quantity: '1.00', unitCost: '415.00', totalCost: '415.00', costDate: daysAgo(4) },
+    { orgId: org.id, jobId: harperJob.id, category: 'materials', description: 'Deposit material order', quantity: '1.00', unitCost: '980.00', totalCost: '980.00', costDate: daysAgo(2) },
   ]);
 
   const timeRows = [
@@ -451,6 +451,7 @@ async function seed(db: Db) {
     quantity: row.hours,
     unitCost: row.hourlyRate,
     totalCost: row.totalCost,
+    costDate: row.date,
   })));
 
   await db.insert(materialPurchases).values({
