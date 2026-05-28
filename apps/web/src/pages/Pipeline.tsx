@@ -497,8 +497,6 @@ function PipelineCardView({ card, onMove, onActivity, onDragStart, onDragEnd }: 
         <span>{stageAge.label}</span>
         <span aria-hidden="true">·</span>
         <span>{card.daysInStage}d in stage</span>
-        <span aria-hidden="true">·</span>
-        <span className="min-w-0 break-words">{labelize(card.stage)}</span>
       </div>
       {card.nextActivity && (
         <div className="mt-3 rounded-md bg-blue-50 px-2.5 py-2">
