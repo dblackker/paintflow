@@ -6,9 +6,23 @@ export class PPGScraper extends BaseSupplierScraper {
   baseUrl = 'https://www.ppgpaints.com';
 
   private productCategories = [
-    { type: 'interior', url: '/products/interior-paint' },
-    { type: 'exterior', url: '/products/exterior-paint' },
-    { type: 'primer', url: '/products/primers' },
+    { type: 'interior', url: '/products?category_equal=%5B%22interior-paint%22%5D' },
+    { type: 'exterior', url: '/products?category_equal=%5B%22exterior-paint%22%5D' },
+    { type: 'primer', url: '/products?category_equal=%5B%22primers%22%5D' },
+  ];
+  private colorFamilyPages = [
+    { family: 'whites', url: '/ppg-color-families/off-whites' },
+    { family: 'grays', url: '/ppg-color-families/grays-blacks' },
+    { family: 'neutrals', url: '/ppg-color-families/beiges' },
+    { family: 'neutrals', url: '/ppg-color-families/neutrals' },
+    { family: 'metallics', url: '/ppg-color-families/metallics' },
+    { family: 'blues', url: '/ppg-color-families/blues' },
+    { family: 'aquas', url: '/ppg-color-families/aquas' },
+    { family: 'greens', url: '/ppg-color-families/greens' },
+    { family: 'yellows', url: '/ppg-color-families/yellows' },
+    { family: 'oranges', url: '/ppg-color-families/oranges' },
+    { family: 'reds', url: '/ppg-color-families/reds' },
+    { family: 'purples', url: '/ppg-color-families/purples' },
   ];
 
   async scrapeProducts(options?: ScrapeOptions): Promise<ScrapeResult<Product>> {
@@ -26,22 +40,31 @@ export class PPGScraper extends BaseSupplierScraper {
         
         try {
           await this.navigate(`${this.baseUrl}${category.url}`);
-          const hasProductGrid = await this.waitForAnySelector('.product-card, .product-item, a[href*="/products/"]');
+          const hasProductGrid = await this.waitForAnySelector('.product-card_container, .product-card, .product-item, a[href*="/ppg-products/"]');
           if (!hasProductGrid) {
             failed++;
             continue;
           }
 
-          // PPG uses a grid layout
           const productLinks = await this.page!.$$eval(
-            '.product-card a, .product-item a, a[href*="/products/"]',
-            links => {
+            '.product-card_container, .product-card, .product-item, a[href*="/ppg-products/"]',
+            elements => {
               const seen = new Set<string>();
-              return links.map(a => {
-                const anchor = a as HTMLAnchorElement;
-                return { url: anchor.href, label: anchor.textContent?.trim() || '' };
+              return elements.map((element) => {
+                const anchor = element.matches('a')
+                  ? element as HTMLAnchorElement
+                  : element.querySelector('a[href*="/ppg-products/"]') as HTMLAnchorElement | null;
+                const title = element.querySelector('.product-card_title, h2, h3')?.textContent?.trim() || '';
+                const sku = Array.from(element.querySelectorAll('div, span, p'))
+                  .map((child) => child.textContent?.trim() || '')
+                  .find((text) => /[A-Z0-9-]+\/\d{2}/.test(text)) || '';
+                return {
+                  url: anchor?.href || '',
+                  label: title || anchor?.textContent?.trim() || '',
+                  sku,
+                };
               }).filter((item) => {
-                if (!item.url || seen.has(item.url)) return false;
+                if (!item.url || !item.url.includes('/ppg-products/') || seen.has(item.url)) return false;
                 seen.add(item.url);
                 return true;
               });
@@ -54,7 +77,7 @@ export class PPGScraper extends BaseSupplierScraper {
             try {
               const product = process.env.SUPPLIER_DEEP_PRODUCT_DETAIL === 'true'
                 ? await this.scrapeProductDetail(productLink.url, category.type)
-                : this.productFromListing(productLink.url, productLink.label, category.type);
+                : this.productFromListing(productLink.url, productLink.label, category.type, productLink.sku);
               if (product) {
                 products.push(product);
                 created++;
@@ -92,21 +115,27 @@ export class PPGScraper extends BaseSupplierScraper {
     }
   }
 
-  private productFromListing(url: string, label: string, type: string): Product | null {
+  private productFromListing(url: string, label: string, type: string, skuText?: string): Product | null {
     const slug = new URL(url).pathname.split('/').filter(Boolean).pop() || '';
     const name = label.replace(/\s+/g, ' ').trim() || this.nameFromSlug(slug);
-    if (!name || name.length < 3) return null;
-    const sku = slug || this.generateId('ppg', name);
+    if (!name || name.length < 3 || /^\d+(\.\d+)?$/.test(name)) return null;
+    const sku = skuText?.split(',')[0]?.trim() || slug || this.generateId('ppg', name);
     return this.validateProduct({
       id: this.generateId(this.supplierId, sku),
       supplierId: this.supplierId,
       sku,
       name,
-      productLine: name.split(/\s+/).slice(0, 2).join(' '),
+      productLine: this.productLineFromName(name),
       type: this.normalizeProductType(type),
       category: 'paint',
       url,
     });
+  }
+
+  private productLineFromName(name: string): string {
+    const cleaned = name.replace(/[®™]/g, '').trim();
+    const match = cleaned.match(/^(.+?)(?:\s+Interior|\s+Exterior|\s+Latex|\s+Paint|\s+Primer|\s+Stain|$)/i);
+    return (match?.[1] || cleaned.split(/\s+/).slice(0, 3).join(' ')).trim();
   }
 
   private nameFromSlug(slug: string) {
@@ -174,66 +203,51 @@ export class PPGScraper extends BaseSupplierScraper {
     const errors: Error[] = [];
 
     try {
-      // PPG color palette
-      await this.navigate(`${this.baseUrl}/color`);
-      const hasColorPage = await this.waitForAnySelector('.color-swatch, .color-card, .color-family a, .palette-section a, a[href*="/color"]');
-      if (!hasColorPage) {
-        errors.push(new Error('PPG color selectors were not found'));
-      }
+      const byCode = new Map<string, Color>();
 
-      // Get color families
-      const families = await this.page!.$$eval(
-        '.color-family a, .palette-section a',
-        links => links.map(a => ({
-          url: (a as HTMLAnchorElement).href,
-          name: a.textContent?.trim()
-        })).filter(l => l.url)
-      );
-
-      this.logger.info(`Found ${families.length} color families`);
-
-      for (const family of families.slice(0, 5)) { // Limit for demo
+      for (const familyPage of this.colorFamilyPages) {
         try {
-          await this.navigate(family.url);
-          const hasSwatches = await this.waitForAnySelector('.color-swatch', 3000);
-          if (!hasSwatches) continue;
-
-          const familyColors = await this.page!.$$eval(
-            '.color-swatch',
-            (swatches, familyName) => {
-              return swatches.map(swatch => {
-                const name = swatch.querySelector('.color-name')?.textContent?.trim() || '';
-                const code = swatch.querySelector('.color-code')?.textContent?.trim() || '';
-                const hex = swatch.getAttribute('data-color') || 
-                           (swatch as HTMLElement).style.backgroundColor || '';
-                
-                return { name, code, hex, family: familyName };
-              }).filter(c => c.name);
-            },
-            family.name
-          );
-
-          for (const colorData of familyColors) {
-            const id = this.generateId(this.supplierId, colorData.code || colorData.name);
-            
-            const color: Color = {
-              id,
-              supplierId: this.supplierId,
-              colorCode: colorData.code || id,
-              name: colorData.name,
-              hexCode: this.normalizeHex(colorData.hex),
-              family: colorData.family,
-              isPopular: false,
-            };
-
-            const validated = this.validateColor(color);
-            if (validated) colors.push(validated);
+          await this.navigate(`${this.baseUrl}${familyPage.url}`);
+          const hasColorPage = await this.waitForAnySelector('a[href*="/ppg-colors/"]');
+          if (!hasColorPage) {
+            errors.push(new Error(`PPG color links were not found on ${familyPage.url}`));
+            continue;
           }
 
-          await this.rateLimit();
+          const colorLinks = await this.page!.$$eval(
+            'a[href*="/ppg-colors/"]',
+            links => {
+              const byUrl = new Map<string, { url: string; label: string }>();
+              for (const link of links) {
+                const anchor = link as HTMLAnchorElement;
+                const url = anchor.href.split('?')[0].split('#')[0];
+                const label = anchor.textContent?.replace(/\s+/g, ' ').trim() || '';
+                if (!url.includes('/ppg-colors/') || !label) continue;
+                const existing = byUrl.get(url);
+                if (!existing || label.length > existing.label.length) byUrl.set(url, { url, label });
+              }
+              return Array.from(byUrl.values());
+            }
+          );
+
+          this.logger.info(`Found ${colorLinks.length} ${familyPage.family} color links`);
+
+          for (const colorLink of colorLinks) {
+            const parsed = this.colorFromLink(colorLink.url, colorLink.label, familyPage.family);
+            if (!parsed) continue;
+            byCode.set(parsed.colorCode.toLowerCase(), parsed);
+            if (options?.limit && byCode.size >= options.limit) break;
+          }
+          if (options?.limit && byCode.size >= options.limit) break;
         } catch (error) {
           errors.push(error as Error);
+          this.logger.warn(`Failed to scrape PPG color family ${familyPage.url}:`, error);
         }
+      }
+
+      for (const color of byCode.values()) {
+        const validated = this.validateColor(color);
+        if (validated) colors.push(validated);
       }
 
       const duration = Date.now() - startTime;
@@ -268,6 +282,38 @@ export class PPGScraper extends BaseSupplierScraper {
       }
     }
     return undefined;
+  }
+
+  private colorFromLink(url: string, label: string, family?: string): Color | null {
+    const slug = new URL(url).pathname.split('/').filter(Boolean).pop() || '';
+    const codeMatch = label.match(/([A-Z]{2,5}\d{2,4}|PPG\d{4}-\d|MTL\d{3})$/i);
+    const colorCode = codeMatch?.[1] || slug.toUpperCase();
+    const name = (codeMatch ? label.slice(0, codeMatch.index).trim() : label.trim()) || this.nameFromSlug(slug);
+    if (!name || name.length < 2) return null;
+    return {
+      id: this.generateId(this.supplierId, colorCode),
+      supplierId: this.supplierId,
+      colorCode,
+      name,
+      family: family || this.inferColorFamily(name),
+      isPopular: false,
+    };
+  }
+
+  private inferColorFamily(colorName: string): string {
+    const name = colorName.toLowerCase();
+    if (name.includes('white') || name.includes('ivory')) return 'whites';
+    if (name.includes('gray') || name.includes('grey') || name.includes('black') || name.includes('flint')) return 'grays';
+    if (name.includes('beige') || name.includes('neutral') || name.includes('tan')) return 'neutrals';
+    if (name.includes('blue')) return 'blues';
+    if (name.includes('aqua') || name.includes('teal')) return 'aquas';
+    if (name.includes('green') || name.includes('foliage') || name.includes('topiary')) return 'greens';
+    if (name.includes('red') || name.includes('mahogany')) return 'reds';
+    if (name.includes('yellow') || name.includes('gold')) return 'yellows';
+    if (name.includes('orange') || name.includes('copper') || name.includes('ginger')) return 'oranges';
+    if (name.includes('purple') || name.includes('orchid')) return 'purples';
+    if (name.includes('brown') || name.includes('caramel') || name.includes('chestnut')) return 'browns';
+    return 'other';
   }
 
   async scrapeProductColorMappings(options?: ScrapeOptions): Promise<ScrapeResult<ProductColorMapping>> {

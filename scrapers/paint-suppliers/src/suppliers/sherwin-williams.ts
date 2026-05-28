@@ -224,82 +224,51 @@ export class SherwinWilliamsScraper extends BaseSupplierScraper {
     let created = 0;
 
     try {
-      // Navigate to color collections
-      await this.navigate(`${this.baseUrl}/homeowners/color`);
-      const hasColorCollections = await this.waitForAnySelector('.color-collection, [data-testid="color-swatch"], a[href*="/homeowners/color/"]');
-      if (!hasColorCollections) {
-        errors.push(new Error('Sherwin-Williams color collection selectors were not found'));
+      const response = await fetch('https://api.sherwin-williams.com/prism/v1/colors/sherwin?lng=en-US&_corev=7.17.1', {
+        headers: {
+          accept: 'application/json',
+          'user-agent': this.getRandomUserAgent(),
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`Sherwin-Williams Prism color API returned ${response.status}`);
       }
 
-      // Get color collection links
-      const collectionLinks = await this.page!.$$eval(
-        '.color-collection a, [data-testid="collection-link"], a[href*="/homeowners/color/"]',
-        links => links.map(a => ({
-          url: (a as HTMLAnchorElement).href,
-          name: a.textContent?.trim()
-        })).filter(l => l.url)
-      );
+      const colorData = await response.json() as Array<{
+        colorNumber?: string;
+        name?: string;
+        hex?: string;
+        red?: number;
+        green?: number;
+        blue?: number;
+        colorFamilyNames?: string[];
+        brandedCollectionNames?: string[];
+        lrv?: number;
+        archived?: boolean;
+      }>;
 
-      this.logger.info(`Found ${collectionLinks.length} color collections`);
+      for (const swColor of colorData.slice(0, options?.limit)) {
+        if (!swColor.colorNumber || !swColor.name || swColor.archived) continue;
+        const id = this.generateId(this.supplierId, swColor.colorNumber);
+        const color: Color = {
+          id,
+          supplierId: this.supplierId,
+          colorCode: `SW ${swColor.colorNumber}`,
+          name: swColor.name,
+          hexCode: swColor.hex?.startsWith('#') ? swColor.hex.toUpperCase() : undefined,
+          rgbR: Number.isInteger(swColor.red) ? swColor.red : undefined,
+          rgbG: Number.isInteger(swColor.green) ? swColor.green : undefined,
+          rgbB: Number.isInteger(swColor.blue) ? swColor.blue : undefined,
+          collection: swColor.brandedCollectionNames?.[0],
+          family: swColor.colorFamilyNames?.[0]?.toLowerCase() || this.inferColorFamily(swColor.name),
+          lrv: typeof swColor.lrv === 'number' ? Math.round(swColor.lrv) : undefined,
+          isPopular: swColor.brandedCollectionNames?.some((name) => /top 50|popular/i.test(name)) || false,
+        };
 
-      for (const collection of collectionLinks.slice(0, 10)) { // Limit for demo
-        try {
-          await this.navigate(collection.url);
-          const hasSwatches = await this.waitForAnySelector('.color-swatch, [data-testid="color-card"]', 3000);
-          if (!hasSwatches) continue;
-
-          const collectionColors = await this.page!.$$eval(
-            '.color-swatch, [data-testid="color-card"]',
-            (swatches, collectionName) => {
-              return swatches.map(swatch => {
-                const name = swatch.querySelector('.color-name, [data-testid="color-name"]')?.textContent?.trim() || '';
-                const code = swatch.querySelector('.color-code, [data-testid="color-code"]')?.textContent?.trim() || '';
-                const hex = swatch.getAttribute('data-hex') || 
-                           (swatch as HTMLElement).style.backgroundColor || '';
-                
-                return { name, code, hex, collection: collectionName };
-              }).filter(c => c.name && c.code);
-            },
-            collection.name
-          );
-
-          for (const colorData of collectionColors) {
-            const id = this.generateId(this.supplierId, colorData.code);
-            
-            // Parse hex from rgb if needed
-            let hexCode = colorData.hex;
-            if (hexCode?.startsWith('rgb')) {
-              const match = hexCode.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-              if (match) {
-                const r = parseInt(match[1]).toString(16).padStart(2, '0');
-                const g = parseInt(match[2]).toString(16).padStart(2, '0');
-                const b = parseInt(match[3]).toString(16).padStart(2, '0');
-                hexCode = `#${r}${g}${b}`;
-              }
-            }
-
-            const color: Color = {
-              id,
-              supplierId: this.supplierId,
-              colorCode: colorData.code,
-              name: colorData.name,
-              hexCode: hexCode?.startsWith('#') ? hexCode : undefined,
-              collection: colorData.collection,
-              family: this.inferColorFamily(colorData.name),
-              isPopular: false, // Would need additional data
-            };
-
-            const validated = this.validateColor(color);
-            if (validated) {
-              colors.push(validated);
-              created++;
-            }
-          }
-
-          await this.rateLimit();
-        } catch (error) {
-          errors.push(error as Error);
-          this.logger.warn(`Failed to scrape collection ${collection.name}:`, error);
+        const validated = this.validateColor(color);
+        if (validated) {
+          colors.push(validated);
+          created++;
         }
       }
 
