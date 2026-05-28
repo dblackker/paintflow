@@ -58,17 +58,17 @@ export function Button({
     if (isInternalHref && href) {
       return (
         <Link className={classes} to={href} {...anchorProps}>
-          {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+          {!isLoading && leftIcon && <span className="inline-flex">{leftIcon}</span>}
           {children}
-          {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+          {!isLoading && rightIcon && <span className="inline-flex">{rightIcon}</span>}
         </Link>
       );
     }
     return (
       <a className={classes} href={href} target={target} rel={rel} download={download} {...anchorProps}>
-        {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+        {!isLoading && leftIcon && <span className="inline-flex">{leftIcon}</span>}
         {children}
-        {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+        {!isLoading && rightIcon && <span className="inline-flex">{rightIcon}</span>}
       </a>
     );
   }
@@ -76,9 +76,9 @@ export function Button({
   if (as === 'span') {
     return (
       <span className={classes}>
-        {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+        {!isLoading && leftIcon && <span className="inline-flex">{leftIcon}</span>}
         {children}
-        {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+        {!isLoading && rightIcon && <span className="inline-flex">{rightIcon}</span>}
       </span>
     );
   }
@@ -90,11 +90,11 @@ export function Button({
       {...props}
     >
       {isLoading && (
-        <Icon name="loader" className="-ml-1 mr-2 h-4 w-4 animate-spin" />
+        <Icon name="loader" className="h-4 w-4 animate-spin" />
       )}
-      {!isLoading && leftIcon && <span className="mr-2">{leftIcon}</span>}
+      {!isLoading && leftIcon && <span className="inline-flex">{leftIcon}</span>}
       {children}
-      {!isLoading && rightIcon && <span className="ml-2">{rightIcon}</span>}
+      {!isLoading && rightIcon && <span className="inline-flex">{rightIcon}</span>}
     </button>
   );
 }
