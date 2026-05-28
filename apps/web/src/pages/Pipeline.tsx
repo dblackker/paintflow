@@ -109,6 +109,31 @@ function transitionHelper(targetStage: string) {
   return 'Use this when the customer interaction happened outside PaintFlow.';
 }
 
+function stageAgeTone(daysInStage: number) {
+  if (daysInStage >= 14) {
+    return {
+      label: 'Stale',
+      className: 'border-red-200 bg-red-50 text-red-800',
+    };
+  }
+  if (daysInStage >= 7) {
+    return {
+      label: 'Aging',
+      className: 'border-amber-200 bg-amber-50 text-amber-800',
+    };
+  }
+  if (daysInStage >= 3) {
+    return {
+      label: 'Monitor',
+      className: 'border-blue-200 bg-blue-50 text-blue-800',
+    };
+  }
+  return {
+    label: 'Fresh',
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  };
+}
+
 export function Pipeline() {
   const [data, setData] = useState<PipelineData>({ stages: [], cards: [], summary: {} });
   const [activeGroup, setActiveGroup] = useState<GroupFilter>('sales');
@@ -442,6 +467,7 @@ function PipelineCardView({ card, onMove, onActivity, onDragStart, onDragEnd }: 
   onDragEnd: () => void;
 }) {
   const address = cardAddress(card);
+  const stageAge = stageAgeTone(Number(card.daysInStage || 0));
   return (
     <article
       className="mobile-card-row rounded-lg border bg-white p-3 shadow-sm"
@@ -460,13 +486,19 @@ function PipelineCardView({ card, onMove, onActivity, onDragStart, onDragEnd }: 
         </div>
         <p className="pf-row-title shrink-0">{formatMoney(card.value)}</p>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
+      <div className="mt-3 flex items-center gap-2">
         <div className="flex gap-1.5">
           {card.phone && <a href={`tel:${card.phone}`} className="btn-icon btn-icon-outlined" aria-label={`Call ${card.name}`} title="Call"><Icon name="phone" className="pf-icon" /></a>}
           {card.email && <a href={`mailto:${card.email}`} className="btn-icon btn-icon-outlined" aria-label={`Email ${card.name}`} title="Email"><Icon name="mail" className="pf-icon" /></a>}
           <Link to={`/sms?leadId=${card.leadId}`} className="btn-icon btn-icon-outlined" aria-label={`Text ${card.name}`} title="Text"><Icon name="message" className="pf-icon" /></Link>
         </div>
-        <span className="pf-meta shrink-0">{card.daysInStage}d in stage</span>
+      </div>
+      <div className={`mt-3 flex flex-wrap items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs font-semibold ${stageAge.className}`}>
+        <span>{stageAge.label}</span>
+        <span aria-hidden="true">·</span>
+        <span>{card.daysInStage}d in stage</span>
+        <span aria-hidden="true">·</span>
+        <span className="min-w-0 break-words">{labelize(card.stage)}</span>
       </div>
       {card.nextActivity && (
         <div className="mt-3 rounded-md bg-blue-50 px-2.5 py-2">
