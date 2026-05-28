@@ -11,9 +11,18 @@ import { API_URL, apiJson, formatAddress, formatMoney } from '@/lib/api';
 interface PurchaseItem {
   description?: string;
   sku?: string;
+  salesNumber?: string | null;
+  productCode?: string | null;
+  productName?: string | null;
+  size?: string | null;
+  colorName?: string | null;
+  colorCode?: string | null;
   quantity?: number;
   unitCost?: number;
   total?: number;
+  gallons?: number | null;
+  pricePerGallon?: number | null;
+  isFee?: boolean;
 }
 
 interface MaterialPurchase {
@@ -292,6 +301,22 @@ function formatAiCost(value: unknown) {
   return formatMoney(cost);
 }
 
+function invoiceItemTitle(item: PurchaseItem) {
+  return item.productName || item.description || item.sku || item.salesNumber || 'Material';
+}
+
+function invoiceItemDetails(item: PurchaseItem) {
+  const details = [
+    item.salesNumber ? `Sales ${item.salesNumber}` : '',
+    item.productCode ? `Product ${item.productCode}` : '',
+    item.colorName || '',
+    item.colorCode ? `Color ${item.colorCode}` : '',
+    item.gallons ? `${numberValue(item.gallons).toLocaleString()} gal` : '',
+    item.pricePerGallon ? `${formatMoney(item.pricePerGallon)}/gal` : '',
+  ].filter(Boolean);
+  return details.join(' | ');
+}
+
 function netPayment(payment: Payment) {
   if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(String(payment.status || 'succeeded'))) return 0;
   return numberValue(payment.amount) - numberValue(payment.refundedAmount);
@@ -393,7 +418,10 @@ function PurchaseCard({ purchase }: { purchase: MaterialPurchase }) {
               <div className="mt-2 space-y-1">
                 {items.slice(0, 3).map((item, index) => (
                   <div key={`${item.description}-${index}`} className="flex justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate text-gray-700">{item.description || item.sku || 'Material'}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-gray-700">{invoiceItemTitle(item)}</span>
+                      {invoiceItemDetails(item) && <span className="block truncate text-xs text-gray-500">{invoiceItemDetails(item)}</span>}
+                    </span>
                     <span className="shrink-0 font-medium text-gray-900">{formatMoney(item.total)}</span>
                   </div>
                 ))}
@@ -583,7 +611,10 @@ function ImportReviewCard({
               <div className="mt-2 space-y-1">
                 {items.slice(0, 4).map((item, index) => (
                   <div key={`${invoiceImport.id}-${index}`} className="flex justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate text-gray-700">{item.description || item.sku || 'Material'}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-gray-700">{invoiceItemTitle(item)}</span>
+                      {invoiceItemDetails(item) && <span className="block truncate text-xs text-gray-500">{invoiceItemDetails(item)}</span>}
+                    </span>
                     <span className="shrink-0 font-medium text-gray-900">{formatMoney(item.total)}</span>
                   </div>
                 ))}

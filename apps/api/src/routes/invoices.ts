@@ -25,10 +25,19 @@ invoicesApp.use('*', authMiddleware);
 type InvoiceItem = {
   description: string;
   sku?: string | null;
+  salesNumber?: string | null;
+  productCode?: string | null;
+  productName?: string | null;
+  size?: string | null;
+  colorName?: string | null;
+  colorCode?: string | null;
   quantity: number;
   unitCost: number;
   total: number;
   category?: string;
+  gallons?: number | null;
+  pricePerGallon?: number | null;
+  isFee?: boolean;
 };
 
 type ParsedInvoicePayload = {
@@ -353,18 +362,34 @@ function normalizeOcrItems(items: unknown): InvoiceItem[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((item: any) => {
-      const description = String(item.description || item.item || item.product || item.name || '').trim();
-      const quantity = currencyValue(item.quantity || item.qty || 1) || 1;
-      const unitCost = currencyValue(item.unitCost || item.unit_cost || item.unitPrice || item.unit_price || item.cost);
-      const total = currencyValue(item.total || item.amount || quantity * unitCost);
+      const productName = String(item.productName || item.product_name || item.product || item.name || '').trim();
+      const description = String(item.description || item.item || productName || '').trim();
+      const size = String(item.size || item.unitSize || item.unit_size || '').trim() || null;
+      const rawGallons = currencyValue(item.gallons || item.gallonQuantity || item.gallon_quantity);
+      const quantity = currencyValue(item.quantity || item.qty || rawGallons || 1) || 1;
+      const isGallonSized = /\b(gallon|gallons|gal)\b/i.test(size || '');
+      const gallons = rawGallons || (isGallonSized ? quantity : 0);
+      const pricePerGallon = currencyValue(item.pricePerGallon || item.price_per_gallon || item.gallonPrice || item.gallon_price);
+      const unitCost = currencyValue(item.unitCost || item.unit_cost || item.unitPrice || item.unit_price || item.cost || pricePerGallon);
+      const total = currencyValue(item.total || item.amount || item.value || quantity * unitCost);
       if (!description || total <= 0) return null;
+      const isFee = Boolean(item.isFee || item.is_fee || /\b(fee|paint care|paintcare|environmental|disposal)\b/i.test(description));
       return {
         description,
-        sku: item.sku || item.itemNumber || item.item_number || item.productCode || null,
+        sku: item.sku || item.itemNumber || item.item_number || item.salesNumber || item.sales_number || null,
+        salesNumber: item.salesNumber || item.sales_number || item.saleNumber || item.sale_number || null,
+        productCode: item.productCode || item.product_code || null,
+        productName: productName || null,
+        size,
+        colorName: String(item.colorName || item.color_name || item.color || '').trim() || null,
+        colorCode: String(item.colorCode || item.color_code || '').trim() || null,
         quantity,
         unitCost: unitCost || total / quantity,
         total,
-        category: inferCostCategory(description),
+        category: item.category || (isFee ? 'fees' : inferCostCategory(description)),
+        gallons: gallons || null,
+        pricePerGallon: pricePerGallon || (gallons ? total / gallons : null),
+        isFee,
       };
     })
     .filter(Boolean) as InvoiceItem[];
@@ -418,8 +443,11 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
             text: [
               'Extract this painting supplier invoice or statement for job-cost review.',
               'Return JSON only with keys: supplier, invoiceNumber, invoiceDate, totalAmount, rawText, confidence, items.',
-              'items must be an array of {description, sku, quantity, unitCost, total}.',
-              'Prefer line-item detail for paint products, primer, sundries, rentals, and supplies.',
+              'items must be an array of {description, sku, salesNumber, productCode, productName, size, colorName, colorCode, quantity, unitCost, gallons, pricePerGallon, total, category, isFee}.',
+              'For Sherwin-Williams rows, map SALES NUMBER to salesNumber, PRODUCT to productCode, DESCRIPTION to description, QTY to quantity, PRICE to unitCost and pricePerGallon when SIZE is GALLON, and VALUE to total.',
+              'If SIZE is GALLON, quantity is the number of gallons and gallons must equal quantity. Preserve paint colors such as SWISS COFFEE and color codes such as Custom/Color Cast values when visible.',
+              'Separate fees such as paint care, environmental, disposal, tax, or government imposed paint fees as category "fees" with isFee true.',
+              'Prefer line-item detail for paint products, primer, sundries, rentals, supplies, colors, gallons, and price per gallon.',
               'Use null for unknown values; do not invent values.',
             ].join(' '),
           },
@@ -552,6 +580,7 @@ function inferCostCategory(description: string) {
   const text = normalizeText(description);
   if (/\b(labor|hours|crew)\b/.test(text)) return 'labor';
   if (/\b(ladder|sprayer|rental|equipment)\b/.test(text)) return 'equipment';
+  if (/\b(fee|paint care|paintcare|environmental|disposal|tax)\b/.test(text)) return 'fees';
   if (/\b(caulk|tape|plastic|mask|roller|brush|tray|sandpaper|drop cloth)\b/.test(text)) return 'supplies';
   return 'materials';
 }
@@ -685,10 +714,12 @@ async function applyInvoiceImport(
     : [];
 
   for (const item of items) {
-    const description = String(item.description || 'Supplier invoice item').slice(0, 255);
-    if (applyMaterialUpdates) {
+    const description = String(item.description || item.productName || 'Supplier invoice item').slice(0, 255);
+    const materialName = String(item.productName || item.description || 'Supplier invoice item').slice(0, 255);
+    const unitCost = currencyValue(item.pricePerGallon || item.unitCost);
+    if (applyMaterialUpdates && !item.isFee) {
       const sku = String(item.sku || '').trim();
-      const normalizedName = normalizeText(description);
+      const normalizedName = normalizeText(materialName);
       const material = existingMaterials.find((candidate) => (
         (sku && candidate.sku === sku)
         || (normalizeText(candidate.name) === normalizedName && normalizeText(candidate.supplier) === normalizeText(supplier))
@@ -696,7 +727,7 @@ async function applyInvoiceImport(
       if (material) {
         await db.update(materials)
           .set({
-            costPerUnit: currencyValue(item.unitCost).toFixed(2),
+            costPerUnit: unitCost.toFixed(2),
             supplier,
             sku: sku || material.sku,
             updatedAt: new Date(),
@@ -705,10 +736,10 @@ async function applyInvoiceImport(
       } else {
         await db.insert(materials).values({
           orgId,
-          name: description,
+          name: materialName,
           category: inferMaterialCategory(description),
           unit: inferUnit(description),
-          costPerUnit: currencyValue(item.unitCost).toFixed(2),
+          costPerUnit: unitCost.toFixed(2),
           supplier,
           sku: sku || null,
         });
@@ -722,8 +753,8 @@ async function applyInvoiceImport(
         category: item.category || inferCostCategory(description),
         description,
         quantity: currencyValue(item.quantity || 1).toFixed(2),
-        unitCost: currencyValue(item.unitCost).toFixed(2),
-        totalCost: currencyValue(item.total || currencyValue(item.quantity || 1) * currencyValue(item.unitCost)).toFixed(2),
+        unitCost: unitCost.toFixed(2),
+        totalCost: currencyValue(item.total || currencyValue(item.quantity || 1) * unitCost).toFixed(2),
         materialPurchaseId: purchase.id,
       });
     }
@@ -1181,9 +1212,10 @@ invoicesApp.post('/upload', async (c) => {
     const material = await db.query.materials.findFirst({
       where: and(eq(materials.orgId, orgId), eq(materials.sku, item.sku || '')),
     });
-    if (material && Math.abs(currencyValue(material.costPerUnit) - item.unitCost) > 0.01) {
+    const unitCost = currencyValue(item.pricePerGallon || item.unitCost);
+    if (material && Math.abs(currencyValue(material.costPerUnit) - unitCost) > 0.01) {
       await db.update(materials)
-        .set({ costPerUnit: item.unitCost.toFixed(2), updatedAt: new Date() })
+        .set({ costPerUnit: unitCost.toFixed(2), updatedAt: new Date() })
         .where(eq(materials.id, material.id));
     }
 
@@ -1194,7 +1226,7 @@ invoicesApp.post('/upload', async (c) => {
         category: 'materials',
         description: item.description,
         quantity: item.quantity.toFixed(2),
-        unitCost: item.unitCost.toFixed(2),
+        unitCost: unitCost.toFixed(2),
         totalCost: item.total.toFixed(2),
         materialPurchaseId: purchase.id,
       });
