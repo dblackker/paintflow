@@ -44,10 +44,11 @@ export function ActivityTimeline({ items, className = '', empty }: ActivityTimel
             </div>
             {item.description && <p className="pf-copy mt-1">{item.description}</p>}
             {Boolean(item.details?.length) && (
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+              <div className="mt-2 flex flex-wrap items-center gap-y-1 text-sm text-gray-600">
                 {item.details?.map((detail, detailIndex) => (
-                  <span key={detailIndex} className="min-w-0 max-w-full truncate whitespace-nowrap">
-                    {detail}
+                  <span key={detailIndex} className="inline-flex min-w-0 max-w-full items-center">
+                    {detailIndex > 0 && <span className="mx-2 shrink-0 text-gray-300" aria-hidden="true">·</span>}
+                    <span className="min-w-0 max-w-full truncate whitespace-nowrap">{detail}</span>
                   </span>
                 ))}
               </div>
