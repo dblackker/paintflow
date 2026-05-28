@@ -2,14 +2,15 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
-import { and, eq, desc, inArray } from 'drizzle-orm';
+import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, supplierCatalogColors, users } from '@paintflow/db/schema';
+import { and, eq, desc, ilike, inArray, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, renderEstimateEmail } from '../lib/email';
 import { estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule } from '../lib/payment-schedule';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
+import { createNotificationAndPush } from '../lib/web-push';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
@@ -137,6 +138,19 @@ const sendEstimateEmailSchema = z.object({
   reason: z.enum(['sent', 'updated']).optional(),
 });
 
+const colorSelectionSchema = z.object({
+  packageName: z.string().trim().max(100).optional(),
+  selections: z.array(z.object({
+    itemIndex: z.coerce.number().int().nonnegative(),
+    colorName: z.string().trim().min(1).max(120),
+    colorCode: z.string().trim().max(80).optional(),
+    supplierId: z.string().trim().max(80).optional(),
+    supplierName: z.string().trim().max(255).optional(),
+    catalogColorId: z.string().uuid().optional(),
+    notes: z.string().trim().max(500).optional(),
+  })).min(1).max(80),
+});
+
 function contractorSignatureFromMetadata(metadata: unknown) {
   const raw = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
     ? (metadata as Record<string, unknown>).contractorSignature
@@ -221,6 +235,77 @@ function estimateJobsite(estimate: typeof estimates.$inferSelect, lead?: typeof 
     state: estimate.state || lead?.state || null,
     postalCode: estimate.postalCode || lead?.postalCode || null,
   };
+}
+
+function catalogSupplierId(value?: string | null) {
+  const normalized = String(value || '').toLowerCase();
+  if (normalized.includes('sherwin')) return 'sherwin-williams';
+  if (normalized.includes('benjamin') || normalized.includes('moore')) return 'benjamin-moore';
+  if (normalized.includes('ppg')) return 'ppg';
+  return '';
+}
+
+function supplierIdsForEstimate(estimate: typeof estimates.$inferSelect) {
+  const ids = new Set<string>();
+  const packages = Array.isArray(estimate.packages) ? estimate.packages : [];
+  packages.forEach((pkg) => {
+    packageItems(pkg).forEach((raw) => {
+      const item = raw as { material?: { supplier?: string; brand?: string } };
+      const id = catalogSupplierId(item.material?.supplier) || catalogSupplierId(item.material?.brand);
+      if (id) ids.add(id);
+    });
+  });
+  return Array.from(ids);
+}
+
+function estimatePackagesWithColorSelections(
+  estimate: typeof estimates.$inferSelect,
+  input: z.infer<typeof colorSelectionSchema>,
+) {
+  const packages = Array.isArray(estimate.packages)
+    ? structuredClone(estimate.packages as Array<Record<string, unknown>>)
+    : [];
+  const packageIndex = Math.max(0, packages.findIndex((pkg) => String(pkg.name || '') === (input.packageName || 'proposal')));
+  const pkg = packages[packageIndex] || packages[0];
+  if (!pkg) throw new Error('No estimate package is available for color selection.');
+  const items = packageItems(pkg) as Array<Record<string, unknown>>;
+  if (!items.length) throw new Error('No proposal items are available for color selection.');
+
+  const applied: Array<Record<string, unknown>> = [];
+  input.selections.forEach((selection) => {
+    const item = items[selection.itemIndex];
+    if (!item || item.customerVisible === false || item.optional) return;
+    const material = item.material && typeof item.material === 'object' && !Array.isArray(item.material)
+      ? { ...item.material as Record<string, unknown> }
+      : {};
+    material.colorName = selection.colorName;
+    material.colorCode = selection.colorCode || '';
+    material.status = 'Customer selected';
+    material.customerSelection = {
+      catalogColorId: selection.catalogColorId || null,
+      supplierId: selection.supplierId || null,
+      supplierName: selection.supplierName || null,
+      notes: selection.notes || null,
+      selectedAt: new Date().toISOString(),
+    };
+    item.material = material;
+    applied.push({
+      itemIndex: selection.itemIndex,
+      roomName: item.roomName || null,
+      surfaceName: item.surfaceName || null,
+      desc: item.desc || null,
+      colorName: selection.colorName,
+      colorCode: selection.colorCode || null,
+      supplierName: selection.supplierName || null,
+      catalogColorId: selection.catalogColorId || null,
+    });
+  });
+
+  if (!applied.length) throw new Error('No valid color selections were submitted.');
+  pkg.items = items;
+  pkg.lineItems = items;
+  packages[packageIndex >= 0 ? packageIndex : 0] = pkg;
+  return { packages, applied };
 }
 
 async function recordPublicEstimateView(db: ReturnType<typeof createDb>, c: Context<{ Bindings: Env; Variables: Variables }>, estimate: typeof estimates.$inferSelect) {
@@ -320,6 +405,127 @@ estimatesApp.get('/:id/public', async (c) => {
         companyName: branding.companyName,
       } : null,
     }
+  });
+});
+
+estimatesApp.get('/:id/color-options', async (c) => {
+  const id = c.req.param('id');
+  const q = c.req.query('q')?.trim();
+  const limit = Math.min(Math.max(Number.parseInt(c.req.query('limit') || '50', 10) || 50, 1), 80);
+  const db = createDb(c.env.DATABASE_URL);
+
+  const estimate = await db.query.estimates.findFirst({
+    where: eq(estimates.id, id),
+  });
+  if (!estimate) return c.json({ error: 'Not found' }, 404);
+
+  const supplierIds = supplierIdsForEstimate(estimate);
+  const conditions = [eq(supplierCatalogColors.isActive, true)];
+  if (supplierIds.length) conditions.push(inArray(supplierCatalogColors.supplierId, supplierIds));
+  if (q) {
+    conditions.push(or(
+      ilike(supplierCatalogColors.name, `%${q}%`),
+      ilike(supplierCatalogColors.colorCode, `%${q}%`),
+      ilike(supplierCatalogColors.collection, `%${q}%`),
+      ilike(supplierCatalogColors.family, `%${q}%`),
+    )!);
+  }
+
+  let data = await db.query.supplierCatalogColors.findMany({
+    where: and(...conditions),
+    orderBy: [desc(supplierCatalogColors.isPopular), supplierCatalogColors.supplierName, supplierCatalogColors.family, supplierCatalogColors.name],
+    limit,
+  });
+
+  if (q && !data.length && supplierIds.length) {
+    data = await db.query.supplierCatalogColors.findMany({
+      where: and(
+        eq(supplierCatalogColors.isActive, true),
+        or(
+          ilike(supplierCatalogColors.name, `%${q}%`),
+          ilike(supplierCatalogColors.colorCode, `%${q}%`),
+          ilike(supplierCatalogColors.collection, `%${q}%`),
+          ilike(supplierCatalogColors.family, `%${q}%`),
+        )!,
+      ),
+      orderBy: [desc(supplierCatalogColors.isPopular), supplierCatalogColors.supplierName, supplierCatalogColors.family, supplierCatalogColors.name],
+      limit,
+    });
+  }
+
+  return c.json({ data });
+});
+
+estimatesApp.post('/:id/color-selections', async (c) => {
+  const id = c.req.param('id');
+  if (!c.req.header('Idempotency-Key')) {
+    return c.json({ error: 'Idempotency-Key header is required' }, 400);
+  }
+  const parsed = colorSelectionSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid color selections', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const existing = await db.query.estimates.findFirst({
+    where: eq(estimates.id, id),
+  });
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+  if (['canceled', 'declined', 'superseded', 'voided'].includes(existing.status)) {
+    return c.json({ error: 'This proposal is no longer accepting color selections.' }, 409);
+  }
+
+  let result: ReturnType<typeof estimatePackagesWithColorSelections>;
+  try {
+    result = estimatePackagesWithColorSelections(existing, parsed.data);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Invalid color selections' }, 400);
+  }
+
+  const [estimate] = await db.update(estimates)
+    .set({
+      packages: result.packages,
+      updatedAt: new Date(),
+    })
+    .where(eq(estimates.id, id))
+    .returning();
+
+  await db.insert(auditLogs).values({
+    orgId: estimate.orgId,
+    action: 'estimate.colors.selected',
+    entityType: 'estimate',
+    entityId: estimate.id,
+    metadata: {
+      leadId: estimate.leadId,
+      packageName: parsed.data.packageName || 'proposal',
+      selections: result.applied,
+      source: 'customer_public_estimate',
+    },
+    ipAddress: c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || null,
+    userAgent: c.req.header('User-Agent') || null,
+  });
+
+  await createNotificationAndPush(c.env, {
+    orgId: estimate.orgId,
+    type: 'estimate.colors.selected',
+    title: 'Customer selected paint colors',
+    body: `${result.applied.length} color selection${result.applied.length === 1 ? '' : 's'} submitted for estimate ${estimate.id.slice(0, 8)}.`,
+    href: `/estimates/${estimate.id}/details`,
+    priority: 'high',
+    sourceType: 'estimate',
+    sourceId: estimate.id,
+    leadId: estimate.leadId,
+    metadata: {
+      selections: result.applied,
+    },
+  }).catch((error) => console.error('Color selection notification failed:', error));
+
+  return c.json({
+    data: {
+      id: estimate.id,
+      updatedAt: estimate.updatedAt,
+      selections: result.applied,
+    },
   });
 });
 
