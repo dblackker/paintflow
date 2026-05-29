@@ -1,7 +1,6 @@
 import { PointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/Badge';
-import { Button } from '@/components/Button';
 import { Modal, ModalFooter } from '@/components/Modal';
 import { Toast } from '@/components/Toast';
 import { API_URL, formatMoney, labelize } from '@/lib/api';
@@ -28,17 +27,8 @@ interface EstimateLineItem {
   material?: {
     name?: string;
     brand?: string;
-    supplier?: string;
     colorName?: string;
     colorCode?: string;
-    status?: string;
-    customerSelection?: {
-      catalogColorId?: string | null;
-      supplierId?: string | null;
-      supplierName?: string | null;
-      notes?: string | null;
-      selectedAt?: string | null;
-    } | null;
   };
 }
 
@@ -134,27 +124,6 @@ interface ScopeParts {
   space: string;
   surface: string;
   label: string;
-}
-
-interface CatalogColor {
-  id: string;
-  supplierId: string;
-  supplierName?: string | null;
-  name: string;
-  colorCode?: string | null;
-  hexCode?: string | null;
-  family?: string | null;
-  collection?: string | null;
-  lrv?: number | string | null;
-}
-
-interface ColorDraft {
-  colorName: string;
-  colorCode: string;
-  supplierId?: string;
-  supplierName?: string;
-  catalogColorId?: string;
-  notes?: string;
 }
 
 function num(value: unknown, fallback = 0) {
@@ -320,25 +289,6 @@ function selectedOptionsFromIndexes(pkg: EstimatePackage | null, indexes: Set<nu
     }));
 }
 
-function colorOptionLabel(color: CatalogColor) {
-  return [color.name, color.colorCode ? `(${color.colorCode})` : ''].filter(Boolean).join(' ') || 'Paint color';
-}
-
-function colorDraftFromItem(item: EstimateLineItem): ColorDraft {
-  return {
-    colorName: item.material?.colorName || '',
-    colorCode: item.material?.colorCode || '',
-    supplierId: item.material?.customerSelection?.supplierId || undefined,
-    supplierName: item.material?.customerSelection?.supplierName || item.material?.supplier || item.material?.brand || undefined,
-    catalogColorId: item.material?.customerSelection?.catalogColorId || undefined,
-    notes: item.material?.customerSelection?.notes || '',
-  };
-}
-
-function materialProductLabel(item: EstimateLineItem) {
-  return [item.material?.brand, item.material?.name].filter(Boolean).join(' ') || 'Selected paint product';
-}
-
 function useBodyTitle(title?: string | null) {
   useEffect(() => {
     if (!title) return;
@@ -360,10 +310,6 @@ export function EstimateDetail() {
   const [showTerms, setShowTerms] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [acknowledgedDisclosure, setAcknowledgedDisclosure] = useState(false);
-  const [colorDrafts, setColorDrafts] = useState<Record<number, ColorDraft>>({});
-  const [colorSuggestions, setColorSuggestions] = useState<CatalogColor[]>([]);
-  const [colorQuery, setColorQuery] = useState('');
-  const [isSavingColors, setIsSavingColors] = useState(false);
   const [signerName, setSignerName] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
@@ -381,22 +327,6 @@ export function EstimateDetail() {
   useEffect(() => {
     loadEstimate();
   }, [id]);
-
-  useEffect(() => {
-    if (!id) return;
-    const handle = window.setTimeout(async () => {
-      try {
-        const query = colorQuery.trim();
-        const response = await fetch(`${API_URL}/v1/estimates/${id}/color-options${query ? `?q=${encodeURIComponent(query)}` : ''}`, { credentials: 'include' });
-        if (!response.ok) return;
-        const payload = await response.json() as { data?: CatalogColor[] };
-        setColorSuggestions(payload.data || []);
-      } catch {
-        setColorSuggestions([]);
-      }
-    }, colorQuery.trim() ? 180 : 0);
-    return () => window.clearTimeout(handle);
-  }, [colorQuery, id]);
 
   useEffect(() => {
     if (!showSignature) return;
@@ -439,18 +369,12 @@ export function EstimateDetail() {
       || null;
   }, [estimate]);
 
-  const packageEntries = useMemo(
-    () => packageItems(selectedPackage).map((item, index) => ({ item, index })),
+  const visibleItems = useMemo(
+    () => packageItems(selectedPackage).filter((item) => item.customerVisible !== false),
     [selectedPackage],
   );
-  const visibleEntries = useMemo(
-    () => packageEntries.filter(({ item }) => item.customerVisible !== false),
-    [packageEntries],
-  );
-  const visibleItems = visibleEntries.map(({ item }) => item);
   const baseItems = visibleItems.filter((item) => !item.optional);
   const optionalItems = visibleItems.filter((item) => item.optional);
-  const colorTargets = visibleEntries.filter(({ item }) => !item.optional && Boolean(item.material?.name));
   const selectedOptions = useMemo(
     () => selectedOptionsFromIndexes(selectedPackage, selectedOptionIndexes),
     [selectedPackage, selectedOptionIndexes],
@@ -462,21 +386,6 @@ export function EstimateDetail() {
   const scopeGroups = groupScopeBySpace(baseItems);
   const legal = estimate?.legal || {};
   const photos = estimate?.photos || [];
-  const colorDraftTargetKey = colorTargets.map(({ index, item }) => `${index}:${item.material?.colorName || ''}:${item.material?.colorCode || ''}`).join('|');
-  const allColorTargetsSelected = colorTargets.length > 0 && colorTargets.every(({ index }) => colorDrafts[index]?.colorName?.trim());
-
-  useEffect(() => {
-    setColorDrafts((current) => {
-      const next = { ...current };
-      colorTargets.forEach(({ index, item }) => {
-        if (!next[index]) next[index] = colorDraftFromItem(item);
-      });
-      Object.keys(next).forEach((key) => {
-        if (!colorTargets.some(({ index }) => String(index) === key)) delete next[Number(key)];
-      });
-      return next;
-    });
-  }, [colorDraftTargetKey]);
 
   function inactiveMessage(status: EstimateStatus) {
     if (status === 'canceled') {
@@ -510,68 +419,6 @@ export function EstimateDetail() {
       else next.add(index);
       return next;
     });
-  }
-
-  function updateColorDraft(itemIndex: number, patch: Partial<ColorDraft>) {
-    setColorDrafts((current) => ({
-      ...current,
-      [itemIndex]: {
-        ...(current[itemIndex] || { colorName: '', colorCode: '' }),
-        ...patch,
-      },
-    }));
-  }
-
-  function applySuggestedColor(itemIndex: number, value: string) {
-    const suggestion = colorSuggestions.find((color) => colorOptionLabel(color) === value || color.name === value || color.colorCode === value);
-    if (!suggestion) {
-      updateColorDraft(itemIndex, { colorName: value, catalogColorId: undefined });
-      setColorQuery(value);
-      return;
-    }
-    updateColorDraft(itemIndex, {
-      colorName: suggestion.name,
-      colorCode: suggestion.colorCode || '',
-      supplierId: suggestion.supplierId,
-      supplierName: suggestion.supplierName || suggestion.supplierId,
-      catalogColorId: suggestion.id,
-    });
-    setColorQuery(suggestion.name);
-  }
-
-  async function submitColorSelections() {
-    if (!id || !selectedPackage || !allColorTargetsSelected) return;
-    setIsSavingColors(true);
-    setMessage(null);
-    try {
-      const response = await fetch(`${API_URL}/v1/estimates/${id}/color-selections`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-        body: JSON.stringify({
-          packageName: selectedPackage.name || 'proposal',
-          selections: colorTargets.map(({ index }) => ({
-            itemIndex: index,
-            colorName: colorDrafts[index]?.colorName || '',
-            colorCode: colorDrafts[index]?.colorCode || '',
-            supplierId: colorDrafts[index]?.supplierId || '',
-            supplierName: colorDrafts[index]?.supplierName || '',
-            catalogColorId: colorDrafts[index]?.catalogColorId || undefined,
-            notes: colorDrafts[index]?.notes || '',
-          })),
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'Unable to save color selections');
-      setMessage({ tone: 'success', text: 'Color selections sent to your contractor.' });
-      await loadEstimate();
-    } catch (error) {
-      setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Unable to save color selections.' });
-    } finally {
-      setIsSavingColors(false);
-    }
   }
 
   function openTerms() {
@@ -867,86 +714,6 @@ export function EstimateDetail() {
                   )}
                 </div>
               </section>
-
-              {colorTargets.length > 0 && (
-                <section className="rounded-lg border bg-white p-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-900">Confirm Colors</h2>
-                      <p className="mt-1 text-sm text-gray-600">Choose from the supplier color library or type the exact swatch name and code you have.</p>
-                    </div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${allColorTargetsSelected ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-                      {colorTargets.filter(({ index }) => colorDrafts[index]?.colorName?.trim()).length}/{colorTargets.length} selected
-                    </span>
-                  </div>
-                  <datalist id="customer-paint-color-options">
-                    {colorSuggestions.map((color) => (
-                      <option key={color.id} value={colorOptionLabel(color)}>
-                        {[color.supplierName, color.family, color.collection].filter(Boolean).join(' - ')}
-                      </option>
-                    ))}
-                  </datalist>
-                  <div className="mt-4 space-y-3">
-                    {colorTargets.map(({ item, index }) => {
-                      const parts = scopeParts(item);
-                      const draft = colorDrafts[index] || colorDraftFromItem(item);
-                      return (
-                        <div key={`${index}-${item.desc}`} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                          <div className="mb-3">
-                            <p className="font-medium text-gray-950">{parts.space} - {parts.surface}</p>
-                            <p className="mt-1 text-sm text-gray-600">{materialProductLabel(item)}</p>
-                          </div>
-                          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                            <label>
-                              <span className="pf-field-label">Color name</span>
-                              <input
-                                className="input mt-1"
-                                list="customer-paint-color-options"
-                                value={draft.colorName}
-                                onChange={(event) => applySuggestedColor(index, event.target.value)}
-                                onFocus={(event) => setColorQuery(event.currentTarget.value)}
-                                placeholder="Search library or type swatch name"
-                                autoComplete="off"
-                              />
-                            </label>
-                            <label>
-                              <span className="pf-field-label">Color code</span>
-                              <input
-                                className="input mt-1"
-                                value={draft.colorCode}
-                                onChange={(event) => updateColorDraft(index, { colorCode: event.target.value })}
-                                placeholder="SW 7005, OC-17"
-                                autoComplete="off"
-                              />
-                            </label>
-                          </div>
-                          <label className="mt-2 block">
-                            <span className="pf-field-label">Note for contractor</span>
-                            <input
-                              className="input mt-1"
-                              value={draft.notes || ''}
-                              onChange={(event) => updateColorDraft(index, { notes: event.target.value })}
-                              placeholder="Optional: confirm finish, sample location, or special request"
-                              autoComplete="off"
-                            />
-                          </label>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <Button
-                    className="mt-4 w-full sm:w-auto"
-                    onClick={() => void submitColorSelections()}
-                    disabled={!allColorTargetsSelected}
-                    isLoading={isSavingColors}
-                  >
-                    Send Color Selections
-                  </Button>
-                  {!allColorTargetsSelected && (
-                    <p className="mt-2 text-sm text-gray-600">Select a color for every listed substrate before sending.</p>
-                  )}
-                </section>
-              )}
             </section>
 
             {breakdown && (
