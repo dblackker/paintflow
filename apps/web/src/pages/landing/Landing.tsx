@@ -1,50 +1,45 @@
-import { Link } from 'react-router-dom';
+import { Button } from '@/components/Button';
+import { Icon } from '@/components/Icon';
+
+const capabilities = [
+  ['Lead pipeline', 'Capture inquiries, qualify work, and keep follow-up moving.'],
+  ['Production estimates', 'Build proposals with scope, payments, signatures, and change orders.'],
+  ['Crew operations', 'Schedule jobs, track time, review costs, and keep production moving.'],
+];
 
 export function Landing() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-            Crewmodo
-          </h1>
-          <p className="mt-6 text-lg leading-8 text-gray-600">
-            The complete CRM for trade contractors. Manage leads, estimates, jobs, crews, and billing in one place.
+    <div className="mx-auto max-w-6xl">
+      <section className="grid gap-6 py-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center lg:py-14">
+        <div>
+          <p className="pf-meta text-blue-800">Contractor CRM, estimating, scheduling, and job cost</p>
+          <h1 className="pf-page-title mt-3 max-w-3xl">Run the sales-to-production workflow from one mobile-ready workspace.</h1>
+          <p className="pf-page-copy mt-4 max-w-2xl">
+            Crewmodo helps contractors capture leads, send proposals, collect payments, schedule crews, track time, and understand job cost without stitching together spreadsheets and point tools.
           </p>
-          <div className="mt-10 flex items-center justify-center gap-x-6">
-            <Link
-              to="/signup"
-              className="rounded-md bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-            >
-              Get started
-            </Link>
-            <Link to="/login" className="text-sm font-semibold leading-6 text-gray-900">
-              Log in <span aria-hidden="true">→</span>
-            </Link>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Button as="a" href="/signup" size="lg" rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
+              Start free trial
+            </Button>
+            <Button as="a" href="/login" variant="secondary" size="lg">
+              Sign in
+            </Button>
           </div>
+          <p className="pf-meta mt-3">14-day free trial. Payment setup is required, but you will not be charged today.</p>
         </div>
-        
-        <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold">Quick Estimates</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Create professional estimates in minutes with production rates and photo takeoff.
-            </p>
+
+        <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="pf-section-title">Built for day-to-day operations</p>
+          <div className="mt-4 grid gap-3">
+            {capabilities.map(([title, copy]) => (
+              <div key={title} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <p className="pf-row-title">{title}</p>
+                <p className="pf-copy mt-1">{copy}</p>
+              </div>
+            ))}
           </div>
-          <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold">Lead Management</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Track leads from first contact to closed job with pipeline management.
-            </p>
-          </div>
-          <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold">Team Coordination</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Schedule crews, track time, and manage jobs from anywhere.
-            </p>
-          </div>
-        </div>
-      </div>
+        </aside>
+      </section>
     </div>
   );
 }

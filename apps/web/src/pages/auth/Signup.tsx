@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
-import { Card, CardContent } from '@/components/Card';
+import { Icon } from '@/components/Icon';
 import { Input, Select } from '@/components/Input';
 import { API_URL } from '@/lib/api';
 
@@ -23,16 +23,16 @@ const plans: Array<{
     name: 'Starter',
     price: 49,
     users: '1-3 users',
-    bestFor: 'Owner-operators and small crews getting organized.',
-    features: ['Lead pipeline', 'Production estimates', 'E-signatures', 'Payments', 'Basic reports'],
+    bestFor: 'Owner-operators and small crews moving out of spreadsheets.',
+    features: ['Lead pipeline', 'Estimate approvals', 'Simple job tracking', 'Payments'],
   },
   {
     key: 'pro',
     name: 'Pro',
     price: 149,
     users: 'Up to 10 users',
-    bestFor: 'Growing painting companies running sales and operations.',
-    features: ['Everything in Starter', 'Crew time tracking', 'Job costing', 'Email templates', 'Advanced reports'],
+    bestFor: 'Growing crews that need sales, time, costing, and scheduling together.',
+    features: ['Everything in Starter', 'Crew time tracking', 'Job costing', 'Production calendar'],
     popular: true,
   },
   {
@@ -41,8 +41,14 @@ const plans: Array<{
     price: 399,
     users: 'Unlimited users',
     bestFor: 'Multi-crew operators that need deeper controls and support.',
-    features: ['Everything in Pro', 'Unlimited users', 'White-labeling', 'API access', 'Priority support'],
+    features: ['Everything in Pro', 'Unlimited users', 'Advanced permissions', 'Priority support'],
   },
+];
+
+const trialDetails = [
+  'No charge today',
+  '14-day trial starts after secure checkout',
+  'Cancel from Billing before the trial ends',
 ];
 
 function phoneDigits(value: string) {
@@ -83,7 +89,7 @@ export function Signup() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<{ tone: 'error' | 'info' | 'success'; text: string; href?: string } | null>(
     searchParams.get('checkout') === 'canceled'
-      ? { tone: 'info', text: 'Checkout was canceled. Your workspace is not active until payment information is added for the trial.' }
+      ? { tone: 'info', text: 'Checkout was canceled. Finish secure checkout when you are ready to activate the free trial.' }
       : null,
   );
 
@@ -119,7 +125,7 @@ export function Signup() {
       if (payload.existingAccount) {
         setMessage({
           tone: 'info',
-          text: 'If this email already has a workspace, use sign in to receive a one-time link.',
+          text: 'If a workspace exists for this email, use sign in to receive a one-time link.',
         });
         return;
       }
@@ -146,94 +152,155 @@ export function Signup() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-        <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
-          <div className="flex items-center justify-between gap-3">
-            <Link to="/" className="text-xl font-bold text-blue-700">Crewmodo</Link>
-            <Link to="/login" className="btn-text btn-sm">Sign in</Link>
-          </div>
+    <main className="min-h-screen bg-gray-50 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="flex items-center justify-between gap-3 py-2">
+          <Link to="/" className="inline-flex items-center gap-2 text-lg font-bold text-blue-700">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--pf-primary)] text-sm font-bold text-white">C</span>
+            Crewmodo
+          </Link>
+          <Link to="/login" className="btn-text btn-sm">Sign in</Link>
+        </header>
 
-          <div className="mt-8">
-            <p className="pf-kicker">14-day free trial</p>
-            <h1 className="pf-page-title mt-2">Set up your painting company workspace</h1>
-            <p className="pf-page-copy mt-2">
-              Add payment information now so the trial can continue automatically. You can cancel from billing at any time.
-            </p>
-          </div>
-
-          {message && (
-            <div className={`mt-5 rounded-lg border p-4 ${messageClass(message.tone)}`}>
-              <p className="pf-copy text-current">{message.text}</p>
-              {message.href && <a className="btn-text mt-2 justify-start p-0 text-current underline" href={message.href}>Continue setup</a>}
-            </div>
-          )}
-
-          <form className="mt-6 grid gap-5" onSubmit={submit}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="Your name" required autoComplete="name" value={formData.name} onChange={(event) => update('name', event.target.value)} placeholder="Alex Morgan" />
-              <Input label="Work email" required type="email" inputMode="email" autoComplete="email" value={formData.email} onChange={(event) => update('email', event.target.value)} placeholder="alex@company.com" />
-              <Input label="Company name" required autoComplete="organization" value={formData.companyName} onChange={(event) => update('companyName', event.target.value)} placeholder="Morgan Painting Co." />
-              <Input label="Phone number" type="tel" inputMode="numeric" autoComplete="tel" value={formData.phone} onChange={(event) => update('phone', maskPhone(event.target.value))} placeholder="(555) 123-4567" />
-              <Select label="Team size" value={formData.teamSize} onChange={(event) => update('teamSize', event.target.value)}>
-                <option value="1-3">1-3 users</option>
-                <option value="4-10">4-10 users</option>
-                <option value="11+">11+ users</option>
-              </Select>
-              <Select label="Plan" value={formData.plan} onChange={(event) => update('plan', event.target.value)}>
-                {plans.map((plan) => <option key={plan.key} value={plan.key}>{plan.name} - ${plan.price}/mo</option>)}
-              </Select>
-            </div>
-
-            {suggestedPlan !== formData.plan && (
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950">
-                Based on your team size, {plans.find((plan) => plan.key === suggestedPlan)?.name} may fit better.
-                <button type="button" className="ml-2 font-semibold underline" onClick={() => update('plan', suggestedPlan)}>Use recommendation</button>
-              </div>
-            )}
-
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="pf-row-title">{selectedPlan.name}</p>
-                {selectedPlan.popular && <Badge variant="info" size="sm">Most common</Badge>}
-                <span className="pf-meta">{selectedPlan.users}</span>
-              </div>
-              <p className="pf-copy mt-1">{selectedPlan.bestFor}</p>
-              <p className="mt-3">
-                <span className="pf-section-title">${selectedPlan.price}</span>
-                <span className="pf-copy">/month after 14 days</span>
+        <div className="grid gap-5 py-4 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-start lg:py-8">
+          <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
+            <div className="max-w-2xl">
+              <Badge variant="info" size="sm">14-day free trial</Badge>
+              <h1 className="pf-page-title mt-4">Start your contractor workspace</h1>
+              <p className="pf-page-copy mt-2">
+                Create the workspace, choose a trial plan, and finish payment setup in Stripe. You will not be charged today.
               </p>
             </div>
 
-            <Button type="submit" size="lg" fullWidth isLoading={isSubmitting}>
-              Add payment info and start trial
-            </Button>
-            <p className="pf-meta text-center">
-              Secure checkout is handled by Stripe. Crewmodo does not store card numbers.
-            </p>
-          </form>
-        </section>
+            <div className="mt-5 grid gap-2 sm:grid-cols-3">
+              {trialDetails.map((detail) => (
+                <div key={detail} className="flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                  <Icon name="check" className="h-4 w-4 shrink-0 text-[var(--pf-primary)]" />
+                  <span className="pf-helper text-blue-950">{detail}</span>
+                </div>
+              ))}
+            </div>
 
-        <aside className="grid gap-4">
-          {plans.map((plan) => (
-            <Card key={plan.key} padding="sm" className={formData.plan === plan.key ? 'border-blue-500 ring-1 ring-blue-500' : ''}>
-              <CardContent>
-                <button type="button" className="w-full text-left" onClick={() => update('plan', plan.key)}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="pf-row-title">{plan.name}</p>
-                      <p className="pf-meta">{plan.users}</p>
-                    </div>
-                    <p className="font-semibold text-gray-950">${plan.price}/mo</p>
+            {message && (
+              <div className={`mt-5 rounded-lg border p-4 ${messageClass(message.tone)}`}>
+                <p className="pf-copy text-current">{message.text}</p>
+                {message.href && <a className="btn-text mt-2 justify-start p-0 text-current underline" href={message.href}>Continue setup</a>}
+              </div>
+            )}
+
+            <form className="mt-6 grid gap-6" onSubmit={submit}>
+              <section aria-labelledby="workspace-details-title" className="grid gap-4">
+                <div>
+                  <h2 id="workspace-details-title" className="pf-section-title">Workspace details</h2>
+                  <p className="pf-copy mt-1">Use the owner or office email that should receive billing and admin messages.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input label="Your name" required autoComplete="name" value={formData.name} onChange={(event) => update('name', event.target.value)} placeholder="Alex Morgan" />
+                  <Input label="Work email" required type="email" inputMode="email" autoComplete="email" value={formData.email} onChange={(event) => update('email', event.target.value)} placeholder="alex@company.com" />
+                  <Input label="Company name" required autoComplete="organization" value={formData.companyName} onChange={(event) => update('companyName', event.target.value)} placeholder="Morgan Contracting Co." />
+                  <Input label="Phone number" type="tel" inputMode="numeric" autoComplete="tel" value={formData.phone} onChange={(event) => update('phone', maskPhone(event.target.value))} placeholder="(555) 123-4567" />
+                  <Select label="Team size" value={formData.teamSize} onChange={(event) => update('teamSize', event.target.value)} helperText="Used to recommend a starting plan. You can change this later.">
+                    <option value="1-3">1-3 users</option>
+                    <option value="4-10">4-10 users</option>
+                    <option value="11+">11+ users</option>
+                  </Select>
+                </div>
+              </section>
+
+              <section aria-labelledby="trial-plan-title" className="grid gap-3">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h2 id="trial-plan-title" className="pf-section-title">Trial plan</h2>
+                    <p className="pf-copy mt-1">Starter is enough for small teams. Pro is usually the right first trial for crews tracking time and job cost.</p>
                   </div>
-                  <ul className="mt-3 grid gap-1">
-                    {plan.features.slice(0, 4).map((feature) => <li key={feature} className="pf-helper">- {feature}</li>)}
-                  </ul>
-                </button>
-              </CardContent>
-            </Card>
-          ))}
-        </aside>
+                  {suggestedPlan !== formData.plan && (
+                    <button type="button" className="btn-text btn-sm" onClick={() => update('plan', suggestedPlan)}>
+                      Use recommended plan
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  {plans.map((plan) => {
+                    const selected = formData.plan === plan.key;
+                    return (
+                      <button
+                        key={plan.key}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => update('plan', plan.key)}
+                        className={`rounded-lg border bg-white p-4 text-left shadow-sm transition hover:border-[var(--pf-primary)] hover:bg-blue-50 ${selected ? 'border-[var(--pf-primary)] ring-2 ring-[rgb(26_86_148_/_0.18)]' : 'border-gray-200'}`}
+                      >
+                        <div className="flex min-h-8 items-start justify-between gap-3">
+                          <div>
+                            <p className="pf-row-title">{plan.name}</p>
+                            <p className="pf-meta">{plan.users}</p>
+                          </div>
+                          {plan.popular && <Badge variant="info" size="sm">Common</Badge>}
+                        </div>
+                        <p className="mt-3">
+                          <span className="pf-section-title">${plan.price}</span>
+                          <span className="pf-meta">/mo after trial</span>
+                        </p>
+                        <p className="pf-copy mt-2">{plan.bestFor}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="pf-row-title">{selectedPlan.name} starts after the free trial</p>
+                    <p className="pf-copy mt-1">
+                      Stripe securely stores the payment method. First charge: ${selectedPlan.price}/month after day 14 unless you cancel.
+                    </p>
+                  </div>
+                  <p className="pf-section-title">${selectedPlan.price}/mo</p>
+                </div>
+              </div>
+
+              <Button type="submit" size="lg" fullWidth isLoading={isSubmitting} rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
+                Continue to secure trial checkout
+              </Button>
+              <p className="pf-meta text-center">
+                Crewmodo does not store card numbers. Billing is managed through Stripe.
+              </p>
+            </form>
+          </section>
+
+          <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm lg:sticky lg:top-5">
+            <p className="pf-section-title">What happens after signup</p>
+            <ol className="mt-4 grid gap-4">
+              {[
+                ['1', 'Secure checkout', 'Stripe stores payment information and starts the free trial.'],
+                ['2', 'Workspace setup', 'Add business info, production rates, paint products, and review links.'],
+                ['3', 'First workflow', 'Create a lead, send a proposal, schedule the job, and track crew time.'],
+              ].map(([step, title, copy]) => (
+                <li key={step} className="flex gap-3">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-semibold text-blue-950">{step}</span>
+                  <span>
+                    <span className="pf-row-title block">{title}</span>
+                    <span className="pf-copy block">{copy}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="pf-row-title">Included in the trial</p>
+              <ul className="mt-3 grid gap-2">
+                {selectedPlan.features.map((feature) => (
+                  <li key={feature} className="flex items-center gap-2">
+                    <Icon name="check" className="h-4 w-4 shrink-0 text-[var(--pf-success)]" />
+                    <span className="pf-copy">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+        </div>
       </div>
     </main>
   );
