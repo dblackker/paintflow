@@ -4,11 +4,17 @@ import { Button } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { apiJson, formatMoney, labelize } from '@/lib/api';
+import { PLAN_DEFINITIONS, PLAN_ORDER } from '@crewmodo/core';
 
 interface Plan {
   id?: string;
   name?: string | null;
   price?: number | string | null;
+  features?: {
+    displayName?: string;
+    featureCopy?: string[];
+    seatCopy?: string;
+  } | null;
 }
 
 interface Subscription {
@@ -18,30 +24,7 @@ interface Subscription {
   plan?: Plan | null;
 }
 
-const planCards = [
-  {
-    key: 'starter',
-    name: 'Starter',
-    price: 49,
-    copy: 'Best for a small owner-operator getting organized.',
-    features: ['Up to 3 users', 'Lead pipeline', 'Production estimates', 'E-signatures', 'Basic reports'],
-  },
-  {
-    key: 'pro',
-    name: 'Pro',
-    price: 149,
-    copy: 'For growing painting companies running sales and operations in one place.',
-    features: ['Up to 10 users', 'Crew time tracking', 'Job costing', 'Email templates', 'Advanced reporting'],
-    popular: true,
-  },
-  {
-    key: 'enterprise',
-    name: 'Enterprise',
-    price: 399,
-    copy: 'For larger operators that need branding, access controls, and support.',
-    features: ['Everything in Pro', 'Unlimited users', 'White-label', 'API access', 'Priority support'],
-  },
-];
+const planCards = PLAN_ORDER.map((key) => PLAN_DEFINITIONS[key]);
 
 function formatDate(value?: string | null) {
   if (!value) return '';
@@ -50,14 +33,14 @@ function formatDate(value?: string | null) {
 
 function planDisplayName(planName?: string | null) {
   if (!planName) return 'Starter';
-  const match = planCards.find((plan) => plan.key === planName.toLowerCase() || plan.name.toLowerCase() === planName.toLowerCase());
-  return match?.name || labelize(planName);
+  const match = planCards.find((plan) => plan.key === planName.toLowerCase() || plan.displayName.toLowerCase() === planName.toLowerCase());
+  return match?.displayName || labelize(planName);
 }
 
 function planPrice(planName?: string | null, fallback?: number | string | null) {
   if (fallback !== null && fallback !== undefined && fallback !== '') return Number(fallback);
-  const match = planCards.find((plan) => plan.key === planName?.toLowerCase() || plan.name.toLowerCase() === planName?.toLowerCase());
-  return match?.price || 49;
+  const match = planCards.find((plan) => plan.key === planName?.toLowerCase() || plan.displayName.toLowerCase() === planName?.toLowerCase());
+  return Number(match?.price || 79);
 }
 
 function isTrialStatus(status?: string | null) {
@@ -77,25 +60,25 @@ function PlanCard({
 }) {
   const isCurrent = currentPlan?.toLowerCase() === plan.key;
   return (
-    <Card className={`relative flex flex-col ${plan.popular ? 'border-blue-600 ring-1 ring-blue-600' : ''}`}>
-      {plan.popular && (
+    <Card className={`relative flex flex-col ${plan.key === 'pro' ? 'border-blue-600 ring-1 ring-blue-600' : ''}`}>
+      {plan.key === 'pro' && (
         <span className="absolute right-4 top-0 rounded-b-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
           Popular
         </span>
       )}
       <div className="min-h-20">
         <div className="flex items-center gap-2">
-          <h3 className="pf-section-title">{plan.name}</h3>
+          <h3 className="pf-section-title">{plan.displayName}</h3>
           {isCurrent && <Badge variant="success" size="sm">Current</Badge>}
         </div>
-        <p className="pf-copy mt-1">{plan.copy}</p>
+        <p className="pf-copy mt-1">{plan.audience}</p>
       </div>
       <div className="my-5">
-        <span className="pf-page-title">{formatMoney(plan.price, false)}</span>
+        <span className="pf-page-title">{formatMoney(Number(plan.price), false)}</span>
         <span className="pf-copy">/month</span>
       </div>
       <ul className="mb-6 flex-1 space-y-2">
-        {plan.features.map((feature) => (
+        {plan.featureCopy.map((feature) => (
           <li key={feature} className="flex gap-2 text-sm text-gray-700">
             <Icon name="plus" className="mt-0.5 h-4 w-4 rotate-45 text-green-600" />
             <span>{feature}</span>
@@ -109,7 +92,7 @@ function PlanCard({
         isLoading={isLoading}
         onClick={() => onSubscribe(plan.key)}
       >
-        {plan.key === 'enterprise' ? 'Contact sales' : isCurrent ? 'Current plan' : `Choose ${plan.name}`}
+        {isCurrent ? 'Current plan' : `Choose ${plan.displayName}`}
       </Button>
     </Card>
   );
@@ -123,7 +106,7 @@ export function Billing() {
   const [error, setError] = useState('');
 
   const currentPlan = useMemo(() => subscription?.plan?.name || null, [subscription]);
-  const currentPlanName = planDisplayName(currentPlan);
+  const currentPlanName = subscription?.plan?.features?.displayName || planDisplayName(currentPlan);
   const currentPlanKey = currentPlan?.toLowerCase() || 'starter';
   const currentPlanPrice = planPrice(currentPlan, subscription?.plan?.price);
   const billingDate = subscription?.currentPeriodEnd ? formatDate(subscription.currentPeriodEnd) : '';
@@ -148,10 +131,6 @@ export function Billing() {
   }
 
   async function subscribe(plan: string) {
-    if (plan === 'enterprise') {
-      window.location.href = 'mailto:sales@crewmodo.com';
-      return;
-    }
     if (currentPlan?.toLowerCase() === plan && !needsPaymentInfo) return;
     setCheckoutPlan(plan);
     try {

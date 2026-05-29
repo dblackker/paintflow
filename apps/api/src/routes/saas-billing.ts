@@ -5,6 +5,7 @@ import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { eq, and } from 'drizzle-orm';
 import Stripe from 'stripe';
+import { PLAN_DEFINITIONS, normalizePlanKey, planFeaturesPayload, type PlanKey } from '@crewmodo/core';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -14,16 +15,8 @@ const planPriceIds = (env: Env) => ({
   enterprise: env.STRIPE_ENTERPRISE_PRICE_ID,
 });
 
-const planDefaults = {
-  starter: { price: '49.00', displayName: 'Starter', userLimit: 3 },
-  pro: { price: '149.00', displayName: 'Pro', userLimit: 10 },
-  enterprise: { price: '399.00', displayName: 'Enterprise', userLimit: null },
-} as const;
-
-type PlanKey = keyof typeof planDefaults;
-
 function normalizePlan(value: unknown): PlanKey {
-  return value === 'starter' || value === 'enterprise' ? value : 'pro';
+  return normalizePlanKey(value);
 }
 
 function normalizeStripeStatus(status: Stripe.Subscription.Status | string | null | undefined) {
@@ -52,13 +45,13 @@ function planFromStripeSubscription(env: Env, subscription: Stripe.Subscription)
 async function ensurePlan(db: ReturnType<typeof createDb>, env: Env, plan: PlanKey) {
   const [existing] = await db.select().from(saasPlans).where(eq(saasPlans.name, plan));
   if (existing) return existing;
-  const defaults = planDefaults[plan];
+  const defaults = PLAN_DEFINITIONS[plan];
   const [created] = await db.insert(saasPlans).values({
     name: plan,
     price: defaults.price,
     interval: 'month',
     stripePriceId: planPriceIds(env)[plan],
-    features: defaults,
+    features: planFeaturesPayload(plan),
   }).returning();
   return created;
 }
@@ -201,6 +194,37 @@ billing.get('/subscription', async (c) => {
   
   const [plan] = await db.select().from(saasPlans).where(eq(saasPlans.id, sub.planId));
   return c.json({ data: { ...sub, plan } });
+});
+
+// GET /v1/billing/entitlements
+billing.get('/entitlements', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.orgId, orgId));
+  if (!sub) {
+    const fallback = planFeaturesPayload('starter');
+    return c.json({
+      data: {
+        plan: 'starter',
+        status: 'trial_pending_payment',
+        features: fallback.features,
+        limits: fallback.limits,
+      },
+    });
+  }
+
+  const [plan] = await db.select().from(saasPlans).where(eq(saasPlans.id, sub.planId));
+  const planKey = normalizePlan(plan?.name);
+  const payload = planFeaturesPayload(planKey);
+  return c.json({
+    data: {
+      plan: planKey,
+      displayName: payload.displayName,
+      status: sub.status,
+      features: payload.features,
+      limits: payload.limits,
+    },
+  });
 });
 
 // POST /v1/billing/create-checkout

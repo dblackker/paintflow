@@ -6,44 +6,9 @@ import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
 import { Input, Select } from '@/components/Input';
 import { API_URL } from '@/lib/api';
+import { PLAN_DEFINITIONS, PLAN_ORDER, type PlanKey } from '@crewmodo/core';
 
-type PlanKey = 'starter' | 'pro' | 'enterprise';
-
-const plans: Array<{
-  key: PlanKey;
-  name: string;
-  price: number;
-  users: string;
-  bestFor: string;
-  features: string[];
-  popular?: boolean;
-}> = [
-  {
-    key: 'starter',
-    name: 'Starter',
-    price: 49,
-    users: '1-3 users',
-    bestFor: 'Owner-operators and small crews moving out of spreadsheets.',
-    features: ['Lead pipeline', 'Estimate approvals', 'Simple job tracking', 'Payments'],
-  },
-  {
-    key: 'pro',
-    name: 'Pro',
-    price: 149,
-    users: 'Up to 10 users',
-    bestFor: 'Growing crews that need sales, time, costing, and scheduling together.',
-    features: ['Everything in Starter', 'Crew time tracking', 'Job costing', 'Production calendar'],
-    popular: true,
-  },
-  {
-    key: 'enterprise',
-    name: 'Enterprise',
-    price: 399,
-    users: 'Unlimited users',
-    bestFor: 'Multi-crew operators that need deeper controls and support.',
-    features: ['Everything in Pro', 'Unlimited users', 'Advanced permissions', 'Priority support'],
-  },
-];
+const plans = PLAN_ORDER.map((key) => PLAN_DEFINITIONS[key]);
 
 const trialDetails = [
   'No charge today',
@@ -93,7 +58,7 @@ export function Signup() {
       : null,
   );
 
-  const selectedPlan = useMemo(() => plans.find((plan) => plan.key === formData.plan) || plans[1], [formData.plan]);
+  const selectedPlan = useMemo(() => PLAN_DEFINITIONS[formData.plan], [formData.plan]);
   const suggestedPlan = recommendedPlan(formData.teamSize);
 
   function update(key: keyof typeof formData, value: string) {
@@ -211,7 +176,7 @@ export function Signup() {
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
                     <h2 id="trial-plan-title" className="pf-section-title">Trial plan</h2>
-                    <p className="pf-copy mt-1">Starter is enough for small teams. Pro is usually the right first trial for crews tracking time and job cost.</p>
+                    <p className="pf-copy mt-1">Starter is enough for very small teams. Growth is usually the right first trial for crews tracking time and job cost.</p>
                   </div>
                   {suggestedPlan !== formData.plan && (
                     <button type="button" className="btn-text btn-sm" onClick={() => update('plan', suggestedPlan)}>
@@ -233,16 +198,16 @@ export function Signup() {
                       >
                         <div className="flex min-h-8 items-start justify-between gap-3">
                           <div>
-                            <p className="pf-row-title">{plan.name}</p>
-                            <p className="pf-meta">{plan.users}</p>
+                            <p className="pf-row-title">{plan.displayName}</p>
+                            <p className="pf-meta">{plan.seatCopy}</p>
                           </div>
-                          {plan.popular && <Badge variant="info" size="sm">Common</Badge>}
+                          {plan.key === 'pro' && <Badge variant="info" size="sm">Common</Badge>}
                         </div>
                         <p className="mt-3">
                           <span className="pf-section-title">${plan.price}</span>
                           <span className="pf-meta">/mo after trial</span>
                         </p>
-                        <p className="pf-copy mt-2">{plan.bestFor}</p>
+                        <p className="pf-copy mt-2">{plan.audience}</p>
                       </button>
                     );
                   })}
@@ -252,7 +217,7 @@ export function Signup() {
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="pf-row-title">{selectedPlan.name} starts after the free trial</p>
+                    <p className="pf-row-title">{selectedPlan.displayName} starts after the free trial</p>
                     <p className="pf-copy mt-1">
                       Stripe securely stores the payment method. First charge: ${selectedPlan.price}/month after day 14 unless you cancel.
                     </p>
@@ -291,7 +256,7 @@ export function Signup() {
             <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <p className="pf-row-title">Included in the trial</p>
               <ul className="mt-3 grid gap-2">
-                {selectedPlan.features.map((feature) => (
+                {selectedPlan.featureCopy.map((feature) => (
                   <li key={feature} className="flex items-center gap-2">
                     <Icon name="check" className="h-4 w-4 shrink-0 text-[var(--pf-success)]" />
                     <span className="pf-copy">{feature}</span>

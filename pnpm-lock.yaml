@@ -34,7 +34,7 @@ importers:
         version: link:../../packages/db
       drizzle-orm:
         specifier: ^0.31.2
-        version: 0.31.4(@cloudflare/workers-types@4.20260518.1)(@neondatabase/serverless@0.9.5)(@types/pg@8.20.0)(@types/react@18.3.29)(pg@8.21.0)(react@18.3.1)(sqlite3@5.1.7)
+        version: 0.31.4(@cloudflare/workers-types@4.20260529.1)(@neondatabase/serverless@0.9.5)(@types/pg@8.20.0)(@types/react@18.3.29)(pg@8.21.0)(react@18.3.1)(sqlite3@5.1.7)
       hono:
         specifier: ^4.4.6
         version: 4.12.19
@@ -54,6 +54,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@crewmodo/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
@@ -125,7 +128,7 @@ importers:
         version: 0.9.5
       drizzle-orm:
         specifier: ^0.31.2
-        version: 0.31.4(@cloudflare/workers-types@4.20260518.1)(@neondatabase/serverless@0.9.5)(@types/pg@8.20.0)(@types/react@18.3.29)(pg@8.21.0)(react@18.3.1)(sqlite3@5.1.7)
+        version: 0.31.4(@cloudflare/workers-types@4.20260529.1)(@neondatabase/serverless@0.9.5)(@types/pg@8.20.0)(@types/react@18.3.29)(pg@8.21.0)(react@18.3.1)(sqlite3@5.1.7)
     devDependencies:
       drizzle-kit:
         specifier: ^0.22.7
@@ -417,9 +420,6 @@ packages:
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
-
-  '@cloudflare/workers-types@4.20260518.1':
-    resolution: {integrity: sha512-xXzGrbRi8RHRBNQFgXYkzrB4DgF0RXvmp8E1vCxoBmINpeitM/ZjVDd1CNC+N3uXjgcNjacoz4OgTa0rxgig1A==}
 
   '@cloudflare/workers-types@4.20260529.1':
     resolution: {integrity: sha512-33n3nsaWELSgn4DLKj1X9dwZc3kVDnO+jF/hLH9fdaXG9mQzKDeUkQaVRWLJXvrPXPa9RaIuSAFO4Zh9YOqOog==}
@@ -4180,9 +4180,6 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260526.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260518.1':
-    optional: true
-
   '@cloudflare/workers-types@4.20260529.1': {}
 
   '@colors/colors@1.6.0': {}
@@ -5621,9 +5618,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.31.4(@cloudflare/workers-types@4.20260518.1)(@neondatabase/serverless@0.9.5)(@types/pg@8.20.0)(@types/react@18.3.29)(pg@8.21.0)(react@18.3.1)(sqlite3@5.1.7):
+  drizzle-orm@0.31.4(@cloudflare/workers-types@4.20260529.1)(@neondatabase/serverless@0.9.5)(@types/pg@8.20.0)(@types/react@18.3.29)(pg@8.21.0)(react@18.3.1)(sqlite3@5.1.7):
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260518.1
+      '@cloudflare/workers-types': 4.20260529.1
       '@neondatabase/serverless': 0.9.5
       '@types/pg': 8.20.0
       '@types/react': 18.3.29

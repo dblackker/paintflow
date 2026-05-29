@@ -21,6 +21,7 @@ import {
 import { and, eq } from 'drizzle-orm';
 import { sendEmail } from '../lib/email';
 import Stripe from 'stripe';
+import { PLAN_DEFINITIONS, TRIAL_DAYS, normalizePlanKey, planFeaturesPayload, type PlanKey } from '@crewmodo/core';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -115,34 +116,6 @@ const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.crewmodo.local';
 const GOLDEN_DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
 const GOLDEN_DEMO_CREW_DOMAIN = '@goldenbrush.example';
 const GOLDEN_DEMO_LOGIN_EMAILS = new Set([GOLDEN_DEMO_EMAIL, GOLDEN_DEMO_CREW_EMAIL]);
-const TRIAL_DAYS = 14;
-
-const PLAN_CONFIG = {
-  starter: {
-    name: 'starter',
-    displayName: 'Starter',
-    price: '49.00',
-    userLimit: 3,
-    featureCopy: ['CRM pipeline', 'Production estimates', 'E-signatures', 'Payments', 'Basic reports'],
-  },
-  pro: {
-    name: 'pro',
-    displayName: 'Pro',
-    price: '149.00',
-    userLimit: 10,
-    featureCopy: ['Everything in Starter', 'Crew time tracking', 'Job costing', 'Email templates', 'Advanced reports'],
-  },
-  enterprise: {
-    name: 'enterprise',
-    displayName: 'Enterprise',
-    price: '399.00',
-    userLimit: null,
-    featureCopy: ['Everything in Pro', 'Unlimited users', 'API access', 'White-labeling', 'Priority support'],
-  },
-} as const;
-
-type PlanKey = keyof typeof PLAN_CONFIG;
-
 function planPriceIds(env: Env) {
   return {
     starter: env.STRIPE_STARTER_PRICE_ID,
@@ -152,7 +125,7 @@ function planPriceIds(env: Env) {
 }
 
 function normalizePlan(value: unknown): PlanKey {
-  return value === 'starter' || value === 'enterprise' ? value : 'pro';
+  return normalizePlanKey(value);
 }
 
 function validEmail(value: string) {
@@ -165,18 +138,13 @@ async function ensureSaasPlan(db: ReturnType<typeof createDb>, env: Env, plan: P
   });
   if (existing) return existing;
 
-  const config = PLAN_CONFIG[plan];
+  const config = PLAN_DEFINITIONS[plan];
   const [created] = await db.insert(saasPlans).values({
-    name: config.name,
+    name: config.key,
     price: config.price,
     interval: 'month',
     stripePriceId: planPriceIds(env)[plan],
-    features: {
-      displayName: config.displayName,
-      userLimit: config.userLimit,
-      featureCopy: config.featureCopy,
-      trialDays: TRIAL_DAYS,
-    },
+    features: planFeaturesPayload(plan),
   }).returning();
   return created;
 }
