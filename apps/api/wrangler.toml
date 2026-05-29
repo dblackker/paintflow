@@ -59,14 +59,14 @@ id = "f7327dd9a0d44ceeacee3fa28353b147"
 binding = "R2"
 bucket_name = "crewmodo-uploads-preview"
 
-[env.demo]
+[env.dev]
 workers_dev = true
-vars = { APP_URL = "https://crewmodo-api-demo.danielablack.workers.dev", PUBLIC_URL = "https://crewmodo-demo.pages.dev", CORS_ORIGINS = "https://crewmodo-demo.pages.dev", ENVIRONMENT = "demo", VAPID_PUBLIC_KEY = "BNpeOQPq_i5tyMu_nJpFApLXmErRPBlWlwAzCplyvr4P3WQyEIW3kWi-qqkCPg7DmfzynDRMMcUrdkk0gdjaC6c", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
+vars = { APP_URL = "https://crewmodo-api-dev.danielablack.workers.dev", PUBLIC_URL = "https://crewmodo-dev.pages.dev", CORS_ORIGINS = "https://crewmodo-dev.pages.dev", ENVIRONMENT = "dev", VAPID_PUBLIC_KEY = "BNpeOQPq_i5tyMu_nJpFApLXmErRPBlWlwAzCplyvr4P3WQyEIW3kWi-qqkCPg7DmfzynDRMMcUrdkk0gdjaC6c", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
 
-[[env.demo.kv_namespaces]]
+[[env.dev.kv_namespaces]]
 binding = "KV"
 id = "6a9fdefdab5b49abb12107e40c4a966e"
 
-[[env.demo.r2_buckets]]
+[[env.dev.r2_buckets]]
 binding = "R2"
 bucket_name = "crewmodo-uploads-preview"

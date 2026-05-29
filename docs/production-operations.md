@@ -7,7 +7,7 @@ This is the operating model for releasing Crewmodo with fast iteration, clear ro
 | Environment | Purpose | Web | API | Deploy trigger |
 | --- | --- | --- | --- | --- |
 | Local dev | Daily development | `http://localhost:5173` | `http://localhost:8787` | `pnpm dev` |
-| Dev | Main-branch verification | `https://crewmodo-demo.pages.dev` | `https://crewmodo-api-demo.danielablack.workers.dev` | Push to `main` or manual dispatch |
+| Dev | Main-branch verification | `https://crewmodo-dev.pages.dev` | `https://crewmodo-api-dev.danielablack.workers.dev` | Push to `main` or manual dispatch |
 | Staging | Pre-release verification | `https://staging.crewmodo.com` | `https://api-staging.crewmodo.com` | Push to `staging` or manual dispatch |
 | Production | Customer-facing release | `https://crewmodo.com` and `https://app.crewmodo.com` | `https://api.crewmodo.com` | Push to `production`, GitHub Release, or manual dispatch |
 
@@ -129,11 +129,11 @@ Cloudflare Email Service reduces external dependencies, but do not remove MailCh
 - Pages:
   - `crewmodo-web`
   - `crewmodo-staging`
-  - `crewmodo-demo`
+  - `crewmodo-dev`
 - Workers:
   - `crewmodo-api-production`
   - `crewmodo-api-staging`
-  - `crewmodo-api-demo`
+  - `crewmodo-api-dev`
 - R2:
   - `crewmodo-uploads`
   - `crewmodo-uploads-preview`

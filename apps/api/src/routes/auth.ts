@@ -235,7 +235,7 @@ async function ensureTeamMemberLoginAccess(
 }
 
 function sessionCookie(value: string, env: Env, maxAge: number) {
-  const isCrossSiteDemo = env.ENVIRONMENT === 'demo';
+  const isCrossSiteDemo = ['demo', 'dev'].includes(env.ENVIRONMENT);
   const parts = [
     `session=${value}`,
     'HttpOnly',
@@ -270,7 +270,7 @@ function magicLinkLimits(env: Env) {
 }
 
 function canUseGoldenDemoEnvironment(env: Env) {
-  return ['development', 'demo'].includes(env.ENVIRONMENT);
+  return ['development', 'demo', 'dev'].includes(env.ENVIRONMENT);
 }
 
 function isGoldenDemoCrewEmail(email: string) {
@@ -312,7 +312,7 @@ function redirectWithLocation(location: string, headers: HeadersInit = {}, statu
 
 function sessionRedirectUrl(location: string, sessionToken: string, env: Env) {
   const redirectUrl = new URL(location);
-  if (env.ENVIRONMENT === 'demo' || env.ENVIRONMENT === 'development') {
+  if (['demo', 'dev', 'development'].includes(env.ENVIRONMENT)) {
     const params = new URLSearchParams(redirectUrl.hash.replace(/^#/, ''));
     params.set('crewmodo_session', sessionToken);
     redirectUrl.hash = params.toString();

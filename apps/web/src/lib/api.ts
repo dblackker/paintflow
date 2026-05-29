@@ -10,8 +10,8 @@ function resolveApiUrl() {
     return 'https://api-staging.crewmodo.com';
   }
 
-  if (typeof window !== 'undefined' && window.location.hostname === 'crewmodo-demo.pages.dev') {
-    return 'https://crewmodo-api-demo.danielablack.workers.dev';
+  if (typeof window !== 'undefined' && window.location.hostname === 'crewmodo-dev.pages.dev') {
+    return 'https://crewmodo-api-dev.danielablack.workers.dev';
   }
 
   return `${window.location.protocol}//${window.location.hostname}:8787`;
@@ -37,8 +37,8 @@ function shouldAttachSession(url: string) {
     const requestOrigin = new URL(url, window.location.origin).origin;
     const configuredOrigin = new URL(API_URL, window.location.origin).origin;
     const localOrigin = `${window.location.protocol}//${window.location.hostname}:8787`;
-    const demoOrigin = 'https://crewmodo-api-demo.danielablack.workers.dev';
-    return requestOrigin === configuredOrigin || requestOrigin === localOrigin || requestOrigin === demoOrigin;
+    const devOrigin = 'https://crewmodo-api-dev.danielablack.workers.dev';
+    return requestOrigin === configuredOrigin || requestOrigin === localOrigin || requestOrigin === devOrigin;
   } catch {
     return false;
   }

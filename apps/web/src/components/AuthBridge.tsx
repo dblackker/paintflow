@@ -6,18 +6,18 @@ export function AuthBridge() {
     const configuredApiUrl = API_URL || import.meta.env.PUBLIC_API_URL || import.meta.env.VITE_API_URL || '';
     const allowSessionFallback = import.meta.env.DEV
       || ['localhost', '127.0.0.1'].includes(window.location.hostname)
-      || window.location.hostname === 'crewmodo-demo.pages.dev'
-      || configuredApiUrl.includes('crewmodo-api-demo');
+      || window.location.hostname === 'crewmodo-dev.pages.dev'
+      || configuredApiUrl.includes('crewmodo-api-dev');
 
     if (!allowSessionFallback) return;
 
     const storageKey = 'crewmodo.sessionToken';
     const configuredApiOrigin = configuredApiUrl ? new URL(configuredApiUrl, window.location.origin).origin : '';
     const fallbackApiOrigin = `${window.location.protocol}//${window.location.hostname}:8787`;
-    const demoApiOrigin = window.location.hostname === 'crewmodo-demo.pages.dev'
-      ? 'https://crewmodo-api-demo.danielablack.workers.dev'
+    const devApiOrigin = window.location.hostname === 'crewmodo-dev.pages.dev'
+      ? 'https://crewmodo-api-dev.danielablack.workers.dev'
       : '';
-    const apiOrigins = new Set([configuredApiOrigin, fallbackApiOrigin, demoApiOrigin].filter(Boolean));
+    const apiOrigins = new Set([configuredApiOrigin, fallbackApiOrigin, devApiOrigin].filter(Boolean));
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const search = new URLSearchParams(window.location.search);
     const sessionToken = hash.get('crewmodo_session') || search.get('crewmodo_session');

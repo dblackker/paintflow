@@ -20,7 +20,7 @@ export const corsHeaders = async (c: Context, next: Next) => {
   const allowedOrigins = [
     'https://app.crewmodo.com',
     'https://crewmodo.com',
-    'https://crewmodo-demo.pages.dev',
+    'https://crewmodo-dev.pages.dev',
     'http://localhost:4321',
     'http://127.0.0.1:4321',
     'http://localhost:5173',

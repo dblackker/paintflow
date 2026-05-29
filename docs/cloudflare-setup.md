@@ -116,7 +116,7 @@ corepack pnpm wrangler secret put VAPID_PRIVATE_KEY --env production
 Use the environment-specific Neon connection string for each Worker environment:
 
 ```powershell
-[Environment]::GetEnvironmentVariable("NEON_MAIN","User") | corepack pnpm wrangler secret put DATABASE_URL --env demo
+[Environment]::GetEnvironmentVariable("NEON_MAIN","User") | corepack pnpm wrangler secret put DATABASE_URL --env dev
 [Environment]::GetEnvironmentVariable("NEON_STAGING","User") | corepack pnpm wrangler secret put DATABASE_URL --env staging
 [Environment]::GetEnvironmentVariable("NEON_PROD","User") | corepack pnpm wrangler secret put DATABASE_URL --env production
 ```

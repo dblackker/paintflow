@@ -23,8 +23,8 @@ type Message = {
 function isDemoOrDev() {
   return Boolean(import.meta.env.DEV)
     || ['localhost', '127.0.0.1'].includes(window.location.hostname)
-    || window.location.hostname === 'crewmodo-demo.pages.dev'
-    || API_URL.includes('crewmodo-api-demo');
+    || window.location.hostname === 'crewmodo-dev.pages.dev'
+    || API_URL.includes('crewmodo-api-dev');
 }
 
 function appOrigin() {

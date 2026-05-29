@@ -12,8 +12,8 @@ This document records the PaintFlow to Crewmodo rename so the next product or do
 | Primary domain | `paintflow.app` | `crewmodo.com` |
 | App domain | `app.paintflow.app` | `app.crewmodo.com` |
 | API domain | `api.paintflow.app` | `api.crewmodo.com` |
-| Demo Pages project | `paintflow-demo` | `crewmodo-demo` |
-| Demo Worker | `paintflow-api-demo` | `crewmodo-api-demo` |
+| Dev Pages project | `paintflow-demo` | `crewmodo-dev` |
+| Dev Worker | `paintflow-api-demo` | `crewmodo-api-dev` |
 | Worker | `paintflow-api` | `crewmodo-api` |
 | Web package | `paintflow-web` | `crewmodo-web` |
 | R2 buckets | `paintflow-uploads`, `paintflow-uploads-preview` | `crewmodo-uploads`, `crewmodo-uploads-preview` |

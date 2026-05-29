@@ -23,7 +23,7 @@ pnpm vapid:generate -- --public-only
 Set the private key as a Worker secret. Do not commit it:
 
 ```bash
-pnpm exec wrangler secret put VAPID_PRIVATE_KEY --env demo --config apps/api/wrangler.toml
+pnpm exec wrangler secret put VAPID_PRIVATE_KEY --env dev --config apps/api/wrangler.toml
 pnpm exec wrangler secret put VAPID_PRIVATE_KEY --env production --config apps/api/wrangler.toml
 ```
 

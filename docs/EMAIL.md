@@ -46,7 +46,7 @@ Set secrets through Wrangler or the Cloudflare dashboard:
 
 ```powershell
 cd apps/api
-wrangler secret put MAILCHANNELS_API_KEY --env demo
+wrangler secret put MAILCHANNELS_API_KEY --env dev
 wrangler secret put MAILCHANNELS_API_KEY --env staging
 wrangler secret put MAILCHANNELS_API_KEY --env production
 ```
@@ -145,7 +145,7 @@ Required Worker secret:
 
 ```powershell
 cd apps/api
-wrangler secret put INBOUND_INVOICE_EMAIL_SECRET --env demo
+wrangler secret put INBOUND_INVOICE_EMAIL_SECRET --env dev
 wrangler secret put INBOUND_INVOICE_EMAIL_SECRET --env production
 ```
 

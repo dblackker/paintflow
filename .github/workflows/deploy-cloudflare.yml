@@ -10,14 +10,14 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     concurrency:
-      group: cloudflare-demo
+      group: crewmodo-dev
       cancel-in-progress: true
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID || '68309aec3845a76b4d2df357a9575e13' }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
       DATABASE_URL: ${{ secrets.NEON_MAIN }}
-      PUBLIC_API_URL: https://crewmodo-api-demo.danielablack.workers.dev
-      VITE_API_URL: https://crewmodo-api-demo.danielablack.workers.dev
+      PUBLIC_API_URL: https://crewmodo-api-dev.danielablack.workers.dev
+      VITE_API_URL: https://crewmodo-api-dev.danielablack.workers.dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,10 +49,10 @@ jobs:
         run: pnpm --filter @crewmodo/db db:migrate
 
       - name: Deploy API Worker
-        run: pnpm exec wrangler deploy --config apps/api/wrangler.toml --env demo
+        run: pnpm exec wrangler deploy --config apps/api/wrangler.toml --env dev
 
       - name: Build web app
         run: pnpm --filter @crewmodo/web build
 
       - name: Deploy Pages
-        run: pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-demo --branch main
+        run: pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-dev --branch main
