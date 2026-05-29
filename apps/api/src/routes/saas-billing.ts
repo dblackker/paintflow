@@ -26,6 +26,29 @@ function normalizePlan(value: unknown): PlanKey {
   return value === 'starter' || value === 'enterprise' ? value : 'pro';
 }
 
+function normalizeStripeStatus(status: Stripe.Subscription.Status | string | null | undefined) {
+  if (status === 'trialing') return 'trial';
+  if (status === 'canceled') return 'canceled';
+  if (status === 'past_due' || status === 'unpaid') return 'past_due';
+  if (status === 'incomplete' || status === 'incomplete_expired') return status;
+  return status || 'active';
+}
+
+function dateFromStripe(seconds: number | null | undefined) {
+  return seconds ? new Date(seconds * 1000) : undefined;
+}
+
+function planFromStripeSubscription(env: Env, subscription: Stripe.Subscription): PlanKey | null {
+  const metadataPlan = subscription.metadata?.plan;
+  if (metadataPlan) return normalizePlan(metadataPlan);
+
+  const priceId = subscription.items.data[0]?.price?.id;
+  const priceIds = planPriceIds(env);
+  const match = (Object.entries(priceIds) as Array<[PlanKey, string | undefined]>)
+    .find(([, configuredPriceId]) => configuredPriceId && configuredPriceId === priceId);
+  return match?.[0] || null;
+}
+
 async function ensurePlan(db: ReturnType<typeof createDb>, env: Env, plan: PlanKey) {
   const [existing] = await db.select().from(saasPlans).where(eq(saasPlans.name, plan));
   if (existing) return existing;
@@ -38,6 +61,77 @@ async function ensurePlan(db: ReturnType<typeof createDb>, env: Env, plan: PlanK
     features: defaults,
   }).returning();
   return created;
+}
+
+async function upsertSubscriptionFromStripe(
+  db: ReturnType<typeof createDb>,
+  env: Env,
+  stripeSubscription: Stripe.Subscription,
+  fallback?: { orgId?: string; plan?: PlanKey; stripeCustomerId?: string },
+) {
+  const existingByStripeId = await db.query.subscriptions.findFirst({
+    where: eq(subscriptions.stripeSubscriptionId, stripeSubscription.id),
+  });
+  const orgId = stripeSubscription.metadata?.orgId || fallback?.orgId || existingByStripeId?.orgId;
+  const planKey = planFromStripeSubscription(env, stripeSubscription) || fallback?.plan;
+  if (!orgId || !planKey) {
+    if (orgId && existingByStripeId) {
+      await db.update(subscriptions)
+        .set({
+          stripeCustomerId: typeof stripeSubscription.customer === 'string'
+            ? stripeSubscription.customer
+            : fallback?.stripeCustomerId || existingByStripeId.stripeCustomerId,
+          stripeSubscriptionId: stripeSubscription.id,
+          status: normalizeStripeStatus(stripeSubscription.status),
+          currentPeriodStart: dateFromStripe(stripeSubscription.current_period_start),
+          currentPeriodEnd: dateFromStripe(stripeSubscription.current_period_end),
+        })
+        .where(and(eq(subscriptions.orgId, orgId), eq(subscriptions.id, existingByStripeId.id)));
+      return;
+    }
+    console.warn('Skipping Stripe subscription sync without org or plan context', {
+      subscriptionId: stripeSubscription.id,
+      hasOrgId: Boolean(orgId),
+      hasPlan: Boolean(planKey),
+    });
+    return;
+  }
+
+  const planRecord = await ensurePlan(db, env, planKey);
+  const stripeCustomerId = typeof stripeSubscription.customer === 'string'
+    ? stripeSubscription.customer
+    : fallback?.stripeCustomerId;
+  const values = {
+    orgId,
+    planId: planRecord.id,
+    stripeCustomerId,
+    stripeSubscriptionId: stripeSubscription.id,
+    status: normalizeStripeStatus(stripeSubscription.status),
+    currentPeriodStart: dateFromStripe(stripeSubscription.current_period_start),
+    currentPeriodEnd: dateFromStripe(stripeSubscription.current_period_end),
+  };
+
+  const existing = await db.query.subscriptions.findFirst({
+    where: eq(subscriptions.orgId, orgId),
+  }) || existingByStripeId;
+  if (existing) {
+    await db.update(subscriptions)
+      .set(values)
+      .where(and(eq(subscriptions.orgId, orgId), eq(subscriptions.id, existing.id)));
+  } else {
+    await db.insert(subscriptions).values(values);
+  }
+}
+
+async function syncSubscriptionById(db: ReturnType<typeof createDb>, env: Env, stripe: Stripe, subscriptionId: string) {
+  const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const existing = await db.query.subscriptions.findFirst({
+    where: eq(subscriptions.stripeSubscriptionId, subscriptionId),
+  });
+  await upsertSubscriptionFromStripe(db, env, stripeSubscription, {
+    orgId: existing?.orgId,
+    stripeCustomerId: existing?.stripeCustomerId || undefined,
+  });
 }
 
 // POST /v1/billing/webhook
@@ -57,41 +151,39 @@ billing.post('/webhook', async (c) => {
     return c.json({ error: 'Invalid signature' }, 400);
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const orgId = session.metadata?.orgId;
-    const plan = session.metadata?.plan;
+  const db = createDb(c.env.DATABASE_URL);
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const orgId = session.metadata?.orgId;
+      const plan = session.metadata?.plan ? normalizePlan(session.metadata.plan) : undefined;
 
-    if (!orgId || !plan || typeof session.subscription !== 'string') {
-      return c.json({ error: 'Missing subscription metadata' }, 400);
+      if (!orgId || !plan || typeof session.subscription !== 'string') {
+        return c.json({ error: 'Missing subscription metadata' }, 400);
+      }
+
+      const stripeSubscription = await stripe.subscriptions.retrieve(session.subscription);
+      await upsertSubscriptionFromStripe(db, c.env, stripeSubscription, {
+        orgId,
+        plan,
+        stripeCustomerId: typeof session.customer === 'string' ? session.customer : undefined,
+      });
+    } else if (
+      event.type === 'customer.subscription.created'
+      || event.type === 'customer.subscription.updated'
+      || event.type === 'customer.subscription.deleted'
+    ) {
+      await upsertSubscriptionFromStripe(db, c.env, event.data.object);
+    } else if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object;
+      const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : undefined;
+      if (subscriptionId) {
+        await syncSubscriptionById(db, c.env, stripe, subscriptionId);
+      }
     }
-
-    const db = createDb(c.env.DATABASE_URL);
-    const planKey = normalizePlan(plan);
-    const planRecord = await ensurePlan(db, c.env, planKey);
-    const stripe = new Stripe(c.env.STRIPE_SECRET_KEY);
-    const subscription = await stripe.subscriptions.retrieve(session.subscription);
-    const status = subscription.status === 'trialing' ? 'trial' : subscription.status;
-
-    const existing = await db.query.subscriptions.findFirst({
-      where: eq(subscriptions.orgId, orgId),
-    });
-    const values = {
-      orgId,
-      planId: planRecord.id,
-      stripeCustomerId: typeof session.customer === 'string' ? session.customer : undefined,
-      stripeSubscriptionId: session.subscription,
-      status,
-      currentPeriodStart: new Date(subscription.current_period_start * 1000),
-      currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-    };
-    if (existing) {
-      await db.update(subscriptions)
-        .set(values)
-        .where(and(eq(subscriptions.orgId, orgId), eq(subscriptions.id, existing.id)));
-    } else {
-      await db.insert(subscriptions).values(values);
-    }
+  } catch (err) {
+    console.error('Stripe subscription webhook sync failed:', { eventType: event.type, eventId: event.id, err });
+    return c.json({ error: 'Webhook received, but subscription sync failed.' }, 500);
   }
 
   return c.json({ received: true });
@@ -134,6 +226,9 @@ billing.post('/create-checkout', async (c) => {
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${c.env.PUBLIC_URL}/billing?success=true`,
     cancel_url: `${c.env.PUBLIC_URL}/billing?canceled=true`,
+    subscription_data: {
+      metadata: { orgId, plan: planKey },
+    },
     metadata: { orgId, plan: planKey },
   });
   

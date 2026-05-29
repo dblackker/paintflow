@@ -185,7 +185,10 @@ This enables magic link emails via MailChannels (free).
 Configure in Stripe Dashboard:
 - SaaS billing endpoint: `https://api.crewmodo.com/v1/billing/webhook`
 - Estimate payment endpoint: `https://api.crewmodo.com/v1/payments/webhook`
-- Events: `checkout.session.completed`, `customer.subscription.updated`, `invoice.payment_failed`
+- SaaS billing events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
+- Estimate payment events: `checkout.session.completed`, `charge.refunded`
+
+Use separate webhook signing secrets for staging and production. Keep Stripe test keys on dev/staging and live keys only on production.
 
 ## Architectural Decisions
 
