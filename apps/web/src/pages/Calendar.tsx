@@ -33,14 +33,6 @@ interface Job {
   leadState?: string | null;
   leadPostalCode?: string | null;
   estimatedLaborHours?: string | number | null;
-  colorReadiness?: ColorReadiness | null;
-}
-
-interface ColorReadiness {
-  required: number;
-  selected: number;
-  missing: number;
-  complete: boolean;
 }
 
 interface GoogleEvent {
@@ -904,7 +896,6 @@ export function Calendar() {
     const progress = estimatedHours > 0 ? Math.min(100, (actualHours / estimatedHours) * 100) : 0;
     const siteForecast = jobForecasts.find((forecast) => forecast.zipCode === jobZip(job));
     const siteConcerns = weatherConcerns(weatherForDay(siteForecast, day));
-    const needsColors = Boolean(job.colorReadiness && job.colorReadiness.required > 0 && !job.colorReadiness.complete);
     const dayOfWeek = day.getDay();
     const popoverPosition = dayOfWeek === 0 || dayOfWeek >= 5
       ? 'right-0'
@@ -922,7 +913,7 @@ export function Calendar() {
             event.dataTransfer.setData('application/x-paintflow-origin-day', dateKey(day));
             event.dataTransfer.effectAllowed = 'move';
           }}
-          className={`block min-w-0 rounded-md px-2 py-1 text-[0.72rem] font-semibold leading-snug text-blue-950 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${siteConcerns.length || needsColors ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-blue-50'}`}
+          className={`block min-w-0 rounded-md px-2 py-1 text-[0.72rem] font-semibold leading-snug text-blue-950 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${siteConcerns.length ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-blue-50'}`}
           aria-describedby={`calendar-job-popover-${job.id}-${dateKey(day)}`}
         >
           <span className="block truncate">{job.name || 'Job'}</span>
@@ -971,11 +962,6 @@ export function Calendar() {
               {siteConcerns.join(', ')} at job site{jobZip(job) ? ` (${jobZip(job)})` : ''}
             </div>
           )}
-          {needsColors && (
-            <div className="mt-3 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
-              {job.colorReadiness?.missing} paint color selection{job.colorReadiness?.missing === 1 ? '' : 's'} needed before production.
-            </div>
-          )}
         </div>
       </div>
     );
@@ -992,7 +978,6 @@ export function Calendar() {
     const siteForecast = jobForecasts.find((forecast) => forecast.zipCode === jobZip(job));
     const siteWeather = weatherForDay(siteForecast, day);
     const siteConcerns = weatherConcerns(siteWeather);
-    const needsColors = Boolean(job.colorReadiness && job.colorReadiness.required > 0 && !job.colorReadiness.complete);
     return (
       <article
         key={job.id}
@@ -1045,12 +1030,6 @@ export function Calendar() {
         {siteConcerns.length > 0 && (
           <div className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
             {siteConcerns.join(', ')} at job site{jobZip(job) ? ` (${jobZip(job)})` : ''}
-          </div>
-        )}
-        {needsColors && (
-          <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900">
-            <Icon name="warning" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>{job.colorReadiness?.missing} color selection{job.colorReadiness?.missing === 1 ? '' : 's'} needed</span>
           </div>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
