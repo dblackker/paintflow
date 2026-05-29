@@ -106,8 +106,6 @@ interface EstimateLineItem {
     productionRatePerHour?: number;
     prepAdjustmentHours?: number;
     paintAdjustmentHours?: number;
-    ceilingColorSeparation?: string;
-    ceilingColorSeparationHours?: number;
   };
   material?: {
     id?: string;
@@ -153,8 +151,6 @@ interface Surface {
   applicationMethod: ApplicationMethod;
   prepAdjustmentHours: string;
   paintAdjustmentHours: string;
-  ceilingColorSeparation: string;
-  ceilingColorSeparationHours: string;
   materialId: string;
   colorName: string;
   colorCode: string;
@@ -271,21 +267,6 @@ function defaultMethod(rate?: ProductionRate | null): ApplicationMethod {
   if (/spray/.test(text) && /back.?roll/.test(text)) return 'spray_backroll';
   if (/spray/.test(text)) return 'spray_only';
   return 'brush_roll';
-}
-
-function defaultCeilingColorSeparation(rate?: ProductionRate | null) {
-  return rateKind(rate) === 'ceilings' ? 'same_as_walls' : 'not_applicable';
-}
-
-function ceilingColorLaborHours(surface: Surface, rate?: ProductionRate | null) {
-  if (rateKind(rate) !== 'ceilings' || surface.ceilingColorSeparation !== 'separate_color') return 0;
-  return num(surface.ceilingColorSeparationHours, 0.75);
-}
-
-function ceilingColorLabel(value?: string) {
-  if (value === 'separate_color') return 'Different ceiling color';
-  if (value === 'same_as_walls') return 'Same color as walls';
-  return '';
 }
 
 function materialLabel(material?: Material | null) {
@@ -435,8 +416,6 @@ export function EstimateProduction() {
       applicationMethod: item.labor?.applicationMethod || defaultMethod(loadedRates.find((rate) => rate.id === rateId)),
       prepAdjustmentHours: String(item.labor?.prepAdjustmentHours || ''),
       paintAdjustmentHours: String(item.labor?.paintAdjustmentHours || ''),
-      ceilingColorSeparation: item.labor?.ceilingColorSeparation || defaultCeilingColorSeparation(loadedRates.find((rate) => rate.id === rateId)),
-      ceilingColorSeparationHours: String(item.labor?.ceilingColorSeparationHours || ''),
       materialId: item.material?.id || '',
       colorName: item.material?.colorName || '',
       colorCode: item.material?.colorCode || '',
@@ -544,8 +523,6 @@ export function EstimateProduction() {
       applicationMethod: template.applicationMethod || defaultMethod(firstRate),
       prepAdjustmentHours: template.prepAdjustmentHours || '',
       paintAdjustmentHours: template.paintAdjustmentHours || '',
-      ceilingColorSeparation: template.ceilingColorSeparation || defaultCeilingColorSeparation(firstRate),
-      ceilingColorSeparationHours: template.ceilingColorSeparationHours || '',
       materialId: template.materialId || '',
       colorName: template.colorName || '',
       colorCode: template.colorCode || '',
@@ -575,8 +552,6 @@ export function EstimateProduction() {
       applicationMethod: defaultMethod(rate),
       prepAdjustmentHours: '',
       paintAdjustmentHours: '',
-      ceilingColorSeparation: defaultCeilingColorSeparation(rate),
-      ceilingColorSeparationHours: '',
       materialId: '',
       colorName: '',
       colorCode: '',
@@ -738,8 +713,7 @@ export function EstimateProduction() {
         const method = applicationMethods[surface.applicationMethod] || applicationMethods.brush_roll;
         const coats = Math.max(1, Math.min(3, num(surface.coats, 2)));
         const adjustedRate = Math.max(1, num(rate.ratePerHour, 1) * method.productivity);
-        const ceilingColorHours = ceilingColorLaborHours(surface, rate);
-        const itemHours = Math.max(0, (quantity.quantity / adjustedRate) * coats * prepMultipliers[surface.prepLevel] + num(surface.prepAdjustmentHours) + num(surface.paintAdjustmentHours) + ceilingColorHours);
+        const itemHours = Math.max(0, (quantity.quantity / adjustedRate) * coats * prepMultipliers[surface.prepLevel] + num(surface.prepAdjustmentHours) + num(surface.paintAdjustmentHours));
         const itemLabor = itemHours * num(rate.hourlyRate, num(settings.defaultLaborRate, 65));
         const selectedMaterial = materials.find((material) => material.id === surface.materialId) || (surface.prepLevel === 'heavy' ? primer : paint);
         const itemMaterial = materialCost(quantity.quantity, coats, selectedMaterial, rate.unit);
@@ -773,8 +747,6 @@ export function EstimateProduction() {
             productionRatePerHour: Number(adjustedRate.toFixed(2)),
             prepAdjustmentHours: num(surface.prepAdjustmentHours),
             paintAdjustmentHours: num(surface.paintAdjustmentHours),
-            ceilingColorSeparation: rateKind(rate) === 'ceilings' ? surface.ceilingColorSeparation : undefined,
-            ceilingColorSeparationHours: ceilingColorHours,
           },
           material: selectedMaterial ? {
             id: selectedMaterial.id,
@@ -1395,8 +1367,6 @@ function RoomCard({
                         rateId: event.target.value,
                         label: labelize(nextRate?.surfaceType || nextRate?.category || surface.label),
                         applicationMethod: defaultMethod(nextRate),
-                        ceilingColorSeparation: defaultCeilingColorSeparation(nextRate),
-                        ceilingColorSeparationHours: '',
                       });
                     }}
                   >
@@ -1454,31 +1424,6 @@ function RoomCard({
                   </select>
                 </label>
               </div>
-              {rateKind(rate) === 'ceilings' && (
-                <div className="mt-2 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
-                  <label>
-                    <span className="form-label">Ceiling color rule</span>
-                    <select
-                      className="input mt-1 bg-white"
-                      value={surface.ceilingColorSeparation}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        updateSurface(room.id, surface.id, {
-                          ceilingColorSeparation: nextValue,
-                          ceilingColorSeparationHours: nextValue === 'separate_color' && !surface.ceilingColorSeparationHours ? '0.75' : surface.ceilingColorSeparationHours,
-                        });
-                      }}
-                    >
-                      <option value="same_as_walls">Same color as walls</option>
-                      <option value="separate_color">Different ceiling color</option>
-                    </select>
-                    <p className="pf-helper mt-1">This is part of the proposal contract and controls how customers can submit colors.</p>
-                  </label>
-                  {surface.ceilingColorSeparation === 'separate_color' && (
-                    <NumberField label="Added color labor" value={surface.ceilingColorSeparationHours} onChange={(value) => updateSurface(room.id, surface.id, { ceilingColorSeparationHours: value })} />
-                  )}
-                </div>
-              )}
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <NumberField label="Prep hours +/-" value={surface.prepAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { prepAdjustmentHours: value })} />
                 <NumberField label="Paint hours +/-" value={surface.paintAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { paintAdjustmentHours: value })} />
@@ -1615,6 +1560,5 @@ function proposalDetail(item: EstimateLineItem) {
     item.labor?.prepLevel ? `${labelize(item.labor.prepLevel)} prep` : '',
     item.material?.name ? `Paint: ${[item.material.brand, item.material.name].filter(Boolean).join(' ')}` : 'Paint: TBD',
     [item.material?.colorName, item.material?.colorCode].filter(Boolean).join(' '),
-    item.labor?.ceilingColorSeparation ? ceilingColorLabel(item.labor.ceilingColorSeparation) : '',
   ].filter(Boolean).join(' - ');
 }
