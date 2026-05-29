@@ -258,6 +258,56 @@ function supplierIdsForEstimate(estimate: typeof estimates.$inferSelect) {
   return Array.from(ids);
 }
 
+function colorSelectionKey(value?: { colorName?: string; colorCode?: string }) {
+  return `${String(value?.colorName || '').trim().toLowerCase()}|${String(value?.colorCode || '').trim().toLowerCase()}`;
+}
+
+function estimateItemSurfaceRole(item: Record<string, unknown>) {
+  const text = `${String(item.surfaceName || '')} ${String(item.desc || '')} ${String(item.category || '')}`.toLowerCase();
+  if (/ceil/.test(text)) return 'ceilings';
+  if (/wall/.test(text)) return 'walls';
+  return '';
+}
+
+function estimateItemCeilingMode(item: Record<string, unknown>) {
+  const labor = item.labor && typeof item.labor === 'object' && !Array.isArray(item.labor)
+    ? item.labor as Record<string, unknown>
+    : {};
+  return String(labor.ceilingColorSeparation || '').toLowerCase();
+}
+
+function validateCeilingColorSelections(
+  items: Array<Record<string, unknown>>,
+  selections: z.infer<typeof colorSelectionSchema>['selections'],
+) {
+  const submitted = new Map(selections.map((selection) => [selection.itemIndex, selection]));
+  items.forEach((ceilingItem, ceilingIndex) => {
+    if (estimateItemSurfaceRole(ceilingItem) !== 'ceilings') return;
+    const ceilingMode = estimateItemCeilingMode(ceilingItem);
+    const ceilingSelection = submitted.get(ceilingIndex);
+    if (!ceilingSelection) return;
+
+    const roomName = String(ceilingItem.roomName || '').trim().toLowerCase();
+    const relatedWalls = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => estimateItemSurfaceRole(item) === 'walls')
+      .filter(({ item }) => String(item.roomName || '').trim().toLowerCase() === roomName);
+
+    relatedWalls.forEach(({ index, item: wallItem }) => {
+      const wallSelection = submitted.get(index);
+      if (!wallSelection) return;
+      const sameColor = colorSelectionKey(wallSelection) === colorSelectionKey(ceilingSelection);
+      const spaceName = String(ceilingItem.roomName || 'this space');
+      if (/separate|different/.test(ceilingMode) && sameColor) {
+        throw new Error(`The ceiling in ${spaceName} is priced as a different color. Choose a different ceiling color or ask your contractor for a revised proposal.`);
+      }
+      if (/same/.test(ceilingMode) && !sameColor) {
+        throw new Error(`The ceiling in ${spaceName} is priced to match the walls. Use the wall color or ask your contractor for a revised proposal.`);
+      }
+    });
+  });
+}
+
 function estimatePackagesWithColorSelections(
   estimate: typeof estimates.$inferSelect,
   input: z.infer<typeof colorSelectionSchema>,
@@ -270,6 +320,7 @@ function estimatePackagesWithColorSelections(
   if (!pkg) throw new Error('No estimate package is available for color selection.');
   const items = packageItems(pkg) as Array<Record<string, unknown>>;
   if (!items.length) throw new Error('No proposal items are available for color selection.');
+  validateCeilingColorSelections(items, input.selections);
 
   const applied: Array<Record<string, unknown>> = [];
   input.selections.forEach((selection) => {

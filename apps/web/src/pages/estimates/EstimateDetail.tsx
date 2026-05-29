@@ -24,6 +24,8 @@ interface EstimateLineItem {
     coats?: number | string;
     prepLevel?: string;
     applicationMethod?: string;
+    ceilingColorSeparation?: string;
+    ceilingColorSeparationHours?: number | string;
   };
   material?: {
     name?: string;
@@ -186,6 +188,10 @@ function applicationLabel(value?: string) {
   return labels[String(value || '')] || labelize(value || '');
 }
 
+function ceilingColorMode(item: EstimateLineItem) {
+  return String(item.labor?.ceilingColorSeparation || '').toLowerCase();
+}
+
 function titleCaseScope(value?: string) {
   return String(value || '')
     .replace(/\s+/g, ' ')
@@ -217,6 +223,27 @@ function scopeParts(item: EstimateLineItem): ScopeParts {
   };
 }
 
+function surfaceRole(item: EstimateLineItem) {
+  const parts = scopeParts(item);
+  const text = `${parts.surface} ${parts.label} ${item.surfaceName || ''} ${item.category || ''}`.toLowerCase();
+  if (/ceil/.test(text)) return 'ceilings';
+  if (/wall/.test(text)) return 'walls';
+  if (/trim|baseboard|casing|crown|corner/.test(text)) return 'trim';
+  if (/door/.test(text)) return 'doors';
+  if (/soffit|eave/.test(text)) return 'soffits';
+  if (/fascia/.test(text)) return 'fascia';
+  if (/siding|body/.test(text)) return 'siding';
+  return text.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'surface';
+}
+
+function ceilingColorRuleLabel(item: EstimateLineItem) {
+  if (surfaceRole(item) !== 'ceilings') return '';
+  const mode = ceilingColorMode(item);
+  if (/separate|different/.test(mode)) return 'Different ceiling color included';
+  if (/same/.test(mode)) return 'Same color as walls';
+  return 'Ceiling color selected separately';
+}
+
 function groupScopeBySpace(items: EstimateLineItem[]): ScopeGroup[] {
   const groups = new Map<string, ScopeGroup>();
   items.forEach((item) => {
@@ -241,6 +268,7 @@ function customerScopeDetail(item: EstimateLineItem) {
     item.labor?.coats ? `${num(item.labor.coats)} coat${num(item.labor.coats) === 1 ? '' : 's'}` : '',
     item.labor?.prepLevel ? `${labelize(item.labor.prepLevel)} prep` : '',
     item.labor?.applicationMethod ? applicationLabel(item.labor.applicationMethod) : '',
+    ceilingColorRuleLabel(item),
   ].filter(Boolean);
   return parts.join(' | ') || 'Included in project scope';
 }
@@ -340,10 +368,14 @@ function materialProductLabel(item: EstimateLineItem) {
 }
 
 function colorGroupKey(item: EstimateLineItem) {
+  const role = surfaceRole(item);
+  const mode = ceilingColorMode(item);
+  const pricingRole = role === 'ceilings' && /same/.test(mode) ? 'walls' : role;
   return [
     item.material?.brand || '',
     item.material?.name || '',
     item.material?.supplier || '',
+    pricingRole,
   ].join('|').toLowerCase() || 'selected-paint-product';
 }
 
@@ -968,8 +1000,8 @@ export function EstimateDetail() {
                         onChange={(event) => toggleGroupedColors(event.target.checked)}
                       />
                       <span>
-                        <span className="block font-medium">Use one color per paint product</span>
-                        <span className="mt-1 block text-blue-800">Best for whole-home repaints where the same wall or exterior product uses one color across many spaces.</span>
+                        <span className="block font-medium">Use one color for matching paint groups</span>
+                        <span className="mt-1 block text-blue-800">Ceilings stay separate unless this proposal prices them to match the walls.</span>
                       </span>
                     </label>
                   )}
@@ -982,6 +1014,11 @@ export function EstimateDetail() {
                           <div className="mb-3">
                             <p className="font-medium text-gray-950">{group.product}</p>
                             <p className="mt-1 text-sm text-gray-600">Applies to {group.targets.length} substrate{group.targets.length === 1 ? '' : 's'}: {spaces.slice(0, 5).join(', ')}{spaces.length > 5 ? `, +${spaces.length - 5} more` : ''}</p>
+                            {group.targets.some((target) => ceilingColorRuleLabel(target.item)) && (
+                              <p className="mt-1 text-xs font-medium text-amber-800">
+                                {Array.from(new Set(group.targets.map((target) => ceilingColorRuleLabel(target.item)).filter(Boolean))).join(' | ')}
+                              </p>
+                            )}
                           </div>
                           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
                             <label>
@@ -1027,6 +1064,7 @@ export function EstimateDetail() {
                           <div className="mb-3">
                             <p className="font-medium text-gray-950">{parts.space} - {parts.surface}</p>
                             <p className="mt-1 text-sm text-gray-600">{materialProductLabel(item)}</p>
+                            {ceilingColorRuleLabel(item) && <p className="mt-1 text-xs font-medium text-amber-800">{ceilingColorRuleLabel(item)}</p>}
                           </div>
                           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
                             <label>

@@ -134,6 +134,12 @@ function applicationLabel(value?: string) {
   return value ? labels[value] || labelize(value) : '';
 }
 
+function ceilingColorLabel(value?: string) {
+  if (value === 'separate_color') return 'Different ceiling color';
+  if (value === 'same_as_walls') return 'Same color as walls';
+  return value ? labelize(value) : '';
+}
+
 function numberLabel(value: unknown) {
   const parsed = Number(value || 0);
   return parsed.toLocaleString('en-US', {
@@ -186,7 +192,7 @@ function itemDetails(item: EstimateLineItem) {
     labor.coats ? `${Number(labor.coats)} coat${Number(labor.coats) === 1 ? '' : 's'}` : '',
     labor.prepLevel ? `${labelize(labor.prepLevel)} prep` : '',
     labor.applicationMethod ? applicationLabel(labor.applicationMethod) : '',
-    labor.ceilingColorSeparation ? `Ceiling color: ${labelize(labor.ceilingColorSeparation)}` : '',
+    labor.ceilingColorSeparation ? `Ceiling color: ${ceilingColorLabel(labor.ceilingColorSeparation)}` : '',
     paint ? `Paint: ${paint}` : '',
     color ? `Color: ${color}` : '',
   ].filter(Boolean).join(' | ');
