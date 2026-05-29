@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { createDb } from '@paintflow/db';
-import { activities, emailSends, estimates, jobs, leads, messages, timeEntries } from '@paintflow/db/schema';
+import { activities, emailSends, estimates, jobs, leads, messages, orgSettings, timeEntries } from '@paintflow/db/schema';
 import { eq, and, gte, count, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { estimateColorReadiness } from '../lib/color-readiness';
+import { isFeatureEnabled } from '../lib/feature-flags';
 
 const dashboard = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -113,7 +114,8 @@ dashboard.get('/recommendations', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
 
-  const [leadRows, estimateRows, jobRows, activityRows, messageRows, emailRows, timeRows] = await Promise.all([
+  const [settings, leadRows, estimateRows, jobRows, activityRows, messageRows, emailRows, timeRows] = await Promise.all([
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
     db.query.leads.findMany({ where: eq(leads.orgId, orgId), orderBy: (leads, { desc }) => [desc(leads.updatedAt)], limit: 250 }),
     db.query.estimates.findMany({ where: eq(estimates.orgId, orgId), orderBy: (estimates, { desc }) => [desc(estimates.updatedAt)], limit: 250 }),
     db.query.jobs.findMany({ where: eq(jobs.orgId, orgId), orderBy: (jobs, { desc }) => [desc(jobs.updatedAt)], limit: 250 }),
@@ -151,6 +153,7 @@ dashboard.get('/recommendations', async (c) => {
   }
 
   const recommendations: Array<Record<string, unknown>> = [];
+  const customerColorSelectionEnabled = isFeatureEnabled(settings, 'customerColorSelection');
 
   for (const lead of leadRows) {
     const hasJob = Boolean(jobsByLead.get(lead.id)?.length);
@@ -232,7 +235,7 @@ dashboard.get('/recommendations', async (c) => {
   for (const job of jobRows) {
     const estimate = job.estimateId ? estimatesById.get(job.estimateId) : undefined;
     const colorReadiness = estimateColorReadiness(estimate?.packages);
-    if (['scheduled', 'in_progress'].includes(job.status) && colorReadiness.required > 0 && !colorReadiness.complete) {
+    if (customerColorSelectionEnabled && ['scheduled', 'in_progress'].includes(job.status) && colorReadiness.required > 0 && !colorReadiness.complete) {
       const lead = leadRows.find((item) => item.id === job.leadId);
       const scheduledSoon = job.scheduledStartAt ? new Date(job.scheduledStartAt).getTime() - Date.now() <= 7 * 86_400_000 : false;
       recommendations.push({

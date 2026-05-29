@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@paintflow/db';
-import { changeOrders, estimateMaterials, estimates, jobCosts, jobs, leads, materialPurchases } from '@paintflow/db/schema';
+import { changeOrders, estimateMaterials, estimates, jobCosts, jobs, leads, materialPurchases, orgSettings } from '@paintflow/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { estimateColorReadiness } from '../lib/color-readiness';
+import { isFeatureEnabled } from '../lib/feature-flags';
 
 const jobsApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 jobsApp.use('*', authMiddleware);
@@ -55,6 +56,8 @@ async function getJobForOrg(db: ReturnType<typeof createDb>, orgId: string, jobI
 jobsApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const db = createDb(c.env.DATABASE_URL);
+  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) });
+  const customerColorSelectionEnabled = isFeatureEnabled(settings, 'customerColorSelection');
   
   const allJobs = await db
     .select({
@@ -95,7 +98,7 @@ jobsApp.get('/', async (c) => {
     data: allJobs.map(({ estimatePackages, ...job }) => ({
       ...job,
       estimatedLaborHours: estimatedLaborHoursFromPackage(estimatePackages ? { packages: estimatePackages } as typeof estimates.$inferSelect : undefined),
-      colorReadiness: estimateColorReadiness(estimatePackages),
+      colorReadiness: customerColorSelectionEnabled ? estimateColorReadiness(estimatePackages) : null,
     })),
   });
 });
@@ -178,12 +181,14 @@ jobsApp.get('/:id/costing', async (c) => {
   const job = await getJobForOrg(db, orgId, id);
   if (!job) return c.json({ error: 'Not found' }, 404);
 
-  const [lead, estimate] = await Promise.all([
+  const [settings, lead, estimate] = await Promise.all([
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
     db.query.leads.findFirst({ where: and(eq(leads.id, job.leadId), eq(leads.orgId, orgId)) }),
     job.estimateId
       ? db.query.estimates.findFirst({ where: and(eq(estimates.id, job.estimateId), eq(estimates.orgId, orgId)) })
       : Promise.resolve(undefined),
   ]);
+  const customerColorSelectionEnabled = isFeatureEnabled(settings, 'customerColorSelection');
 
   const [costs, orders, purchases, estimatedMaterials] = await Promise.all([
     db.query.jobCosts.findMany({
@@ -248,7 +253,7 @@ jobsApp.get('/:id/costing', async (c) => {
         leadCity: lead?.city,
         leadState: lead?.state,
         leadPostalCode: lead?.postalCode,
-        colorReadiness: estimateColorReadiness(estimate?.packages),
+        colorReadiness: customerColorSelectionEnabled ? estimateColorReadiness(estimate?.packages) : null,
       },
       revenue: {
         contract: contractValue,
