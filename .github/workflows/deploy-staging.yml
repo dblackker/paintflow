@@ -34,6 +34,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify Cloudflare credentials
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Set GitHub secret CLOUDFLARE_API_TOKEN or CF_API_TOKEN so Wrangler can deploy."
+            exit 1
+          fi
+          pnpm exec wrangler whoami
+
       - name: Build packages
         run: pnpm -r build
 
