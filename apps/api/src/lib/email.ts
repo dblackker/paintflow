@@ -21,11 +21,11 @@ function emailProvider(env: Env) {
 }
 
 function fromEmail(env: Env, override?: string) {
-  return override || env.EMAIL_FROM || 'estimates@paintflow.app';
+  return override || env.EMAIL_FROM || 'estimates@crewmodo.com';
 }
 
 function fromName(env: Env, override?: string) {
-  return override || env.EMAIL_FROM_NAME || 'PaintFlow';
+  return override || env.EMAIL_FROM_NAME || 'Crewmodo';
 }
 
 function plainTextFromHtml(html: string) {
@@ -347,7 +347,7 @@ export function renderEstimateEmail(input: EstimateEmailInput, override?: EmailT
   const template = input.isUpdate
     ? estimateEmailTemplates['estimate.updated.sent']
     : estimateEmailTemplates[estimateTemplateKey(input)] || estimateEmailTemplates['estimate.standard.sent'];
-  const baseUrl = input.baseUrl || 'https://app.paintflow.app';
+  const baseUrl = input.baseUrl || 'https://app.crewmodo.com';
   const url = `${baseUrl}/estimates/${encodeURIComponent(input.estimateId)}`;
   const companyName = escapeHtml(input.companyName || 'your painting contractor');
   const leadName = escapeHtml(input.leadName);

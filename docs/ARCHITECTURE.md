@@ -1,8 +1,8 @@
-# PaintFlow Architecture
+# Crewmodo Architecture
 
 ## Overview
 
-PaintFlow is a multi-tenant SaaS CRM built for painting contractors, deployed on Cloudflare Workers edge runtime.
+Crewmodo is a multi-tenant SaaS CRM built for trade contractors, initially optimized for painting contractors, deployed on Cloudflare Workers edge runtime.
 
 ## System Architecture
 
@@ -333,12 +333,12 @@ Current:
 - `ENVIRONMENT=development`
 
 **Staging:**
-- `staging.paintflow.app`
+- `staging.crewmodo.com`
 - Auto-deploy from `develop` branch
 - Production-like data (anonymized)
 
 **Production:**
-- `app.paintflow.app`
+- `app.crewmodo.com`
 - Manual approval from `main` branch
 - Real customer data
 

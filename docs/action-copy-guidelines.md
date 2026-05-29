@@ -1,6 +1,6 @@
 # Action Copy Guidelines
 
-Use this standard for buttons, links, menus, and CTAs across PaintFlow.
+Use this standard for buttons, links, menus, and CTAs across Crewmodo.
 
 ## Principles
 

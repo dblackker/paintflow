@@ -14,7 +14,7 @@ const { defineOnly = false } = Astro.props;
       }
 
       function money(value) {
-        return window.PaintFlowFormat?.money(value) || new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+        return window.CrewmodoFormat?.money(value) || new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value || 0));
       }
 
       function netPaid(payments = []) {
@@ -214,7 +214,7 @@ const { defineOnly = false } = Astro.props;
             return;
           }
           window.showToast?.('Agreement voided', 'success');
-          window.dispatchEvent(new CustomEvent('paintflow:estimate-updated', { detail: { estimateId } }));
+          window.dispatchEvent(new CustomEvent('crewmodo:estimate-updated', { detail: { estimateId } }));
         } catch (err) {
           window.showToast?.(err.message || 'Agreement action failed', 'error');
         } finally {
@@ -223,7 +223,7 @@ const { defineOnly = false } = Astro.props;
       }
 
       function apiBaseUrl() {
-        return window.__PAINTFLOW_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
+        return window.__CREWMODO_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
       }
 
       async function apiJson(path, options = {}) {
@@ -389,7 +389,7 @@ const { defineOnly = false } = Astro.props;
           });
           closeManualPaymentModal();
           window.showToast?.('Payment recorded', 'success');
-          window.dispatchEvent(new CustomEvent('paintflow:payment-recorded', { detail: { estimateId: form.elements.estimateId.value } }));
+          window.dispatchEvent(new CustomEvent('crewmodo:payment-recorded', { detail: { estimateId: form.elements.estimateId.value } }));
         } catch (err) {
           window.showToast?.(err.message || 'Failed to record payment', 'error');
         } finally {
@@ -437,9 +437,9 @@ const { defineOnly = false } = Astro.props;
         if (event.key === 'Escape') closeEstimateActionsMenu();
       });
 
-      window.PaintFlowUI = window.PaintFlowUI || {};
-      window.PaintFlowUI.estimateActions = estimateActions;
-      window.PaintFlowUI.openManualPaymentModal = openManualPaymentModal;
+      window.CrewmodoUI = window.CrewmodoUI || {};
+      window.CrewmodoUI.estimateActions = estimateActions;
+      window.CrewmodoUI.openManualPaymentModal = openManualPaymentModal;
     })();
   </script>
 )}

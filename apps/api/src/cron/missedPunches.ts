@@ -1,5 +1,5 @@
-import { createDb } from '@paintflow/db';
-import { notificationEvents, orgSettings, teamMembers, timePunchEvents, timePunchSessions } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { notificationEvents, orgSettings, teamMembers, timePunchEvents, timePunchSessions } from '@crewmodo/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Env } from '../types';
 import { sendEmail } from '../lib/email';
@@ -47,7 +47,7 @@ function missedPunchEmail(name: string, hours: number, publicUrl: string) {
     <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;padding:24px;">
       <h1 style="font-size:22px;margin:0 0 12px;">You may still be clocked in</h1>
       <p>Hi ${safeName},</p>
-      <p>Your PaintFlow time clock has been running for about ${hours.toFixed(1)} hours.</p>
+      <p>Your Crewmodo time clock has been running for about ${hours.toFixed(1)} hours.</p>
       <p>If you forgot to clock out, open Time Tracking, clock out, and enter the time you actually finished. Your crew lead will review the correction.</p>
       <p><a href="${publicUrl}/time" style="display:inline-block;background:#0b57d0;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;">Open time clock</a></p>
     </div>
@@ -118,7 +118,7 @@ export async function processMissedPunches(env: Env) {
 
     flagged += 1;
     if (member?.email) {
-      await sendEmail(env, member.email, 'PaintFlow time clock reminder', missedPunchEmail(member.name, hours, env.PUBLIC_URL));
+      await sendEmail(env, member.email, 'Crewmodo time clock reminder', missedPunchEmail(member.name, hours, env.PUBLIC_URL));
       emailed += 1;
     }
   }

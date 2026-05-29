@@ -2,8 +2,8 @@ function resolveApiUrl() {
   const configuredUrl = import.meta.env.PUBLIC_API_URL || import.meta.env.VITE_API_URL;
   if (configuredUrl) return configuredUrl.replace(/\/$/, '');
 
-  if (typeof window !== 'undefined' && window.location.hostname === 'paintflow-demo.pages.dev') {
-    return 'https://paintflow-api-demo.danielablack.workers.dev';
+  if (typeof window !== 'undefined' && window.location.hostname === 'crewmodo-demo.pages.dev') {
+    return 'https://crewmodo-api-demo.danielablack.workers.dev';
   }
 
   return `${window.location.protocol}//${window.location.hostname}:8787`;
@@ -13,11 +13,11 @@ export const API_URL = resolveApiUrl();
 
 function storedSessionToken() {
   if (typeof window === 'undefined') return '';
-  const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('paintflow_session');
-  const searchToken = new URLSearchParams(window.location.search).get('paintflow_session');
+  const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('crewmodo_session');
+  const searchToken = new URLSearchParams(window.location.search).get('crewmodo_session');
   if (hashToken || searchToken) return hashToken || searchToken || '';
   try {
-    return localStorage.getItem('paintflow.sessionToken') || '';
+    return localStorage.getItem('crewmodo.sessionToken') || '';
   } catch {
     return '';
   }
@@ -29,21 +29,21 @@ function shouldAttachSession(url: string) {
     const requestOrigin = new URL(url, window.location.origin).origin;
     const configuredOrigin = new URL(API_URL, window.location.origin).origin;
     const localOrigin = `${window.location.protocol}//${window.location.hostname}:8787`;
-    const demoOrigin = 'https://paintflow-api-demo.danielablack.workers.dev';
+    const demoOrigin = 'https://crewmodo-api-demo.danielablack.workers.dev';
     return requestOrigin === configuredOrigin || requestOrigin === localOrigin || requestOrigin === demoOrigin;
   } catch {
     return false;
   }
 }
 
-export class PaintFlowApiError extends Error {
+export class CrewmodoApiError extends Error {
   status?: number;
   code?: string;
   serviceUnavailable: boolean;
 
   constructor(message: string, options: { status?: number; code?: string; serviceUnavailable?: boolean } = {}) {
     super(message);
-    this.name = 'PaintFlowApiError';
+    this.name = 'CrewmodoApiError';
     this.status = options.status;
     this.code = options.code;
     this.serviceUnavailable = Boolean(options.serviceUnavailable);
@@ -62,7 +62,7 @@ export async function apiJson<T>(path: string, options: RequestInit = {}): Promi
   try {
     response = await fetch(url, { credentials: 'include', ...options, headers });
   } catch {
-    throw new PaintFlowApiError('PaintFlow API is unreachable. The app loaded, but the service that provides this page data did not respond.', {
+    throw new CrewmodoApiError('Crewmodo API is unreachable. The app loaded, but the service that provides this page data did not respond.', {
       serviceUnavailable: true,
       code: 'NETWORK_UNREACHABLE',
     });
@@ -76,8 +76,8 @@ export async function apiJson<T>(path: string, options: RequestInit = {}): Promi
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const statusUnavailable = response.status === 502 || response.status === 503 || response.status === 504;
-    throw new PaintFlowApiError(
-      body?.error || body?.message || (statusUnavailable ? 'PaintFlow API is temporarily unavailable.' : 'Request failed'),
+    throw new CrewmodoApiError(
+      body?.error || body?.message || (statusUnavailable ? 'Crewmodo API is temporarily unavailable.' : 'Request failed'),
       {
         status: response.status,
         code: body?.code,

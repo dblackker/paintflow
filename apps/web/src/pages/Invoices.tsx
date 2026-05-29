@@ -1274,7 +1274,7 @@ export function Invoices() {
             <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
               <p className="pf-meta">Forwarding address</p>
               <p className="pf-copy mt-1 break-all font-mono text-xs">
-                {inboundEmailConfig?.forwardingAddress || 'receipts+workspace-slug@receipts.paintflow.app'}
+                {inboundEmailConfig?.forwardingAddress || 'receipts+workspace-slug@receipts.crewmodo.com'}
               </p>
               {inboundEmailConfig?.alternateAddress && (
                 <p className="pf-helper mt-1 break-all">
@@ -1325,7 +1325,7 @@ export function Invoices() {
                 <EmptyState
                   icon={<Icon name="file-text" className="h-5 w-5" />}
                   title="No supplier invoices uploaded yet."
-                  description="Upload a supplier invoice and PaintFlow will stage extracted material costs for review before they hit a job."
+                  description="Upload a supplier invoice and Crewmodo will stage extracted material costs for review before they hit a job."
                   action={{ label: 'Review invoice', onClick: openUploadModal }}
                 />
               )}
@@ -1361,7 +1361,7 @@ export function Invoices() {
           {[
             ['Now', 'One receivables queue for estimates, change orders, quick invoices, manual payments, and reminders.'],
             ['Next', 'Dedicated invoice records with number sequencing, due dates, reminders, receipts, and customer portal payment links.'],
-            ['Integrations', 'QuickBooks should remain the accounting ledger. PaintFlow should sync invoices and payments rather than replace bookkeeping.'],
+            ['Integrations', 'QuickBooks should remain the accounting ledger. Crewmodo should sync invoices and payments rather than replace bookkeeping.'],
           ].map(([label, copy]) => (
             <div key={label} className="rounded-lg border border-gray-200 p-3">
               <p className="pf-meta">{label}</p>
@@ -1454,7 +1454,7 @@ export function Invoices() {
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h2 id="invoice-upload-title" className="pf-section-title">Review supplier invoice</h2>
-                <p className="pf-copy mt-1">Upload a supplier invoice. PaintFlow will extract the lines, suggest a job match, and stage it for approval.</p>
+                <p className="pf-copy mt-1">Upload a supplier invoice. Crewmodo will extract the lines, suggest a job match, and stage it for approval.</p>
               </div>
               <button type="button" className="btn-icon" aria-label="Close invoice upload" onClick={closeUploadModal}>
                 <Icon name="close" className="h-5 w-5" />
@@ -1493,7 +1493,7 @@ export function Invoices() {
                     onChange={(event) => setForm({ ...form, invoiceNumber: event.target.value })}
                   />
                   <Select label="Suggested job" value={form.jobId} onChange={(event) => setForm({ ...form, jobId: event.target.value })}>
-                    <option value="">Let PaintFlow match it</option>
+                    <option value="">Let Crewmodo match it</option>
                     {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
                   </Select>
                   <Input
@@ -1513,7 +1513,7 @@ export function Invoices() {
                   <p className="pf-row-title">OCR and receipt automation</p>
                 </div>
                 <p className="pf-copy mt-1">
-                  OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. R2 is optional; without it, PaintFlow can stage the invoice for review but will not retain the original file.
+                  OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. R2 is optional; without it, Crewmodo can stage the invoice for review but will not retain the original file.
                 </p>
               </div>
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">

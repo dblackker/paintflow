@@ -149,7 +149,7 @@ export function Billing() {
 
   async function subscribe(plan: string) {
     if (plan === 'enterprise') {
-      window.location.href = 'mailto:sales@paintflow.app';
+      window.location.href = 'mailto:sales@crewmodo.com';
       return;
     }
     if (currentPlan?.toLowerCase() === plan && !needsPaymentInfo) return;
@@ -184,10 +184,10 @@ export function Billing() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-1 pb-24 sm:px-0">
-      <p className="pf-page-copy">Manage your PaintFlow plan, payment method, invoices, and cancellation from one place.</p>
+      <p className="pf-page-copy">Manage your Crewmodo plan, payment method, invoices, and cancellation from one place.</p>
 
       <Card>
-        <CardHeader title="Current Plan" description="This subscription is for PaintFlow software access. Customer deposits and contractor payouts are handled separately." />
+        <CardHeader title="Current Plan" description="This subscription is for Crewmodo software access. Customer deposits and contractor payouts are handled separately." />
         {isLoading && (
           <div className="space-y-2">
             <div className="h-5 w-1/3 animate-pulse rounded bg-gray-200" />
@@ -258,7 +258,7 @@ export function Billing() {
           </div>
         )}
         <p className="pf-meta mt-4">
-          Manage billing opens Stripe's secure customer page for this PaintFlow subscription. From there you can update the card, view invoices, change or cancel the subscription, and handle billing history.
+          Manage billing opens Stripe's secure customer page for this Crewmodo subscription. From there you can update the card, view invoices, change or cancel the subscription, and handle billing history.
         </p>
       </Card>
 

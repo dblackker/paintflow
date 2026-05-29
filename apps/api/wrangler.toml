@@ -1,22 +1,22 @@
-name = "paintflow-api"
+name = "crewmodo-api"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 [vars]
 APP_URL = "http://localhost:8787"
-PUBLIC_URL = "https://app.paintflow.app"
-CORS_ORIGINS = "http://localhost:4321,https://app.paintflow.app,https://paintflow.app"
+PUBLIC_URL = "https://app.crewmodo.com"
+CORS_ORIGINS = "http://localhost:4321,https://app.crewmodo.com,https://crewmodo.com"
 ENVIRONMENT = "development"
 VAPID_PUBLIC_KEY = "BO5Sp6VtcPNypgVGwHWHIlNzBgk5zUQKU4N4ap7Ory1nWgQtznZgso0do6-0tqRQ12effdP2vEG_xqT_UTEZqVM"
-VAPID_SUBJECT = "mailto:admin@paintflow.app"
+VAPID_SUBJECT = "mailto:admin@crewmodo.com"
 EMAIL_PROVIDER = "mailchannels"
 EMAIL_FROM = "no-reply@blacklinepainting.com"
-EMAIL_FROM_NAME = "PaintFlow"
+EMAIL_FROM_NAME = "Crewmodo"
 OPENAI_OCR_MODEL = "gpt-4.1-mini"
 OCR_BURST_LIMIT_PER_MINUTE = "5"
 OCR_DAILY_LIMIT = "25"
 OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50"
-INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.paintflow.app"
+INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com"
 
 [[kv_namespaces]]
 binding = "KV"
@@ -25,16 +25,16 @@ preview_id = "a5f2ed59095e479088b1f4b9ef6c830d"
 
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "paintflow-uploads"
-preview_bucket_name = "paintflow-uploads-preview"
+bucket_name = "crewmodo-uploads"
+preview_bucket_name = "crewmodo-uploads-preview"
 
 [triggers]
 crons = ["*/30 1-6 * * *"]
 
 [env.production]
-vars = { APP_URL = "https://api.paintflow.app", PUBLIC_URL = "https://app.paintflow.app", CORS_ORIGINS = "https://app.paintflow.app,https://paintflow.app", ENVIRONMENT = "production", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter", STRIPE_PRO_PRICE_ID = "price_replace_pro", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise", VAPID_PUBLIC_KEY = "BO5Sp6VtcPNypgVGwHWHIlNzBgk5zUQKU4N4ap7Ory1nWgQtznZgso0do6-0tqRQ12effdP2vEG_xqT_UTEZqVM", VAPID_SUBJECT = "mailto:admin@paintflow.app", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "PaintFlow", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.paintflow.app" }
+vars = { APP_URL = "https://api.crewmodo.com", PUBLIC_URL = "https://app.crewmodo.com", CORS_ORIGINS = "https://app.crewmodo.com,https://crewmodo.com", ENVIRONMENT = "production", COOKIE_DOMAIN = ".crewmodo.com", STRIPE_STARTER_PRICE_ID = "price_replace_starter", STRIPE_PRO_PRICE_ID = "price_replace_pro", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise", VAPID_PUBLIC_KEY = "BO5Sp6VtcPNypgVGwHWHIlNzBgk5zUQKU4N4ap7Ory1nWgQtznZgso0do6-0tqRQ12effdP2vEG_xqT_UTEZqVM", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
 routes = [
-  { pattern = "api.paintflow.app/*", zone_name = "paintflow.app" }
+  { pattern = "api.crewmodo.com/*", zone_name = "crewmodo.com" }
 ]
 
 [[env.production.kv_namespaces]]
@@ -43,14 +43,14 @@ id = "prod_kv_namespace_id"
 
 [[env.production.r2_buckets]]
 binding = "R2"
-bucket_name = "paintflow-uploads"
+bucket_name = "crewmodo-uploads"
 
 [env.staging]
-vars = { APP_URL = "https://api-staging.paintflow.app", PUBLIC_URL = "https://staging.paintflow.app", CORS_ORIGINS = "https://staging.paintflow.app", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".paintflow.app", STRIPE_STARTER_PRICE_ID = "price_replace_starter_test", STRIPE_PRO_PRICE_ID = "price_replace_pro_test", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise_test", VAPID_PUBLIC_KEY = "BO5Sp6VtcPNypgVGwHWHIlNzBgk5zUQKU4N4ap7Ory1nWgQtznZgso0do6-0tqRQ12effdP2vEG_xqT_UTEZqVM", VAPID_SUBJECT = "mailto:admin@paintflow.app", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "PaintFlow", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.paintflow.app" }
+vars = { APP_URL = "https://api-staging.crewmodo.com", PUBLIC_URL = "https://staging.crewmodo.com", CORS_ORIGINS = "https://staging.crewmodo.com", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".crewmodo.com", STRIPE_STARTER_PRICE_ID = "price_replace_starter_test", STRIPE_PRO_PRICE_ID = "price_replace_pro_test", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise_test", VAPID_PUBLIC_KEY = "BO5Sp6VtcPNypgVGwHWHIlNzBgk5zUQKU4N4ap7Ory1nWgQtznZgso0do6-0tqRQ12effdP2vEG_xqT_UTEZqVM", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
 
 [env.demo]
 workers_dev = true
-vars = { APP_URL = "https://paintflow-api-demo.danielablack.workers.dev", PUBLIC_URL = "https://paintflow-demo.pages.dev", CORS_ORIGINS = "https://paintflow-demo.pages.dev", ENVIRONMENT = "demo", VAPID_PUBLIC_KEY = "BO5Sp6VtcPNypgVGwHWHIlNzBgk5zUQKU4N4ap7Ory1nWgQtznZgso0do6-0tqRQ12effdP2vEG_xqT_UTEZqVM", VAPID_SUBJECT = "mailto:admin@paintflow.app", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "PaintFlow", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.paintflow.app" }
+vars = { APP_URL = "https://crewmodo-api-demo.danielablack.workers.dev", PUBLIC_URL = "https://crewmodo-demo.pages.dev", CORS_ORIGINS = "https://crewmodo-demo.pages.dev", ENVIRONMENT = "demo", VAPID_PUBLIC_KEY = "BO5Sp6VtcPNypgVGwHWHIlNzBgk5zUQKU4N4ap7Ory1nWgQtznZgso0do6-0tqRQ12effdP2vEG_xqT_UTEZqVM", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "mailchannels", EMAIL_FROM = "no-reply@blacklinepainting.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
 
 [[env.demo.kv_namespaces]]
 binding = "KV"
@@ -58,4 +58,4 @@ id = "6a9fdefdab5b49abb12107e40c4a966e"
 
 [[env.demo.r2_buckets]]
 binding = "R2"
-bucket_name = "paintflow-uploads-preview"
+bucket_name = "crewmodo-uploads-preview"

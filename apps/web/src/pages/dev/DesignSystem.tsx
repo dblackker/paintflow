@@ -20,7 +20,7 @@ export function DesignSystem() {
         <p className="pf-kicker">Developer only</p>
         <h1 className="pf-page-title">Design System</h1>
         <p className="pf-page-copy mt-2 max-w-2xl">
-          PaintFlow uses Material-style color roles, rounded action controls, consistent Lucide icons, and compact mobile-first density.
+          Crewmodo uses Material-style color roles, rounded action controls, consistent Lucide icons, and compact mobile-first density.
         </p>
       </div>
 

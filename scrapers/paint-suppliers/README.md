@@ -1,6 +1,6 @@
 # Paint Supplier Scraper
 
-Deterministic, foolproof scraper for paint supplier products, pricing, colors, and sundries. Built for PaintFlow to provide real-time supplier data for accurate estimates.
+Deterministic, foolproof scraper for paint supplier products, pricing, colors, and sundries. Built for Crewmodo to provide real-time supplier data for accurate estimates.
 
 ## Suppliers Supported
 
@@ -108,22 +108,22 @@ See [Docker section](#docker-deployment) below for more details.
 
 ## Usage
 
-### Scheduled PaintFlow catalog hydration
+### Scheduled Crewmodo catalog hydration
 
-PaintFlow now treats this package as a workspace package and uses it to hydrate
+Crewmodo now treats this package as a workspace package and uses it to hydrate
 the app database's `supplier_catalog_*` tables. The scheduled job lives in
 `.github/workflows/supplier-catalog.yml` and runs weekly, with manual
 `workflow_dispatch` support for a single supplier or limited test scrape.
 
 Required secrets:
 
-- `DATABASE_URL` - Neon/Postgres connection string for the target PaintFlow
+- `DATABASE_URL` - Neon/Postgres connection string for the target Crewmodo
   database.
 
 Local smoke test:
 
 ```bash
-corepack pnpm --filter @paintflow/supplier-scraper build
+corepack pnpm --filter @crewmodo/supplier-scraper build
 cd scrapers/paint-suppliers
 DATABASE_PATH=./data/suppliers.db node dist/index.js scrape sherwin-williams --limit 10
 DATABASE_URL=postgres://... node dist/index.js hydrate-postgres
@@ -133,7 +133,7 @@ The scraper writes to SQLite first, validates the data, then upserts products,
 colors, and product-color availability into Postgres. Retailer pages can change
 without notice, so the sync records `supplier_catalog_sync_runs.issues` instead
 of blocking the app when a supplier is slow or stale. The `/supplier-catalog`
-screen shows the latest PaintFlow-level run history and per-supplier sync
+screen shows the latest Crewmodo-level run history and per-supplier sync
 status; these rows are global catalog health records, not contractor tenant
 records.
 
@@ -343,4 +343,4 @@ MIT - See LICENSE file
 
 ## Support
 
-For issues or questions, see PaintFlow documentation or open an issue in the repo.
+For issues or questions, see Crewmodo documentation or open an issue in the repo.

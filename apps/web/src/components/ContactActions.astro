@@ -81,8 +81,8 @@ const sanitizedPhone = phone ? String(phone).replace(/[^+\d]/g, '') : '';
       return `<a class="btn-icon btn-icon-outlined" href="${escapeHtml(href)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${svg(icon)}</a>`;
     };
 
-    window.PaintFlowUI = window.PaintFlowUI || {};
-    window.PaintFlowUI.contactActions = ({ phone = '', email = '', leadId = '', className = '' } = {}) => {
+    window.CrewmodoUI = window.CrewmodoUI || {};
+    window.CrewmodoUI.contactActions = ({ phone = '', email = '', leadId = '', className = '' } = {}) => {
       const rawPhone = String(phone || '').trim();
       const phoneHref = rawPhone ? `tel:${rawPhone.replace(/[^+\d]/g, '')}` : '';
       const smsHref = rawPhone && leadId ? `/sms?leadId=${encodeURIComponent(leadId)}` : '';

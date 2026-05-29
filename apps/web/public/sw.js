@@ -12,15 +12,15 @@ self.addEventListener('push', (event) => {
     payload = event.data?.json() || {};
   } catch {
     payload = {
-      title: 'PaintFlow notification',
-      body: event.data?.text() || 'Open PaintFlow to review new customer activity.',
+      title: 'Crewmodo notification',
+      body: event.data?.text() || 'Open Crewmodo to review new customer activity.',
     };
   }
 
-  const title = payload.title || 'PaintFlow notification';
+  const title = payload.title || 'Crewmodo notification';
   const options = {
-    body: payload.body || payload.message || 'Open PaintFlow to review new customer activity.',
-    tag: payload.tag || 'paintflow-notification',
+    body: payload.body || payload.message || 'Open Crewmodo to review new customer activity.',
+    tag: payload.tag || 'crewmodo-notification',
     data: { url: payload.url || payload.href || '/notifications' },
     icon: '/icon-192.png',
     badge: '/icon-192.png',

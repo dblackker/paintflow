@@ -1,4 +1,4 @@
-# PaintFlow Video Tutorial Series
+# Crewmodo Video Tutorial Series
 
 ## Strategy: Self-Service Education Without Live Demos
 
@@ -22,20 +22,20 @@
 
 #### Videos:
 
-**1. "How PaintFlow Saves You 5 Hours Per Week" (3 min)**
+**1. "How Crewmodo Saves You 5 Hours Per Week" (3 min)**
 - Hook: "Most painters spend 10 hours/week on paperwork"
-- Show: Before/after comparison (spreadsheet vs PaintFlow)
+- Show: Before/after comparison (spreadsheet vs Crewmodo)
 - Demo: Create estimate in 2 minutes (speed up footage)
 - Don't show: Exact UI details, advanced settings
 - CTA: "Start free trial"
 
-**2. "From Lead to Paid: The PaintFlow Workflow" (4 min)**
+**2. "From Lead to Paid: The Crewmodo Workflow" (4 min)**
 - Story: Follow one job from lead → estimate → job → invoice → payment
 - Show: Mobile photo upload, automated follow-ups, payment link
 - Don't show: Specific pricing, internal calculations
 - CTA: "See how it works"
 
-**3. "Why I Built PaintFlow" (2 min)**
+**3. "Why I Built Crewmodo" (2 min)**
 - Your story as painting contractor
 - Problem you faced (losing jobs to slow estimates)
 - Solution you built
@@ -48,10 +48,10 @@
 - Show: Brief screen glimpses, focus on Mike talking
 - CTA: "Start your free trial"
 
-**5. "PaintFlow vs Spreadsheets" (3 min)**
+**5. "Crewmodo vs Spreadsheets" (3 min)**
 - Side-by-side comparison
 - Show pain points of spreadsheets
-- Show PaintFlow solving them
+- Show Crewmodo solving them
 - Don't bash competitors by name
 - CTA: "Make the switch"
 
@@ -75,7 +75,7 @@
 
 **Getting Started (Must-watch):**
 
-1. **"First 5 Minutes in PaintFlow" (3 min)**
+1. **"First 5 Minutes in Crewmodo" (3 min)**
    - Add company info
    - Create first estimate
    - Send to customer
@@ -156,7 +156,7 @@
 
 **Distribution:**
 - Help center (embedded)
-- YouTube "PaintFlow Help" playlist
+- YouTube "Crewmodo Help" playlist
 - In-app contextual help ("Watch video" links)
 - Email onboarding sequence
 
@@ -177,7 +177,7 @@
 1. **"Pricing for Profit: How Top Painters Price Jobs" (8 min)**
    - Per-square-foot vs hourly
    - Value-based pricing
-   - Using PaintFlow data to optimize
+   - Using Crewmodo data to optimize
 
 2. **"Marketing That Actually Works for Painters" (10 min)**
    - Lead sources tracking
@@ -186,7 +186,7 @@
 
 3. **"Hiring Your First Employee" (7 min)**
    - When to hire
-   - Using PaintFlow to onboard
+   - Using Crewmodo to onboard
    - Setting up permissions
 
 **Advanced Features:**
@@ -237,9 +237,9 @@
 
 **Objection Handlers:**
 
-1. **"PaintFlow vs Jobber: Feature Comparison" (3 min)**
+1. **"Crewmodo vs Jobber: Feature Comparison" (3 min)**
    - Side-by-side
-   - Where PaintFlow wins
+   - Where Crewmodo wins
    - For sales calls only
 
 2. **"Migrating from [Competitor]" (4 min)**
@@ -456,7 +456,7 @@ Competitors can copy features, but they can't copy:
 "Add your scope. Pro tip: Save common items as templates to go even faster."
 
 **[1:00] Pricing**
-"PaintFlow calculates totals automatically based on your rates. No math needed."
+"Crewmodo calculates totals automatically based on your rates. No math needed."
 
 **[1:20] Photos**
 "Add before photos from your phone. Customers love seeing the starting point."
@@ -471,7 +471,7 @@ Competitors can copy features, but they can't copy:
 
 ---
 
-### "Why I Built PaintFlow"
+### "Why I Built Crewmodo"
 
 **[0:00] Personal story**
 "I'm Daniel. I own Black Line Painting in Washington. Two years ago, I was losing jobs because my estimates took too long."
@@ -483,13 +483,13 @@ Competitors can copy features, but they can't copy:
 "I lost a $18,000 exterior job because I took 4 days to send the estimate. The customer told me: 'We went with someone faster.'"
 
 **[1:00] The solution**
-"So I built PaintFlow. Now I create estimates in 5 minutes from my phone, right on the job site. I win more jobs and I'm home for dinner."
+"So I built Crewmodo. Now I create estimates in 5 minutes from my phone, right on the job site. I win more jobs and I'm home for dinner."
 
 **[1:30] The results**
 "Last year, Black Line did $400K in revenue. This year we're on track for $600K. Same crew, just better system."
 
 **[1:50] The offer**
-"I built this for painters like me. If you're tired of losing jobs to slow estimates, try PaintFlow free for 14 days."
+"I built this for painters like me. If you're tired of losing jobs to slow estimates, try Crewmodo free for 14 days."
 
 **CTA:** "Start free trial - no credit card required"
 
@@ -581,12 +581,12 @@ Competitors can copy features, but they can't copy:
 
 1. **"How [Name] Saved 10 Hours Per Week"**
    - Before: Spreadsheets and paper
-   - After: PaintFlow
+   - After: Crewmodo
    - Specific time savings
 
 2. **"From $200K to $500K with Better Systems"**
    - Growth story
-   - How PaintFlow enabled scaling
+   - How Crewmodo enabled scaling
    - Advice for others
 
 3. **"Winning More Jobs with Faster Estimates"**
@@ -596,7 +596,7 @@ Competitors can copy features, but they can't copy:
 
 **Ask customers:**
 - "Can I record a 10-min interview?"
-- "What was life like before PaintFlow?"
+- "What was life like before Crewmodo?"
 - "What's changed since?"
 - Offer: 1 month free for participation
 

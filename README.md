@@ -1,8 +1,8 @@
-# PaintFlow
+# Crewmodo
 
-**CRM built specifically for painting contractors.**
+**CRM built for trade contractors, starting with deep support for painting operations.**
 
-PaintFlow handles the entire workflow from lead capture to final payment, with features tailored to painting businesses (job costing, production rates, before/after photos, review automation).
+Crewmodo handles the entire workflow from lead capture to final payment, with features tailored to field service teams and deep painting-specific workflows such as job costing, production rates, before/after photos, and review automation.
 
 ## Tech Stack
 
@@ -31,8 +31,8 @@ PaintFlow handles the entire workflow from lead capture to final payment, with f
 
 1. **Clone and install:**
 ```bash
-git clone https://github.com/dblackker/paintflow.git
-cd paintflow
+git clone https://github.com/dblackker/crewmodo.git
+cd crewmodo
 npm install
 ```
 
@@ -77,7 +77,7 @@ Visit `http://localhost:4321`
 ### Monorepo Structure
 
 ```
-paintflow/
+crewmodo/
 ├── apps/
 │   ├── api/          # Hono API (Cloudflare Workers)
 │   └── web/          # Astro frontend
@@ -153,29 +153,29 @@ Full API docs: [OpenAPI spec](./docs/api.yaml)
 ### Environments
 
 - **Development:** Local, `ENVIRONMENT=development`
-- **Staging:** `staging.paintflow.app`, auto-deploy from `develop` branch
-- **Production:** `app.paintflow.app`, manual approval from `main` branch
+- **Staging:** `staging.crewmodo.com`, auto-deploy from `develop` branch
+- **Production:** `app.crewmodo.com`, manual approval from `main` branch
 
 ### Deploy to Cloudflare
 
 ```bash
 # Staging
 git push origin develop
-# Auto-deploys to staging.paintflow.app
+# Auto-deploys to staging.crewmodo.com
 
 # Production
 git checkout main
 git merge develop
 git push origin main
-# Requires approval, deploys to app.paintflow.app
+# Requires approval, deploys to app.crewmodo.com
 ```
 
 ### DNS Setup for MailChannels
 
-Add these DNS records to `paintflow.app`:
+Add these DNS records to `crewmodo.com`:
 
 ```
-_mailchannels.paintflow.app TXT "v=mc1 cfid=paintflow.workers.dev"
+_mailchannels.crewmodo.com TXT "v=mc1 cfid=crewmodo.workers.dev"
 ```
 
 This enables magic link emails via MailChannels (free).
@@ -183,8 +183,8 @@ This enables magic link emails via MailChannels (free).
 ### Stripe Webhooks
 
 Configure in Stripe Dashboard:
-- SaaS billing endpoint: `https://api.paintflow.app/v1/billing/webhook`
-- Estimate payment endpoint: `https://api.paintflow.app/v1/payments/webhook`
+- SaaS billing endpoint: `https://api.crewmodo.com/v1/billing/webhook`
+- Estimate payment endpoint: `https://api.crewmodo.com/v1/payments/webhook`
 - Events: `checkout.session.completed`, `customer.subscription.updated`, `invoice.payment_failed`
 
 ## Architectural Decisions
@@ -321,6 +321,6 @@ Proprietary – All rights reserved
 
 ## Support
 
-- Docs: https://paintflow.app/docs
-- Email: support@paintflow.app
+- Docs: https://crewmodo.com/docs
+- Email: support@crewmodo.com
 - Issues: GitHub Issues

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { createDb } from '@paintflow/db';
-import { activities, auditLogs, customerPayments, emailSends, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { activities, auditLogs, customerPayments, emailSends, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@crewmodo/db/schema';
 import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -156,7 +156,7 @@ leadsApp.get('/:id', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
 
   const customer = await db.query.leads.findFirst({
     where: and(eq(leads.id, id), eq(leads.orgId, orgId)),

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Integrations are critical for painting contractors - they reduce double data entry and make PaintFlow sticky. This document outlines our integration strategy, prioritizing high-impact, high-demand integrations that drive retention and expansion revenue.
+Integrations are critical for painting contractors - they reduce double data entry and make Crewmodo sticky. This document outlines our integration strategy, prioritizing high-impact, high-demand integrations that drive retention and expansion revenue.
 
 ---
 
@@ -43,20 +43,20 @@ Integrations are critical for painting contractors - they reduce double data ent
 **Why:** 80% of contractors use QuickBooks. Without this, they won't switch.
 
 **What syncs:**
-- **PaintFlow → QuickBooks:**
+- **Crewmodo → QuickBooks:**
   - Invoices (when sent)
   - Payments (when received)
   - Customers (when created)
   - Items/services (line items)
-  
-- **QuickBooks → PaintFlow:**
+
+- **QuickBooks → Crewmodo:**
   - Payment status updates
   - Customer changes
   - Item list updates
 
 **How it works:**
 1. User connects QuickBooks account (OAuth)
-2. Map PaintFlow items to QuickBooks items
+2. Map Crewmodo items to QuickBooks items
 3. Choose sync direction (one-way or two-way)
 4. Auto-sync every 15 minutes
 5. Manual sync button for immediate updates
@@ -65,11 +65,11 @@ Integrations are critical for painting contractors - they reduce double data ent
 ```
 Settings → Integrations → QuickBooks → Connect
 ↓
-"Which QuickBooks items map to your PaintFlow services?"
+"Which QuickBooks items map to your Crewmodo services?"
 [Dropdown for each service]
 ↓
 "Sync direction?"
-○ PaintFlow → QuickBooks only
+○ Crewmodo → QuickBooks only
 ● Two-way sync
 ↓
 "You're connected! Invoices will sync automatically."
@@ -106,15 +106,15 @@ Settings → Integrations → QuickBooks → Connect
 - Payouts
 
 **Improvements needed:**
-- Show Stripe dashboard in PaintFlow
+- Show Stripe dashboard in Crewmodo
 - Payment plan setup
 - Automated dunning (failed payment retries)
 - Revenue recognition
 
 **User experience:**
 ```
-Invoice sent → Customer clicks "Pay Now" → Stripe checkout → 
-Payment succeeds → PaintFlow marks invoice paid → 
+Invoice sent → Customer clicks "Pay Now" → Stripe checkout →
+Payment succeeds → Crewmodo marks invoice paid →
 QuickBooks syncs automatically
 ```
 
@@ -125,13 +125,13 @@ QuickBooks syncs automatically
 **Why:** Painters live in Google Calendar, need to see jobs there
 
 **What syncs:**
-- **PaintFlow → Google:**
+- **Crewmodo → Google:**
   - Jobs (as events)
   - Estimates (as tentative events)
   - Crew assignments
   - Customer info in description
 
-- **Google → PaintFlow:**
+- **Google → Crewmodo:**
   - Time blocks (show as unavailable)
   - Personal appointments
 
@@ -153,7 +153,7 @@ Settings → Integrations → Google Calendar → Connect
 ☑ Estimates
 ☐ Personal events (for availability)
 ↓
-"Synced! Your PaintFlow jobs now appear in Google Calendar."
+"Synced! Your Crewmodo jobs now appear in Google Calendar."
 ```
 
 ---
@@ -165,12 +165,12 @@ Settings → Integrations → Google Calendar → Connect
 **Why:** 40% of our users have employees, payroll is painful
 
 **What syncs:**
-- **PaintFlow → Gusto:**
+- **Crewmodo → Gusto:**
   - Time tracking data (hours worked)
   - Employee info
   - Job costing data
 
-- **Gusto → PaintFlow:**
+- **Gusto → Crewmodo:**
   - Payroll runs
   - Employee status changes
   - Labor costs for job costing
@@ -183,7 +183,7 @@ Payroll → "Send to Gusto"
 ↓
 Review hours → Approve → Sync to Gusto
 ↓
-Gusto runs payroll → Costs sync back to PaintFlow
+Gusto runs payroll → Costs sync back to Crewmodo
 ↓
 Job profitability updated automatically
 ```
@@ -221,13 +221,13 @@ Job profitability updated automatically
 **Why:** Email is primary communication channel
 
 **What syncs:**
-- **Email → PaintFlow:**
+- **Email → Crewmodo:**
   - Detect customer emails
   - Log to customer timeline
   - Extract attachments (photos, docs)
 
-- **PaintFlow → Email:**
-  - Send estimates/invoices from PaintFlow
+- **Crewmodo → Email:**
+  - Send estimates/invoices from Crewmodo
   - Use user's email address (via SMTP)
   - Track opens/clicks
 
@@ -235,12 +235,12 @@ Job profitability updated automatically
 ```
 Settings → Integrations → Gmail → Connect
 ↓
-"PaintFlow can log emails to customer records. 
+"Crewmodo can log emails to customer records.
 We'll never send emails without your permission."
 ↓
 [Connect button]
 ↓
-"Connected! Emails with customers now appear in PaintFlow."
+"Connected! Emails with customers now appear in Crewmodo."
 ```
 
 **Value prop:**
@@ -326,7 +326,7 @@ Settings → Integrations → Zapier → Connect
 ```
 
 **Value prop:**
-"Connect PaintFlow to any app you use - no coding required."
+"Connect Crewmodo to any app you use - no coding required."
 
 ---
 
@@ -365,11 +365,11 @@ Settings → Integrations → Zapier → Connect
 ### Data Flow
 
 ```
-PaintFlow → Integration Service → External API
+Crewmodo → Integration Service → External API
                 ↓
          Webhook Handler ← External API
                 ↓
-         Sync Engine → PaintFlow DB
+         Sync Engine → Crewmodo DB
 ```
 
 ### Security
@@ -428,7 +428,7 @@ PaintFlow → Integration Service → External API
 - "No more double data entry"
 
 **Comparison table:**
-| Feature | PaintFlow | Jobber | ServiceTitan |
+| Feature | Crewmodo | Jobber | ServiceTitan |
 |---------|-----------|--------|--------------|
 | QuickBooks sync | ✅ Two-way | ✅ One-way | ✅ Two-way |
 | Gusto payroll | ✅ | ❌ | ❌ |

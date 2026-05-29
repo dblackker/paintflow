@@ -150,7 +150,7 @@ export function Signup() {
       <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
         <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
           <div className="flex items-center justify-between gap-3">
-            <Link to="/" className="text-xl font-bold text-blue-700">PaintFlow</Link>
+            <Link to="/" className="text-xl font-bold text-blue-700">Crewmodo</Link>
             <Link to="/login" className="btn-text btn-sm">Sign in</Link>
           </div>
 
@@ -209,7 +209,7 @@ export function Signup() {
               Add payment info and start trial
             </Button>
             <p className="pf-meta text-center">
-              Secure checkout is handled by Stripe. PaintFlow does not store card numbers.
+              Secure checkout is handled by Stripe. Crewmodo does not store card numbers.
             </p>
           </form>
         </section>

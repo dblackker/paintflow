@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { createDb } from '@paintflow/db';
-import { organizations, orgSettings, stripeConnections } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { organizations, orgSettings, stripeConnections } from '@crewmodo/db/schema';
 import { eq } from 'drizzle-orm';
 import Stripe from 'stripe';
 import type { Env, Variables } from '../types';

@@ -29,7 +29,7 @@ services:
     environment:
       CI: "true"
       DATABASE_URL: postgres://neon:npg@db:5432/neondb?sslmode=no-verify
-    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @paintflow/db db:migrate"
+    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter @crewmodo/db db:migrate"
 
   api:
     build:

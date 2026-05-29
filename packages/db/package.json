@@ -1,5 +1,5 @@
 {
-  "name": "@paintflow/db",
+  "name": "@crewmodo/db",
   "private": true,
   "scripts": {
     "db:generate": "drizzle-kit generate",

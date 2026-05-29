@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createDb } from '@paintflow/db';
-import { activities, auditLogs, leads, leadSources, notificationEvents, organizations } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { activities, auditLogs, leads, leadSources, notificationEvents, organizations } from '@crewmodo/db/schema';
 import { and, eq, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { formatPhoneNumber } from '../lib/twilio';

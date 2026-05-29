@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { createDb } from '@paintflow/db';
-import { reviewRequests, jobs, leads, orgSettings } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { reviewRequests, jobs, leads, orgSettings } from '@crewmodo/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';

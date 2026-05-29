@@ -14,8 +14,8 @@ interface Props {
   backLabel?: string;
 }
 
-const { title = 'PaintFlow', backHref = '', backLabel = 'Back' } = Astro.props;
-const shellTitle = title.replace(/\s+-\s+PaintFlow$/i, '');
+const { title = 'Crewmodo', backHref = '', backLabel = 'Back' } = Astro.props;
+const shellTitle = title.replace(/\s+-\s+Crewmodo$/i, '');
 
 const navSections = [
   {
@@ -83,7 +83,7 @@ const navSections = [
   </script>
   <AuthBridge />
   <script is:inline>
-    window.PaintFlowFormat = {
+    window.CrewmodoFormat = {
       money(value, options = {}) {
         const amount = Number(value || 0);
         return new Intl.NumberFormat('en-US', {
@@ -221,7 +221,7 @@ const navSections = [
             </div>
           </div>
           <button type="button" data-logout class="pf-logout-button hidden lg:inline-flex">Log out</button>
-          <a href="/dashboard" class="pf-app-brand-link" aria-label="PaintFlow dashboard">
+          <a href="/dashboard" class="pf-app-brand-link" aria-label="Crewmodo dashboard">
             <span class="pf-brand-mark">P</span>
           </a>
         </div>
@@ -232,7 +232,7 @@ const navSections = [
       <div class="flex items-center justify-between gap-3 border-b px-4 py-4">
         <a href="/dashboard" class="flex items-center gap-3">
           <span class="pf-brand-mark">P</span>
-          <span class="text-lg font-semibold text-gray-950">PaintFlow</span>
+          <span class="text-lg font-semibold text-gray-950">Crewmodo</span>
         </a>
         <button id="mobile-nav-close" type="button" class="btn-icon" aria-label="Close navigation">x</button>
       </div>
@@ -262,7 +262,7 @@ const navSections = [
   <Toast />
   <script>
     const API_URL = import.meta.env.PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8787`;
-    window.PaintFlowBack = window.PaintFlowBack || {
+    window.CrewmodoBack = window.CrewmodoBack || {
       shouldUseHistory(fallbackHref = '') {
         if (!document.referrer || window.history.length <= 1) return false;
         try {
@@ -284,16 +284,16 @@ const navSections = [
         window.history.back();
       },
     };
-    if (!window.PaintFlowBackInstalled) {
-      window.PaintFlowBackInstalled = true;
-      document.addEventListener('click', (event) => window.PaintFlowBack.go(event));
+    if (!window.CrewmodoBackInstalled) {
+      window.CrewmodoBackInstalled = true;
+      document.addEventListener('click', (event) => window.CrewmodoBack.go(event));
     }
     const notificationState = {
       items: [],
-      lastSeenKey: 'paintflow.lastSeenNotificationId',
-      notifiedKey: 'paintflow.notifiedNotificationIds',
-      auditReadKey: 'paintflow.readAuditNotifications',
-      browserKey: 'paintflow.browserNotifications',
+      lastSeenKey: 'crewmodo.lastSeenNotificationId',
+      notifiedKey: 'crewmodo.notifiedNotificationIds',
+      auditReadKey: 'crewmodo.readAuditNotifications',
+      browserKey: 'crewmodo.browserNotifications',
     };
 
     function escapeNotificationHtml(value = '') {
@@ -403,7 +403,7 @@ const navSections = [
           body: JSON.stringify(body),
         }).catch(() => {});
       }
-      window.dispatchEvent(new CustomEvent('paintflow:notifications-updated'));
+      window.dispatchEvent(new CustomEvent('crewmodo:notifications-updated'));
     }
 
     async function loadNotificationsForNav({ notify = false } = {}) {
@@ -597,7 +597,7 @@ const navSections = [
     });
 
     document.getElementById('notifications-enable')?.addEventListener('click', enableBrowserNotifications);
-    window.addEventListener('paintflow:notifications-read', (event) => {
+    window.addEventListener('crewmodo:notifications-read', (event) => {
       if (event.detail?.items) markNotificationsRead(event.detail.items);
       else loadNotificationsForNav();
     });
@@ -624,7 +624,7 @@ const navSections = [
           });
 
           if (!response.ok) throw new Error('Logout failed');
-          window.PaintFlowAuth?.clearSessionFallback?.();
+          window.CrewmodoAuth?.clearSessionFallback?.();
           window.location.href = '/login';
         } catch (error) {
           button.disabled = false;

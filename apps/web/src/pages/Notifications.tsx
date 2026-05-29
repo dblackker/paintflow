@@ -7,7 +7,7 @@ import { Icon } from '@/components/Icon';
 import { UpsellCard } from '@/components/UpsellCard';
 import { apiJson } from '@/lib/api';
 
-const readAuditKey = 'paintflow.readAuditNotifications';
+const readAuditKey = 'crewmodo.readAuditNotifications';
 
 interface NotificationCustomer {
   id?: string;
@@ -162,7 +162,7 @@ export function Notifications() {
       notifications.filter((item) => item.source === 'audit').forEach((item) => auditRead.add(item.id));
       saveReadAuditIds(auditRead);
       setNotifications((current) => current.map((item) => ({ ...item, read: true })));
-      window.dispatchEvent(new CustomEvent('paintflow:notifications-read'));
+      window.dispatchEvent(new CustomEvent('crewmodo:notifications-read'));
       showToast('Notifications marked read');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to mark notifications read', 'error');
@@ -180,18 +180,18 @@ export function Notifications() {
       }
       const permission = await window.Notification.requestPermission();
       if (permission !== 'granted') {
-        localStorage.setItem('paintflow.browserNotifications', 'disabled');
+        localStorage.setItem('crewmodo.browserNotifications', 'disabled');
         showToast('Browser alerts not enabled', 'error');
         return;
       }
       const subscribed = await subscribeToPush();
-      localStorage.setItem('paintflow.browserNotifications', subscribed ? 'enabled' : 'disabled');
+      localStorage.setItem('crewmodo.browserNotifications', subscribed ? 'enabled' : 'disabled');
       showToast(
         subscribed ? 'Browser alerts enabled' : 'Push is not configured yet',
         subscribed ? 'success' : 'error',
       );
     } catch (err) {
-      localStorage.setItem('paintflow.browserNotifications', 'disabled');
+      localStorage.setItem('crewmodo.browserNotifications', 'disabled');
       showToast(err instanceof Error ? err.message : 'Failed to enable browser alerts', 'error');
     } finally {
       setIsEnablingAlerts(false);
@@ -200,7 +200,7 @@ export function Notifications() {
 
   async function markItemRead(item: NotificationItem) {
     setNotifications((current) => current.map((entry) => entry.id === item.id ? { ...entry, read: true } : entry));
-    window.dispatchEvent(new CustomEvent('paintflow:notifications-read', { detail: { items: [item] } }));
+    window.dispatchEvent(new CustomEvent('crewmodo:notifications-read', { detail: { items: [item] } }));
 
     if (item.source === 'audit') {
       const auditRead = readAuditIds();
@@ -265,7 +265,7 @@ export function Notifications() {
       <UpsellCard
         eyebrow="Field alerts"
         title="Get notified before work slips through the cracks"
-        body="Turn on browser alerts for new customer messages, accepted estimates, and time-sensitive production updates while PaintFlow is open."
+        body="Turn on browser alerts for new customer messages, accepted estimates, and time-sensitive production updates while Crewmodo is open."
         ctaText="Enable alerts"
         icon="bell"
         onCta={enableBrowserNotifications}

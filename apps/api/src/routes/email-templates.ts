@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { createDb } from '@paintflow/db';
-import { emailTemplates } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { emailTemplates } from '@crewmodo/db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -35,7 +35,7 @@ function systemTemplates() {
     category: template.category,
     channel: template.channel,
     name: template.name,
-    description: 'PaintFlow default template. Create an org override to customize copy.',
+    description: 'Crewmodo default template. Create an org override to customize copy.',
     subject: template.subject,
     preheader: template.preheader,
     html: [

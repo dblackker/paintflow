@@ -1,5 +1,5 @@
-import { createDb } from '@paintflow/db';
-import { notificationEvents, pushSubscriptions } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { notificationEvents, pushSubscriptions } from '@crewmodo/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Env } from '../types';
 
@@ -46,7 +46,7 @@ function pemToArrayBuffer(pem: string) {
 async function signVapidJwt(env: Env, endpoint: string) {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return null;
   const aud = new URL(endpoint).origin;
-  const sub = env.VAPID_SUBJECT || 'mailto:admin@paintflow.app';
+  const sub = env.VAPID_SUBJECT || 'mailto:admin@crewmodo.com';
   const header = base64Url(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
   const payload = base64Url(JSON.stringify({
     aud,

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { createDb } from '@paintflow/db';
-import { estimatePhotos, estimates } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { estimatePhotos, estimates } from '@crewmodo/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -77,7 +77,7 @@ photosApp.post('/:estimateId', async (c) => {
     const [photo] = await db.insert(estimatePhotos).values({
       estimateId,
       roomId: roomId || undefined,
-      url: `https://cdn.paintflow.app/${key}`,
+      url: `https://cdn.crewmodo.com/${key}`,
       annotations: caption ? [{ text: caption }] : [],
     }).returning();
 

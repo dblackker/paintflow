@@ -23,7 +23,7 @@ const { href, label, class: className = '' } = Astro.props;
 </style>
 
 <script>
-  window.PaintFlowBack = window.PaintFlowBack || {
+  window.CrewmodoBack = window.CrewmodoBack || {
     shouldUseHistory(fallbackHref = '') {
       if (!document.referrer || window.history.length <= 1) return false;
       try {
@@ -45,8 +45,8 @@ const { href, label, class: className = '' } = Astro.props;
       window.history.back();
     },
   };
-  if (!window.PaintFlowBackInstalled) {
-    window.PaintFlowBackInstalled = true;
-    document.addEventListener('click', (event) => window.PaintFlowBack.go(event));
+  if (!window.CrewmodoBackInstalled) {
+    window.CrewmodoBackInstalled = true;
+    document.addEventListener('click', (event) => window.CrewmodoBack.go(event));
   }
 </script>

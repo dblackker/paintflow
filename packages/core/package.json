@@ -1,5 +1,5 @@
 {
-  "name": "@paintflow/core",
+  "name": "@crewmodo/core",
   "private": true,
   "exports": {
     ".": "./src/index.ts"

@@ -106,7 +106,7 @@ function transitionHelper(targetStage: string) {
   if (targetStage === 'estimate_sent') return 'This stage is normally set automatically when an estimate is sent.';
   if (['scheduled', 'in_production', 'punch_list', 'completed_review'].includes(targetStage)) return 'Production stages are normally driven by the job status once a job exists.';
   if (['won_deposit_pending', 'ready_to_schedule'].includes(targetStage)) return 'This is normally set after a customer signs an estimate, but you can move it manually for offline commitments.';
-  return 'Use this when the customer interaction happened outside PaintFlow.';
+  return 'Use this when the customer interaction happened outside Crewmodo.';
 }
 
 function stageAgeTone(daysInStage: number) {

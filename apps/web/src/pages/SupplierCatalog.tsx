@@ -421,7 +421,7 @@ function SyncRunHistory({ runs }: { runs: NonNullable<CatalogStatus['recentRuns'
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="pf-section-title">Catalog run history</h2>
-          <p className="pf-meta">PaintFlow-level sync results for the supplier catalog.</p>
+          <p className="pf-meta">Crewmodo-level sync results for the supplier catalog.</p>
         </div>
       </div>
       <div className="mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">

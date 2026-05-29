@@ -1,6 +1,6 @@
 import type { Context, Next } from 'hono';
-import { createDb } from '@paintflow/db';
-import { userRoles, roles } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { userRoles, roles } from '@crewmodo/db/schema';
 import { eq, and } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 
@@ -52,7 +52,7 @@ export async function canLogTimeFor(c: Context<{ Bindings: Env; Variables: Varia
   }
   
   // Check if team member is linked to user
-  const { teamMembers } = await import('@paintflow/db/schema');
+  const { teamMembers } = await import('@crewmodo/db/schema');
   const member = await db.query.teamMembers.findFirst({
     where: and(eq(teamMembers.id, teamMemberId), eq(teamMembers.orgId, orgId)),
   });

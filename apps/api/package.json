@@ -1,13 +1,13 @@
 {
-  "name": "@paintflow/api",
+  "name": "@crewmodo/api",
   "private": true,
   "scripts": {
     "build": "tsc --noEmit",
     "dev": "wrangler dev"
   },
   "dependencies": {
-    "@paintflow/core": "workspace:*",
-    "@paintflow/db": "workspace:*",
+    "@crewmodo/core": "workspace:*",
+    "@crewmodo/db": "workspace:*",
     "drizzle-orm": "^0.31.2",
     "hono": "^4.4.6",
     "postal-mime": "^2.7.4",

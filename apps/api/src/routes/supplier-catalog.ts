@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
-import { createDb } from '@paintflow/db';
-import { supplierCatalogColors, supplierCatalogProductColors, supplierCatalogProducts, supplierCatalogSyncRuns } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { supplierCatalogColors, supplierCatalogProductColors, supplierCatalogProducts, supplierCatalogSyncRuns } from '@crewmodo/db/schema';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 

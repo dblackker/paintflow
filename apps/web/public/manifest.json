@@ -1,6 +1,6 @@
 {
-  "name": "PaintFlow",
-  "short_name": "PaintFlow",
+  "name": "Crewmodo",
+  "short_name": "Crewmodo",
   "description": "CRM for painting contractors",
   "start_url": "/dashboard",
   "display": "standalone",

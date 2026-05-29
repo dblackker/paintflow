@@ -1,6 +1,6 @@
 # Local Development Stack
 
-PaintFlow has a Cloudflare Worker API that uses the Neon serverless Postgres driver. For local development, use Neon Local rather than plain Postgres so the app exercises the same driver path that production uses.
+Crewmodo has a Cloudflare Worker API that uses the Neon serverless Postgres driver. For local development, use Neon Local rather than plain Postgres so the app exercises the same driver path that production uses.
 
 ## Prerequisites
 

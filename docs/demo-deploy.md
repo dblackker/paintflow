@@ -1,13 +1,13 @@
 # Demo Deploy
 
-PaintFlow has a Cloudflare demo environment for shareable previews:
+Crewmodo has a Cloudflare demo environment for shareable previews:
 
-- Web: `https://paintflow-demo.pages.dev`
-- API: `https://paintflow-api-demo.danielablack.workers.dev`
+- Web: `https://crewmodo-demo.pages.dev`
+- API: `https://crewmodo-api-demo.danielablack.workers.dev`
 - Worker environment: `demo`
-- Pages project: `paintflow-demo`
-- Demo KV namespace: `paintflow-demo-kv`
-- Demo R2 bucket: `paintflow-uploads-preview`
+- Pages project: `crewmodo-demo`
+- Demo KV namespace: `crewmodo-demo-kv`
+- Demo R2 bucket: `crewmodo-uploads-preview`
 
 ## Manual Deploy
 
@@ -16,8 +16,8 @@ From the repo root:
 ```sh
 corepack pnpm -r build
 corepack pnpm exec wrangler deploy --config apps/api/wrangler.toml --env demo
-PUBLIC_API_URL="https://paintflow-api-demo.danielablack.workers.dev" corepack pnpm --filter @paintflow/web build
-corepack pnpm exec wrangler pages deploy apps/web/dist --project-name paintflow-demo --branch main
+PUBLIC_API_URL="https://crewmodo-api-demo.danielablack.workers.dev" corepack pnpm --filter @crewmodo/web build
+corepack pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-demo --branch main
 ```
 
 PowerShell:
@@ -25,9 +25,9 @@ PowerShell:
 ```powershell
 corepack pnpm -r build
 corepack pnpm exec wrangler deploy --config apps/api/wrangler.toml --env demo
-$env:PUBLIC_API_URL = "https://paintflow-api-demo.danielablack.workers.dev"
-corepack pnpm --filter @paintflow/web build
-corepack pnpm exec wrangler pages deploy apps/web/dist --project-name paintflow-demo --branch main
+$env:PUBLIC_API_URL = "https://crewmodo-api-demo.danielablack.workers.dev"
+corepack pnpm --filter @crewmodo/web build
+corepack pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-demo --branch main
 ```
 
 ## GitHub Auto Deploy

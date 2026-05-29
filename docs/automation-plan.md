@@ -1,6 +1,6 @@
 # Pipeline Automation Plan
 
-PaintFlow now derives a customer pipeline from leads, estimates, jobs, and open activities. The next production step is to make stage changes and follow-up creation deliberate, auditable, and eventually automated.
+Crewmodo now derives a customer pipeline from leads, estimates, jobs, and open activities. The next production step is to make stage changes and follow-up creation deliberate, auditable, and eventually automated.
 
 ## Current Lifecycle
 

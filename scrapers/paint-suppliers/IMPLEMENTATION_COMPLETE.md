@@ -1,7 +1,7 @@
 # Paint Supplier Scraper - Implementation Complete ✅
 
 ## Repository
-`dblackker/paintflow/scrapers/paint-suppliers/`
+`dblackker/crewmodo/scrapers/paint-suppliers/`
 
 ## Commits
 1. `70bc0d0` - Initial structure and Sherwin-Williams scraper

@@ -2,7 +2,7 @@
 ## Production Rates System
 
 ### Overview
-PaintFlow now includes a production rates engine comparable to PaintScout, enabling sq ft/hour based estimates with room-by-room breakdowns.
+Crewmodo now includes a production rates engine comparable to PaintScout, enabling sq ft/hour based estimates with room-by-room breakdowns.
 
 ### Database Schema
 - `production_rates` - Rate library (category, surface_type, rate_per_hour, hourly_rate)

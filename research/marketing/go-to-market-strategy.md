@@ -1,8 +1,8 @@
-# PaintFlow Marketing Plan & Go-To-Market Strategy
+# Crewmodo Marketing Plan & Go-To-Market Strategy
 
 ## Executive Summary
 
-PaintFlow is a React-based CRM built specifically for painting contractors, targeting the gap between expensive enterprise solutions (ServiceTitan $245-500/mo) and generic tools (Jobber $29-599/mo). Our competitive advantage: **painting-specific features** at affordable pricing, built by contractors for contractors.
+Crewmodo is a React-based CRM built specifically for painting contractors, targeting the gap between expensive enterprise solutions (ServiceTitan $245-500/mo) and generic tools (Jobber $29-599/mo). Our competitive advantage: **painting-specific features** at affordable pricing, built by contractors for contractors.
 
 ---
 
@@ -98,7 +98,7 @@ PaintFlow is a React-based CRM built specifically for painting contractors, targ
 
 ## 3. Unique Value Proposition
 
-### PaintFlow's Positioning:
+### Crewmodo's Positioning:
 
 **"The only CRM built specifically for painting contractors who want to scale without the enterprise price tag."**
 
@@ -181,7 +181,7 @@ PaintFlow is a React-based CRM built specifically for painting contractors, targ
 
 **Demo script:**
 1. "Show me how you create an estimate now" (let them complain)
-2. Show PaintFlow estimate creation (2 minutes vs their 20)
+2. Show Crewmodo estimate creation (2 minutes vs their 20)
 3. Show mobile photo upload workflow
 4. Show automated follow-ups
 5. "What would this save you per week?"
@@ -212,7 +212,7 @@ PaintFlow is a React-based CRM built specifically for painting contractors, targ
 
 #### Content Marketing
 
-**YouTube Channel: "PaintFlow Academy"**
+**YouTube Channel: "Crewmodo Academy"**
 
 **Video series (2x/week):**
 1. **"How I..." tutorials**
@@ -222,7 +222,7 @@ PaintFlow is a React-based CRM built specifically for painting contractors, targ
 
 2. **Contractor interviews**
    - "How Mike scaled from $200K to $600K"
-   - Real painters using PaintFlow
+   - Real painters using Crewmodo
 
 3. **Painting business tips**
    - "Pricing jobs per square foot"
@@ -237,7 +237,7 @@ PaintFlow is a React-based CRM built specifically for painting contractors, targ
 
 #### Community Building
 
-**Facebook Group: "PaintFlow Painters"**
+**Facebook Group: "Crewmodo Painters"**
 - Private group for customers
 - Weekly live Q&A (you host)
 - Members help each other
@@ -252,7 +252,7 @@ PaintFlow is a React-based CRM built specifically for painting contractors, targ
 
 **1. Paint stores**
 - Sherwin-Williams, Benjamin Moore reps
-- Offer: "Free PaintFlow for 3 months if you switch to our store"
+- Offer: "Free Crewmodo for 3 months if you switch to our store"
 - Stores promote to their contractors
 
 **2. Painting coaches/consultants**
@@ -331,7 +331,7 @@ PaintFlow is a React-based CRM built specifically for painting contractors, targ
 
 ---
 
-## 8. AI Support Persona: "Parker, PaintFlow Assistant"
+## 8. AI Support Persona: "Parker, Crewmodo Assistant"
 
 ### Persona Overview
 
@@ -444,7 +444,7 @@ Parker action: Send email: "Need help getting started?
 
 #### **Weekly Digest Email to You:**
 
-**Subject:** PaintFlow Support Digest - Week of May 25
+**Subject:** Crewmodo Support Digest - Week of May 25
 
 **🐛 Bugs (3 new, 2 fixed)**
 1. **P0:** Estimates not saving for >$10K (FIXED)
@@ -483,7 +483,7 @@ Top 3 by score:
 - **Loom** for video recording
 
 #### **Parker's Knowledge Base:**
-1. All PaintFlow documentation
+1. All Crewmodo documentation
 2. Common painting workflows
 3. Competitor feature comparisons
 4. Pricing and plan details

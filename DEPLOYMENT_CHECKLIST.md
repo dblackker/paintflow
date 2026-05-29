@@ -1,4 +1,4 @@
-# PaintFlow Deployment Checklist
+# Crewmodo Deployment Checklist
 
 ## Pre-Deployment
 
@@ -8,11 +8,11 @@
 - [ ] Set Cloudflare environment variables:
   ```
   DATABASE_URL=postgresql://...
-  APP_URL=https://api.paintflow.app
-  PUBLIC_URL=https://app.paintflow.app
-  PUBLIC_API_URL=https://api.paintflow.app
-  CORS_ORIGINS=https://app.paintflow.app,https://paintflow.app
-  COOKIE_DOMAIN=.paintflow.app
+  APP_URL=https://api.crewmodo.com
+  PUBLIC_URL=https://app.crewmodo.com
+  PUBLIC_API_URL=https://api.crewmodo.com
+  CORS_ORIGINS=https://app.crewmodo.com,https://crewmodo.com
+  COOKIE_DOMAIN=.crewmodo.com
   ENVIRONMENT=production
   SESSION_SECRET=...
   CRON_SECRET=...
@@ -28,16 +28,16 @@
   QB_CLIENT_SECRET=...
   ```
 - [ ] Configure Cloudflare Workers:
-  - [ ] Create KV namespace `PAINTFLOW_SESSIONS`
+  - [ ] Create KV namespace `CREWMODO_SESSIONS`
   - [ ] Bind KV to api worker
   - [ ] Set compatibility_date = "2024-01-01"
   - [ ] Confirm scheduled trigger is active for daily drip and review automations
 
 ### 2. DNS Configuration
-- [ ] Add CNAME: `app.paintflow.app` → `paintflow.workers.dev`
+- [ ] Add CNAME: `app.crewmodo.com` → `crewmodo.workers.dev`
 - [ ] Add MailChannels DNS:
   ```
-  _mailchannels.paintflow.app TXT "v=mc1 cfid=paintflow.workers.dev"
+  _mailchannels.crewmodo.com TXT "v=mc1 cfid=crewmodo.workers.dev"
   ```
 - [ ] Verify DNS propagation
 
@@ -48,19 +48,19 @@
   - Pro: $149/month
   - Enterprise: $399/month
 - [ ] Configure webhook endpoint:
-  - URL: `https://api.paintflow.app/v1/billing/webhook`
+  - URL: `https://api.crewmodo.com/v1/billing/webhook`
   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 - [ ] Copy webhook secret to env
 
 ### 4. QuickBooks (Optional for launch)
 - [ ] Register app at developer.intuit.com
-- [ ] Set redirect URI: `https://api.paintflow.app/v1/quickbooks/callback`
+- [ ] Set redirect URI: `https://api.crewmodo.com/v1/quickbooks/callback`
 - [ ] Get production Client ID/Secret
 - [ ] Add to env vars
 
 ### 5. Google Calendar Setup
 - [ ] Create OAuth client in Google Cloud Console
-- [ ] Set redirect URI: `https://api.paintflow.app/v1/calendar/callback`
+- [ ] Set redirect URI: `https://api.crewmodo.com/v1/calendar/callback`
 - [ ] Add production Client ID/Secret to env vars
 
 ## Deployment
@@ -75,12 +75,12 @@ wrangler deploy --env production
 ```bash
 cd apps/web
 pnpm build
-wrangler pages deploy dist --project-name=paintflow
+wrangler pages deploy dist --project-name=crewmodo
 ```
 
 ### 8. Verify Deployment
-- [ ] https://app.paintflow.app loads
-- [ ] https://api.paintflow.app/health returns `status: ok`
+- [ ] https://app.crewmodo.com loads
+- [ ] https://api.crewmodo.com/health returns `status: ok`
 - [ ] Landing page displays
 - [ ] Sign up flow works (magic link email sent)
 - [ ] Dashboard loads
@@ -138,7 +138,7 @@ Track these in first week:
 
 ## Support Readiness
 
-- [ ] Set up support@paintflow.app email
+- [ ] Set up support@crewmodo.com email
 - [ ] Create canned responses for common questions
 - [ ] Monitor #support channel
 - [ ] Prepare refund process
@@ -149,10 +149,10 @@ Track these in first week:
 
 **Full deploy:**
 ```bash
-cd ~/workspace/paintflow
+cd ~/workspace/crewmodo
 pnpm build
-pnpm --filter @paintflow/api deploy
-pnpm --filter @paintflow/web deploy
+pnpm --filter @crewmodo/api deploy
+pnpm --filter @crewmodo/web deploy
 ```
 
 **Database migration:**

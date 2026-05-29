@@ -177,8 +177,8 @@ const reviewLabels: Record<string, string> = {
 };
 
 const defaultRoles = new Set(['crew_lead', 'painter', 'prep']);
-const viewStorageKey = 'paintflow.time.viewMode';
-const mapStorageKey = 'paintflow.time.mapCollapsed';
+const viewStorageKey = 'crewmodo.time.viewMode';
+const mapStorageKey = 'crewmodo.time.mapCollapsed';
 
 function idempotencyKey() {
   return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;

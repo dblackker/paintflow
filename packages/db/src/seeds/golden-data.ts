@@ -5,7 +5,7 @@ export const goldenSeed = {
   },
   owner: {
     name: 'Daniel Demo',
-    email: 'demo@goldenbrush.paintflow.local',
+    email: 'demo@goldenbrush.crewmodo.local',
   },
   settings: {
     companyName: 'Golden Brush Painting',
@@ -96,7 +96,7 @@ export const goldenSeed = {
     },
   ],
   messageTemplates: [
-    { type: 'estimate_followup_1', channel: 'sms', body: 'Hi {{customerName}}, just checking in on your PaintFlow estimate. Any questions before we hold the schedule?', enabled: true, delayDays: 2 },
+    { type: 'estimate_followup_1', channel: 'sms', body: 'Hi {{customerName}}, just checking in on your Crewmodo estimate. Any questions before we hold the schedule?', enabled: true, delayDays: 2 },
     { type: 'review_request', channel: 'email', subject: 'How did your painting project go?', body: 'Thanks for choosing Golden Brush Painting. Would you leave us a quick review?', enabled: true, delayDays: 1 },
   ],
 } as const;

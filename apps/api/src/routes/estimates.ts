@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createDb } from '@paintflow/db';
-import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@crewmodo/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -410,7 +410,7 @@ estimatesApp.get('/', async (c) => {
   const orgId = c.get('orgId');
   const limit = Math.min(parseInt(c.req.query('limit') || '50'), 100);
   const offset = parseInt(c.req.query('offset') || '0');
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
   const db = createDb(c.env.DATABASE_URL);
   
   const rows = await db.query.estimates.findMany({
@@ -555,8 +555,8 @@ estimatesApp.post('/', async (c) => {
     data: {
       ...estimate,
       recommendedTotal: estimateContractValue(estimate),
-      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
-      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
+      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
+      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
     },
   }, 201);
 });
@@ -574,7 +574,7 @@ estimatesApp.get('/:id', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
   const payments = await optionalPaymentRows(db.select().from(customerPayments)
     .where(and(eq(customerPayments.orgId, orgId), eq(customerPayments.estimateId, estimate.id)))
     .orderBy(desc(customerPayments.receivedAt)));
@@ -602,7 +602,7 @@ estimatesApp.post('/:id/cancel', async (c) => {
     return c.json({ error: 'Signed estimates cannot be canceled here. Use a change order, new estimate agreement, or close the job instead.' }, 409);
   }
   if (estimate.status === 'canceled') {
-    return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id), customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id) } });
+    return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id), customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id) } });
   }
 
   const [updated] = await db.update(estimates)
@@ -623,7 +623,7 @@ estimatesApp.post('/:id/cancel', async (c) => {
     },
   });
 
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
   return c.json({ data: { ...updated, payments: [], publicUrl: publicEstimateUrl(baseUrl, updated.id), customerPreviewUrl: publicEstimateUrl(baseUrl, updated.id) } });
 });
 
@@ -645,7 +645,7 @@ estimatesApp.post('/:id/void', async (c) => {
     return c.json({ error: 'Only signed agreements can be voided. Use cancel for unsigned estimates.' }, 409);
   }
   if (estimate.status === 'voided') {
-    const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+    const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
     return c.json({ data: { ...estimate, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
   }
   if (estimate.status === 'superseded') {
@@ -670,7 +670,7 @@ estimatesApp.post('/:id/void', async (c) => {
     },
   });
 
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
   return c.json({ data: { ...updated, publicUrl: publicEstimateUrl(baseUrl, updated.id), customerPreviewUrl: publicEstimateUrl(baseUrl, updated.id) } });
 });
 
@@ -742,7 +742,7 @@ estimatesApp.post('/:id/revise', async (c) => {
     },
   ]);
 
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
   return c.json({
     data: {
       ...revision,
@@ -834,8 +834,8 @@ estimatesApp.patch('/:id', async (c) => {
     data: {
       ...estimate,
       recommendedTotal: estimateContractValue(estimate),
-      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
-      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.paintflow.app', estimate.id),
+      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
+      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
     },
   });
 });
@@ -979,7 +979,7 @@ estimatesApp.post('/:id/countersign', async (c) => {
 
   const existingSignature = await estimateContractorSignature(db, estimate);
   if (existingSignature) {
-    const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+    const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
     return c.json({
       data: {
         contractorSignature: existingSignature,
@@ -1004,7 +1004,7 @@ estimatesApp.post('/:id/countersign', async (c) => {
     },
   });
 
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
   return c.json({
     data: {
       contractorSignature,
@@ -1046,7 +1046,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
   const estimator = userId
     ? await db.query.users.findFirst({ where: eq(users.id, userId) })
     : null;
-  const baseUrl = c.env.PUBLIC_URL || 'https://app.paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://app.crewmodo.com';
   const previewUrl = publicEstimateUrl(baseUrl, estimate.id);
   const total = estimateContractValue(estimate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const projectType = estimateProjectType(estimate);
@@ -1069,7 +1069,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
     scopeSummary: proposalScopeSummary(estimate),
     isUpdate: isUpdateEmail,
   }, templateOverride);
-  const fromEmail = c.env.EMAIL_FROM || 'estimates@paintflow.app';
+  const fromEmail = c.env.EMAIL_FROM || 'estimates@crewmodo.com';
   const replyTo = settings?.email || estimator?.email || undefined;
 
   const providerResult = await sendEmail(c.env, lead.email, renderedEmail.subject, renderedEmail.html, undefined, {
@@ -1155,7 +1155,7 @@ estimatesApp.post('/:id/portal-link', async (c) => {
     expiresAt,
   });
   
-  const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://crewmodo.com';
   const link = `${baseUrl}/portal/${token}`;
 
   await db.insert(auditLogs).values({

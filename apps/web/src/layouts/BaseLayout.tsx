@@ -79,7 +79,7 @@ interface NotificationPreview {
 }
 
 function routeTitle(pathname: string) {
-  if (pathname === '/') return 'PaintFlow';
+  if (pathname === '/') return 'Crewmodo';
   if (pathname.startsWith('/dashboard')) return 'Dashboard';
   if (pathname.startsWith('/leads/')) return 'Customer';
   if (pathname.startsWith('/leads')) return 'Leads';
@@ -112,7 +112,7 @@ function routeTitle(pathname: string) {
   if (pathname.startsWith('/billing')) return 'Billing';
   if (pathname.startsWith('/payments/stripe')) return 'Stripe';
   if (pathname.startsWith('/dev/design-system')) return 'Design System';
-  return 'PaintFlow';
+  return 'Crewmodo';
 }
 
 function notificationTime(value?: string) {
@@ -224,8 +224,8 @@ export function BaseLayout() {
       setNotifications((current) => current.map((item) => ({ ...item, read: true })));
     }
 
-    window.addEventListener('paintflow:notifications-read', handleNotificationsRead as EventListener);
-    return () => window.removeEventListener('paintflow:notifications-read', handleNotificationsRead as EventListener);
+    window.addEventListener('crewmodo:notifications-read', handleNotificationsRead as EventListener);
+    return () => window.removeEventListener('crewmodo:notifications-read', handleNotificationsRead as EventListener);
   }, []);
 
   async function logout() {
@@ -358,7 +358,7 @@ export function BaseLayout() {
                   </div>
                 )}
               </div>
-              <Link to="/dashboard" className="pf-app-brand-link" aria-label="PaintFlow dashboard">
+              <Link to="/dashboard" className="pf-app-brand-link" aria-label="Crewmodo dashboard">
                 <span className="pf-brand-mark">P</span>
               </Link>
             </div>
@@ -373,7 +373,7 @@ export function BaseLayout() {
             <div className="flex items-center justify-between gap-3 border-b px-4 py-4">
               <Link to="/dashboard" className="flex items-center gap-3" onClick={() => setIsMobileMenuOpen(false)}>
                 <span className="pf-brand-mark">P</span>
-                <span className="pf-section-title">PaintFlow</span>
+                <span className="pf-section-title">Crewmodo</span>
               </Link>
               <button
                 type="button"

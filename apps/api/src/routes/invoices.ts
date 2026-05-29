@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { createDb } from '@paintflow/db';
+import { createDb } from '@crewmodo/db';
 import {
   aiUsageEvents,
   jobCosts,
@@ -15,7 +15,7 @@ import {
   supplierInvoiceImports,
   supplierInvoiceLearningStats,
   supplierInvoiceSenderRules,
-} from '@paintflow/db/schema';
+} from '@crewmodo/db/schema';
 import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -1118,7 +1118,7 @@ function inboundOrgSlug(value: unknown) {
 }
 
 function inboundEmailDomain(env: Env) {
-  return (env.INBOUND_INVOICE_EMAIL_DOMAIN || 'receipts.paintflow.app').replace(/^@+/, '').trim();
+  return (env.INBOUND_INVOICE_EMAIL_DOMAIN || 'receipts.crewmodo.com').replace(/^@+/, '').trim();
 }
 
 function fileFromBase64(attachment: z.infer<typeof inboundEmailSchema>['attachments'][number]) {
@@ -1134,7 +1134,7 @@ function fileFromBase64(attachment: z.infer<typeof inboundEmailSchema>['attachme
 
 async function requireInboundSecret(c: any) {
   const expected = c.env.INBOUND_INVOICE_EMAIL_SECRET;
-  const provided = c.req.header('x-paintflow-inbound-secret')
+  const provided = c.req.header('x-crewmodo-inbound-secret')
     || c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
   return Boolean(expected && provided && provided === expected);
 }
@@ -1152,7 +1152,7 @@ invoicesApp.post('/imports/email-forward', async (c) => {
   const payload = parsedBody.data;
   const slug = inboundOrgSlug(payload.to);
   if (!slug) {
-    return c.json({ error: 'Forward to receipts+workspace-slug@your-domain so PaintFlow can route the invoice.' }, 400);
+    return c.json({ error: 'Forward to receipts+workspace-slug@your-domain so Crewmodo can route the invoice.' }, 400);
   }
 
   const db = createDb(c.env.DATABASE_URL);

@@ -233,7 +233,7 @@ export function Onboarding() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="pf-kicker">Setup</p>
-                  <h1 className="pf-section-title mt-1">Get PaintFlow ready for your painting business</h1>
+                  <h1 className="pf-section-title mt-1">Get Crewmodo ready for your painting business</h1>
                 </div>
                 <span className="pf-meta">Step {currentStep + 1} of {steps.length}</span>
               </div>
@@ -305,7 +305,7 @@ export function Onboarding() {
 
                 {step.key === 'ready' && (
                   <div className="rounded-lg border bg-green-50 p-5 text-green-950">
-                    <p className="pf-section-title text-green-950">You are ready to start using PaintFlow</p>
+                    <p className="pf-section-title text-green-950">You are ready to start using Crewmodo</p>
                     <p className="mt-2 text-sm text-green-900">
                       Next, add paint products and production rates so estimates and job costing stay accurate.
                     </p>
@@ -393,7 +393,7 @@ export function Onboarding() {
 }
 
 function TrialSummary({ subscription, compact = false }: { subscription: SubscriptionStatus; compact?: boolean }) {
-  const planName = subscription?.plan?.features?.displayName || subscription?.plan?.name || 'PaintFlow';
+  const planName = subscription?.plan?.features?.displayName || subscription?.plan?.name || 'Crewmodo';
   const trialEnd = subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const status = subscription?.status || 'trial';
   return (

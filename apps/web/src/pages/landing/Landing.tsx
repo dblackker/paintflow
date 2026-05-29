@@ -6,10 +6,10 @@ export function Landing() {
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-            PaintFlow
+            Crewmodo
           </h1>
           <p className="mt-6 text-lg leading-8 text-gray-600">
-            The complete CRM for painting contractors. Manage leads, estimates, jobs, and billing in one place.
+            The complete CRM for trade contractors. Manage leads, estimates, jobs, crews, and billing in one place.
           </p>
           <div className="mt-10 flex items-center justify-center gap-x-6">
             <Link

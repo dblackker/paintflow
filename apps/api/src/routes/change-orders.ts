@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { createDb } from '@paintflow/db';
-import { auditLogs, changeOrders, emailSends, emailTemplates, jobs, leads, orgBranding, orgSettings, portalTokens, users } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { auditLogs, changeOrders, emailSends, emailTemplates, jobs, leads, orgBranding, orgSettings, portalTokens, users } from '@crewmodo/db/schema';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { eq, and, desc } from 'drizzle-orm';
@@ -151,7 +151,7 @@ async function renderChangeOrderEmailPreview(
     db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
   ]);
   const estimator = userId ? await db.query.users.findFirst({ where: eq(users.id, userId) }) : null;
-  const baseUrl = env.PUBLIC_URL || 'https://paintflow.app';
+  const baseUrl = env.PUBLIC_URL || 'https://crewmodo.com';
   const portalUrl = `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`;
   const templateKey = 'change_order.approval.sent';
   const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
@@ -229,7 +229,7 @@ changeOrdersRoute.post('/', async (c) => {
   }).returning();
 
   const portal = await createPortalLink(db, orgId, order.id);
-  const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://crewmodo.com';
   return c.json({ data: { ...order, approvalLink: portal ? `${baseUrl}/portal/${portal.token}?changeOrderId=${order.id}` : null } });
 });
 
@@ -263,7 +263,7 @@ changeOrdersRoute.post('/:id/portal-link', async (c) => {
     },
   });
 
-  const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://crewmodo.com';
   return c.json({ data: { link: `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`, token: portal.token, expiresAt: portal.expiresAt, changeOrder: updated } });
 });
 
@@ -324,7 +324,7 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     templateName: preview.renderedEmail.templateName,
     channel: preview.renderedEmail.channel,
     toEmail: preview.lead.email,
-    fromEmail: c.env.EMAIL_FROM || 'estimates@paintflow.app',
+    fromEmail: c.env.EMAIL_FROM || 'estimates@crewmodo.com',
     replyTo: replyTo || null,
     subject: preview.renderedEmail.subject,
     previewText: preview.renderedEmail.preheader,

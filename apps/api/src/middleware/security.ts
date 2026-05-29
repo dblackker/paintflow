@@ -18,9 +18,9 @@ export const securityHeaders = async (c: Context, next: Next) => {
 export const corsHeaders = async (c: Context, next: Next) => {
   const origin = c.req.header('Origin');
   const allowedOrigins = [
-    'https://app.paintflow.app',
-    'https://paintflow.app',
-    'https://paintflow-demo.pages.dev',
+    'https://app.crewmodo.com',
+    'https://crewmodo.com',
+    'https://crewmodo-demo.pages.dev',
     'http://localhost:4321',
     'http://127.0.0.1:4321',
     'http://localhost:5173',

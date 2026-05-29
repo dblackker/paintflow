@@ -2,7 +2,7 @@ import { Context, Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { createSession } from '../auth';
 import type { Env } from '../types';
-import { createDb } from '@paintflow/db';
+import { createDb } from '@crewmodo/db';
 import {
   users,
   organizations,
@@ -17,7 +17,7 @@ import {
   subscriptions,
   userRoles,
   teamMembers,
-} from '@paintflow/db/schema';
+} from '@crewmodo/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { sendEmail } from '../lib/email';
 import Stripe from 'stripe';
@@ -90,7 +90,7 @@ const DEFAULT_MESSAGE_TEMPLATES = [
   {
     type: 'estimate_followup_1',
     channel: 'email',
-    subject: 'Following up on your PaintFlow estimate',
+    subject: 'Following up on your Crewmodo estimate',
     body: 'Hi {{customer_name}}, checking in on the painting estimate we sent. Reply here with any questions or approve it from your customer portal.',
     delayDays: 2,
   },
@@ -111,7 +111,7 @@ const DEFAULT_ROLES = [
 ];
 
 const MAGIC_LINK_WINDOW_SECONDS = 3600;
-const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
+const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.crewmodo.local';
 const GOLDEN_DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
 const GOLDEN_DEMO_CREW_DOMAIN = '@goldenbrush.example';
 const GOLDEN_DEMO_LOGIN_EMAILS = new Set([GOLDEN_DEMO_EMAIL, GOLDEN_DEMO_CREW_EMAIL]);
@@ -314,7 +314,7 @@ function sessionRedirectUrl(location: string, sessionToken: string, env: Env) {
   const redirectUrl = new URL(location);
   if (env.ENVIRONMENT === 'demo' || env.ENVIRONMENT === 'development') {
     const params = new URLSearchParams(redirectUrl.hash.replace(/^#/, ''));
-    params.set('paintflow_session', sessionToken);
+    params.set('crewmodo_session', sessionToken);
     redirectUrl.hash = params.toString();
   }
   return redirectUrl.toString();
@@ -493,7 +493,7 @@ async function seedWorkspaceDefaults(
 
 function magicLinkEmailHtml(magicLink: string) {
   return `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-<h1 style="color: #1a1a1a;">PaintFlow</h1>
+<h1 style="color: #1a1a1a;">Crewmodo</h1>
 <p>Click below to sign in:</p>
 <p><a href="${magicLink}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Sign in</a></p>
 <p style="color: #999; font-size: 13px;">Link expires in 15 minutes.</p>
@@ -502,7 +502,7 @@ function magicLinkEmailHtml(magicLink: string) {
 
 function welcomeEmailHtml(publicUrl: string) {
   return `<!DOCTYPE html><html><body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-<h1>Welcome to PaintFlow!</h1>
+<h1>Welcome to Crewmodo!</h1>
 <p>You're all set. <a href="${publicUrl}/onboarding">Start onboarding</a></p>
 </body></html>`;
 }
@@ -541,12 +541,12 @@ function verifyMagicLinkHtml(token: string, publicUrl: string, error?: string) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in to PaintFlow</title>
+  <title>Sign in to Crewmodo</title>
 </head>
 <body style="margin: 0; background: #f8fafc; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
   <main style="min-height: 100vh; display: grid; place-items: center; padding: 24px;">
     <section style="width: min(100%, 420px); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 28px; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);">
-      <h1 style="margin: 0 0 8px; font-size: 24px; line-height: 1.2;">Sign in to PaintFlow</h1>
+      <h1 style="margin: 0 0 8px; font-size: 24px; line-height: 1.2;">Sign in to Crewmodo</h1>
       <p style="margin: 0 0 20px; color: #4b5563; line-height: 1.5;">${bodyCopy}</p>
       ${errorHtml}
       ${actionHtml}
@@ -851,11 +851,11 @@ auth.post('/magic-link', async (c) => {
     await sendEmail(
       c.env,
       normalizedEmail,
-      'Sign in to PaintFlow',
+      'Sign in to Crewmodo',
       magicLinkEmailHtml(magicLink),
       undefined,
       {
-        text: `Sign in to PaintFlow\n\nClick: ${magicLink}\n\nExpires in 15 min.`,
+        text: `Sign in to Crewmodo\n\nClick: ${magicLink}\n\nExpires in 15 min.`,
       }
     );
   } catch (err) {
@@ -894,8 +894,8 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
 
   // Send welcome email for new users (fire and forget)
   if (isNewUser) {
-    sendEmail(c.env, email, 'Welcome to PaintFlow', welcomeEmailHtml(c.env.PUBLIC_URL), undefined, {
-      text: `Welcome to PaintFlow!\n\nYou're all set. Start onboarding: ${c.env.PUBLIC_URL}/onboarding`,
+    sendEmail(c.env, email, 'Welcome to Crewmodo', welcomeEmailHtml(c.env.PUBLIC_URL), undefined, {
+      text: `Welcome to Crewmodo!\n\nYou're all set. Start onboarding: ${c.env.PUBLIC_URL}/onboarding`,
     }).catch((error) => console.error('Failed to send welcome email:', error));
   }
 

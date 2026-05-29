@@ -321,7 +321,7 @@ export function EstimateDetail() {
   const drawingRef = useRef(false);
 
   const primaryColor = estimate?.branding?.primaryColor || '#2563eb';
-  const brandTitle = estimate?.branding?.companyName ? `${estimate.branding.companyName} - Estimate` : 'Estimate - PaintFlow';
+  const brandTitle = estimate?.branding?.companyName ? `${estimate.branding.companyName} - Estimate` : 'Estimate - Crewmodo';
   useBodyTitle(brandTitle);
 
   useEffect(() => {

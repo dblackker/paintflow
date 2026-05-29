@@ -137,7 +137,7 @@ export function Roles() {
           <CardHeader
             className="mb-0 border-b border-gray-200 px-4 py-3"
             title="User Roles"
-            description="Assign office and field users to roles that match how they work in PaintFlow."
+            description="Assign office and field users to roles that match how they work in Crewmodo."
           />
           <CardContent className="divide-y divide-gray-200">
             {isLoading && <RolesSkeleton />}

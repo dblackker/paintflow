@@ -104,10 +104,10 @@ const ids = idPrefix === 'bulk'
 </div>
 
 <script is:inline>
-  window.PaintFlowBulkTimecard = window.PaintFlowBulkTimecard || {};
+  window.CrewmodoBulkTimecard = window.CrewmodoBulkTimecard || {};
 
-  if (!window.PaintFlowBulkTimecard.create) {
-  window.PaintFlowBulkTimecard.idsFor = function idsFor(idPrefix = 'bulk') {
+  if (!window.CrewmodoBulkTimecard.create) {
+  window.CrewmodoBulkTimecard.idsFor = function idsFor(idPrefix = 'bulk') {
     if (idPrefix === 'bulk') {
       return {
         modal: 'bulk-modal',
@@ -138,9 +138,9 @@ const ids = idPrefix === 'bulk'
     };
   };
 
-  window.PaintFlowBulkTimecard.create = function createBulkTimecardController(options = {}) {
+  window.CrewmodoBulkTimecard.create = function createBulkTimecardController(options = {}) {
     const idPrefix = options.idPrefix || 'bulk';
-    const ids = window.PaintFlowBulkTimecard.idsFor(idPrefix);
+    const ids = window.CrewmodoBulkTimecard.idsFor(idPrefix);
     ids.submit = idPrefix === 'bulk' ? 'submit-bulk-btn' : `submit-${idPrefix}-btn`;
     const state = {
       isSaving: false,

@@ -613,7 +613,7 @@ export function Calendar() {
       <UpsellCard
         eyebrow="Calendar sync"
         title="Connect Google Calendar"
-        body="Keep production dates visible outside PaintFlow and reduce missed schedule updates as the crew calendar changes."
+        body="Keep production dates visible outside Crewmodo and reduce missed schedule updates as the crew calendar changes."
         ctaText="Connect Google"
         icon="calendar"
         tone="neutral"
@@ -774,8 +774,8 @@ export function Calendar() {
           onDragLeave={() => setDropTargetDay(null)}
           onDrop={(event) => {
             event.preventDefault();
-            const jobId = event.dataTransfer.getData('application/x-paintflow-job-id') || event.dataTransfer.getData('text/plain');
-            const originDay = event.dataTransfer.getData('application/x-paintflow-origin-day');
+            const jobId = event.dataTransfer.getData('application/x-crewmodo-job-id') || event.dataTransfer.getData('text/plain');
+            const originDay = event.dataTransfer.getData('application/x-crewmodo-origin-day');
             setDropTargetDay(null);
             if (originDay && originDay === key) return;
             if (jobId) scheduleDroppedJob(jobId, key);
@@ -837,8 +837,8 @@ export function Calendar() {
         onDragLeave={() => setDropTargetDay(null)}
         onDrop={(event) => {
           event.preventDefault();
-          const jobId = event.dataTransfer.getData('application/x-paintflow-job-id') || event.dataTransfer.getData('text/plain');
-          const originDay = event.dataTransfer.getData('application/x-paintflow-origin-day');
+          const jobId = event.dataTransfer.getData('application/x-crewmodo-job-id') || event.dataTransfer.getData('text/plain');
+          const originDay = event.dataTransfer.getData('application/x-crewmodo-origin-day');
           setDropTargetDay(null);
           if (originDay && originDay === key) return;
           if (jobId) scheduleDroppedJob(jobId, key);
@@ -909,8 +909,8 @@ export function Calendar() {
           draggable
           onDragStart={(event) => {
             event.dataTransfer.setData('text/plain', job.id);
-            event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
-            event.dataTransfer.setData('application/x-paintflow-origin-day', dateKey(day));
+            event.dataTransfer.setData('application/x-crewmodo-job-id', job.id);
+            event.dataTransfer.setData('application/x-crewmodo-origin-day', dateKey(day));
             event.dataTransfer.effectAllowed = 'move';
           }}
           className={`block min-w-0 rounded-md px-2 py-1 text-[0.72rem] font-semibold leading-snug text-blue-950 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 ${siteConcerns.length ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-blue-50'}`}
@@ -984,8 +984,8 @@ export function Calendar() {
         draggable
         onDragStart={(event) => {
           event.dataTransfer.setData('text/plain', job.id);
-          event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
-          event.dataTransfer.setData('application/x-paintflow-origin-day', dateKey(day));
+          event.dataTransfer.setData('application/x-crewmodo-job-id', job.id);
+          event.dataTransfer.setData('application/x-crewmodo-origin-day', dateKey(day));
           event.dataTransfer.effectAllowed = 'move';
         }}
         onPointerDown={(event) => beginPointerDrag(event, job.id, dateKey(day))}
@@ -1254,7 +1254,7 @@ function BacklogJobCard({
       draggable
       onDragStart={(event) => {
         event.dataTransfer.setData('text/plain', job.id);
-        event.dataTransfer.setData('application/x-paintflow-job-id', job.id);
+        event.dataTransfer.setData('application/x-crewmodo-job-id', job.id);
         event.dataTransfer.effectAllowed = 'move';
       }}
       onPointerDown={(event) => onPointerDown(event, job.id)}

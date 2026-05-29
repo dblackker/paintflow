@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
 
-  /* Material Design 3 role tokens, tuned to PaintFlow's contractor/productivity context. */
+  /* Material Design 3 role tokens, tuned to Crewmodo's contractor/productivity context. */
   --md-sys-color-primary: #1a5694;
   --md-sys-color-on-primary: #ffffff;
   --md-sys-color-primary-container: #d7e3ff;

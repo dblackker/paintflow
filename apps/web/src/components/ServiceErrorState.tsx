@@ -1,7 +1,7 @@
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
-import { API_URL, PaintFlowApiError } from '@/lib/api';
+import { API_URL, CrewmodoApiError } from '@/lib/api';
 
 interface ServiceErrorStateProps {
   error: unknown;
@@ -13,7 +13,7 @@ interface ServiceErrorStateProps {
 
 function errorCopy(error: unknown, pageName?: string) {
   const message = error instanceof Error ? error.message : String(error || '');
-  const isApiError = error instanceof PaintFlowApiError;
+  const isApiError = error instanceof CrewmodoApiError;
   const networkFailure = isApiError
     ? error.serviceUnavailable
     : /failed to fetch|network|unreachable|load failed/i.test(message);
@@ -21,7 +21,7 @@ function errorCopy(error: unknown, pageName?: string) {
   if (networkFailure) {
     return {
       title: 'Data service unavailable',
-      body: `The ${pageName || 'page'} loaded, but PaintFlow could not reach the API service that supplies this data. This is usually temporary; retry in a moment.`,
+      body: `The ${pageName || 'page'} loaded, but Crewmodo could not reach the API service that supplies this data. This is usually temporary; retry in a moment.`,
       detail: message || 'Network request failed',
       tone: 'danger' as const,
     };
@@ -29,7 +29,7 @@ function errorCopy(error: unknown, pageName?: string) {
 
   return {
     title: 'Could not load this data',
-    body: `PaintFlow could not finish loading ${pageName ? pageName.toLowerCase() : 'this page'}. Retry once; if it continues, capture the details below.`,
+    body: `Crewmodo could not finish loading ${pageName ? pageName.toLowerCase() : 'this page'}. Retry once; if it continues, capture the details below.`,
     detail: message || 'Request failed',
     tone: 'warning' as const,
   };

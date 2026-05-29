@@ -5,7 +5,7 @@ import { Icon } from '@/components/Icon';
 
 function errorMessage(error: unknown) {
   if (isRouteErrorResponse(error)) {
-    if (error.status === 404) return 'We could not find that PaintFlow page.';
+    if (error.status === 404) return 'We could not find that Crewmodo page.';
     return error.statusText || 'This page could not be loaded.';
   }
   if (error instanceof Error) return error.message;
@@ -14,7 +14,7 @@ function errorMessage(error: unknown) {
 
 export function ErrorPage({ notFound = false }: { notFound?: boolean }) {
   const error = useRouteError();
-  const message = notFound ? 'We could not find that PaintFlow page.' : errorMessage(error);
+  const message = notFound ? 'We could not find that Crewmodo page.' : errorMessage(error);
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-xl items-center px-4 py-10">

@@ -32,7 +32,7 @@ export function Help() {
           <CardContent className="p-8">
             <h2 className="text-2xl font-bold mb-4">Getting Started</h2>
             <h3 className="font-semibold mt-6 mb-2">1. Sign up</h3>
-            <p className="text-gray-700 mb-4">Go to <Link to="/signup" className="text-blue-600">paintflow.app/signup</Link> and enter your email. We'll send you a magic link to sign in — no password needed.</p>
+            <p className="text-gray-700 mb-4">Go to <Link to="/signup" className="text-blue-600">crewmodo.com/signup</Link> and enter your email. We'll send you a magic link to sign in — no password needed.</p>
             <h3 className="font-semibold mt-6 mb-2">2. Complete onboarding</h3>
             <p className="text-gray-700 mb-4">Set your company name, logo, and default pricing. This takes 2 minutes.</p>
             <h3 className="font-semibold mt-6 mb-2">3. Create your first estimate</h3>

@@ -15,7 +15,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      PUBLIC_API_URL: https://paintflow-api-demo.danielablack.workers.dev
+      PUBLIC_API_URL: https://crewmodo-api-demo.danielablack.workers.dev
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +39,7 @@ jobs:
         run: pnpm exec wrangler deploy --config apps/api/wrangler.toml --env demo
 
       - name: Build web app
-        run: pnpm --filter @paintflow/web build
+        run: pnpm --filter @crewmodo/web build
 
       - name: Deploy Pages
-        run: pnpm exec wrangler pages deploy apps/web/dist --project-name paintflow-demo --branch main
+        run: pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-demo --branch main

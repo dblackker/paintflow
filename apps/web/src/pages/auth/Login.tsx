@@ -4,7 +4,7 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { API_URL } from '@/lib/api';
 
-const DEMO_EMAIL = 'demo@goldenbrush.paintflow.local';
+const DEMO_EMAIL = 'demo@goldenbrush.crewmodo.local';
 const DEMO_LOGIN_EMAILS = new Set([
   DEMO_EMAIL,
   'nick@goldenbrush.example',
@@ -23,8 +23,8 @@ type Message = {
 function isDemoOrDev() {
   return Boolean(import.meta.env.DEV)
     || ['localhost', '127.0.0.1'].includes(window.location.hostname)
-    || window.location.hostname === 'paintflow-demo.pages.dev'
-    || API_URL.includes('paintflow-api-demo');
+    || window.location.hostname === 'crewmodo-demo.pages.dev'
+    || API_URL.includes('crewmodo-api-demo');
 }
 
 function appOrigin() {
@@ -143,7 +143,7 @@ export function Login() {
     <main className="min-h-screen bg-gray-50 px-4 py-8 sm:flex sm:items-center sm:justify-center sm:px-6">
       <section className="mx-auto w-full max-w-md rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
         <div className="text-center">
-          <Link to="/" className="text-2xl font-bold text-blue-700">PaintFlow</Link>
+          <Link to="/" className="text-2xl font-bold text-blue-700">Crewmodo</Link>
           <h1 className="pf-page-title mt-6">Sign in</h1>
           <p className="pf-page-copy mt-2">Use a secure one-time email link to access your workspace.</p>
         </div>

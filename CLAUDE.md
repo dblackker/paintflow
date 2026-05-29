@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PaintFlow is a CRM built specifically for painting contractors. It's a multi-tenant SaaS application with a focus on the painting industry workflow: leads → estimates (Good/Better/Best) → jobs → payments.
+Crewmodo is a CRM built specifically for painting contractors. It's a multi-tenant SaaS application with a focus on the painting industry workflow: leads → estimates (Good/Better/Best) → jobs → payments.
 
-**Key Differentiator:** Unlike generic CRMs (Jobber, Housecall Pro), PaintFlow is purpose-built for painters with production rates, job costing, and painting-specific workflows.
+**Key Differentiator:** Unlike generic CRMs (Jobber, Housecall Pro), Crewmodo is purpose-built for painters with production rates, job costing, and painting-specific workflows.
 
 ## Tech Stack
 
@@ -109,7 +109,7 @@ Every table has `org_id` foreign key. Middleware extracts `orgId` from session a
 ## Project Structure
 
 ```
-paintflow/
+crewmodo/
 ├── apps/
 │   ├── api/              # Hono API
 │   │   ├── src/
@@ -242,7 +242,7 @@ Required:
 - `DATABASE_URL` – Neon Postgres connection string
 - `CLOUDFLARE_API_TOKEN` – For deployments
 - `STRIPE_SECRET_KEY` – Stripe payments
-- `APP_URL` – Base URL (e.g., https://app.paintflow.app)
+- `APP_URL` – Base URL (e.g., https://app.crewmodo.com)
 - `ENVIRONMENT` – `development`, `staging`, or `production`
 
 Optional:
@@ -254,8 +254,8 @@ Optional:
 
 ### Branches
 
-- `develop` → Auto-deploys to `staging.paintflow.app`
-- `main` → Manual approval → `app.paintflow.app`
+- `develop` → Auto-deploys to `staging.crewmodo.com`
+- `main` → Manual approval → `app.crewmodo.com`
 
 ### Deploy
 
@@ -271,9 +271,9 @@ git push origin main
 
 ### DNS for MailChannels
 
-Add to `paintflow.app` DNS:
+Add to `crewmodo.com` DNS:
 ```
-_mailchannels.paintflow.app TXT "v=mc1 cfid=paintflow.workers.dev"
+_mailchannels.crewmodo.com TXT "v=mc1 cfid=crewmodo.workers.dev"
 ```
 
 ## Testing Strategy

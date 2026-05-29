@@ -2,7 +2,7 @@
 
 ## Goal
 
-PaintFlow should treat a lead/customer as the account record for a painting contractor. The detail page should answer: who is this customer, what has happened, what is next, what estimates/jobs are attached, and what field media exists for selling, production, proof, and future marketing.
+Crewmodo should treat a lead/customer as the account record for a painting contractor. The detail page should answer: who is this customer, what has happened, what is next, what estimates/jobs are attached, and what field media exists for selling, production, proof, and future marketing.
 
 ## Customer Detail Page
 

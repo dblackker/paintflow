@@ -1,6 +1,6 @@
 # PWA Push Notifications
 
-PaintFlow uses standards-based Web Push with VAPID keys:
+Crewmodo uses standards-based Web Push with VAPID keys:
 
 - `VAPID_PUBLIC_KEY` is safe to store in `wrangler.toml` and expose to the web app.
 - `VAPID_PRIVATE_KEY` must be stored as a Cloudflare Worker secret.
@@ -34,7 +34,7 @@ For local Worker development, add these to `apps/api/.dev.vars`:
 ```bash
 VAPID_PUBLIC_KEY="..."
 VAPID_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-VAPID_SUBJECT="mailto:admin@paintflow.app"
+VAPID_SUBJECT="mailto:admin@crewmodo.com"
 ```
 
 The React app registers `/sw.js` automatically. Users subscribe from `/notifications` by clicking **Enable alerts**.

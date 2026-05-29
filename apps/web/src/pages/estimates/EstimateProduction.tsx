@@ -896,7 +896,7 @@ export function EstimateProduction() {
 
   return (
     <div className="mx-auto max-w-6xl py-5 sm:py-8">
-      <datalist id="paintflow-catalog-colors">
+      <datalist id="crewmodo-catalog-colors">
         {catalogColors.map((color) => (
           <option key={color.id} value={[color.name, color.colorCode ? `(${color.colorCode})` : ''].filter(Boolean).join(' ')}>
             {[color.supplierName, color.family].filter(Boolean).join(' - ')}
@@ -1429,7 +1429,7 @@ function RoomCard({
                 <NumberField label="Paint hours +/-" value={surface.paintAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { paintAdjustmentHours: value })} />
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_0.7fr_0.8fr]">
-                <input className="input" list="paintflow-catalog-colors" value={surface.colorName} onChange={(event) => updateSurfaceColor(room.id, surface.id, event.target.value)} placeholder={catalogColors.length ? 'Search color library' : 'Color name'} />
+                <input className="input" list="crewmodo-catalog-colors" value={surface.colorName} onChange={(event) => updateSurfaceColor(room.id, surface.id, event.target.value)} placeholder={catalogColors.length ? 'Search color library' : 'Color name'} />
                 <input className="input" value={surface.colorCode} onChange={(event) => updateSurface(room.id, surface.id, { colorCode: event.target.value })} placeholder="Color code" />
                 <select className="input" value={surface.colorStatus} onChange={(event) => updateSurface(room.id, surface.id, { colorStatus: event.target.value })}>
                   {['TBD', 'Selected', 'Approved', 'Ordered', 'Delivered', 'Changed'].map((status) => <option key={status} value={status}>{status}</option>)}

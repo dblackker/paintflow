@@ -1,6 +1,6 @@
 # Mobile UX Audit
 
-PaintFlow is field software first: a contractor should be able to add leads, review the pipeline, log time, check jobs, and send estimates from a phone without fighting desktop-density layouts.
+Crewmodo is field software first: a contractor should be able to add leads, review the pipeline, log time, check jobs, and send estimates from a phone without fighting desktop-density layouts.
 
 ## Fixed
 

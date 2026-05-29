@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { createDb } from '@paintflow/db';
-import { auditLogs, changeOrders, estimates, jobs, leads, notificationEvents, portalTokens, stripeConnections } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { auditLogs, changeOrders, estimates, jobs, leads, notificationEvents, portalTokens, stripeConnections } from '@crewmodo/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
@@ -240,7 +240,7 @@ portalApp.post('/:token/change-orders/:id/checkout', async (c) => {
     return c.json({ error: 'Invalid payment amount' }, 400);
   }
 
-  const baseUrl = c.env.PUBLIC_URL || 'https://paintflow.app';
+  const baseUrl = c.env.PUBLIC_URL || 'https://crewmodo.com';
   const session = await createCheckoutSession(c.env, {
     amount,
     successUrl: `${baseUrl}/portal/${token}?changeOrderId=${id}&changeOrderPaid=${id}`,

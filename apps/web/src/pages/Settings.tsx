@@ -339,7 +339,7 @@ export function Settings() {
           <div>
             <p className="pf-meta text-blue-700">Owner setup</p>
             <p className="pf-copy mt-1 max-w-3xl">
-              Configure the business defaults that make PaintFlow usable in the field: pricing, production rates, materials, team roles, payments, and customer-facing branding.
+              Configure the business defaults that make Crewmodo usable in the field: pricing, production rates, materials, team roles, payments, and customer-facing branding.
             </p>
           </div>
           <Link to="/onboarding" className="btn-primary btn-sm justify-center">Review</Link>
@@ -500,7 +500,7 @@ export function Settings() {
         </Card>
 
         <Card id="legal-settings" padding="lg" className="scroll-mt-20">
-          <CardHeader title="Contract Terms & Disclosures" description="Configure company-reviewed language shown to customers before they sign a proposal. PaintFlow stores the accepted snapshot in estimate activity." />
+          <CardHeader title="Contract Terms & Disclosures" description="Configure company-reviewed language shown to customers before they sign a proposal. Crewmodo stores the accepted snapshot in estimate activity." />
           <form className="grid gap-4" onSubmit={saveLegal}>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5">
@@ -579,7 +579,7 @@ export function Settings() {
           </div>
           <div className="mt-4 grid gap-3">
             <ActionCard href="/payments/stripe" title="Stripe payments" copy="Collect deposits and customer payments." />
-            <ActionCard href="/billing" title="Billing" copy="Manage the PaintFlow subscription and account status." />
+            <ActionCard href="/billing" title="Billing" copy="Manage the Crewmodo subscription and account status." />
             <ActionCard href="/notifications" title="Browser notifications" copy="Enable alerts for new messages and accepted estimates." />
           </div>
         </Card>
@@ -588,7 +588,7 @@ export function Settings() {
           <CardHeader title="Review Links" />
           <form className="grid gap-4" onSubmit={saveReviews}>
             <label className="grid gap-1.5">
-              <FieldLabel label="Google Business review URL" help="The direct Google review link customers use after a completed job. PaintFlow can send happy customers here after they rate the project highly." />
+              <FieldLabel label="Google Business review URL" help="The direct Google review link customers use after a completed job. Crewmodo can send happy customers here after they rate the project highly." />
               <input className="input" type="url" inputMode="url" autoComplete="url" value={settings.googleReviewUrl || ''} onChange={(event) => setSettings({ ...settings, googleReviewUrl: event.target.value })} placeholder="https://g.page/r/..." />
             </label>
             <label className="grid gap-1.5">

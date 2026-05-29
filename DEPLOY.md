@@ -87,19 +87,19 @@ pnpm deploy:web
 
 Or manually:
 ```bash
-pnpm --filter @paintflow/web build
-wrangler pages deploy apps/web/dist --project-name=paintflow
+pnpm --filter @crewmodo/web build
+wrangler pages deploy apps/web/dist --project-name=crewmodo
 ```
 
 ## Environment Variables
 
 Set in Cloudflare dashboard or wrangler.toml:
 
-- `APP_URL` - API base URL, for example `https://api.paintflow.app`
+- `APP_URL` - API base URL, for example `https://api.crewmodo.com`
 - `PUBLIC_URL` - Public web app URL
 - `PUBLIC_API_URL` - Public API URL used by the web app
 - `CORS_ORIGINS` - Comma-separated web origins allowed to call the API
-- `COOKIE_DOMAIN` - Cookie domain for shared auth, for example `.paintflow.app`
+- `COOKIE_DOMAIN` - Cookie domain for shared auth, for example `.crewmodo.com`
 - `DATABASE_URL` - Neon connection string
 - `KV` - KV namespace binding
 - `TWILIO_*` - Twilio credentials
@@ -133,20 +133,20 @@ crons = ["0 9 * * *"]
 
 ### API
 ```bash
-wrangler route add "api.paintflow.app/*" --zone-name=paintflow.app
+wrangler route add "api.crewmodo.com/*" --zone-name=crewmodo.com
 ```
 
 ### Connector Redirects
 
 Configure connector redirect URLs exactly:
 
-- Google Calendar: `https://api.paintflow.app/v1/calendar/callback`
-- QuickBooks: `https://api.paintflow.app/v1/quickbooks/callback`
-- Stripe webhook: `https://api.paintflow.app/v1/billing/webhook`
+- Google Calendar: `https://api.crewmodo.com/v1/calendar/callback`
+- QuickBooks: `https://api.crewmodo.com/v1/quickbooks/callback`
+- Stripe webhook: `https://api.crewmodo.com/v1/billing/webhook`
 
 ### Web
 In Cloudflare Pages dashboard:
-- Add custom domain: paintflow.app
+- Add custom domain: crewmodo.com
 - Set CNAME to pages.dev URL
 
 ## Monitoring
@@ -157,8 +157,8 @@ wrangler tail
 ```
 
 View metrics in Cloudflare dashboard:
-- Workers & Pages → paintflow-api → Metrics
-- Pages → paintflow → Analytics
+- Workers & Pages → crewmodo-api → Metrics
+- Pages → crewmodo → Analytics
 
 ## Rollback
 

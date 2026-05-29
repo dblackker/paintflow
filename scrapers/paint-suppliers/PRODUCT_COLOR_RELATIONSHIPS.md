@@ -2,7 +2,7 @@
 
 ## Overview
 
-Colors are not inherently "interior" or "exterior" - they're just pigments. However, the **availability** and **recommendation** of colors varies by product and use case. This document explains how PaintFlow's scraper handles these relationships.
+Colors are not inherently "interior" or "exterior" - they're just pigments. However, the **availability** and **recommendation** of colors varies by product and use case. This document explains how Crewmodo's scraper handles these relationships.
 
 ## Key Concepts
 
@@ -146,7 +146,7 @@ async scrapeProductColorMappings() {
 }
 ```
 
-## Usage in PaintFlow
+## Usage in Crewmodo
 
 ### For Estimators
 
@@ -213,7 +213,7 @@ if (mapping.base_required && !product.bases.includes(mapping.base_required)) {
 
 ### Best Practice
 
-For PaintFlow estimates:
+For Crewmodo estimates:
 - Default to "both" for most colors
 - Flag colors with LRV < 15 as "interior recommended"
 - Flag colors in "Exterior Collections" as "exterior tested"
@@ -287,4 +287,4 @@ GROUP BY uses;
 
 Colors aren't inherently interior or exterior, but **product suitability** and **supplier recommendations** create practical distinctions. The scraper now supports tracking these relationships, but needs actual page scraping to populate the data accurately.
 
-For PaintFlow's use case: Most customers will be fine with "this color works in this product", with base requirements being the real constraint.
+For Crewmodo's use case: Most customers will be fine with "this color works in this product", with base requirements being the real constraint.

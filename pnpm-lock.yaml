@@ -26,10 +26,10 @@ importers:
 
   apps/api:
     dependencies:
-      '@paintflow/core':
+      '@crewmodo/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@paintflow/db':
+      '@crewmodo/db':
         specifier: workspace:*
         version: link:../../packages/db
       drizzle-orm:

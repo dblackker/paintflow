@@ -29,7 +29,7 @@ Evaluation should happen in the API, not only the browser. The browser can recei
 Good future locations:
 
 - Database-backed org preferences for a small internal rollout.
-- OpenFeature-compatible provider if PaintFlow later needs environments, percentage rollout, audit history, or remote config.
+- OpenFeature-compatible provider if Crewmodo later needs environments, percentage rollout, audit history, or remote config.
 - Cloudflare-native flags if the app standardizes on Cloudflare for runtime controls.
 
 ## Proposal Requirements

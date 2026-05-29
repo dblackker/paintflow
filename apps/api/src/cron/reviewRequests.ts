@@ -1,5 +1,5 @@
-import { createDb } from '@paintflow/db';
-import { jobs, reviewRequests, leads, orgBranding } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { jobs, reviewRequests, leads, orgBranding } from '@crewmodo/db/schema';
 import { eq, and, lte } from 'drizzle-orm';
 import { sendSMS } from '../lib/twilio';
 import { sendEmail } from '../lib/email';

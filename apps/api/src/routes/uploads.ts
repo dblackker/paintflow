@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { createDb } from '@paintflow/db';
-import { expenses, jobPhotos, jobs } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { expenses, jobPhotos, jobs } from '@crewmodo/db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -30,7 +30,7 @@ uploads.post('/receipt', async (c) => {
   //   httpMetadata: { contentType: file.type },
   // });
   
-  const url = `https://cdn.paintflow.app/${key}`;
+  const url = `https://cdn.crewmodo.com/${key}`;
   
   // Create expense record
   const db = createDb(c.env.DATABASE_URL);
@@ -55,7 +55,7 @@ uploads.post('/receipt', async (c) => {
 // GET /v1/uploads/:key
 uploads.get('/:key', async (c) => {
   const key = c.req.param('key');
-  return c.json({ url: `https://cdn.paintflow.app/${key}` });
+  return c.json({ url: `https://cdn.crewmodo.com/${key}` });
 });
 
 // GET /v1/uploads/photos/file/:photoId
@@ -116,7 +116,7 @@ uploads.post('/photo', async (c) => {
       httpMetadata: { contentType: file.type || 'application/octet-stream' },
     });
   }
-  const url = `https://cdn.paintflow.app/${key}`;
+  const url = `https://cdn.crewmodo.com/${key}`;
   
   // Save to DB
   const [photo] = await db.insert(jobPhotos).values({

@@ -50,8 +50,8 @@ const defaultOrigins = [
   'http://127.0.0.1:4321',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'https://app.paintflow.app',
-  'https://paintflow.app',
+  'https://app.crewmodo.com',
+  'https://crewmodo.com',
 ];
 
 function isAllowedOrigin(origin: string | undefined, configuredOrigins: string[], environment?: string) {
@@ -123,9 +123,9 @@ app.route('/v1/portal', portalRoutes);
 app.route('/v1/lead-capture', leadCaptureRoute);
 
 app.get('/health', (c) => {
-  return c.json({ 
-    status: 'ok', 
-    service: 'paintflow-api', 
+  return c.json({
+    status: 'ok',
+    service: 'crewmodo-api',
     timestamp: new Date().toISOString(),
     orgId: c.get('orgId')
   });
@@ -256,7 +256,7 @@ async function handleInboundInvoiceEmail(message: any, env: Env, ctx: ExecutionC
     })),
   };
 
-  const request = new Request('https://paintflow.internal/v1/invoices/imports/email-forward', {
+  const request = new Request('https://crewmodo.internal/v1/invoices/imports/email-forward', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -276,7 +276,7 @@ async function handleInboundInvoiceEmail(message: any, env: Env, ctx: ExecutionC
       error: body.slice(0, 300),
     });
     if ([400, 401, 402, 403, 404].includes(response.status)) {
-      message.setReject?.('PaintFlow could not accept this invoice email.');
+      message.setReject?.('Crewmodo could not accept this invoice email.');
     }
     return;
   }

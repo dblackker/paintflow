@@ -1,12 +1,12 @@
-# PaintFlow Demo Video - 90 Second Script
+# Crewmodo Demo Video - 90 Second Script
 
 ## Scene 1: Problem (0-10s)
 **Visual:** Frustrated contractor juggling paper estimates, phone, calendar
 **VO:** "Running a painting business means juggling leads, estimates, scheduling, and getting paid. Most tools weren't built for contractors."
 
 ## Scene 2: Intro (10-15s)
-**Visual:** PaintFlow logo animation
-**VO:** "Meet PaintFlow. The CRM built specifically for painting contractors."
+**Visual:** Crewmodo logo animation
+**VO:** "Meet Crewmodo. The CRM built specifically for painting contractors."
 
 ## Scene 3: Estimates (15-35s)
 **Visual:** Screen recording - creating estimate
@@ -42,7 +42,7 @@
 
 ## Scene 7: CTA (80-90s)
 **Visual:** Pricing page
-**VO:** "Start your free 14-day trial at paintflow.app. No credit card required."
+**VO:** "Start your free 14-day trial at crewmodo.com. No credit card required."
 
 ---
 
@@ -66,8 +66,8 @@
 
 ## 30-Second Cut (For ads)
 
-"Running a painting business means juggling leads, estimates, and payments. PaintFlow handles it all.
+"Running a painting business means juggling leads, estimates, and payments. Crewmodo handles it all.
 
 Create estimates in 2 minutes with Good/Better/Best pricing. Schedule jobs with drag-and-drop. Get paid online with Stripe.
 
-Start your free trial at paintflow.app"
+Start your free trial at crewmodo.com"

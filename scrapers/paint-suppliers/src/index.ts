@@ -169,7 +169,7 @@ async function performSupplierScrape(
 
 program
   .name('paint-supplier-scraper')
-  .description('Scrape paint supplier data for PaintFlow')
+  .description('Scrape paint supplier data for Crewmodo')
   .version('1.0.0');
 
 program
@@ -217,7 +217,7 @@ program
           && Number(supplier.colorCount || 0) === 0
         );
         if (missingSuppliers.length > 0) {
-          logger.warn(`Live scrape did not capture catalog data for ${missingSuppliers.map((supplier) => supplier.name).join(', ')}. Seeding validated baseline catalog so PaintFlow has usable products and colors.`);
+          logger.warn(`Live scrape did not capture catalog data for ${missingSuppliers.map((supplier) => supplier.name).join(', ')}. Seeding validated baseline catalog so Crewmodo has usable products and colors.`);
           await seedBaselineCatalog(db);
         }
       }
@@ -302,7 +302,7 @@ program
 
 program
   .command('hydrate-postgres')
-  .description('Hydrate PaintFlow Postgres supplier catalog tables from the local scraper database')
+  .description('Hydrate Crewmodo Postgres supplier catalog tables from the local scraper database')
   .option('--supplier <supplier>', 'Filter by supplier')
   .option('--type <type>', 'Filter by product type')
   .action(async (options) => {

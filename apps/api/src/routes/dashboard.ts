@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { createDb } from '@paintflow/db';
-import { activities, emailSends, estimates, jobs, leads, messages, timeEntries } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { activities, emailSends, estimates, jobs, leads, messages, timeEntries } from '@crewmodo/db/schema';
 import { eq, and, gte, count, desc } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';

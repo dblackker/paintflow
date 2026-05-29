@@ -1,10 +1,10 @@
-# PaintFlow Email Templates Suite
+# Crewmodo Email Templates Suite
 
 ## Complete Customer Communication Workflow
 
 This document contains email templates for every stage of the painting contractor customer journey, from lead intake to review request.
 
-**Usage:** Copy these templates into PaintFlow's email template system. Variables in `{{double_braces}}` will be automatically replaced.
+**Usage:** Copy these templates into Crewmodo's email template system. Variables in `{{double_braces}}` will be automatically replaced.
 
 ---
 
@@ -1132,7 +1132,7 @@ Always use:
 
 ---
 
-## Implementation in PaintFlow
+## Implementation in Crewmodo
 
 ### Email Template Variables
 

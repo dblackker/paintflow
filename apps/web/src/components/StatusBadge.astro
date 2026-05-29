@@ -40,7 +40,7 @@ const {
     const normalize = (value = '') => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
 
     const labelFor = (value = '') => {
-      if (window.PaintFlowFormat?.label) return window.PaintFlowFormat.label(value);
+      if (window.CrewmodoFormat?.label) return window.CrewmodoFormat.label(value);
       return String(value || '')
         .replace(/[_-]+/g, ' ')
         .replace(/\s+/g, ' ')
@@ -140,7 +140,7 @@ const {
       customElements.define('status-badge', StatusBadgeElement);
     }
 
-    window.PaintFlowUI = window.PaintFlowUI || {};
-    window.PaintFlowUI.statusBadge = badgeMarkup;
+    window.CrewmodoUI = window.CrewmodoUI || {};
+    window.CrewmodoUI.statusBadge = badgeMarkup;
   })();
 </script>

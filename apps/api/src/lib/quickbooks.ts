@@ -1,5 +1,5 @@
-import { createDb } from '@paintflow/db';
-import { quickbooksConnections, leads, estimates } from '@paintflow/db/schema';
+import { createDb } from '@crewmodo/db';
+import { quickbooksConnections, leads, estimates } from '@crewmodo/db/schema';
 import { eq } from 'drizzle-orm';
 
 export const QB_SANDBOX_BASE = 'https://sandbox-quickbooks.api.intuit.com';
@@ -146,7 +146,7 @@ export async function createQBInvoice(env: any, orgId: string, estimate: any, le
     CustomerRef: { value: customerId },
     Line: lineItems,
     TxnDate: new Date().toISOString().split('T')[0],
-    PrivateNote: `PaintFlow Estimate ${estimate.id}`,
+    PrivateNote: `Crewmodo Estimate ${estimate.id}`,
   };
   
   const response = await fetch(

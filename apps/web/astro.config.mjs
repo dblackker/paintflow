@@ -6,7 +6,7 @@ export default defineConfig({
   output: 'server',
   adapter: cloudflare(),
   integrations: [tailwind()],
-  site: 'https://app.paintflow.app',
+  site: 'https://app.crewmodo.com',
   build: {
     inlineStylesheets: 'auto',
   },

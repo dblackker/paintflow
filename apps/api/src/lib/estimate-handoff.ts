@@ -1,5 +1,5 @@
-import { auditLogs, estimates, jobs, leads } from '@paintflow/db/schema';
-import type { DbClient } from '@paintflow/db/client';
+import { auditLogs, estimates, jobs, leads } from '@crewmodo/db/schema';
+import type { DbClient } from '@crewmodo/db/client';
 import { and, eq } from 'drizzle-orm';
 
 type EstimatePackage = {

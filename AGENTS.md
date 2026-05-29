@@ -1,6 +1,6 @@
-# AGENTS.md - PaintFlow
+# AGENTS.md - Crewmodo
 
-Multi-tenant SaaS for solopreneur painting contractors.
+Multi-tenant SaaS for small trade contractors, initially optimized for painting contractors.
 
 ## Stack
 - Frontend: Astro 5 + React, Tailwind, shadcn, PWA

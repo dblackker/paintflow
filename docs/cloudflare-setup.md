@@ -1,6 +1,6 @@
 # Cloudflare and Database Setup
 
-PaintFlow deploys as:
+Crewmodo deploys as:
 
 - `apps/api`: Cloudflare Worker API
 - `apps/web`: Cloudflare Pages app
@@ -27,7 +27,7 @@ CLOUDFLARE_API_TOKEN=...
 
 In Neon:
 
-1. Create a project for PaintFlow.
+1. Create a project for Crewmodo.
 2. Create production and staging branches if desired.
 3. Copy the pooled or serverless-compatible connection string for the app role.
 
@@ -37,13 +37,13 @@ PowerShell:
 
 ```powershell
 $env:DATABASE_URL="postgresql://USER:PASSWORD@HOST/db?sslmode=require"
-corepack pnpm --filter @paintflow/db db:migrate
+corepack pnpm --filter @crewmodo/db db:migrate
 ```
 
 Shell:
 
 ```sh
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/db?sslmode=require" corepack pnpm --filter @paintflow/db db:migrate
+DATABASE_URL="postgresql://USER:PASSWORD@HOST/db?sslmode=require" corepack pnpm --filter @crewmodo/db db:migrate
 ```
 
 The current API uses `@neondatabase/serverless`. Cloudflare also recommends Hyperdrive for database pooling when using native Postgres drivers. If we later move from the Neon serverless HTTP driver to `pg`/Postgres.js, add a Hyperdrive binding and pass `env.HYPERDRIVE.connectionString` to the database client.
@@ -60,8 +60,8 @@ corepack pnpm wrangler kv namespace create KV --env production
 Create R2 buckets:
 
 ```sh
-corepack pnpm wrangler r2 bucket create paintflow-uploads-preview
-corepack pnpm wrangler r2 bucket create paintflow-uploads
+corepack pnpm wrangler r2 bucket create crewmodo-uploads-preview
+corepack pnpm wrangler r2 bucket create crewmodo-uploads
 ```
 
 Copy the generated KV namespace IDs into `apps/api/wrangler.toml`:
@@ -131,11 +131,11 @@ The current production route in `apps/api/wrangler.toml` is:
 
 ```toml
 routes = [
-  { pattern = "api.paintflow.app/*", zone_name = "paintflow.app" }
+  { pattern = "api.crewmodo.com/*", zone_name = "crewmodo.com" }
 ]
 ```
 
-Before deploying, make sure `paintflow.app` is a zone in the same Cloudflare account, or adjust the route.
+Before deploying, make sure `crewmodo.com` is a zone in the same Cloudflare account, or adjust the route.
 
 ## 6. Configure and Deploy Web App
 
@@ -144,30 +144,30 @@ For direct upload:
 PowerShell:
 
 ```powershell
-$env:PUBLIC_API_URL="https://api.paintflow.app"
-corepack pnpm --filter @paintflow/web build
-corepack pnpm wrangler pages deploy apps/web/dist --project-name paintflow-web
+$env:PUBLIC_API_URL="https://api.crewmodo.com"
+corepack pnpm --filter @crewmodo/web build
+corepack pnpm wrangler pages deploy apps/web/dist --project-name crewmodo-web
 ```
 
 Shell:
 
 ```sh
-PUBLIC_API_URL="https://api.paintflow.app" corepack pnpm --filter @paintflow/web build
-corepack pnpm wrangler pages deploy apps/web/dist --project-name paintflow-web
+PUBLIC_API_URL="https://api.crewmodo.com" corepack pnpm --filter @crewmodo/web build
+corepack pnpm wrangler pages deploy apps/web/dist --project-name crewmodo-web
 ```
 
 If using Cloudflare Pages Git integration, set:
 
-- Build command: `corepack pnpm --filter @paintflow/web build`
+- Build command: `corepack pnpm --filter @crewmodo/web build`
 - Build output directory: `apps/web/dist`
-- Production env var: `PUBLIC_API_URL=https://api.paintflow.app`
+- Production env var: `PUBLIC_API_URL=https://api.crewmodo.com`
 
 ## 7. Custom Domains
 
 Use Cloudflare dashboard:
 
-- Pages custom domain: `app.paintflow.app`
-- Worker custom domain or route: `api.paintflow.app`
+- Pages custom domain: `app.crewmodo.com`
+- Worker custom domain or route: `api.crewmodo.com`
 
 Keep the API `PUBLIC_URL` and CORS origins in sync with the final app domain.
 
@@ -176,15 +176,15 @@ Keep the API `PUBLIC_URL` and CORS origins in sync with the final app domain.
 After deploy:
 
 ```sh
-curl https://api.paintflow.app/health
+curl https://api.crewmodo.com/health
 ```
 
 Then test in the browser:
 
-- `https://app.paintflow.app/signup`
-- `https://app.paintflow.app/onboarding`
-- `https://app.paintflow.app/leads`
-- `https://app.paintflow.app/estimates/production`
+- `https://app.crewmodo.com/signup`
+- `https://app.crewmodo.com/onboarding`
+- `https://app.crewmodo.com/leads`
+- `https://app.crewmodo.com/estimates/production`
 
 If a page says it cannot reach the API, verify:
 

@@ -87,13 +87,13 @@ const previewData: Record<string, string> = {
   estimatorName: 'Nick Martinez',
   estimatorEmail: 'nick@goldenbrush.example',
   estimatorPhone: '(415) 555-0138',
-  proposalUrl: 'https://paintflow-demo.pages.dev/estimates/demo-preview',
+  proposalUrl: 'https://crewmodo-demo.pages.dev/estimates/demo-preview',
   jobName: 'Rivera Interior Repaint',
   jobAddress: '95 South Park St, San Francisco, CA',
   description: 'Add two coats to the stairwell handrail and repaint the upstairs linen closet.',
   amount: '640',
   paymentDue: '320',
-  portalUrl: 'https://paintflow-demo.pages.dev/portal/demo-change-order',
+  portalUrl: 'https://crewmodo-demo.pages.dev/portal/demo-change-order',
   ctaText: 'Review and approve',
   scopeSummaryHtml: [
     '<table style="width:100%;border-collapse:collapse;margin:16px 0;font-family:Arial,sans-serif;font-size:14px;">',
@@ -624,7 +624,7 @@ export function EmailTemplates() {
                     <details className="mt-3 rounded-lg border bg-white p-3">
                       <summary className="cursor-pointer pf-row-title">Plain text preview</summary>
                       <pre className="mt-3 whitespace-pre-wrap text-xs leading-5 text-gray-700">
-                        {renderedText || 'Plain text fallback is blank. PaintFlow will generate a fallback from the HTML body when sending.'}
+                        {renderedText || 'Plain text fallback is blank. Crewmodo will generate a fallback from the HTML body when sending.'}
                       </pre>
                     </details>
                   </div>
