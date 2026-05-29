@@ -7,7 +7,6 @@ import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 import { paymentScheduleSettingsFromPreferences } from '../lib/payment-schedule';
-import { FEATURE_FLAG_DEFINITIONS, featureFlagPayload, featureFlagsFromPreferences } from '../lib/feature-flags';
 
 const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -56,10 +55,6 @@ const dashboardActionsSchema = z.object({
     id: z.string().trim().min(1).max(80),
     visible: z.boolean(),
   })).max(20),
-}).strict();
-
-const featureFlagsSchema = z.object({
-  flags: z.record(z.boolean()).default({}),
 }).strict();
 
 const timeClockSettingsSchema = z.object({
@@ -298,52 +293,6 @@ settings.put('/dashboard-actions', async (c) => {
     .returning();
 
   return c.json({ data: { actions: readBusinessHours(settings.businessHours).dashboardQuickActions ?? [] } });
-});
-
-settings.get('/feature-flags', async (c) => {
-  const orgId = c.get('orgId');
-  const db = createDb(c.env.DATABASE_URL);
-  let settings = await db.query.orgSettings.findFirst({
-    where: eq(orgSettings.orgId, orgId),
-  });
-  if (!settings) {
-    [settings] = await db.insert(orgSettings).values({ orgId }).returning();
-  }
-
-  return c.json({ data: featureFlagPayload(settings) });
-});
-
-settings.put('/feature-flags', async (c) => {
-  const orgId = c.get('orgId');
-  const parsed = featureFlagsSchema.safeParse(await c.req.json());
-  if (!parsed.success) {
-    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
-  }
-
-  const allowedKeys = new Set(Object.keys(FEATURE_FLAG_DEFINITIONS));
-  const requested = Object.fromEntries(
-    Object.entries(parsed.data.flags).filter(([key]) => allowedKeys.has(key)),
-  );
-  const db = createDb(c.env.DATABASE_URL);
-  const existing = await db.query.orgSettings.findFirst({
-    where: eq(orgSettings.orgId, orgId),
-  });
-  const preferences = readBusinessHours(existing?.businessHours);
-  const featureFlags = {
-    ...featureFlagsFromPreferences(preferences),
-    ...requested,
-  };
-  const businessHours = { ...preferences, featureFlags };
-
-  const [settings] = await db.insert(orgSettings)
-    .values({ orgId, businessHours })
-    .onConflictDoUpdate({
-      target: orgSettings.orgId,
-      set: { businessHours, updatedAt: new Date() },
-    })
-    .returning();
-
-  return c.json({ data: featureFlagPayload(settings) });
 });
 
 settings.get('/time-clock', async (c) => {

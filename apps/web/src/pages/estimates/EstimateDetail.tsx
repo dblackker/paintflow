@@ -110,9 +110,6 @@ interface PublicEstimate {
   paymentSchedule?: PaymentScheduleItem[];
   paymentTerms?: string;
   legal?: LegalSettings;
-  features?: {
-    customerColorSelection?: boolean;
-  };
   photos?: EstimatePhoto[];
   branding?: {
     logoUrl?: string | null;
@@ -494,8 +491,7 @@ export function EstimateDetail() {
   const visibleItems = visibleEntries.map(({ item }) => item);
   const baseItems = visibleItems.filter((item) => !item.optional);
   const optionalItems = visibleItems.filter((item) => item.optional);
-  const customerColorSelectionEnabled = estimate?.features?.customerColorSelection !== false;
-  const colorTargets = customerColorSelectionEnabled ? visibleEntries.filter(({ item }) => !item.optional && Boolean(item.material?.name)) : [];
+  const colorTargets = visibleEntries.filter(({ item }) => !item.optional && Boolean(item.material?.name));
   const selectedOptions = useMemo(
     () => selectedOptionsFromIndexes(selectedPackage, selectedOptionIndexes),
     [selectedPackage, selectedOptionIndexes],

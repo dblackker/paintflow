@@ -55,19 +55,6 @@ interface ConnectorStatus {
   calendar: React.ReactNode;
 }
 
-interface FeatureFlagDefinition {
-  key: string;
-  label: string;
-  description: string;
-  defaultValue: boolean;
-  enabled: boolean;
-}
-
-interface FeatureFlagsPayload {
-  flags: Record<string, boolean>;
-  definitions: FeatureFlagDefinition[];
-}
-
 const defaultMilestones: PaymentMilestone[] = [
   { key: 'deposit', label: 'Deposit', due: 'Due after approval to reserve the schedule', percent: 40, payable: true },
   { key: 'progress', label: 'Progress payment', due: 'Due before production starts', percent: 30, payable: false },
@@ -78,7 +65,6 @@ const setupCards = [
   ['Company', 'Business profile', 'Company name, phone, email, address, proposal branding, and review links.', '#business-settings'],
   ['Estimating', 'Pricing defaults', 'Labor rate, material markup, tax, deposit, paint products, and production rates.', '#pricing-settings'],
   ['Operations', 'Team and field setup', 'Crew roles, time clock policies, scheduling, notifications, and reusable templates.', '#operations-settings'],
-  ['Flags', 'Feature flags', 'Turn newer workflows on or off from the server without redeploying the app.', '#feature-flags'],
   ['Connectors', 'Payments and integrations', 'Stripe deposits, Google Calendar, QuickBooks status, billing, and browser notifications.', '#integrations-settings'],
   ['Insights', 'Reports', 'Review sales, revenue, jobs, and operating metrics from one reporting surface.', '/reports'],
   ['Audit', 'Activity log', 'See customer events and operational changes across leads, estimates, and jobs.', '/activity'],
@@ -149,7 +135,6 @@ export function Settings() {
   const [branding, setBranding] = useState<BrandingSettings>({ primaryColor: '#2563eb' });
   const [legal, setLegal] = useState<LegalSettings>({});
   const [milestones, setMilestones] = useState<PaymentMilestone[]>(defaultMilestones);
-  const [featureFlags, setFeatureFlags] = useState<FeatureFlagsPayload>({ flags: {}, definitions: [] });
   const [connectors, setConnectors] = useState<ConnectorStatus>({
     stripe: 'Checking...',
     quickbooks: 'Check QuickBooks settings',
@@ -173,19 +158,17 @@ export function Settings() {
     setIsLoading(true);
     setError('');
     try {
-      const [orgPayload, brandingPayload, legalPayload, schedulePayload, featureFlagsPayload] = await Promise.all([
+      const [orgPayload, brandingPayload, legalPayload, schedulePayload] = await Promise.all([
         apiJson<{ data?: OrgSettings }>('/v1/settings/org'),
         apiJson<{ data?: BrandingSettings }>('/v1/settings/branding'),
         apiJson<{ data?: LegalSettings }>('/v1/settings/legal'),
         apiJson<{ data?: PaymentSchedule }>('/v1/settings/payment-schedule'),
-        apiJson<{ data?: FeatureFlagsPayload }>('/v1/settings/feature-flags'),
       ]);
       const org = orgPayload.data || {};
       setSettings({ ...org, phone: org.phone ? maskPhone(String(org.phone)) : '', salesTaxRate: salesTaxDisplay(org.salesTaxRate) });
       setBranding({ primaryColor: '#2563eb', ...(brandingPayload.data || {}) });
       setLegal(legalPayload.data || {});
       setMilestones(schedulePayload.data?.milestones?.length ? schedulePayload.data.milestones : defaultMilestones);
-      setFeatureFlags(featureFlagsPayload.data || { flags: {}, definitions: [] });
       void loadConnectorStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -332,32 +315,6 @@ export function Settings() {
     } finally {
       setSaving(null);
     }
-  }
-
-  async function saveFeatureFlags(event: FormEvent) {
-    event.preventDefault();
-    setSaving('feature-flags');
-    try {
-      const payload = await apiJson<{ data?: FeatureFlagsPayload }>('/v1/settings/feature-flags', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flags: featureFlags.flags }),
-      });
-      setFeatureFlags(payload.data || featureFlags);
-      window.showToast?.('Feature flags saved', 'success');
-    } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Failed to save feature flags', 'error');
-    } finally {
-      setSaving(null);
-    }
-  }
-
-  function toggleFeatureFlag(key: string, enabled: boolean) {
-    setFeatureFlags((current) => ({
-      ...current,
-      flags: { ...current.flags, [key]: enabled },
-      definitions: current.definitions.map((definition) => definition.key === key ? { ...definition, enabled } : definition),
-    }));
   }
 
   function updateMilestone(index: number, patch: Partial<PaymentMilestone>) {
@@ -604,35 +561,6 @@ export function Settings() {
             <ActionCard href="/email-templates" title="Email templates" copy="Proposal emails, future drips, thank-yous, and change-order communication." />
             <ActionCard href="/notifications" title="Notifications" copy="Review messages, accepted estimates, and browser alert readiness." />
           </div>
-        </Card>
-
-        <Card id="feature-flags" padding="lg" className="scroll-mt-20">
-          <CardHeader title="Feature Flags" description="Server-side switches for newer workflows. Changes apply to API responses and public proposal behavior without a redeploy." />
-          <form className="grid gap-3" onSubmit={saveFeatureFlags}>
-            {featureFlags.definitions.length ? featureFlags.definitions.map((flag) => (
-              <label key={flag.key} className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-3">
-                <span className="min-w-0">
-                  <span className="pf-row-title block">{flag.label}</span>
-                  <span className="pf-copy mt-1 block">{flag.description}</span>
-                  <span className="pf-meta mt-1 block">Default: {flag.defaultValue ? 'on' : 'off'}</span>
-                </span>
-                <span className="inline-flex shrink-0 items-center gap-2">
-                  <span className={`text-sm font-medium ${featureFlags.flags[flag.key] !== false ? 'text-green-700' : 'text-gray-500'}`}>
-                    {featureFlags.flags[flag.key] !== false ? 'On' : 'Off'}
-                  </span>
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5 rounded border-gray-300"
-                    checked={featureFlags.flags[flag.key] !== false}
-                    onChange={(event) => toggleFeatureFlag(flag.key, event.target.checked)}
-                  />
-                </span>
-              </label>
-            )) : (
-              <p className="pf-copy rounded-lg border border-dashed border-gray-200 p-3">No feature flags are configured yet.</p>
-            )}
-            <Button type="submit" isLoading={saving === 'feature-flags'} className="w-full sm:w-fit">Save Feature Flags</Button>
-          </form>
         </Card>
 
         <Card id="integrations-settings" padding="lg" className="scroll-mt-20">

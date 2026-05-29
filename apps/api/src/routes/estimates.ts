@@ -11,7 +11,6 @@ import { estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule } from '../lib/payment-schedule';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 import { createNotificationAndPush } from '../lib/web-push';
-import { featureFlagsFromSettings, isFeatureEnabled } from '../lib/feature-flags';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
@@ -450,7 +449,6 @@ estimatesApp.get('/:id/public', async (c) => {
       paymentSchedule,
       paymentTerms: settings?.paymentTerms || 'Due on completion',
       legal,
-      features: featureFlagsFromSettings(settings),
       photos,
       branding: branding ? {
         logoUrl: branding.logoUrl,
@@ -471,10 +469,6 @@ estimatesApp.get('/:id/color-options', async (c) => {
     where: eq(estimates.id, id),
   });
   if (!estimate) return c.json({ error: 'Not found' }, 404);
-  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, estimate.orgId) });
-  if (!isFeatureEnabled(settings, 'customerColorSelection')) {
-    return c.json({ error: 'Customer color selection is disabled for this contractor.' }, 404);
-  }
 
   const supplierIds = supplierIdsForEstimate(estimate);
   const conditions = [eq(supplierCatalogColors.isActive, true)];
@@ -530,10 +524,6 @@ estimatesApp.post('/:id/color-selections', async (c) => {
   if (!existing) return c.json({ error: 'Not found' }, 404);
   if (['canceled', 'declined', 'superseded', 'voided'].includes(existing.status)) {
     return c.json({ error: 'This proposal is no longer accepting color selections.' }, 409);
-  }
-  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, existing.orgId) });
-  if (!isFeatureEnabled(settings, 'customerColorSelection')) {
-    return c.json({ error: 'Customer color selection is disabled for this contractor.' }, 404);
   }
 
   let result: ReturnType<typeof estimatePackagesWithColorSelections>;
