@@ -43,6 +43,8 @@ Required GitHub Actions secrets:
 - `NEON_STAGING`
 - `NEON_PROD`
 
+The deploy workflows also accept the existing aliases `CF_ACCOUNT_ID` and `CF_API_TOKEN`. `CLOUDFLARE_API_TOKEN` or `CF_API_TOKEN` must be present for Wrangler deploys.
+
 ## Rollback
 
 Cloudflare keeps previous deployments and Worker versions.

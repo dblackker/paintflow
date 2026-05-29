@@ -13,8 +13,8 @@ jobs:
       group: cloudflare-demo
       cancel-in-progress: true
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.CF_ACCOUNT_ID || '68309aec3845a76b4d2df357a9575e13' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
       DATABASE_URL: ${{ secrets.NEON_MAIN }}
       PUBLIC_API_URL: https://crewmodo-api-demo.danielablack.workers.dev
       VITE_API_URL: https://crewmodo-api-demo.danielablack.workers.dev
