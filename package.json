@@ -22,11 +22,11 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260514.0",
+    "@cloudflare/workers-types": "^4.20260529.1",
     "@playwright/test": "^1.44.0",
     "prettier": "^3.0.0",
     "typescript": "^5.4.5",
-    "wrangler": "^3.57.2"
+    "wrangler": "^4.95.0"
   },
   "packageManager": "pnpm@9.0.0"
 }

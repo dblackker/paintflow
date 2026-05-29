@@ -7,6 +7,8 @@ Crewmodo deploys as:
 - Database: Neon Postgres
 - Supporting Cloudflare bindings: Workers KV and R2
 
+See `docs/production-operations.md` for the current dev, staging, and production release model.
+
 ## 1. Install and Authenticate Wrangler
 
 From the repo root:
@@ -145,6 +147,7 @@ PowerShell:
 
 ```powershell
 $env:PUBLIC_API_URL="https://api.crewmodo.com"
+$env:VITE_API_URL="https://api.crewmodo.com"
 corepack pnpm --filter @crewmodo/web build
 corepack pnpm wrangler pages deploy apps/web/dist --project-name crewmodo-web
 ```
@@ -152,7 +155,7 @@ corepack pnpm wrangler pages deploy apps/web/dist --project-name crewmodo-web
 Shell:
 
 ```sh
-PUBLIC_API_URL="https://api.crewmodo.com" corepack pnpm --filter @crewmodo/web build
+PUBLIC_API_URL="https://api.crewmodo.com" VITE_API_URL="https://api.crewmodo.com" corepack pnpm --filter @crewmodo/web build
 corepack pnpm wrangler pages deploy apps/web/dist --project-name crewmodo-web
 ```
 
@@ -160,7 +163,9 @@ If using Cloudflare Pages Git integration, set:
 
 - Build command: `corepack pnpm --filter @crewmodo/web build`
 - Build output directory: `apps/web/dist`
-- Production env var: `PUBLIC_API_URL=https://api.crewmodo.com`
+- Production env vars:
+  - `PUBLIC_API_URL=https://api.crewmodo.com`
+  - `VITE_API_URL=https://api.crewmodo.com`
 
 ## 7. Custom Domains
 

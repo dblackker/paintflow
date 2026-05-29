@@ -8,11 +8,11 @@ Crewmodo separates email into three lanes:
 
 ## Recommended Provider Strategy
 
-Use MailChannels for transactional and operational email while the app is deployed on Cloudflare Workers. MailChannels supports Cloudflare-friendly HTTP sending through `https://api.mailchannels.net/tx/v1/send` with an `X-Api-Key` header.
+Use MailChannels for transactional and operational email until `crewmodo.com` is fully verified in Cloudflare Email Service. MailChannels supports Cloudflare-friendly HTTP sending through `https://api.mailchannels.net/tx/v1/send` with an `X-Api-Key` header.
 
 Use a marketing platform, or a later dedicated Crewmodo campaigns module, for drip marketing. Do not send marketing drips from the same code path as magic links because unsubscribe, consent, and suppression behavior should never block login or system notifications.
 
-Cloudflare Email Service is worth watching as a future consolidation option, but MailChannels is the practical choice if the sending domain is already working there.
+Cloudflare Email Service now supports outbound email from Workers through a native binding, which is the preferred long-term direction because it removes an external dependency. Do not switch production to Cloudflare Email Service until sender DNS, test delivery, and bounce behavior have been verified from staging.
 
 ## Required MailChannels Setup
 
@@ -38,8 +38,8 @@ Set public configuration as Worker vars:
 
 ```toml
 EMAIL_PROVIDER = "mailchannels"
-EMAIL_FROM = "estimates@blacklinepainting.com"
-EMAIL_FROM_NAME = "Blackline Painting"
+EMAIL_FROM = "no-reply@crewmodo.com"
+EMAIL_FROM_NAME = "Crewmodo"
 ```
 
 Set secrets through Wrangler or the Cloudflare dashboard:
@@ -47,10 +47,22 @@ Set secrets through Wrangler or the Cloudflare dashboard:
 ```powershell
 cd apps/api
 wrangler secret put MAILCHANNELS_API_KEY --env demo
+wrangler secret put MAILCHANNELS_API_KEY --env staging
 wrangler secret put MAILCHANNELS_API_KEY --env production
 ```
 
-The app only sends `MAILCHANNELS_API_KEY` to MailChannels. SPF, DKIM, DMARC, and Domain Lockdown belong in DNS/provider setup, not in the application payload. Keep `EMAIL_PROVIDER=mailchannels` for the Cloudflare demo unless you intentionally switch to another provider.
+The app only sends `MAILCHANNELS_API_KEY` to MailChannels. SPF, DKIM, DMARC, and Domain Lockdown belong in DNS/provider setup, not in the application payload. Keep `EMAIL_PROVIDER=mailchannels` until Cloudflare Email Service is verified.
+
+## Cloudflare Email Service Migration
+
+Recommended migration path:
+
+1. In Cloudflare, open Email Service / Email Sending for `crewmodo.com`.
+2. Onboard the domain and add the SPF/DKIM records Cloudflare provides.
+3. Add a Worker `send_email` binding in `apps/api/wrangler.toml`.
+4. Add a `cloudflare` provider branch in `apps/api/src/lib/email.ts`, or replace MailChannels after staging is verified.
+5. Send test magic links, estimate emails, change order emails, invoice reminders, and supplier-invoice notifications from staging.
+6. Switch production `EMAIL_PROVIDER` only after delivery is reliable.
 
 ## Product Behavior
 

@@ -2,6 +2,14 @@ function resolveApiUrl() {
   const configuredUrl = import.meta.env.PUBLIC_API_URL || import.meta.env.VITE_API_URL;
   if (configuredUrl) return configuredUrl.replace(/\/$/, '');
 
+  if (typeof window !== 'undefined' && ['crewmodo.com', 'www.crewmodo.com', 'app.crewmodo.com'].includes(window.location.hostname)) {
+    return 'https://api.crewmodo.com';
+  }
+
+  if (typeof window !== 'undefined' && window.location.hostname === 'staging.crewmodo.com') {
+    return 'https://api-staging.crewmodo.com';
+  }
+
   if (typeof window !== 'undefined' && window.location.hostname === 'crewmodo-demo.pages.dev') {
     return 'https://crewmodo-api-demo.danielablack.workers.dev';
   }

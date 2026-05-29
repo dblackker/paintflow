@@ -1,22 +1,32 @@
-name: Deploy Demo
+name: Deploy Production
 
 on:
+  release:
+    types:
+      - published
   workflow_dispatch:
+    inputs:
+      release_ref:
+        description: Git ref to deploy, for example main or v1.0.0
+        required: false
+        default: main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     concurrency:
-      group: cloudflare-demo
-      cancel-in-progress: true
+      group: crewmodo-production
+      cancel-in-progress: false
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      PUBLIC_API_URL: https://crewmodo-api-demo.danielablack.workers.dev
-      VITE_API_URL: https://crewmodo-api-demo.danielablack.workers.dev
+      PUBLIC_API_URL: https://api.crewmodo.com
+      VITE_API_URL: https://api.crewmodo.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_ref || github.ref }}
 
       - name: Enable Corepack
         run: corepack enable
@@ -34,10 +44,13 @@ jobs:
         run: pnpm -r build
 
       - name: Deploy API Worker
-        run: pnpm exec wrangler deploy --config apps/api/wrangler.toml --env demo
+        run: pnpm exec wrangler deploy --config apps/api/wrangler.toml --env production
 
       - name: Build web app
         run: pnpm --filter @crewmodo/web build
 
       - name: Deploy Pages
-        run: pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-demo --branch main
+        run: pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-web --branch main
+
+      - name: Smoke test API
+        run: curl --fail --retry 3 --retry-delay 5 https://api.crewmodo.com/health
