@@ -22,7 +22,7 @@ jobs:
       group: supplier-catalog-sync
       cancel-in-progress: false
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.NEON_PROD }}
       DATABASE_PATH: ./data/suppliers.db
       SUPPLIER_NAV_TIMEOUT_MS: 12000
       SUPPLIER_SELECTOR_TIMEOUT_MS: 3500

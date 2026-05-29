@@ -7,25 +7,41 @@ This is the operating model for releasing Crewmodo with fast iteration, clear ro
 | Environment | Purpose | Web | API | Deploy trigger |
 | --- | --- | --- | --- | --- |
 | Local dev | Daily development | `http://localhost:5173` | `http://localhost:8787` | `pnpm dev` |
-| Demo | Shareable sandbox | `https://crewmodo-demo.pages.dev` | `https://crewmodo-api-demo.danielablack.workers.dev` | Manual GitHub Action |
-| Staging | Main-branch verification | `https://staging.crewmodo.com` | `https://api-staging.crewmodo.com` | Push to `main` |
-| Production | Customer-facing release | `https://crewmodo.com` and `https://app.crewmodo.com` | `https://api.crewmodo.com` | GitHub Release or manual dispatch |
+| Dev | Main-branch verification | `https://crewmodo-demo.pages.dev` | `https://crewmodo-api-demo.danielablack.workers.dev` | Push to `main` or manual dispatch |
+| Staging | Pre-release verification | `https://staging.crewmodo.com` | `https://api-staging.crewmodo.com` | Push to `staging` or manual dispatch |
+| Production | Customer-facing release | `https://crewmodo.com` and `https://app.crewmodo.com` | `https://api.crewmodo.com` | Push to `production`, GitHub Release, or manual dispatch |
 
-Staging and production use separate Worker environments, KV namespaces, and R2 buckets. Staging currently uses the same app secrets supplied from local `.env`; before real customers are onboarded, use a separate Neon branch and separate Stripe test keys for staging.
+Dev, staging, and production use separate Neon connection strings:
+
+- `NEON_MAIN` for `main` / dev.
+- `NEON_STAGING` for `staging`.
+- `NEON_PROD` for `production`.
+
+Staging and production use separate Worker environments, KV namespaces, R2 buckets, and database branches. Keep Stripe test keys on dev/staging and live keys only on production.
 
 ## Release Flow
 
 1. Merge code to `main`.
-2. GitHub Actions deploys staging automatically.
-3. Smoke test staging:
+2. GitHub Actions deploys dev automatically against `NEON_MAIN`.
+3. Promote by merging `main` to `staging`.
+4. GitHub Actions runs migrations against `NEON_STAGING`, then deploys staging.
+5. Smoke test staging:
    - `https://staging.crewmodo.com`
    - `https://api-staging.crewmodo.com/health`
-4. Create a GitHub Release with a concise changelog.
-5. The production workflow deploys API and web assets.
-6. Smoke test production:
+6. Promote by merging `staging` to `production` or publishing a GitHub Release.
+7. GitHub Actions runs migrations against `NEON_PROD`, then deploys API and web assets.
+8. Smoke test production:
    - `https://crewmodo.com`
    - `https://app.crewmodo.com`
    - `https://api.crewmodo.com/health`
+
+Required GitHub Actions secrets:
+
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+- `NEON_MAIN`
+- `NEON_STAGING`
+- `NEON_PROD`
 
 ## Rollback
 
@@ -44,7 +60,7 @@ For the API:
 2. Go to Workers & Pages > `crewmodo-api-production` > Deployments / Versions.
 3. Roll back to the prior healthy version.
 
-Keep database migrations backwards compatible where possible. If a migration is not backwards compatible, document the rollback plan in the release notes before shipping.
+Keep database migrations backwards compatible where possible. Database rollback is a separate operation from code rollback. If a migration is not backwards compatible, document the data recovery or forward-fix plan in the release notes before shipping.
 
 ## Monitoring
 

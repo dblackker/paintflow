@@ -1,6 +1,9 @@
 name: Deploy Production
 
 on:
+  push:
+    branches:
+      - production
   release:
     types:
       - published
@@ -20,6 +23,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DATABASE_URL: ${{ secrets.NEON_PROD }}
       PUBLIC_API_URL: https://api.crewmodo.com
       VITE_API_URL: https://api.crewmodo.com
     steps:
@@ -43,6 +47,9 @@ jobs:
       - name: Build packages
         run: pnpm -r build
 
+      - name: Run database migrations
+        run: pnpm --filter @crewmodo/db db:migrate
+
       - name: Deploy API Worker
         run: pnpm exec wrangler deploy --config apps/api/wrangler.toml --env production
 
@@ -50,7 +57,7 @@ jobs:
         run: pnpm --filter @crewmodo/web build
 
       - name: Deploy Pages
-        run: pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-web --branch main
+        run: pnpm exec wrangler pages deploy apps/web/dist --project-name crewmodo-web --branch production
 
       - name: Smoke test API
         run: curl --fail --retry 3 --retry-delay 5 https://api.crewmodo.com/health

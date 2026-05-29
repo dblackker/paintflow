@@ -19,10 +19,58 @@ CREATE TABLE IF NOT EXISTS team_members (
 ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS team_member_id UUID REFERENCES team_members(id);
 ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS hourly_rate DECIMAL(10,2);
 ALTER TABLE time_entries ADD COLUMN IF NOT EXISTS total_cost DECIMAL(10,2);
-ALTER TABLE time_entries ALTER COLUMN user_id DROP NOT NULL;
-ALTER TABLE time_entries ALTER COLUMN rate DROP NOT NULL;
-ALTER TABLE time_entries ALTER COLUMN cost DROP NOT NULL;
-ALTER TABLE time_entries ALTER COLUMN hours TYPE DECIMAL(10,2);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'time_entries'
+      AND column_name = 'user_id'
+  ) THEN
+    ALTER TABLE time_entries ALTER COLUMN user_id DROP NOT NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'time_entries'
+      AND column_name = 'rate'
+  ) THEN
+    ALTER TABLE time_entries ALTER COLUMN rate DROP NOT NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'time_entries'
+      AND column_name = 'cost'
+  ) THEN
+    ALTER TABLE time_entries ALTER COLUMN cost DROP NOT NULL;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'time_entries'
+      AND column_name = 'hours'
+  ) THEN
+    ALTER TABLE time_entries ALTER COLUMN hours TYPE DECIMAL(10,2);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS quickbooks_connections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

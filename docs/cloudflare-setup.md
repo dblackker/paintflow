@@ -30,22 +30,37 @@ CLOUDFLARE_API_TOKEN=...
 In Neon:
 
 1. Create a project for Crewmodo.
-2. Create production and staging branches if desired.
+2. Create production, staging, and main/dev branches.
 3. Copy the pooled or serverless-compatible connection string for the app role.
 
-Run migrations against the production database:
+For local development on Windows, keep the three connection strings in User environment variables:
+
+- `NEON_MAIN`
+- `NEON_STAGING`
+- `NEON_PROD`
+
+Local `.env` should use the dev database:
+
+```powershell
+$neonMain=[Environment]::GetEnvironmentVariable("NEON_MAIN","User")
+$lines = if (Test-Path .env) { Get-Content .env } else { @() }
+$lines = $lines | Where-Object { $_ -notmatch '^DATABASE_URL=' }
+($lines + "DATABASE_URL=$neonMain") | Set-Content .env
+```
+
+Run migrations against a target database by setting `DATABASE_URL` from the matching Neon variable:
 
 PowerShell:
 
 ```powershell
-$env:DATABASE_URL="postgresql://USER:PASSWORD@HOST/db?sslmode=require"
+$env:DATABASE_URL=[Environment]::GetEnvironmentVariable("NEON_MAIN","User")
 corepack pnpm --filter @crewmodo/db db:migrate
 ```
 
 Shell:
 
 ```sh
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/db?sslmode=require" corepack pnpm --filter @crewmodo/db db:migrate
+DATABASE_URL="$NEON_MAIN" corepack pnpm --filter @crewmodo/db db:migrate
 ```
 
 The current API uses `@neondatabase/serverless`. Cloudflare also recommends Hyperdrive for database pooling when using native Postgres drivers. If we later move from the Neon serverless HTTP driver to `pg`/Postgres.js, add a Hyperdrive binding and pass `env.HYPERDRIVE.connectionString` to the database client.
@@ -97,6 +112,20 @@ corepack pnpm wrangler secret put TWILIO_AUTH_TOKEN --env production
 corepack pnpm wrangler secret put TWILIO_PHONE_NUMBER --env production
 corepack pnpm wrangler secret put VAPID_PRIVATE_KEY --env production
 ```
+
+Use the environment-specific Neon connection string for each Worker environment:
+
+```powershell
+[Environment]::GetEnvironmentVariable("NEON_MAIN","User") | corepack pnpm wrangler secret put DATABASE_URL --env demo
+[Environment]::GetEnvironmentVariable("NEON_STAGING","User") | corepack pnpm wrangler secret put DATABASE_URL --env staging
+[Environment]::GetEnvironmentVariable("NEON_PROD","User") | corepack pnpm wrangler secret put DATABASE_URL --env production
+```
+
+GitHub Actions also needs these repository secrets so deploys can run migrations before releasing:
+
+- `NEON_MAIN`
+- `NEON_STAGING`
+- `NEON_PROD`
 
 For Web Push, generate an ES256 VAPID key pair and set:
 
