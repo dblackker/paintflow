@@ -66,6 +66,24 @@ const navSections: NavSection[] = [
   },
 ];
 
+function BrandMark() {
+  return (
+    <span className="pf-brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" focusable="false">
+        <path
+          d="M20.8 9.3A8.3 8.3 0 1 0 21 22.6"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="4.2"
+        />
+        <circle cx="22.8" cy="11.2" r="2.5" fill="currentColor" />
+        <circle cx="22.8" cy="20.8" r="2.5" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
 interface NotificationPreview {
   id: string;
   source?: string;
@@ -359,7 +377,7 @@ export function BaseLayout() {
                 )}
               </div>
               <Link to="/dashboard" className="pf-app-brand-link" aria-label="Crewmodo dashboard">
-                <span className="pf-brand-mark">P</span>
+                <BrandMark />
               </Link>
             </div>
           </div>
@@ -372,7 +390,7 @@ export function BaseLayout() {
           <div id="app-nav-drawer" className="pf-mobile-nav is-open border-r">
             <div className="flex items-center justify-between gap-3 border-b px-4 py-4">
               <Link to="/dashboard" className="flex items-center gap-3" onClick={() => setIsMobileMenuOpen(false)}>
-                <span className="pf-brand-mark">P</span>
+                <BrandMark />
                 <span className="pf-section-title">Crewmodo</span>
               </Link>
               <button

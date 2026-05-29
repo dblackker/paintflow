@@ -222,7 +222,13 @@ const navSections = [
           </div>
           <button type="button" data-logout class="pf-logout-button hidden lg:inline-flex">Log out</button>
           <a href="/dashboard" class="pf-app-brand-link" aria-label="Crewmodo dashboard">
-            <span class="pf-brand-mark">P</span>
+            <span class="pf-brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32" focusable="false">
+                <path d="M20.8 9.3A8.3 8.3 0 1 0 21 22.6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="4.2"></path>
+                <circle cx="22.8" cy="11.2" r="2.5" fill="currentColor"></circle>
+                <circle cx="22.8" cy="20.8" r="2.5" fill="currentColor"></circle>
+              </svg>
+            </span>
           </a>
         </div>
       </div>
@@ -231,7 +237,13 @@ const navSections = [
     <div id="mobile-nav" class="pf-mobile-nav hidden border-r" data-owner-nav>
       <div class="flex items-center justify-between gap-3 border-b px-4 py-4">
         <a href="/dashboard" class="flex items-center gap-3">
-          <span class="pf-brand-mark">P</span>
+          <span class="pf-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" focusable="false">
+              <path d="M20.8 9.3A8.3 8.3 0 1 0 21 22.6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="4.2"></path>
+              <circle cx="22.8" cy="11.2" r="2.5" fill="currentColor"></circle>
+              <circle cx="22.8" cy="20.8" r="2.5" fill="currentColor"></circle>
+            </svg>
+          </span>
           <span class="text-lg font-semibold text-gray-950">Crewmodo</span>
         </a>
         <button id="mobile-nav-close" type="button" class="btn-icon" aria-label="Close navigation">x</button>
