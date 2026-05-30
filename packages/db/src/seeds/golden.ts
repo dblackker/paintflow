@@ -4,6 +4,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { createDb } from '../client';
 import {
   auditLogs,
+  activities,
+  aiUsageEvents,
   changeOrders,
   estimateMaterials,
   estimatePhotos,
@@ -11,6 +13,11 @@ import {
   estimateRooms,
   estimates,
   estimateTemplates,
+  emailSends,
+  customerPayments,
+  expenses,
+  emailTemplates,
+  googleCalendarConnections,
   jobAssignments,
   jobCosts,
   jobPhotos,
@@ -21,6 +28,9 @@ import {
   memberships,
   messageTemplates,
   messages,
+  notificationEvents,
+  notificationReads,
+  pushSubscriptions,
   orgBranding,
   organizations,
   orgSettings,
@@ -29,6 +39,9 @@ import {
   reviewRequests,
   roles,
   serviceAreas,
+  stripeConnections,
+  quickbooksConnections,
+  subscriptions,
   teamMembers,
   timeEntries,
   timePunchEvents,
@@ -36,6 +49,10 @@ import {
   userRoles,
   users,
   materialPurchases,
+  supplierInvoiceImportFeedback,
+  supplierInvoiceImports,
+  supplierInvoiceLearningStats,
+  supplierInvoiceSenderRules,
 } from '../schema';
 import { goldenSeed } from './golden-data';
 
@@ -126,17 +143,29 @@ async function deleteOrgData(db: Db, orgId: string) {
     await db.delete(estimateRooms).where(inArray(estimateRooms.estimateId, estimateIds));
   }
   if (jobIds.length) {
+    await db.delete(customerPayments).where(eq(customerPayments.orgId, orgId));
+    await db.delete(emailSends).where(eq(emailSends.orgId, orgId));
     await db.delete(jobAssignments).where(inArray(jobAssignments.jobId, jobIds));
     await db.delete(timePunchEvents).where(eq(timePunchEvents.orgId, orgId));
     await db.delete(timePunchSessions).where(eq(timePunchSessions.orgId, orgId));
     await db.delete(timeEntries).where(inArray(timeEntries.jobId, jobIds));
+    await db.delete(expenses).where(inArray(expenses.jobId, jobIds));
     await db.delete(jobCosts).where(inArray(jobCosts.jobId, jobIds));
+    await db.delete(supplierInvoiceImportFeedback).where(eq(supplierInvoiceImportFeedback.orgId, orgId));
+    await db.delete(supplierInvoiceImports).where(eq(supplierInvoiceImports.orgId, orgId));
     await db.delete(materialPurchases).where(inArray(materialPurchases.jobId, jobIds));
     await db.delete(changeOrders).where(inArray(changeOrders.jobId, jobIds));
     await db.delete(reviewRequests).where(inArray(reviewRequests.jobId, jobIds));
     await db.delete(jobPhotos).where(inArray(jobPhotos.jobId, jobIds));
   }
 
+  await db.delete(supplierInvoiceSenderRules).where(eq(supplierInvoiceSenderRules.orgId, orgId));
+  await db.delete(supplierInvoiceLearningStats).where(eq(supplierInvoiceLearningStats.orgId, orgId));
+  await db.delete(notificationReads).where(eq(notificationReads.orgId, orgId));
+  await db.delete(notificationEvents).where(eq(notificationEvents.orgId, orgId));
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.orgId, orgId));
+  await db.delete(activities).where(eq(activities.orgId, orgId));
+  await db.delete(aiUsageEvents).where(eq(aiUsageEvents.orgId, orgId));
   await db.delete(auditLogs).where(eq(auditLogs.orgId, orgId));
   await db.delete(portalTokens).where(eq(portalTokens.orgId, orgId));
   await db.delete(messages).where(eq(messages.orgId, orgId));
@@ -148,12 +177,17 @@ async function deleteOrgData(db: Db, orgId: string) {
   await db.delete(productionRates).where(eq(productionRates.orgId, orgId));
   await db.delete(leadSources).where(eq(leadSources.orgId, orgId));
   await db.delete(estimateTemplates).where(eq(estimateTemplates.orgId, orgId));
+  await db.delete(emailTemplates).where(eq(emailTemplates.orgId, orgId));
   await db.delete(messageTemplates).where(eq(messageTemplates.orgId, orgId));
   await db.delete(userRoles).where(eq(userRoles.orgId, orgId));
   await db.delete(roles).where(eq(roles.orgId, orgId));
   await db.delete(serviceAreas).where(eq(serviceAreas.orgId, orgId));
+  await db.delete(stripeConnections).where(eq(stripeConnections.orgId, orgId));
+  await db.delete(quickbooksConnections).where(eq(quickbooksConnections.orgId, orgId));
+  await db.delete(googleCalendarConnections).where(eq(googleCalendarConnections.orgId, orgId));
   await db.delete(orgBranding).where(eq(orgBranding.orgId, orgId));
   await db.delete(orgSettings).where(eq(orgSettings.orgId, orgId));
+  await db.delete(subscriptions).where(eq(subscriptions.orgId, orgId));
   await db.delete(memberships).where(eq(memberships.orgId, orgId));
   await db.delete(organizations).where(eq(organizations.id, orgId));
 }
