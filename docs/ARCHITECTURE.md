@@ -41,7 +41,7 @@ Crewmodo is a multi-tenant SaaS CRM built for trade contractors, initially optim
 │ QuickBooks (accounting)│
 │ Google Calendar      │
 │ Twilio (SMS)         │
-│ MailChannels (email) │
+│ Resend (email)       │
 │ Documenso (e-sign)   │
 └──────────────────────┘
 ```
@@ -55,7 +55,7 @@ Crewmodo is a multi-tenant SaaS CRM built for trade contractors, initially optim
 2. POST /v1/auth/magic-link
    - Generate token (UUID)
    - Store in KV: magic:{token} → {userId, orgId} (TTL: 15 min)
-   - Send email via MailChannels
+   - Send email via Resend
 3. User clicks link: GET /v1/auth/verify?token=xxx
    - Validate token exists in KV
    - Delete token (one-time use)

@@ -9,7 +9,7 @@ Crewmodo handles the entire workflow from lead capture to final payment, with fe
 - **Frontend:** Astro, TypeScript, Tailwind CSS
 - **Backend:** Hono on Cloudflare Workers
 - **Database:** Drizzle ORM + PostgreSQL (Neon)
-- **Auth:** Magic links via MailChannels
+- **Auth:** Magic links via Resend
 - **Payments:** Stripe
 - **E-signature:** Documenso
 - **Calendar:** Google Calendar API
@@ -25,7 +25,7 @@ Crewmodo handles the entire workflow from lead capture to final payment, with fe
 - Node.js 20+
 - Cloudflare account
 - Neon Postgres database
-- MailChannels (free, via Cloudflare)
+- Resend transactional email
 
 ### Setup
 
@@ -170,18 +170,19 @@ git push origin main
 # Requires approval, deploys to app.crewmodo.com
 ```
 
-### DNS Setup for MailChannels
+### DNS Setup for Resend
 
-Transactional platform email should send from `mail.crewmodo.com` to isolate sender reputation from the apex domain.
-Configure the sender subdomain with SPF, DMARC, and MailChannels Domain Lockdown:
+Transactional platform email sends from `mail.crewmodo.com` to isolate sender reputation from the apex domain.
+Resend manages the required DNS verification records for that sender subdomain:
 
 ```
-mail.crewmodo.com TXT "v=spf1 include:relay.mailchannels.net ~all"
+resend._domainkey.mail.crewmodo.com TXT "<Resend DKIM public key>"
+send.mail.crewmodo.com MX feedback-smtp.us-east-1.amazonses.com priority 10
+send.mail.crewmodo.com TXT "v=spf1 include:amazonses.com ~all"
 _dmarc.mail.crewmodo.com TXT "v=DMARC1; p=none; rua=mailto:admin@crewmodo.com"
-_mailchannels.mail.crewmodo.com TXT "v=mc1 auth=blacklinepainting"
 ```
 
-Set `EMAIL_FROM=no-reply@mail.crewmodo.com` and `MAILCHANNELS_API_KEY` on each Worker environment.
+Set `EMAIL_PROVIDER=resend`, `EMAIL_FROM=no-reply@mail.crewmodo.com`, and `RESEND_API_KEY` on each Worker environment.
 
 ### Stripe Webhooks
 
@@ -210,7 +211,7 @@ Use separate webhook signing secrets for staging and production. Keep Stripe tes
 **Trade-offs:**
 - Email deliverability dependency
 - 15-minute token expiration
-- Requires email provider (MailChannels)
+- Requires a transactional email provider (Resend)
 - Magic link requests are rate-limited per email and per IP/network. Defaults are higher in development for demos and configurable with `MAGIC_LINK_EMAIL_LIMIT` and `MAGIC_LINK_IP_LIMIT`.
 
 ### Why Hono on Cloudflare Workers?

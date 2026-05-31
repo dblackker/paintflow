@@ -111,17 +111,17 @@ Example:
 
 ## Email Strategy
 
-MailChannels is still configured as the active outbound provider because it is already integrated and has an API key. Cloudflare now has Email Service with outbound sending from Workers through a binding, but the domain must be onboarded and sender DNS verified before switching.
+Resend is configured as the active outbound provider for transactional and operational email. The sender domain is `mail.crewmodo.com`, which isolates platform email reputation from the apex domain.
 
-Recommended path:
+Current setup:
 
-1. Keep `EMAIL_PROVIDER=mailchannels` until production email from `no-reply@crewmodo.com` is verified end-to-end.
-2. In Cloudflare, onboard `crewmodo.com` under Email Service / Email Sending.
-3. Add the SPF/DKIM records Cloudflare provides.
-4. Add a Worker `send_email` binding and switch `EMAIL_PROVIDER=cloudflare`.
-5. Send test magic links, proposal emails, change order emails, and invoice reminders from staging before production.
+1. `EMAIL_PROVIDER=resend`.
+2. `EMAIL_FROM=no-reply@mail.crewmodo.com`.
+3. `RESEND_API_KEY` is stored as a Worker secret per environment.
+4. Resend DNS records are configured in Cloudflare and Resend reports the domain as verified.
+5. Send test magic links, proposal emails, change order emails, and invoice reminders from staging before major releases.
 
-Cloudflare Email Service reduces external dependencies, but do not remove MailChannels until delivery, bounce handling, and sender reputation are proven.
+Cloudflare Email Service remains a possible future migration if we want to remove the external provider dependency.
 
 ## Configured Cloudflare Resources
 
@@ -152,7 +152,7 @@ Configured records:
 - `staging.crewmodo.com` -> `crewmodo-staging.pages.dev`
 - `api.crewmodo.com` -> production Worker route
 - `api-staging.crewmodo.com` -> staging Worker route
-- root SPF record for MailChannels
+- Resend DNS records for `mail.crewmodo.com`
 - `_dmarc.crewmodo.com` with monitoring policy
 
 When Cloudflare Email Service is enabled, update SPF/DKIM/DMARC according to the records Cloudflare provides.
