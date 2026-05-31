@@ -22,6 +22,7 @@ For each sender domain:
 2. Add the MailChannels Domain Lockdown TXT record:
    - Host: `_mailchannels` for apex sending or `_mailchannels.mail` when sending from `mail.<domain>`
    - Value format: `v=mc1 auth=<mailchannels-account-id>`
+   - Crewmodo production value: `_mailchannels.mail.crewmodo.com TXT "v=mc1 auth=blacklinepainting"`
 3. Update the domain SPF record to include MailChannels:
    - Add `include:relay.mailchannels.net` to the existing SPF record.
    - Keep only one SPF TXT record on whichever domain is used as the sender.
