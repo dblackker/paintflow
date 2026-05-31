@@ -112,6 +112,7 @@ const DEFAULT_ROLES = [
 ];
 
 const MAGIC_LINK_WINDOW_SECONDS = 3600;
+const SIGNUP_CHECKOUT_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const GOLDEN_DEMO_EMAIL = 'demo@goldenbrush.crewmodo.local';
 const GOLDEN_DEMO_CREW_EMAIL = 'devon@goldenbrush.example';
 const GOLDEN_DEMO_CREW_DOMAIN = '@goldenbrush.example';
@@ -147,6 +148,96 @@ async function ensureSaasPlan(db: ReturnType<typeof createDb>, env: Env, plan: P
     features: planFeaturesPayload(plan),
   }).returning();
   return created;
+}
+
+async function putSignupReturnToken(
+  env: Env,
+  input: { email: string; userId: string; orgId: string }
+) {
+  const token = crypto.randomUUID();
+  await env.KV.put(
+    `magic:${token}`,
+    JSON.stringify({
+      email: input.email,
+      userId: input.userId,
+      orgId: input.orgId,
+      isNewUser: true,
+      redirectPath: '/onboarding?welcome=1',
+    }),
+    { expirationTtl: SIGNUP_CHECKOUT_TOKEN_TTL_SECONDS }
+  );
+  return token;
+}
+
+async function createSignupCheckoutSession(
+  c: Context<{ Bindings: Env }>,
+  input: {
+    email: string;
+    userId: string;
+    orgId: string;
+    plan: PlanKey;
+    teamSize?: string;
+    idempotencyKey?: string;
+  }
+) {
+  const priceId = planPriceIds(c.env)[input.plan];
+  if (!priceId || priceId.startsWith('price_replace')) {
+    return { error: 'Subscription billing is not configured yet. Add the Stripe price IDs before accepting signups.', status: 503 as const };
+  }
+
+  const token = await putSignupReturnToken(c.env, {
+    email: input.email,
+    userId: input.userId,
+    orgId: input.orgId,
+  });
+
+  const stripe = new Stripe(c.env.STRIPE_SECRET_KEY);
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    customer_email: input.email,
+    payment_method_collection: 'always',
+    line_items: [{ price: priceId, quantity: 1 }],
+    subscription_data: {
+      trial_period_days: TRIAL_DAYS,
+      metadata: {
+        orgId: input.orgId,
+        plan: input.plan,
+        ...(input.idempotencyKey ? { signupIdempotencyKey: input.idempotencyKey } : {}),
+      },
+    },
+    success_url: `${c.env.APP_URL}/v1/auth/verify?token=${token}`,
+    cancel_url: `${c.env.PUBLIC_URL}/signup?checkout=canceled&plan=${input.plan}`,
+    metadata: {
+      orgId: input.orgId,
+      userId: input.userId,
+      plan: input.plan,
+      teamSize: input.teamSize || '',
+    },
+  });
+
+  return {
+    checkoutUrl: session.url,
+    trialDays: TRIAL_DAYS,
+    plan: input.plan,
+    devToken: c.env.ENVIRONMENT === 'development' ? token : undefined,
+  };
+}
+
+async function sendExistingAccountMagicLink(
+  c: Context<{ Bindings: Env }>,
+  input: { email: string; userId: string; orgId: string }
+) {
+  const token = crypto.randomUUID();
+  await c.env.KV.put(
+    `magic:${token}`,
+    JSON.stringify({ email: input.email, userId: input.userId, orgId: input.orgId, isNewUser: false, redirectPath: '/dashboard' }),
+    { expirationTtl: 900 }
+  );
+
+  const magicLink = `${c.env.APP_URL}/v1/auth/verify?token=${token}`;
+  await sendEmail(c.env, input.email, 'Sign in to Crewmodo', magicLinkEmailHtml(magicLink), undefined, {
+    text: `Sign in to Crewmodo\n\nClick: ${magicLink}\n\nExpires in 15 min.`,
+  });
 }
 
 function accessRoleForTeamRole(teamRole: string) {
@@ -574,10 +665,52 @@ auth.post('/signup', async (c) => {
   const db = createDb(c.env.DATABASE_URL);
   const existingUser = await db.query.users.findFirst({ where: eq(users.email, normalizedEmail) });
   if (existingUser) {
+    const membership = await db.query.memberships.findFirst({ where: eq(memberships.userId, existingUser.id) });
+    const existingSub = membership
+      ? await db.query.subscriptions.findFirst({ where: eq(subscriptions.orgId, membership.orgId) })
+      : null;
+
+    if (membership && existingSub?.status === 'trial_pending_payment' && !existingSub.stripeSubscriptionId) {
+      try {
+        const checkout = await createSignupCheckoutSession(c, {
+          email: normalizedEmail,
+          userId: existingUser.id,
+          orgId: membership.orgId,
+          plan,
+          teamSize,
+          idempotencyKey,
+        });
+        if ('error' in checkout) return c.json({ error: checkout.error }, checkout.status);
+        return c.json({
+          success: true,
+          checkoutUrl: checkout.checkoutUrl,
+          trialDays: checkout.trialDays,
+          plan: checkout.plan,
+          resumedSignup: true,
+          devToken: checkout.devToken,
+        });
+      } catch (err) {
+        console.error('Failed to resume signup checkout:', err);
+        return c.json({ error: 'Could not reopen subscription checkout. Check Stripe configuration and try again.' }, 502);
+      }
+    }
+
+    if (membership) {
+      try {
+        await sendExistingAccountMagicLink(c, {
+          email: normalizedEmail,
+          userId: existingUser.id,
+          orgId: membership.orgId,
+        });
+      } catch (err) {
+        console.error('Failed to send existing account sign-in link from signup:', err);
+      }
+    }
+
     return c.json({
       success: true,
       existingAccount: true,
-      message: 'If this email already has a workspace, use sign in to receive a one-time link.',
+      message: 'If this email already has a workspace, a one-time sign-in link will be sent.',
     });
   }
 
@@ -621,44 +754,23 @@ auth.post('/signup', async (c) => {
     currentPeriodEnd: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
   });
 
-  const token = crypto.randomUUID();
-  await c.env.KV.put(
-    `magic:${token}`,
-    JSON.stringify({ email: normalizedEmail, userId: user.id, orgId: org.id, isNewUser: true, redirectPath: '/onboarding?welcome=1' }),
-    { expirationTtl: 3600 }
-  );
-
   try {
-    const stripe = new Stripe(c.env.STRIPE_SECRET_KEY);
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer_email: normalizedEmail,
-      payment_method_collection: 'always',
-      line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        trial_period_days: TRIAL_DAYS,
-        metadata: {
-          orgId: org.id,
-          plan,
-          signupIdempotencyKey: idempotencyKey,
-        },
-      },
-      success_url: `${c.env.APP_URL}/v1/auth/verify?token=${token}`,
-      cancel_url: `${c.env.PUBLIC_URL}/signup?checkout=canceled&plan=${plan}`,
-      metadata: {
-        orgId: org.id,
-        userId: user.id,
-        plan,
-        teamSize,
-      },
+    const checkout = await createSignupCheckoutSession(c, {
+      email: normalizedEmail,
+      userId: user.id,
+      orgId: org.id,
+      plan,
+      teamSize,
+      idempotencyKey,
     });
+    if ('error' in checkout) return c.json({ error: checkout.error }, checkout.status);
 
     return c.json({
       success: true,
-      checkoutUrl: session.url,
-      trialDays: TRIAL_DAYS,
-      plan,
-      devToken: c.env.ENVIRONMENT === 'development' ? token : undefined,
+      checkoutUrl: checkout.checkoutUrl,
+      trialDays: checkout.trialDays,
+      plan: checkout.plan,
+      devToken: checkout.devToken,
     }, 201);
   } catch (err) {
     console.error('Failed to create signup checkout:', err);

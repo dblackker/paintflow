@@ -12,8 +12,8 @@ const plans = PLAN_ORDER.map((key) => PLAN_DEFINITIONS[key]);
 
 const trialDetails = [
   'No charge today',
-  '14-day trial starts after secure checkout',
-  'Cancel from Billing before the trial ends',
+  'Secure checkout starts the 14-day trial',
+  'You return signed in automatically',
 ];
 
 function phoneDigits(value: string) {
@@ -52,9 +52,10 @@ export function Signup() {
     plan: plans.some((plan) => plan.key === initialPlan) ? initialPlan : 'pro',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [redirectingToCheckout, setRedirectingToCheckout] = useState(false);
   const [message, setMessage] = useState<{ tone: 'error' | 'info' | 'success'; text: string; href?: string } | null>(
     searchParams.get('checkout') === 'canceled'
-      ? { tone: 'info', text: 'Checkout was canceled. Finish secure checkout when you are ready to activate the free trial.' }
+      ? { tone: 'info', text: 'Checkout was canceled. Your workspace is saved, but the trial is not active yet. Submit this form again to reopen secure checkout.' }
       : null,
   );
 
@@ -90,7 +91,7 @@ export function Signup() {
       if (payload.existingAccount) {
         setMessage({
           tone: 'info',
-          text: 'If a workspace exists for this email, use sign in to receive a one-time link.',
+          text: 'If this email has a Crewmodo workspace, we sent a one-time sign-in link. Check your inbox to continue.',
         });
         return;
       }
@@ -104,6 +105,13 @@ export function Signup() {
       }
 
       if (payload.checkoutUrl) {
+        setRedirectingToCheckout(true);
+        setMessage({
+          tone: 'success',
+          text: payload.resumedSignup
+            ? 'Workspace found. Reopening secure checkout so you can activate the trial.'
+            : 'Workspace reserved. Opening secure checkout to start your trial.',
+        });
         window.location.href = payload.checkoutUrl;
         return;
       }
@@ -133,7 +141,7 @@ export function Signup() {
               <Badge variant="info" size="sm">14-day free trial</Badge>
               <h1 className="pf-page-title mt-4">Start your contractor workspace</h1>
               <p className="pf-page-copy mt-2">
-                Create the workspace, choose a trial plan, and finish payment setup in Stripe. You will not be charged today.
+                Create your workspace, add payment information through Stripe, and return signed in to finish setup. You will not be charged today.
               </p>
             </div>
 
@@ -157,7 +165,7 @@ export function Signup() {
               <section aria-labelledby="workspace-details-title" className="grid gap-4">
                 <div>
                   <h2 id="workspace-details-title" className="pf-section-title">Workspace details</h2>
-                  <p className="pf-copy mt-1">Use the owner or office email that should receive billing and admin messages.</p>
+                  <p className="pf-copy mt-1">Use the owner or office email that should receive billing, setup, and sign-in messages.</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Input label="Your name" required autoComplete="name" value={formData.name} onChange={(event) => update('name', event.target.value)} placeholder="Alex Morgan" />
@@ -219,18 +227,18 @@ export function Signup() {
                   <div>
                     <p className="pf-row-title">{selectedPlan.displayName} starts after the free trial</p>
                     <p className="pf-copy mt-1">
-                      Stripe securely stores the payment method. First charge: ${selectedPlan.price}/month after day 14 unless you cancel.
+                      Stripe securely stores the payment method and starts the trial. First charge: ${selectedPlan.price}/month after day 14 unless you cancel.
                     </p>
                   </div>
                   <p className="pf-section-title">${selectedPlan.price}/mo</p>
                 </div>
               </div>
 
-              <Button type="submit" size="lg" fullWidth isLoading={isSubmitting} rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
-                Continue to secure trial checkout
+              <Button type="submit" size="lg" fullWidth isLoading={isSubmitting || redirectingToCheckout} rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
+                {redirectingToCheckout ? 'Opening secure checkout' : 'Continue to secure checkout'}
               </Button>
               <p className="pf-meta text-center">
-                Crewmodo does not store card numbers. Billing is managed through Stripe.
+                No magic link is required during signup. After checkout, Stripe sends you back signed in. If you leave before finishing, use this same email to resume checkout or request a sign-in link.
               </p>
             </form>
           </section>
@@ -240,8 +248,8 @@ export function Signup() {
             <ol className="mt-4 grid gap-4">
               {[
                 ['1', 'Secure checkout', 'Stripe stores payment information and starts the free trial.'],
-                ['2', 'Workspace setup', 'Add business info, production rates, paint products, and review links.'],
-                ['3', 'First workflow', 'Create a lead, send a proposal, schedule the job, and track crew time.'],
+                ['2', 'Automatic sign-in', 'You return to Crewmodo signed in. A welcome email is sent for your records.'],
+                ['3', 'Workspace setup', 'Add business info, production rates, paint products, and review links.'],
               ].map(([step, title, copy]) => (
                 <li key={step} className="flex gap-3">
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 text-sm font-semibold text-blue-950">{step}</span>
