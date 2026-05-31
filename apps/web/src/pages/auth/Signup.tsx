@@ -222,15 +222,16 @@ export function Signup() {
                 </div>
               </section>
 
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="pf-row-title">{selectedPlan.displayName} starts after the free trial</p>
-                    <p className="pf-copy mt-1">
-                      Stripe securely stores the payment method and starts the trial. First charge: ${selectedPlan.price}/month after day 14 unless you cancel.
+              <div className="rounded-md border-l-4 border-[var(--pf-primary)] bg-blue-50 px-4 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="pf-meta font-semibold uppercase tracking-normal text-blue-900">Selected plan</p>
+                    <p className="pf-row-title mt-1 text-blue-950">{selectedPlan.displayName} starts after the free trial</p>
+                    <p className="pf-copy mt-1 text-blue-900">
+                      Stripe stores the payment method and starts the trial. First charge is ${selectedPlan.price}/month after day 14 unless you cancel.
                     </p>
                   </div>
-                  <p className="pf-section-title">${selectedPlan.price}/mo</p>
+                  <p className="pf-section-title shrink-0 text-blue-950">${selectedPlan.price}/mo</p>
                 </div>
               </div>
 
