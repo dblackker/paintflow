@@ -20,17 +20,17 @@ For each sender domain:
 
 1. Create a MailChannels API key with `api` scope.
 2. Add the MailChannels Domain Lockdown TXT record:
-   - Host: `_mailchannels`
+   - Host: `_mailchannels` for apex sending or `_mailchannels.mail` when sending from `mail.<domain>`
    - Value format: `v=mc1 auth=<mailchannels-account-id>`
 3. Update the domain SPF record to include MailChannels:
    - Add `include:relay.mailchannels.net` to the existing SPF record.
-   - Keep only one SPF TXT record on the root domain.
+   - Keep only one SPF TXT record on whichever domain is used as the sender.
 4. Add DKIM for deliverability if MailChannels provides DKIM records for the domain.
 5. Add a DMARC record if the domain does not already have one:
    - Host: `_dmarc`
    - Starter value: `v=DMARC1; p=none; rua=mailto:dmarc@<domain>`
 
-For the demo, using a working domain such as `blacklinepainting.com` is fine. For production Crewmodo platform email, set up `crewmodo.com` separately.
+Crewmodo sends transactional platform email from `mail.crewmodo.com` so sender reputation is isolated from the apex domain.
 
 ## API Environment Variables
 
@@ -38,7 +38,7 @@ Set public configuration as Worker vars:
 
 ```toml
 EMAIL_PROVIDER = "mailchannels"
-EMAIL_FROM = "no-reply@crewmodo.com"
+EMAIL_FROM = "no-reply@mail.crewmodo.com"
 EMAIL_FROM_NAME = "Crewmodo"
 ```
 

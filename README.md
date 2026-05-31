@@ -172,13 +172,16 @@ git push origin main
 
 ### DNS Setup for MailChannels
 
-Add these DNS records to `crewmodo.com`:
+Transactional platform email should send from `mail.crewmodo.com` to isolate sender reputation from the apex domain.
+Configure the sender subdomain with SPF, DMARC, and MailChannels Domain Lockdown:
 
 ```
-_mailchannels.crewmodo.com TXT "v=mc1 cfid=crewmodo.workers.dev"
+mail.crewmodo.com TXT "v=spf1 include:relay.mailchannels.net ~all"
+_dmarc.mail.crewmodo.com TXT "v=DMARC1; p=none; rua=mailto:admin@crewmodo.com"
+_mailchannels.mail.crewmodo.com TXT "v=mc1 auth=<mailchannels-account-id>"
 ```
 
-This enables magic link emails via MailChannels (free).
+Set `EMAIL_FROM=no-reply@mail.crewmodo.com` and `MAILCHANNELS_API_KEY` on each Worker environment.
 
 ### Stripe Webhooks
 
