@@ -9,6 +9,8 @@ dist
 .dev.vars
 .DS_Store
 *.log
+playwright-report/
+test-results/
 .wrangler
 .corepack
 .pnpm-store/

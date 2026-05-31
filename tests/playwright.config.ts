@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:4321',
+    baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
   },
   projects: [
@@ -19,13 +19,8 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'cd apps/web && pnpm dev',
-      port: 4321,
-      reuseExistingServer: !process.env.CI,
-    },
-    {
-      command: 'cd apps/api && pnpm dev',
-      port: 8787,
+      command: 'pnpm --filter @crewmodo/web dev -- --host 127.0.0.1',
+      port: 5173,
       reuseExistingServer: !process.env.CI,
     },
   ],
