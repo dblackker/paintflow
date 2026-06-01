@@ -162,7 +162,7 @@ export function Signup() {
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-[92rem]">
         <header className="flex items-center justify-between gap-3 py-2">
           <Link to="/" className="inline-flex items-center gap-2 text-lg font-bold text-blue-700">
             <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--pf-primary)] text-sm font-bold text-white">C</span>
@@ -171,7 +171,7 @@ export function Signup() {
           <Link to="/login" className="btn-text btn-sm">Sign in</Link>
         </header>
 
-        <div className="grid gap-5 py-4 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-start lg:py-8">
+        <div className="grid gap-5 py-4 xl:grid-cols-[minmax(0,1fr)_24rem] xl:items-start lg:py-8">
           <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
             <div className="max-w-2xl">
               <Badge variant="info" size="sm">14-day free trial</Badge>
@@ -272,14 +272,14 @@ export function Signup() {
                 </div>
                 <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
                   <div className="overflow-x-auto">
-                    <table className="min-w-[46rem] w-full border-collapse text-left">
+                    <table className="w-full min-w-[42rem] table-fixed border-collapse text-left lg:min-w-0">
                       <thead>
                         <tr className="border-b border-gray-200 bg-gray-50">
-                          <th className="w-[34%] px-4 py-3 text-xs font-semibold uppercase tracking-normal text-gray-600">Feature</th>
+                          <th className="w-[31%] px-3 py-3 text-xs font-semibold uppercase tracking-normal text-gray-600 sm:px-4">Feature</th>
                           {plans.map((plan) => (
                             <th
                               key={plan.key}
-                              className={`px-4 py-3 text-sm font-semibold ${formData.plan === plan.key ? 'text-[var(--pf-primary)]' : 'text-gray-900'}`}
+                              className={`px-3 py-3 text-sm font-semibold sm:px-4 ${formData.plan === plan.key ? 'text-[var(--pf-primary)]' : 'text-gray-900'}`}
                             >
                               <span className="block">{plan.displayName}</span>
                               <span className="pf-meta font-normal">${plan.price}/mo</span>
@@ -291,15 +291,15 @@ export function Signup() {
                         {comparisonRows.map((group) => (
                           <Fragment key={group.section}>
                             <tr key={`${group.section}-section`} className="border-t border-gray-200 bg-gray-50">
-                              <td colSpan={4} className="px-4 py-2 text-xs font-semibold uppercase tracking-normal text-gray-600">{group.section}</td>
+                              <td colSpan={4} className="px-3 py-2 text-xs font-semibold uppercase tracking-normal text-gray-600 sm:px-4">{group.section}</td>
                             </tr>
                             {group.rows.map((row) => (
                               <tr key={row.label} className="border-t border-gray-100">
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.label}</td>
+                                <td className="px-3 py-3 text-sm font-medium text-gray-900 sm:px-4">{row.label}</td>
                                 {plans.map((plan) => (
                                   <td
                                     key={`${row.label}-${plan.key}`}
-                                    className={`px-4 py-3 text-sm ${formData.plan === plan.key ? 'bg-gray-50/70' : ''} ${comparisonValueClass(row[plan.key])}`}
+                                    className={`px-3 py-3 text-sm sm:px-4 ${formData.plan === plan.key ? 'bg-gray-50/70' : ''} ${comparisonValueClass(row[plan.key])}`}
                                   >
                                     {row[plan.key] === 'Included' ? (
                                       <span className="inline-flex items-center gap-1.5">
@@ -316,13 +316,13 @@ export function Signup() {
                       </tbody>
                       <tfoot>
                         <tr className="border-t border-gray-200 bg-white">
-                          <td className="px-4 py-3">
+                          <td className="px-3 py-3 sm:px-4">
                             <span className="pf-meta">Select a trial plan</span>
                           </td>
                           {plans.map((plan) => {
                             const selected = formData.plan === plan.key;
                             return (
-                              <td key={`${plan.key}-select`} className="px-4 py-3">
+                              <td key={`${plan.key}-select`} className="px-3 py-3 sm:px-4">
                                 <Button
                                   type="button"
                                   variant={selected ? 'primary' : 'secondary'}
@@ -354,7 +354,7 @@ export function Signup() {
             </form>
           </section>
 
-          <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm lg:sticky lg:top-5">
+          <aside className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm xl:sticky xl:top-5">
             <p className="pf-section-title">What happens after signup</p>
             <ol className="mt-4 grid gap-4">
               {[
