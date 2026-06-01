@@ -266,7 +266,7 @@ billing.post('/webhook', async (c) => {
     const isValid = await verifyWebhookSignature(
       body,
       sig,
-      c.env.STRIPE_WEBHOOK_SECRET
+      c.env.STRIPE_CONNECT_WEBHOOK_SECRET || c.env.STRIPE_WEBHOOK_SECRET
     );
     
     if (!isValid) {
