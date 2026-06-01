@@ -12,6 +12,21 @@ async function fillSignupForm(page: import('@playwright/test').Page, email: stri
 }
 
 test.describe('trial signup', () => {
+  test('surfaces branded required-field errors instead of native validation', async ({ page }) => {
+    let signupRequested = false;
+    await page.route(signupUrlPattern, async (route) => {
+      signupRequested = true;
+      await route.abort();
+    });
+
+    await page.goto('/signup');
+    await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
+
+    await expect(page.getByText('Your name is required.')).toBeVisible();
+    await expect(page.getByLabel('Your name')).toHaveAttribute('aria-invalid', 'true');
+    expect(signupRequested).toBe(false);
+  });
+
   test('explains checkout handoff and redirects to Stripe checkout', async ({ page }) => {
     await page.route(signupUrlPattern, async (route, request) => {
       const headers = request.headers();

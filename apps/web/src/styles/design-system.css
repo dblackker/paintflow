@@ -313,6 +313,38 @@ textarea:focus {
   outline: none;
 }
 
+input.pf-field-invalid,
+select.pf-field-invalid,
+textarea.pf-field-invalid {
+  border-color: var(--pf-danger) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pf-danger) 16%, transparent) !important;
+}
+
+.pf-field-error {
+  align-items: flex-start;
+  color: var(--pf-danger);
+  display: flex;
+  font: var(--pf-type-supporting);
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.pf-field-error::before {
+  background: var(--pf-danger);
+  border-radius: 999px;
+  color: var(--md-sys-color-on-error);
+  content: "!";
+  display: inline-grid;
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  font-weight: 800;
+  height: 1rem;
+  line-height: 1;
+  margin-top: 0.075rem;
+  place-items: center;
+  width: 1rem;
+}
+
 a[class*="px-"][class*="py-"],
 button[class*="px-"][class*="py-"],
 button[class*=" p-"],
