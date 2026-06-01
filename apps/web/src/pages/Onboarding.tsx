@@ -6,7 +6,7 @@ import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { Input } from '@/components/Input';
-import { API_URL, apiJson } from '@/lib/api';
+import { API_URL, apiJson, labelize } from '@/lib/api';
 
 interface OrgSettings {
   companyName?: string | null;
@@ -396,11 +396,12 @@ function TrialSummary({ subscription, compact = false }: { subscription: Subscri
   const planName = subscription?.plan?.features?.displayName || subscription?.plan?.name || 'Crewmodo';
   const trialEnd = subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const status = subscription?.status || 'trial';
+  const statusLabel = status === 'trial_pending_payment' ? 'Payment pending' : labelize(status);
   return (
     <div className={`rounded-lg border border-blue-100 bg-blue-50 ${compact ? 'p-3' : 'p-4'}`}>
       <div className="flex flex-wrap items-center gap-2">
         <p className="pf-row-title text-blue-950">{planName} trial</p>
-        <Badge variant={status === 'active' ? 'success' : 'info'} size="sm">{status === 'trial_pending_payment' ? 'Payment pending' : status}</Badge>
+        <Badge variant={status === 'active' ? 'success' : 'info'} size="sm">{statusLabel}</Badge>
       </div>
       <p className="pf-copy mt-1 text-blue-900">
         {trialEnd ? `Your trial runs through ${trialEnd}.` : 'Your subscription details will appear here after checkout.'}

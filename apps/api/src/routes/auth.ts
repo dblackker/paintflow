@@ -205,7 +205,7 @@ async function createSignupCheckoutSession(
         ...(input.idempotencyKey ? { signupIdempotencyKey: input.idempotencyKey } : {}),
       },
     },
-    success_url: `${c.env.APP_URL}/v1/auth/verify?token=${token}`,
+    success_url: `${c.env.APP_URL}/v1/auth/verify?token=${token}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${c.env.PUBLIC_URL}/signup?checkout=canceled&plan=${input.plan}`,
     metadata: {
       orgId: input.orgId,
@@ -383,6 +383,70 @@ function redirectWithSession(location: string, sessionToken: string, env: Env) {
   return redirectWithLocation(sessionRedirectUrl(location, sessionToken, env), {
     'Set-Cookie': sessionCookie(sessionToken, env, 604800),
   });
+}
+
+function normalizeStripeSubscriptionStatus(status: Stripe.Subscription.Status | string | null | undefined) {
+  if (status === 'trialing') return 'trial';
+  if (status === 'canceled') return 'canceled';
+  if (status === 'past_due' || status === 'unpaid') return 'past_due';
+  if (status === 'incomplete' || status === 'incomplete_expired') return status;
+  return status || 'active';
+}
+
+function stripeDate(seconds: number | null | undefined) {
+  return seconds ? new Date(seconds * 1000) : undefined;
+}
+
+async function syncSignupCheckoutSession(
+  c: Context<{ Bindings: Env }>,
+  db: ReturnType<typeof createDb>,
+  sessionId: string,
+  expectedOrgId: string,
+) {
+  if (!sessionId) return;
+
+  const stripe = new Stripe(c.env.STRIPE_SECRET_KEY);
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  if (session.metadata?.orgId && session.metadata.orgId !== expectedOrgId) {
+    console.warn('Skipping signup checkout sync for mismatched org', {
+      sessionId,
+      expectedOrgId,
+      sessionOrgId: session.metadata.orgId,
+    });
+    return;
+  }
+
+  if (typeof session.subscription !== 'string') return;
+
+  const stripeSubscription = await stripe.subscriptions.retrieve(session.subscription);
+  const planKey = normalizePlan(stripeSubscription.metadata?.plan || session.metadata?.plan);
+  const planRecord = await ensureSaasPlan(db, c.env, planKey);
+  const stripeCustomerId = typeof stripeSubscription.customer === 'string'
+    ? stripeSubscription.customer
+    : typeof session.customer === 'string' ? session.customer : undefined;
+
+  const values = {
+    planId: planRecord.id,
+    stripeCustomerId,
+    stripeSubscriptionId: stripeSubscription.id,
+    status: normalizeStripeSubscriptionStatus(stripeSubscription.status),
+    currentPeriodStart: stripeDate(stripeSubscription.current_period_start),
+    currentPeriodEnd: stripeDate(stripeSubscription.current_period_end),
+  };
+
+  const existing = await db.query.subscriptions.findFirst({
+    where: eq(subscriptions.orgId, expectedOrgId),
+  });
+  if (existing) {
+    await db.update(subscriptions)
+      .set(values)
+      .where(and(eq(subscriptions.orgId, expectedOrgId), eq(subscriptions.id, existing.id)));
+  } else {
+    await db.insert(subscriptions).values({
+      orgId: expectedOrgId,
+      ...values,
+    });
+  }
 }
 
 function clientIp(c: Context<{ Bindings: Env }>) {
@@ -576,8 +640,9 @@ function escapeHtml(value: string) {
   }[char] || char));
 }
 
-function verifyMagicLinkHtml(token: string, publicUrl: string, error?: string) {
+function verifyMagicLinkHtml(token: string, publicUrl: string, error?: string, sessionId = '') {
   const escapedToken = escapeHtml(token);
+  const escapedSessionId = escapeHtml(sessionId);
   const loginUrl = `${publicUrl}/login`;
   const errorHtml = error
     ? `<p style="padding: 12px 14px; border-radius: 8px; background: #fef2f2; color: #991b1b;">${escapeHtml(error)}</p>`
@@ -586,6 +651,7 @@ function verifyMagicLinkHtml(token: string, publicUrl: string, error?: string) {
     ? `<a href="${escapeHtml(loginUrl)}" style="display: inline-flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; border-radius: 999px; background: #0b57d0; color: #fff; font-size: 15px; font-weight: 600; text-decoration: none;">Request a new link</a>`
     : `<form method="post" action="/v1/auth/verify">
         <input type="hidden" name="token" value="${escapedToken}">
+        ${escapedSessionId ? `<input type="hidden" name="session_id" value="${escapedSessionId}">` : ''}
         <button type="submit" style="width: 100%; min-height: 44px; border: 0; border-radius: 999px; background: #0b57d0; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;">Continue</button>
       </form>`;
   const bodyCopy = error
@@ -952,7 +1018,7 @@ auth.post('/magic-link', async (c) => {
   });
 });
 
-async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
+async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string, checkoutSessionId = '') {
   c.header('Cache-Control', 'no-store');
   c.header('Pragma', 'no-cache');
 
@@ -969,6 +1035,14 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
   const { email, userId, orgId, isNewUser, redirectPath } = JSON.parse(data);
 
   await c.env.KV.delete(`magic:${token}`);
+
+  if (isNewUser && checkoutSessionId) {
+    try {
+      await syncSignupCheckoutSession(c, createDb(c.env.DATABASE_URL), checkoutSessionId, orgId);
+    } catch (error) {
+      console.error('Failed to sync signup checkout session before redirect', { checkoutSessionId, orgId, error });
+    }
+  }
 
   const sessionToken = await createSession(c.env, userId, orgId, email);
 
@@ -988,6 +1062,7 @@ async function consumeMagicLink(c: Context<{ Bindings: Env }>, token: string) {
 // GET /v1/auth/verify?token=...
 auth.get('/verify', async (c) => {
   const token = c.req.query('token');
+  const sessionId = c.req.query('session_id') || '';
 
   c.header('Cache-Control', 'no-store');
   c.header('Pragma', 'no-cache');
@@ -1002,14 +1077,15 @@ auth.get('/verify', async (c) => {
     return c.html(verifyMagicLinkHtml('', c.env.PUBLIC_URL, 'This sign-in link is invalid or expired.'), 400);
   }
 
-  return c.html(verifyMagicLinkHtml(token, c.env.PUBLIC_URL));
+  return c.html(verifyMagicLinkHtml(token, c.env.PUBLIC_URL, undefined, sessionId));
 });
 
 // POST /v1/auth/verify
 auth.post('/verify', async (c) => {
   const body = await c.req.parseBody();
   const token = typeof body.token === 'string' ? body.token : c.req.query('token') || '';
-  return consumeMagicLink(c, token);
+  const sessionId = typeof body.session_id === 'string' ? body.session_id : c.req.query('session_id') || '';
+  return consumeMagicLink(c, token, sessionId);
 });
 
 // POST /v1/auth/logout

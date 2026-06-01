@@ -17,6 +17,9 @@ OCR_BURST_LIMIT_PER_MINUTE = "5"
 OCR_DAILY_LIMIT = "25"
 OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50"
 INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com"
+STRIPE_STARTER_PRICE_ID = "price_1TdOdxFDz3Lb7DedDQL4mYmC"
+STRIPE_PRO_PRICE_ID = "price_1TdOevFDz3Lb7DedrHHj3i5h"
+STRIPE_ENTERPRISE_PRICE_ID = "price_1TdOflFDz3Lb7Ded2refwHR9"
 
 [[kv_namespaces]]
 binding = "KV"
@@ -46,7 +49,7 @@ binding = "R2"
 bucket_name = "crewmodo-uploads"
 
 [env.staging]
-vars = { APP_URL = "https://api-staging.crewmodo.com", PUBLIC_URL = "https://staging.crewmodo.com", CORS_ORIGINS = "https://staging.crewmodo.com", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".crewmodo.com", STRIPE_STARTER_PRICE_ID = "price_replace_starter_test", STRIPE_PRO_PRICE_ID = "price_replace_pro_test", STRIPE_ENTERPRISE_PRICE_ID = "price_replace_enterprise_test", VAPID_PUBLIC_KEY = "BNpeOQPq_i5tyMu_nJpFApLXmErRPBlWlwAzCplyvr4P3WQyEIW3kWi-qqkCPg7DmfzynDRMMcUrdkk0gdjaC6c", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "resend", EMAIL_FROM = "no-reply@mail.crewmodo.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
+vars = { APP_URL = "https://api-staging.crewmodo.com", PUBLIC_URL = "https://staging.crewmodo.com", CORS_ORIGINS = "https://staging.crewmodo.com", ENVIRONMENT = "staging", COOKIE_DOMAIN = ".crewmodo.com", STRIPE_STARTER_PRICE_ID = "price_1TdOdxFDz3Lb7DedDQL4mYmC", STRIPE_PRO_PRICE_ID = "price_1TdOevFDz3Lb7DedrHHj3i5h", STRIPE_ENTERPRISE_PRICE_ID = "price_1TdOflFDz3Lb7Ded2refwHR9", VAPID_PUBLIC_KEY = "BNpeOQPq_i5tyMu_nJpFApLXmErRPBlWlwAzCplyvr4P3WQyEIW3kWi-qqkCPg7DmfzynDRMMcUrdkk0gdjaC6c", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "resend", EMAIL_FROM = "no-reply@mail.crewmodo.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
 routes = [
   { pattern = "api-staging.crewmodo.com/*", zone_name = "crewmodo.com" }
 ]
@@ -61,7 +64,7 @@ bucket_name = "crewmodo-uploads-preview"
 
 [env.dev]
 workers_dev = true
-vars = { APP_URL = "https://crewmodo-api-dev.danielablack.workers.dev", PUBLIC_URL = "https://crewmodo-dev.pages.dev", CORS_ORIGINS = "https://crewmodo-dev.pages.dev", ENVIRONMENT = "dev", VAPID_PUBLIC_KEY = "BNpeOQPq_i5tyMu_nJpFApLXmErRPBlWlwAzCplyvr4P3WQyEIW3kWi-qqkCPg7DmfzynDRMMcUrdkk0gdjaC6c", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "resend", EMAIL_FROM = "no-reply@mail.crewmodo.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
+vars = { APP_URL = "https://crewmodo-api-dev.danielablack.workers.dev", PUBLIC_URL = "https://crewmodo-dev.pages.dev", CORS_ORIGINS = "https://crewmodo-dev.pages.dev", ENVIRONMENT = "dev", STRIPE_STARTER_PRICE_ID = "price_1TdOdxFDz3Lb7DedDQL4mYmC", STRIPE_PRO_PRICE_ID = "price_1TdOevFDz3Lb7DedrHHj3i5h", STRIPE_ENTERPRISE_PRICE_ID = "price_1TdOflFDz3Lb7Ded2refwHR9", VAPID_PUBLIC_KEY = "BNpeOQPq_i5tyMu_nJpFApLXmErRPBlWlwAzCplyvr4P3WQyEIW3kWi-qqkCPg7DmfzynDRMMcUrdkk0gdjaC6c", VAPID_SUBJECT = "mailto:admin@crewmodo.com", EMAIL_PROVIDER = "resend", EMAIL_FROM = "no-reply@mail.crewmodo.com", EMAIL_FROM_NAME = "Crewmodo", OPENAI_OCR_MODEL = "gpt-4.1-mini", OCR_BURST_LIMIT_PER_MINUTE = "5", OCR_DAILY_LIMIT = "25", OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD = "50", INBOUND_INVOICE_EMAIL_DOMAIN = "receipts.crewmodo.com" }
 
 [[env.dev.kv_namespaces]]
 binding = "KV"
