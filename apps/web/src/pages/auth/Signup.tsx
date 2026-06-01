@@ -32,7 +32,7 @@ const comparisonRows = [
       { label: 'Job scheduling and basic reports', starter: 'Included', pro: 'Included', enterprise: 'Included' },
       { label: 'Crew time with GPS and approvals', starter: 'Not included', pro: 'Included', enterprise: 'Included' },
       { label: 'Job costing and supplier catalog', starter: 'Not included', pro: 'Included', enterprise: 'Included' },
-      { label: 'Supplier invoice OCR import', starter: 'Not included', pro: '10 docs/mo', enterprise: '100 docs/mo' },
+      { label: 'Supplier invoice OCR import', starter: 'Not included', pro: '100 docs/mo', enterprise: '100 docs/mo' },
     ],
   },
   {
@@ -238,14 +238,21 @@ export function Signup() {
                         type="button"
                         aria-pressed={selected}
                         onClick={() => update('plan', plan.key)}
-                        className={`rounded-lg border bg-white p-4 text-left shadow-sm transition hover:border-[var(--pf-primary)] hover:bg-blue-50 ${selected ? 'border-[var(--pf-primary)] ring-2 ring-[rgb(26_86_148_/_0.18)]' : 'border-gray-200'}`}
+                        className={`rounded-lg border p-4 text-left shadow-sm transition hover:border-[var(--pf-primary)] hover:bg-blue-50 ${selected ? 'border-[var(--pf-primary)] bg-blue-50 ring-2 ring-[rgb(26_86_148_/_0.18)]' : 'border-gray-200 bg-white'}`}
                       >
                         <div className="flex min-h-8 items-start justify-between gap-3">
                           <div>
                             <p className="pf-row-title">{plan.displayName}</p>
                             <p className="pf-meta">{plan.seatCopy}</p>
                           </div>
-                          {plan.key === 'pro' && <Badge variant="info" size="sm">Common</Badge>}
+                          <div className="flex items-center gap-2">
+                            {plan.key === 'pro' && <Badge variant="info" size="sm">Common</Badge>}
+                            {selected && (
+                              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600 text-white" aria-label="Selected plan">
+                                <Icon name="check" className="h-4 w-4" />
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <p className="mt-3">
                           <span className="pf-section-title">${plan.price}</span>

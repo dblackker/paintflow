@@ -123,7 +123,7 @@ export const PLAN_DEFINITIONS: Record<PlanKey, PlanDefinition> = {
     limits: {
       adminUsers: 3,
       fieldUsers: 10,
-      monthlyOcrDocuments: 10,
+      monthlyOcrDocuments: 100,
       monthlySmsIncluded: 250,
       monthlyAiEstimatedCents: 2000,
     },
