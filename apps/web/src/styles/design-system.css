@@ -322,15 +322,19 @@ textarea.pf-field-invalid {
 
 .pf-field-error {
   align-items: flex-start;
-  color: var(--pf-danger);
+  background: color-mix(in srgb, var(--md-sys-color-error-container) 62%, white);
+  border: 1px solid color-mix(in srgb, var(--pf-danger) 18%, transparent);
+  border-radius: 0.5rem;
+  color: var(--md-sys-color-on-error-container);
   display: flex;
   font: var(--pf-type-supporting);
   gap: 0.4rem;
   margin-top: 0.45rem;
+  padding: 0.45rem 0.55rem;
 }
 
 .pf-field-error::before {
-  background: var(--pf-danger);
+  background: color-mix(in srgb, var(--pf-danger) 86%, white);
   border-radius: 999px;
   color: var(--md-sys-color-on-error);
   content: "!";
