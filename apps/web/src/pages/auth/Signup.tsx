@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { Fragment, FormEvent, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/Badge';
@@ -15,6 +15,36 @@ const trialDetails = [
   'Secure checkout starts the 14-day trial',
   'You return signed in automatically',
 ];
+
+const comparisonRows = [
+  {
+    section: 'Sales',
+    rows: [
+      { label: 'Lead pipeline and customer profiles', starter: 'Included', pro: 'Included', enterprise: 'Included' },
+      { label: 'Quick estimates and public proposals', starter: 'Included', pro: 'Included', enterprise: 'Included' },
+      { label: 'Production estimator', starter: 'Not included', pro: 'Included', enterprise: 'Included' },
+      { label: 'Payment schedules and change orders', starter: 'Manual payments', pro: 'Included', enterprise: 'Included' },
+    ],
+  },
+  {
+    section: 'Operations',
+    rows: [
+      { label: 'Job scheduling and basic reports', starter: 'Included', pro: 'Included', enterprise: 'Included' },
+      { label: 'Crew time with GPS and approvals', starter: 'Not included', pro: 'Included', enterprise: 'Included' },
+      { label: 'Job costing and supplier catalog', starter: 'Not included', pro: 'Included', enterprise: 'Included' },
+      { label: 'Supplier invoice OCR import', starter: 'Not included', pro: '10 docs/mo', enterprise: '100 docs/mo' },
+    ],
+  },
+  {
+    section: 'Scale',
+    rows: [
+      { label: 'Admins and field crew', starter: '1 admin + 3 crew', pro: '3 admins + 10 crew', enterprise: '8 admins + 25 crew' },
+      { label: 'Messaging and notifications', starter: 'Not included', pro: 'Included', enterprise: 'Higher limits' },
+      { label: 'Automations and advanced reports', starter: 'Not included', pro: 'Not included', enterprise: 'Included' },
+      { label: 'Roles, permissions, and priority support', starter: 'Not included', pro: 'Not included', enterprise: 'Included' },
+    ],
+  },
+] as const;
 
 function phoneDigits(value: string) {
   const digits = value.replace(/\D/g, '');
@@ -38,6 +68,12 @@ function messageClass(tone: 'error' | 'info' | 'success') {
   if (tone === 'error') return 'border-red-200 bg-red-50 text-red-800';
   if (tone === 'success') return 'border-green-200 bg-green-50 text-green-800';
   return 'border-blue-200 bg-blue-50 text-blue-900';
+}
+
+function comparisonValueClass(value: string) {
+  if (value === 'Not included') return 'text-gray-400';
+  if (value === 'Included') return 'font-semibold text-[var(--pf-success)]';
+  return 'font-medium text-gray-900';
 }
 
 export function Signup() {
@@ -222,21 +258,85 @@ export function Signup() {
                 </div>
               </section>
 
-              <div className="border-y border-gray-200 px-1 py-3 sm:px-0">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex min-w-0 gap-3">
-                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[var(--pf-primary)]" aria-hidden="true" />
-                    <div className="min-w-0">
-                      <p className="pf-meta font-semibold uppercase tracking-normal">Selected plan</p>
-                      <p className="pf-row-title mt-1">{selectedPlan.displayName} starts after the free trial</p>
-                      <p className="pf-copy mt-1">
-                        Stripe stores the payment method and starts the trial. First charge is ${selectedPlan.price}/month after day 14 unless you cancel.
-                      </p>
-                    </div>
-                  </div>
-                  <p className="pf-section-title shrink-0">${selectedPlan.price}/mo</p>
+              <section aria-labelledby="plan-comparison-title" className="grid gap-3">
+                <div>
+                  <h2 id="plan-comparison-title" className="pf-section-title">Compare plans</h2>
+                  <p className="pf-copy mt-1">Use the matrix for the differences that usually matter after the first month.</p>
                 </div>
-              </div>
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[46rem] w-full border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="w-[34%] px-4 py-3 text-xs font-semibold uppercase tracking-normal text-gray-600">Feature</th>
+                          {plans.map((plan) => (
+                            <th
+                              key={plan.key}
+                              className={`px-4 py-3 text-sm font-semibold ${formData.plan === plan.key ? 'text-[var(--pf-primary)]' : 'text-gray-900'}`}
+                            >
+                              <span className="block">{plan.displayName}</span>
+                              <span className="pf-meta font-normal">${plan.price}/mo</span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comparisonRows.map((group) => (
+                          <Fragment key={group.section}>
+                            <tr key={`${group.section}-section`} className="border-t border-gray-200 bg-gray-50">
+                              <td colSpan={4} className="px-4 py-2 text-xs font-semibold uppercase tracking-normal text-gray-600">{group.section}</td>
+                            </tr>
+                            {group.rows.map((row) => (
+                              <tr key={row.label} className="border-t border-gray-100">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.label}</td>
+                                {plans.map((plan) => (
+                                  <td
+                                    key={`${row.label}-${plan.key}`}
+                                    className={`px-4 py-3 text-sm ${formData.plan === plan.key ? 'bg-gray-50/70' : ''} ${comparisonValueClass(row[plan.key])}`}
+                                  >
+                                    {row[plan.key] === 'Included' ? (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <Icon name="check" className="h-4 w-4" />
+                                        Included
+                                      </span>
+                                    ) : row[plan.key]}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t border-gray-200 bg-white">
+                          <td className="px-4 py-3">
+                            <span className="pf-meta">Select a trial plan</span>
+                          </td>
+                          {plans.map((plan) => {
+                            const selected = formData.plan === plan.key;
+                            return (
+                              <td key={`${plan.key}-select`} className="px-4 py-3">
+                                <Button
+                                  type="button"
+                                  variant={selected ? 'primary' : 'secondary'}
+                                  size="sm"
+                                  fullWidth
+                                  onClick={() => update('plan', plan.key)}
+                                >
+                                  {selected ? 'Selected' : `Choose ${plan.displayName}`}
+                                </Button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+                <p className="pf-meta">
+                  {selectedPlan.displayName} is selected. Stripe stores the payment method and starts the trial. First charge is ${selectedPlan.price}/month after day 14 unless you cancel.
+                </p>
+              </section>
 
               <Button type="submit" size="lg" fullWidth isLoading={isSubmitting || redirectingToCheckout} rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
                 {redirectingToCheckout ? 'Opening secure checkout' : 'Continue to secure checkout'}
