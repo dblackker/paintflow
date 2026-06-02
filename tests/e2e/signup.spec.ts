@@ -21,9 +21,13 @@ test.describe('trial signup', () => {
 
     await page.goto('/signup');
     await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
+    await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
+    await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
 
     await expect(page.getByText('Your name is required.')).toBeVisible();
     await expect(page.getByLabel('Your name')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#signup-name-error')).toHaveCount(1);
+    await expect(page.getByLabel('Your name')).toHaveAttribute('aria-describedby', 'signup-name-error');
     expect(signupRequested).toBe(false);
   });
 
@@ -100,7 +104,8 @@ test.describe('trial signup', () => {
     await fillSignupForm(page, 'owner@example.com');
     await page.getByRole('button', { name: 'Continue to secure checkout' }).click();
 
-    await expect(page.getByText('If this email has a Crewmodo workspace, we sent a one-time sign-in link.')).toBeVisible();
+    await expect(page.getByText('That email is already tied to a Crewmodo workspace')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Continue setup' })).toHaveAttribute('href', '/login');
     await expect(page).toHaveURL(/\/signup$/);
   });
 });
