@@ -140,7 +140,8 @@ export function Signup() {
       if (payload.existingAccount) {
         showStatus({
           tone: 'info',
-          text: 'If this email has a Crewmodo workspace, we sent a one-time sign-in link. Check your inbox to continue.',
+          text: 'That email is already tied to a Crewmodo workspace, so we sent a sign-in link instead of opening a new checkout. Use a different email to start a separate trial.',
+          href: '/login',
         });
         return;
       }

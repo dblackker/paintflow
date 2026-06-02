@@ -18,7 +18,7 @@ import {
   userRoles,
   teamMembers,
 } from '@crewmodo/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { sendEmail } from '../lib/email';
 import Stripe from 'stripe';
 import { PLAN_DEFINITIONS, TRIAL_DAYS, normalizePlanKey, planFeaturesPayload, type PlanKey } from '@crewmodo/core';
@@ -733,7 +733,10 @@ auth.post('/signup', async (c) => {
   if (existingUser) {
     const membership = await db.query.memberships.findFirst({ where: eq(memberships.userId, existingUser.id) });
     const existingSub = membership
-      ? await db.query.subscriptions.findFirst({ where: eq(subscriptions.orgId, membership.orgId) })
+      ? await db.query.subscriptions.findFirst({
+          where: eq(subscriptions.orgId, membership.orgId),
+          orderBy: desc(subscriptions.createdAt),
+        })
       : null;
 
     if (membership && existingSub?.status === 'trial_pending_payment' && !existingSub.stripeSubscriptionId) {
@@ -776,6 +779,7 @@ auth.post('/signup', async (c) => {
     return c.json({
       success: true,
       existingAccount: true,
+      subscriptionStatus: existingSub?.status || null,
       message: 'If this email already has a workspace, a one-time sign-in link will be sent.',
     });
   }
