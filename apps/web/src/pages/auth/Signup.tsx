@@ -1,4 +1,4 @@
-import { Fragment, FormEvent, useMemo, useState } from 'react';
+import { Fragment, FormEvent, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/Badge';
@@ -78,6 +78,7 @@ function comparisonValueClass(value: string) {
 
 export function Signup() {
   const [searchParams] = useSearchParams();
+  const statusRef = useRef<HTMLDivElement | null>(null);
   const initialPlan = (searchParams.get('plan') as PlanKey | null) || 'pro';
   const [formData, setFormData] = useState({
     name: '',
@@ -89,6 +90,7 @@ export function Signup() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [redirectingToCheckout, setRedirectingToCheckout] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
   const [message, setMessage] = useState<{ tone: 'error' | 'info' | 'success'; text: string; href?: string } | null>(
     searchParams.get('checkout') === 'canceled'
       ? { tone: 'info', text: 'Checkout was canceled. Your workspace is saved, but the trial is not active yet. Submit this form again to reopen secure checkout.' }
@@ -102,11 +104,22 @@ export function Signup() {
     setFormData((current) => ({ ...current, [key]: value }));
   }
 
+  function showStatus(next: { tone: 'error' | 'info' | 'success'; text: string; href?: string }) {
+    setMessage(next);
+    window.setTimeout(() => {
+      statusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      statusRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setRedirectingToCheckout(false);
+    setCheckoutUrl('');
     setMessage(null);
+    let isRedirecting = false;
 
     try {
       const response = await fetch(`${API_URL}/v1/auth/signup`, {
@@ -125,7 +138,7 @@ export function Signup() {
       }
 
       if (payload.existingAccount) {
-        setMessage({
+        showStatus({
           tone: 'info',
           text: 'If this email has a Crewmodo workspace, we sent a one-time sign-in link. Check your inbox to continue.',
         });
@@ -133,7 +146,7 @@ export function Signup() {
       }
 
       if (payload.devToken) {
-        setMessage({
+        showStatus({
           tone: 'success',
           text: 'Development signup created. Use this shortcut to continue.',
           href: `${API_URL}/v1/auth/verify?token=${payload.devToken}`,
@@ -141,22 +154,33 @@ export function Signup() {
       }
 
       if (payload.checkoutUrl) {
+        isRedirecting = true;
+        setCheckoutUrl(payload.checkoutUrl);
         setRedirectingToCheckout(true);
-        setMessage({
+        showStatus({
           tone: 'success',
           text: payload.resumedSignup
             ? 'Workspace found. Reopening secure checkout so you can activate the trial.'
             : 'Workspace reserved. Opening secure checkout to start your trial.',
         });
-        window.location.href = payload.checkoutUrl;
+        window.setTimeout(() => {
+          window.location.assign(payload.checkoutUrl);
+        }, 100);
+        window.setTimeout(() => {
+          setIsSubmitting(false);
+          setRedirectingToCheckout(false);
+        }, 4000);
         return;
       }
 
       throw new Error('Stripe checkout is not configured yet.');
     } catch (err) {
-      setMessage({ tone: 'error', text: err instanceof Error ? err.message : 'Something went wrong.' });
+      showStatus({ tone: 'error', text: err instanceof Error ? err.message : 'Something went wrong.' });
     } finally {
-      setIsSubmitting(false);
+      if (!isRedirecting) {
+        setIsSubmitting(false);
+        setRedirectingToCheckout(false);
+      }
     }
   }
 
@@ -189,13 +213,6 @@ export function Signup() {
                 </div>
               ))}
             </div>
-
-            {message && (
-              <div className={`mt-5 rounded-lg border p-4 ${messageClass(message.tone)}`}>
-                <p className="pf-copy text-current">{message.text}</p>
-                {message.href && <a className="btn-text mt-2 justify-start p-0 text-current underline" href={message.href}>Continue setup</a>}
-              </div>
-            )}
 
             <form className="mt-6 grid gap-6" onSubmit={submit}>
               <section aria-labelledby="workspace-details-title" className="grid gap-4">
@@ -345,9 +362,28 @@ export function Signup() {
                 </p>
               </section>
 
-              <Button type="submit" size="lg" fullWidth isLoading={isSubmitting || redirectingToCheckout} rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
-                {redirectingToCheckout ? 'Opening secure checkout' : 'Continue to secure checkout'}
-              </Button>
+              <div className="grid gap-3">
+                {message && (
+                  <div
+                    ref={statusRef}
+                    tabIndex={-1}
+                    className={`rounded-lg border p-4 focus:outline-none focus:ring-2 focus:ring-[var(--pf-primary)] focus:ring-offset-2 ${messageClass(message.tone)}`}
+                    aria-live={message.tone === 'error' ? 'assertive' : 'polite'}
+                  >
+                    <p className="pf-copy text-current">{message.text}</p>
+                    {message.href && <a className="btn-text mt-2 justify-start p-0 text-current underline" href={message.href}>Continue setup</a>}
+                    {checkoutUrl && (
+                      <a className="btn-text mt-2 justify-start p-0 text-current underline" href={checkoutUrl}>
+                        Open secure checkout
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                <Button type="submit" size="lg" fullWidth isLoading={isSubmitting || redirectingToCheckout} rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
+                  {redirectingToCheckout ? 'Opening secure checkout' : 'Continue to secure checkout'}
+                </Button>
+              </div>
               <p className="pf-meta text-center">
                 No magic link is required during signup. After checkout, Stripe sends you back signed in. If you leave before finishing, use this same email to resume checkout or request a sign-in link.
               </p>
