@@ -52,7 +52,16 @@ function validationMessage(field: HTMLInputElement | HTMLSelectElement | HTMLTex
 function describedBy(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
   const id = `${fieldKey(field)}-error`;
   const current = field.getAttribute('aria-describedby') || '';
-  return current.split(/\s+/).filter(Boolean).includes(id) ? current : `${current} ${id}`.trim();
+  return Array.from(new Set([...current.split(/\s+/).filter(Boolean), id])).join(' ');
+}
+
+function removeGeneratedErrors(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
+  let next = field.nextElementSibling;
+  while (next?.classList.contains(ERROR_CLASS)) {
+    const toRemove = next;
+    next = next.nextElementSibling;
+    toRemove.remove();
+  }
 }
 
 function clearFieldError(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
@@ -60,21 +69,26 @@ function clearFieldError(field: HTMLInputElement | HTMLSelectElement | HTMLTextA
   field.classList.remove(INVALID_CLASS);
   field.removeAttribute('aria-invalid');
   const current = field.getAttribute('aria-describedby') || '';
-  const next = current.split(/\s+/).filter((item) => item && item !== id).join(' ');
+  const next = Array.from(new Set(current.split(/\s+/).filter((item) => item && item !== id))).join(' ');
   if (next) field.setAttribute('aria-describedby', next);
   else field.removeAttribute('aria-describedby');
-  field.parentElement?.querySelector(`#${CSS.escape(id)}`)?.remove();
+  field.parentElement?.querySelectorAll(`#${CSS.escape(id)}`).forEach((item) => item.remove());
+  removeGeneratedErrors(field);
 }
 
 function showFieldError(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
   const id = `${fieldKey(field)}-error`;
-  let error = field.parentElement?.querySelector<HTMLParagraphElement>(`#${CSS.escape(id)}`);
+  const existing = Array.from(field.parentElement?.querySelectorAll<HTMLParagraphElement>(`#${CSS.escape(id)}`) || []);
+  const error = existing[0] || document.createElement('p');
 
-  if (!error) {
-    error = document.createElement('p');
+  removeGeneratedErrors(field);
+  existing.slice(1).forEach((item) => item.remove());
+
+  if (!error.isConnected) {
     error.id = id;
     error.className = ERROR_CLASS;
     error.setAttribute('role', 'alert');
+    error.dataset.pfFieldErrorFor = fieldKey(field);
     field.insertAdjacentElement('afterend', error);
   }
 

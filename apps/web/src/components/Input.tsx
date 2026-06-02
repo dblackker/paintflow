@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes, forwardRef } from 'react';
+import { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes, forwardRef, useId } from 'react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -6,9 +6,14 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   helperText?: string;
 }
 
+function useStableFieldId(prefix: string, explicitId?: string) {
+  const reactId = useId().replace(/:/g, '');
+  return explicitId || `${prefix}-${reactId}`;
+}
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, helperText, className = '', id, ...props }, ref) => {
-    const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+    const inputId = useStableFieldId('input', id);
     
     return (
       <div className="w-full">
@@ -48,7 +53,7 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, helperText, className = '', id, ...props }, ref) => {
-    const inputId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`;
+    const inputId = useStableFieldId('textarea', id);
     
     return (
       <div className="w-full">
@@ -89,7 +94,7 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, helperText, options, className = '', id, ...props }, ref) => {
-    const inputId = id || `select-${Math.random().toString(36).substr(2, 9)}`;
+    const inputId = useStableFieldId('select', id);
     
     return (
       <div className="w-full">

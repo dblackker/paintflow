@@ -204,11 +204,11 @@ export function Signup() {
                   <p className="pf-copy mt-1">Use the owner or office email that should receive billing, setup, and sign-in messages.</p>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Input label="Your name" required autoComplete="name" value={formData.name} onChange={(event) => update('name', event.target.value)} placeholder="Alex Morgan" />
-                  <Input label="Work email" required type="email" inputMode="email" autoComplete="email" value={formData.email} onChange={(event) => update('email', event.target.value)} placeholder="alex@company.com" />
-                  <Input label="Company name" required autoComplete="organization" value={formData.companyName} onChange={(event) => update('companyName', event.target.value)} placeholder="Morgan Contracting Co." />
-                  <Input label="Phone number" type="tel" inputMode="numeric" autoComplete="tel" value={formData.phone} onChange={(event) => update('phone', maskPhone(event.target.value))} placeholder="(555) 123-4567" />
-                  <Select label="Team size" value={formData.teamSize} onChange={(event) => update('teamSize', event.target.value)} helperText="Used to recommend a starting plan. You can change this later.">
+                  <Input id="signup-name" name="name" label="Your name" required autoComplete="name" value={formData.name} onChange={(event) => update('name', event.target.value)} placeholder="Alex Morgan" />
+                  <Input id="signup-email" name="email" label="Work email" required type="email" inputMode="email" autoComplete="email" value={formData.email} onChange={(event) => update('email', event.target.value)} placeholder="alex@company.com" />
+                  <Input id="signup-company-name" name="companyName" label="Company name" required autoComplete="organization" value={formData.companyName} onChange={(event) => update('companyName', event.target.value)} placeholder="Morgan Contracting Co." />
+                  <Input id="signup-phone" name="phone" label="Phone number" type="tel" inputMode="numeric" autoComplete="tel" value={formData.phone} onChange={(event) => update('phone', maskPhone(event.target.value))} placeholder="(555) 123-4567" />
+                  <Select id="signup-team-size" name="teamSize" label="Team size" value={formData.teamSize} onChange={(event) => update('teamSize', event.target.value)} helperText="Used to recommend a starting plan. You can change this later.">
                     <option value="1-3">1-3 users</option>
                     <option value="4-10">4-10 users</option>
                     <option value="11+">11+ users</option>
