@@ -108,6 +108,28 @@ export function Onboarding() {
   const areaCount = useMemo(() => parseZipCodes(zipCodes).length, [zipCodes]);
 
   useEffect(() => {
+    if (!isWelcome) return;
+
+    const guardKey = 'crewmodo.postSignupHistoryGuarded';
+    const guarded = sessionStorage.getItem(guardKey) === '1';
+
+    if (!guarded) {
+      window.history.replaceState({ ...(window.history.state || {}), crewmodoPostSignup: true }, '', window.location.href);
+      window.history.pushState({ crewmodoPostSignupGuard: true }, '', window.location.href);
+      sessionStorage.setItem(guardKey, '1');
+    }
+
+    function keepUserInAppAfterSignup() {
+      navigate('/dashboard', { replace: true });
+    }
+
+    window.addEventListener('popstate', keepUserInAppAfterSignup);
+    return () => {
+      window.removeEventListener('popstate', keepUserInAppAfterSignup);
+    };
+  }, [isWelcome, navigate]);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       setIsLoading(true);
