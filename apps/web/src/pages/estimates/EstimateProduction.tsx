@@ -332,6 +332,7 @@ export function EstimateProduction() {
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [starterCollapsed, setStarterCollapsed] = useState(false);
   const [starterSkipped, setStarterSkipped] = useState(false);
+  const [templateApplied, setTemplateApplied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [setupError, setSetupError] = useState('');
@@ -466,6 +467,7 @@ export function EstimateProduction() {
       setRooms(nextRooms);
       setStarterCollapsed(true);
       setStarterSkipped(false);
+      setTemplateApplied(true);
       window.showToast?.(`Loaded ${nextRooms.length} room${nextRooms.length === 1 ? '' : 's'} from template.`, 'success');
       return true;
     } catch (err) {
@@ -739,6 +741,7 @@ export function EstimateProduction() {
     setEstimateType('interior');
     setStarterCollapsed(true);
     setStarterSkipped(false);
+    setTemplateApplied(false);
     window.showToast?.(`Built ${nextRooms.length} room${nextRooms.length === 1 ? '' : 's'} with itemized substrates.`, 'success');
   }
 
@@ -775,6 +778,7 @@ export function EstimateProduction() {
     setRooms([next]);
     setStarterCollapsed(true);
     setStarterSkipped(false);
+    setTemplateApplied(false);
     window.showToast?.('Built exterior starter scope from house assumptions.', 'success');
   }
 
@@ -1137,7 +1141,7 @@ export function EstimateProduction() {
               </div>
             </div>
 
-            {!starterCollapsed && !starterSkipped && (
+            {!templateApplied && !starterCollapsed && !starterSkipped && (
               <div className="border-b bg-gray-50 p-4">
                 {estimateType === 'exterior' ? (
                   <ExteriorStarter assumptions={exteriorAssumptions} setAssumptions={setExteriorAssumptions} onBuild={buildExteriorScope} onSkip={() => setStarterSkipped(true)} />
@@ -1147,13 +1151,13 @@ export function EstimateProduction() {
               </div>
             )}
 
-            {(starterCollapsed || starterSkipped) && (
+            {!templateApplied && (starterCollapsed || starterSkipped) && (
               <div className="border-b bg-blue-50/70 p-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="pf-copy text-blue-950">
                     {starterSkipped ? 'Starter scope skipped. Add rooms and substrates manually.' : 'Starter scope added. Refine measurements, products, and options below.'}
                   </p>
-                  <button className="btn-text btn-sm" onClick={() => { setStarterCollapsed(false); setStarterSkipped(false); }}>Review</button>
+                  <button className="btn-text btn-sm" onClick={() => { setStarterCollapsed(false); setStarterSkipped(false); setTemplateApplied(false); }}>Review</button>
                 </div>
               </div>
             )}
@@ -1162,7 +1166,7 @@ export function EstimateProduction() {
               {rooms.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-gray-300 p-5 text-center">
                   <p className="pf-row-title">Start with a room, exterior elevation, or work space.</p>
-                  <p className="pf-meta mt-1">Use starter scope for a generated first pass, or add a space manually.</p>
+                  <p className="pf-meta mt-1">{templateApplied ? 'Add spaces manually or choose another template from Templates.' : 'Use starter scope for a generated first pass, or add a space manually.'}</p>
                 </div>
               ) : rooms.map((room) => (
                 <RoomCard
