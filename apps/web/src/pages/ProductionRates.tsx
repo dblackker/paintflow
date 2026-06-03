@@ -63,6 +63,193 @@ function unitLabel(value?: string | null) {
   return unitOptions.find((option) => option.value === value)?.label || labelize(value || 'unit');
 }
 
+type RateSectionKey = 'interior' | 'exterior' | 'prep' | 'other';
+
+interface GroupedRateSubsection {
+  key: string;
+  title: string;
+  description: string;
+  rates: ProductionRate[];
+}
+
+interface GroupedRateSection {
+  key: RateSectionKey;
+  title: string;
+  description: string;
+  order: number;
+  subsections: GroupedRateSubsection[];
+  count: number;
+}
+
+const sectionMeta: Record<RateSectionKey, { title: string; description: string; order: number }> = {
+  interior: {
+    title: 'Interior',
+    description: 'Walls, ceilings, trim, doors, cabinets, and room-level repaint work.',
+    order: 1,
+  },
+  exterior: {
+    title: 'Exterior',
+    description: 'Siding, body, soffits, fascia, exterior trim, and exterior repaint work.',
+    order: 2,
+  },
+  prep: {
+    title: 'Prep and Specialty',
+    description: 'Preparation, repairs, coating, staining, and specialty work that can apply across scopes.',
+    order: 3,
+  },
+  other: {
+    title: 'Other Rates',
+    description: 'Rates that do not match a standard interior, exterior, or specialty grouping yet.',
+    order: 4,
+  },
+};
+
+const subsectionMeta: Record<string, { title: string; description: string; order: number }> = {
+  interior_walls: {
+    title: 'Walls and Ceilings',
+    description: 'Primary room substrates measured by square footage.',
+    order: 1,
+  },
+  interior_trim: {
+    title: 'Trim, Doors, and Cabinets',
+    description: 'Detailed finish work measured by linear foot or each.',
+    order: 2,
+  },
+  interior_prep: {
+    title: 'Interior Prep and Repairs',
+    description: 'Prep adjustments and repair-driven interior labor.',
+    order: 3,
+  },
+  exterior_body: {
+    title: 'Body and Siding',
+    description: 'Main exterior surface production rates.',
+    order: 1,
+  },
+  exterior_trim: {
+    title: 'Trim, Fascia, Soffits, and Details',
+    description: 'Exterior detail substrates measured separately from siding.',
+    order: 2,
+  },
+  exterior_prep: {
+    title: 'Exterior Prep and Repairs',
+    description: 'Washing, scraping, caulking, priming, and repair-driven labor.',
+    order: 3,
+  },
+  specialty: {
+    title: 'Specialty Work',
+    description: 'Special coating, stain, and non-standard production assumptions.',
+    order: 1,
+  },
+  other: {
+    title: 'Unsorted Rates',
+    description: 'Review these categories when you tune your rate library.',
+    order: 99,
+  },
+};
+
+function searchableRateText(rate: ProductionRate) {
+  return [rate.category, rate.surfaceType, rate.unit, rate.description].filter(Boolean).join(' ').toLowerCase();
+}
+
+function hasAny(text: string, terms: string[]) {
+  return terms.some((term) => text.includes(term));
+}
+
+function classifyRate(rate: ProductionRate): { section: RateSectionKey; subsection: string } {
+  const text = searchableRateText(rate);
+  const category = (rate.category || '').toLowerCase();
+
+  const isExterior =
+    category === 'exterior' ||
+    hasAny(text, ['exterior', 'siding', 'soffit', 'fascia', 'corner', 'stucco', 'brick', 'deck', 'fence', 'shutter', 'garage']);
+  const isInterior =
+    category === 'interior' ||
+    hasAny(text, ['interior', 'wall', 'ceiling', 'trim', 'door', 'cabinet', 'baseboard', 'casing', 'drywall', 'room']);
+  const isPrep = hasAny(text, ['prep', 'repair', 'patch', 'wash', 'pressure', 'scrape', 'caulk', 'prime', 'primer', 'stain', 'specialty']);
+
+  if (isExterior) {
+    if (hasAny(text, ['soffit', 'fascia', 'trim', 'corner', 'door', 'shutter', 'garage'])) {
+      return { section: 'exterior', subsection: 'exterior_trim' };
+    }
+    if (isPrep) return { section: 'exterior', subsection: 'exterior_prep' };
+    return { section: 'exterior', subsection: 'exterior_body' };
+  }
+
+  if (isInterior) {
+    if (hasAny(text, ['trim', 'door', 'cabinet', 'baseboard', 'casing'])) {
+      return { section: 'interior', subsection: 'interior_trim' };
+    }
+    if (isPrep) return { section: 'interior', subsection: 'interior_prep' };
+    return { section: 'interior', subsection: 'interior_walls' };
+  }
+
+  if (isPrep) return { section: 'prep', subsection: 'specialty' };
+  return { section: 'other', subsection: 'other' };
+}
+
+function rateSortKey(rate: ProductionRate) {
+  return `${rate.category || ''} ${rate.surfaceType || ''} ${rate.description || ''}`.toLowerCase();
+}
+
+function rateDisplayTitle(rate: ProductionRate) {
+  const category = labelize(rate.category || '');
+  const surface = labelize(rate.surfaceType || '');
+  const normalizedCategory = category.toLowerCase();
+  const normalizedSurface = surface.toLowerCase();
+
+  if (!category && !surface) return 'Production rate';
+  if (!category) return surface;
+  if (!surface) return category;
+  if (normalizedCategory === 'interior' || normalizedCategory === 'exterior') return surface;
+  if (normalizedCategory.includes(normalizedSurface) || normalizedSurface.includes(normalizedCategory)) return category;
+  return `${category} - ${surface}`;
+}
+
+function groupRatesByScope(rates: ProductionRate[]): GroupedRateSection[] {
+  const sectionMap = new Map<RateSectionKey, Map<string, ProductionRate[]>>();
+
+  rates.forEach((rate) => {
+    const classification = classifyRate(rate);
+    if (!sectionMap.has(classification.section)) {
+      sectionMap.set(classification.section, new Map());
+    }
+    const subsectionMap = sectionMap.get(classification.section)!;
+    const currentRates = subsectionMap.get(classification.subsection) || [];
+    currentRates.push(rate);
+    subsectionMap.set(classification.subsection, currentRates);
+  });
+
+  return Array.from(sectionMap.entries())
+    .map(([key, subsectionMap]) => {
+      const meta = sectionMeta[key];
+      const subsections = Array.from(subsectionMap.entries())
+        .map(([subsectionKey, subsectionRates]) => {
+          const subsection = subsectionMeta[subsectionKey] || subsectionMeta.other;
+          return {
+            key: subsectionKey,
+            title: subsection.title,
+            description: subsection.description,
+            rates: [...subsectionRates].sort((a, b) => rateSortKey(a).localeCompare(rateSortKey(b))),
+          };
+        })
+        .sort((a, b) => {
+          const aOrder = subsectionMeta[a.key]?.order ?? 99;
+          const bOrder = subsectionMeta[b.key]?.order ?? 99;
+          return aOrder - bOrder || a.title.localeCompare(b.title);
+        });
+
+      return {
+        key,
+        title: meta.title,
+        description: meta.description,
+        order: meta.order,
+        subsections,
+        count: subsections.reduce((sum, subsection) => sum + subsection.rates.length, 0),
+      };
+    })
+    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+}
+
 function rateFromForm(form: RateFormState) {
   return {
     category: form.category.trim(),
@@ -183,13 +370,7 @@ export function ProductionRates() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState('');
 
-  const groupedRates = useMemo(() => {
-    return [...rates].sort((a, b) => {
-      const aKey = `${a.category || ''} ${a.surfaceType || ''}`;
-      const bKey = `${b.category || ''} ${b.surfaceType || ''}`;
-      return aKey.localeCompare(bKey);
-    });
-  }, [rates]);
+  const groupedRateSections = useMemo(() => groupRatesByScope(rates), [rates]);
 
   const averageHourlyRate = useMemo(() => {
     if (!rates.length) return 0;
@@ -299,7 +480,7 @@ export function ProductionRates() {
         <CardHeader
           className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5"
           title="Production Rate Library"
-          description="Use rates that match how your crews actually paint by substrate, prep, and unit."
+          description="Grouped by how estimators build scope: interior, exterior, and specialty prep."
         />
         <CardContent>
           {isLoading && <RateSkeleton />}
@@ -324,15 +505,39 @@ export function ProductionRates() {
           )}
 
           {!isLoading && !error && rates.length > 0 && (
-            <div className="divide-y divide-gray-200">
-              {groupedRates.map((rate) => (
-                <RateRow
-                  key={rate.id}
-                  rate={rate}
-                  onEdit={openRateModal}
-                  onDelete={deleteRate}
-                  isDeleting={deletingId === rate.id}
-                />
+            <div className="grid gap-4 p-3 sm:p-4">
+              {groupedRateSections.map((section) => (
+                <section key={section.key} className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50/80">
+                  <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5">
+                    <div>
+                      <h3 className="pf-section-title">{section.title}</h3>
+                      <p className="pf-copy mt-1">{section.description}</p>
+                    </div>
+                    <span className="pf-status pf-status-neutral pf-status-sm self-start">{section.count} rates</span>
+                  </div>
+
+                  <div className="divide-y divide-gray-200 border-t border-gray-200 bg-white">
+                    {section.subsections.map((subsection) => (
+                      <div key={subsection.key}>
+                        <div className="bg-gray-50/70 px-4 py-2 sm:px-5">
+                          <p className="pf-row-title">{subsection.title}</p>
+                          <p className="pf-meta mt-0.5">{subsection.description}</p>
+                        </div>
+                        <div className="divide-y divide-gray-200">
+                          {subsection.rates.map((rate) => (
+                            <RateRow
+                              key={rate.id}
+                              rate={rate}
+                              onEdit={openRateModal}
+                              onDelete={deleteRate}
+                              isDeleting={deletingId === rate.id}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}
