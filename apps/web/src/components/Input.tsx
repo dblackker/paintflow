@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, forwardRef, useId } from 'react';
+import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, forwardRef, useId, useState } from 'react';
 import { Icon } from './Icon';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -14,19 +14,35 @@ function useStableFieldId(prefix: string, explicitId?: string) {
 }
 
 function FieldLabel({ htmlFor, label, help }: { htmlFor: string; label: string; help?: ReactNode }) {
+  const tooltipId = useStableFieldId('field-help');
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="mb-1 flex items-center gap-1.5">
       <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700">
         {label}
       </label>
       {help && (
-        <span className="group relative inline-flex">
-          <button type="button" className="btn-icon h-5 w-5 text-gray-500" aria-label={`Explain ${label}`}>
+        <span
+          className="group relative inline-flex"
+          onBlur={() => {
+            window.setTimeout(() => setOpen(false), 120);
+          }}
+        >
+          <button
+            type="button"
+            className="btn-icon h-5 w-5 text-gray-500"
+            aria-label={`Explain ${label}`}
+            aria-expanded={open}
+            aria-describedby={tooltipId}
+            onClick={() => setOpen((current) => !current)}
+          >
             <Icon name="info" className="h-3.5 w-3.5" />
           </button>
           <span
+            id={tooltipId}
             role="tooltip"
-            className="pointer-events-none absolute left-1/2 top-full z-30 mt-1 hidden w-72 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block sm:left-0 sm:translate-x-0"
+            className={`pointer-events-none absolute left-1/2 top-full z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block sm:left-0 sm:translate-x-0 ${open ? 'block' : 'hidden'}`}
           >
             {help}
           </span>
