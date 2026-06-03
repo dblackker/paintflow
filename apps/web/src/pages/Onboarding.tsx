@@ -74,6 +74,14 @@ function normalizePercent(value: unknown, fallback = '') {
   return String(number <= 1 ? number * 100 : number);
 }
 
+function displayOrgSettings(settings: OrgSettings) {
+  return {
+    ...settings,
+    phone: settings.phone ? maskPhone(String(settings.phone)) : '',
+    salesTaxRate: normalizePercent(settings.salesTaxRate, '9.2'),
+  };
+}
+
 function phoneDigits(value: string) {
   const digits = value.replace(/\D/g, '');
   return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits.slice(0, 10);
@@ -140,11 +148,7 @@ export function Onboarding() {
         ]);
         if (cancelled) return;
         const nextSettings = payload.data?.settings || {};
-        setSettings({
-          ...nextSettings,
-          phone: nextSettings.phone ? maskPhone(String(nextSettings.phone)) : '',
-          salesTaxRate: normalizePercent(nextSettings.salesTaxRate, '9.2'),
-        });
+        setSettings(displayOrgSettings(nextSettings));
         setZipCodes((payload.data?.serviceAreas || []).map((area) => area.zipCode).join(', '));
         setProgress(payload.data?.progress || null);
         setSubscription(subscriptionPayload.data || null);
@@ -169,7 +173,7 @@ export function Onboarding() {
       },
       body: JSON.stringify(patch),
     });
-    if (payload.data) setSettings({ ...payload.data, phone: payload.data.phone ? maskPhone(String(payload.data.phone)) : '' });
+    if (payload.data) setSettings(displayOrgSettings(payload.data));
   }
 
   async function refreshProgress() {
@@ -297,7 +301,19 @@ export function Onboarding() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Input label="Default labor rate ($/hour)" type="number" min="0" step="0.01" inputMode="decimal" autoComplete="off" value={settings.defaultLaborRate ?? '65'} onChange={(event) => updateSetting('defaultLaborRate', event.target.value)} />
                     <Input label="Material markup (%)" type="number" min="0" step="0.01" inputMode="decimal" autoComplete="off" value={settings.materialMarkupPercent ?? '30'} onChange={(event) => updateSetting('materialMarkupPercent', event.target.value)} />
-                    <Input label="Sales tax rate (%)" type="number" min="0" step="0.01" inputMode="decimal" autoComplete="off" value={settings.salesTaxRate ?? '9.2'} onChange={(event) => updateSetting('salesTaxRate', event.target.value)} />
+                    <Input
+                      label="Sales tax rate (%)"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="any"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={settings.salesTaxRate ?? '9.2'}
+                      onChange={(event) => updateSetting('salesTaxRate', event.target.value)}
+                      onBlur={(event) => updateSetting('salesTaxRate', normalizePercent(event.target.value, '9.2'))}
+                      helperText="Enter 9.2 for a 9.2% sales tax rate."
+                    />
                     <Input label="Deposit required (%)" type="number" min="0" max="100" step="0.01" inputMode="decimal" autoComplete="off" value={settings.depositPercent ?? '50'} onChange={(event) => updateSetting('depositPercent', event.target.value)} />
                   </div>
                 )}
