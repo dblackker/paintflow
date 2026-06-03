@@ -1595,7 +1595,12 @@ export function Invoices() {
                 <Input label="Due date" type="date" value={quickInvoiceForm.dueDate} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueDate: event.target.value })} />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Select label="Payment terms" value={quickInvoiceForm.dueLabel} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueLabel: event.target.value })}>
+                <Select
+                  label="Payment terms"
+                  labelHelp="Payment terms are the customer-facing rule for when payment is expected. The due date is the actual calendar date on this invoice. For example, Net 14 means payment is expected 14 days after the invoice date."
+                  value={quickInvoiceForm.dueLabel}
+                  onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueLabel: event.target.value })}
+                >
                   <option value="Due on receipt">Due on receipt</option>
                   <option value="Net 7">Net 7</option>
                   <option value="Net 14">Net 14</option>
