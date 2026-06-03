@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
+import { UpsellCard } from '@/components/UpsellCard';
 import { API_URL, apiJson, formatPhone } from '@/lib/api';
 
 interface OrgSettings {
@@ -57,8 +58,8 @@ interface ConnectorStatus {
 
 const defaultMilestones: PaymentMilestone[] = [
   { key: 'deposit', label: 'Deposit', due: 'Due after approval to reserve the schedule', percent: 40, payable: true },
-  { key: 'progress', label: 'Progress payment', due: 'Due before production starts', percent: 30, payable: false },
-  { key: 'completion', label: 'Final payment', due: 'Due on completion', percent: 30, payable: false },
+  { key: 'progress', label: 'Progress payment', due: 'Due before production starts', percent: 30, payable: true },
+  { key: 'completion', label: 'Final payment', due: 'Due on completion', percent: 30, payable: true },
 ];
 
 const setupCards = [
@@ -140,6 +141,7 @@ export function Settings() {
     quickbooks: 'Check QuickBooks settings',
     calendar: 'Checking...',
   });
+  const [stripeReady, setStripeReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -168,7 +170,10 @@ export function Settings() {
       setSettings({ ...org, phone: org.phone ? maskPhone(String(org.phone)) : '', salesTaxRate: salesTaxDisplay(org.salesTaxRate) });
       setBranding({ primaryColor: '#2563eb', ...(brandingPayload.data || {}) });
       setLegal(legalPayload.data || {});
-      setMilestones(schedulePayload.data?.milestones?.length ? schedulePayload.data.milestones : defaultMilestones);
+      setMilestones((schedulePayload.data?.milestones?.length ? schedulePayload.data.milestones : defaultMilestones).map((milestone) => ({
+        ...milestone,
+        payable: milestone.payable !== false,
+      })));
       void loadConnectorStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -188,8 +193,11 @@ export function Settings() {
     }
     try {
       const stripePayload = await apiJson<{ data?: { onboardingComplete?: boolean } }>('/v1/stripe/status');
-      next.stripe = stripePayload.data?.onboardingComplete ? <span className="text-green-700">Ready for deposits</span> : <Link to="/payments/stripe" className="text-blue-700">Set up payments</Link>;
+      const isReady = Boolean(stripePayload.data?.onboardingComplete);
+      setStripeReady(isReady);
+      next.stripe = isReady ? <span className="text-green-700">Ready for deposits</span> : <Link to="/payments/stripe" className="text-blue-700">Set up payments</Link>;
     } catch {
+      setStripeReady(false);
       next.stripe = <Link to="/payments/stripe" className="text-blue-700">Set up payments</Link>;
     }
     setConnectors(next);
@@ -457,10 +465,21 @@ export function Settings() {
                 <h4 className="pf-section-title">Deposit & Payment Schedule</h4>
                 <p className="pf-copy mt-1">Define the payment milestones customers see on proposals. Percentages must total 100%.</p>
               </div>
-              <Button type="button" variant="secondary" size="sm" onClick={() => setMilestones([...milestones, { key: `payment_${milestones.length + 1}`, label: 'Progress payment', due: 'Due before the next phase starts', percent: 0, payable: false }])}>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setMilestones([...milestones, { key: `payment_${milestones.length + 1}`, label: 'Progress payment', due: 'Due before the next phase starts', percent: 0, payable: true }])}>
                 Add Payment
               </Button>
             </div>
+            {!stripeReady && (
+              <UpsellCard
+                eyebrow="Recommended setup"
+                title="Connect Stripe to collect scheduled payments online"
+                body="Milestones are set up for online payments by default. Connect Stripe before customers can pay deposits, progress payments, or final balances by card."
+                ctaText="Set up Stripe"
+                icon="credit-card"
+                compact
+                onCta={() => { window.location.href = '/payments/stripe'; }}
+              />
+            )}
             <div className="grid gap-2">
               {milestones.map((milestone, index) => (
                 <div key={`${milestone.key || 'payment'}-${index}`} className="grid gap-3 rounded-lg border border-gray-200 p-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.5fr)_6rem_7rem_auto] sm:items-end">
@@ -476,8 +495,14 @@ export function Settings() {
                     <FieldLabel label="Percent" />
                     <input className="input" type="number" min="0.1" max="100" step="0.1" inputMode="decimal" value={milestone.percent} onChange={(event) => updateMilestone(index, { percent: event.target.value })} />
                   </label>
-                  <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
-                    <input type="checkbox" className="rounded border-gray-300" checked={Boolean(milestone.payable)} onChange={(event) => updateMilestone(index, { payable: event.target.checked })} />
+                  <label className={`flex items-center gap-2 pb-2 text-sm ${stripeReady ? 'text-gray-700' : 'text-gray-500'}`}>
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 disabled:bg-gray-100"
+                      checked={Boolean(milestone.payable)}
+                      disabled={!stripeReady}
+                      onChange={(event) => updateMilestone(index, { payable: event.target.checked })}
+                    />
                     Online pay
                   </label>
                   <button type="button" className="btn-icon btn-icon-tonal justify-self-end" aria-label="Remove payment milestone" onClick={() => setMilestones((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
