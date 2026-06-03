@@ -137,6 +137,10 @@ interface AiUsageSummary {
   }>;
 }
 
+interface OrgSettings {
+  salesTaxRate?: string | number | null;
+}
+
 interface Lead {
   id: string;
   name?: string | null;
@@ -153,7 +157,19 @@ interface Estimate {
   leadId: string;
   status?: string | null;
   total?: string | number | null;
-  packages?: Array<{ name?: string; total?: string | number | null; subtotal?: string | number | null; tax?: string | number | null; items?: Array<{ qty?: number; rate?: number }>; lineItems?: Array<{ qty?: number; rate?: number }> }>;
+  packages?: Array<{
+    name?: string;
+    total?: string | number | null;
+    subtotal?: string | number | null;
+    tax?: string | number | null;
+    dueDate?: string | null;
+    dueLabel?: string | null;
+    reminderCadence?: string | null;
+    taxRate?: string | number | null;
+    taxOverride?: boolean | null;
+    items?: Array<{ qty?: number; rate?: number }>;
+    lineItems?: Array<{ qty?: number; rate?: number }>;
+  }>;
   payments?: Payment[];
   signedAt?: string | null;
   sentAt?: string | null;
@@ -229,8 +245,12 @@ interface QuickInvoiceFormState {
   leadId: string;
   description: string;
   amount: string;
+  taxMode: 'auto' | 'manual';
+  taxRate: string;
   tax: string;
   dueLabel: string;
+  dueDate: string;
+  reminderCadence: 'none' | 'due_date' | 'three_days_before' | 'weekly';
   note: string;
 }
 
@@ -275,8 +295,12 @@ const emptyQuickInvoiceForm: QuickInvoiceFormState = {
   leadId: '',
   description: '',
   amount: '',
+  taxMode: 'auto',
+  taxRate: '0',
   tax: '0',
   dueLabel: 'Due on receipt',
+  dueDate: '',
+  reminderCadence: 'due_date',
   note: '',
 };
 
@@ -347,6 +371,37 @@ function estimateTotal(estimate: Estimate) {
   if (estimate.total) return numberValue(estimate.total);
   const items = proposal?.items || proposal?.lineItems || [];
   return items.reduce((sum, item) => sum + numberValue(item.qty || 1) * numberValue(item.rate), 0);
+}
+
+function primaryPackage(estimate: Estimate) {
+  const packages = Array.isArray(estimate.packages) ? estimate.packages : [];
+  return packages.find((pkg) => pkg.name === 'proposal') || packages.find((pkg) => /better|recommended|quick invoice/i.test(String(pkg.name))) || packages[0];
+}
+
+function formatDateOnly(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function isoDateOffset(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function taxRateDisplay(value: unknown) {
+  const numeric = numberValue(value);
+  if (numeric > 0 && numeric <= 1) return String(Number((numeric * 100).toFixed(4)));
+  return numeric ? String(numeric) : '0';
+}
+
+function reminderLabel(value?: string | null) {
+  if (value === 'none') return 'No automatic reminder';
+  if (value === 'three_days_before') return 'Reminder 3 days before due date';
+  if (value === 'weekly') return 'Weekly reminder until paid';
+  return 'Reminder on due date';
 }
 
 function paymentScheduleFor(total: number, paid: number, milestones: PaymentMilestone[]) {
@@ -768,6 +823,7 @@ export function Invoices() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([]);
+  const [settings, setSettings] = useState<OrgSettings>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'receivables' | 'supplier'>('receivables');
@@ -810,6 +866,8 @@ export function Invoices() {
         const balance = Math.max(amount - paid, 0);
         const job = jobsByEstimateId.get(estimate.id);
         const isQuickInvoice = estimate.packages?.some((pkg) => /quick invoice/i.test(String(pkg.name)));
+        const proposal = primaryPackage(estimate);
+        const quickDueLabel = proposal?.dueLabel || (proposal?.dueDate ? `Due ${formatDateOnly(proposal.dueDate)}` : 'Due on receipt');
         return {
           id: estimate.id,
           kind: 'estimate' as ReceivableKind,
@@ -821,7 +879,7 @@ export function Invoices() {
           paid,
           balance,
           createdAt: estimate.sentAt || estimate.createdAt,
-          dueLabel: isQuickInvoice ? 'Due on receipt' : 'Per payment schedule',
+          dueLabel: isQuickInvoice ? quickDueLabel : 'Per payment schedule',
           href: `/estimates/${estimate.id}/details`,
           previewHref: estimate.customerPreviewUrl || `/estimates/${estimate.id}`,
           jobHref: job ? `/jobs/${job.id}` : null,
@@ -870,6 +928,12 @@ export function Invoices() {
     () => purchases.reduce((sum, purchase) => sum + numberValue(purchase.totalAmount), 0),
     [purchases],
   );
+  const quickInvoiceAmount = numberValue(quickInvoiceForm.amount);
+  const quickInvoiceTaxRate = numberValue(quickInvoiceForm.taxRate);
+  const quickInvoiceTax = quickInvoiceForm.taxMode === 'auto'
+    ? Math.round(quickInvoiceAmount * (quickInvoiceTaxRate / 100) * 100) / 100
+    : numberValue(quickInvoiceForm.tax);
+  const quickInvoiceTotal = quickInvoiceAmount + quickInvoiceTax;
   useEffect(() => {
     loadInvoices();
   }, []);
@@ -883,7 +947,7 @@ export function Invoices() {
     setIsLoading(true);
     setError('');
     try {
-      const [purchasePayload, importPayload, learningPayload, usagePayload, inboundEmailPayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload] = await Promise.all([
+      const [purchasePayload, importPayload, learningPayload, usagePayload, inboundEmailPayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload, settingsPayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
         apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
         apiJson<{ data?: { stats?: InvoiceLearningStat[] } }>('/v1/invoices/imports/learning').catch(() => ({ data: { stats: [] } })),
@@ -896,6 +960,7 @@ export function Invoices() {
         apiJson<{ data?: Payment[] }>('/v1/payments/history').catch(() => ({ data: [] })),
         apiJson<{ data?: Lead[] }>('/v1/leads?limit=200').catch(() => ({ data: [] })),
         apiJson<{ data?: { milestones?: PaymentMilestone[] } }>('/v1/settings/payment-schedule').catch(() => ({ data: { milestones: [] } })),
+        apiJson<{ data?: OrgSettings }>('/v1/settings/org').catch(() => ({ data: {} })),
       ]);
       setPurchases(purchasePayload.data || []);
       setInvoiceImports(importPayload.data || []);
@@ -910,6 +975,7 @@ export function Invoices() {
       setPayments(paymentsPayload.data || []);
       setLeads(leadsPayload.data || []);
       setMilestones(schedulePayload.data?.milestones || []);
+      setSettings(settingsPayload.data || {});
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load invoices');
     } finally {
@@ -929,7 +995,13 @@ export function Invoices() {
   }
 
   function openQuickInvoiceModal() {
-    setQuickInvoiceForm(emptyQuickInvoiceForm);
+    const defaultTaxRate = taxRateDisplay(settings.salesTaxRate);
+    setQuickInvoiceForm({
+      ...emptyQuickInvoiceForm,
+      taxRate: defaultTaxRate,
+      dueDate: isoDateOffset(14),
+      dueLabel: 'Net 14',
+    });
     setQuickInvoiceOpen(true);
   }
 
@@ -1064,12 +1136,19 @@ export function Invoices() {
   async function createQuickInvoice(event: FormEvent) {
     event.preventDefault();
     const amount = numberValue(quickInvoiceForm.amount);
-    const tax = numberValue(quickInvoiceForm.tax);
+    const tax = quickInvoiceTax;
     if (!quickInvoiceForm.leadId || amount <= 0) {
       window.showToast?.('Select a customer and enter a positive amount.', 'error');
       return;
     }
+    if (quickInvoiceForm.taxMode === 'auto' && numberValue(quickInvoiceForm.taxRate) < 0) {
+      window.showToast?.('Tax rate cannot be negative.', 'error');
+      return;
+    }
     const lead = leads.find((item) => item.id === quickInvoiceForm.leadId);
+    const dueLabel = quickInvoiceForm.dueDate
+      ? `${quickInvoiceForm.dueLabel || 'Due'} (${formatDateOnly(quickInvoiceForm.dueDate)})`
+      : quickInvoiceForm.dueLabel;
     setIsCreatingInvoice(true);
     try {
       const response = await apiJson<{ data?: Estimate }>('/v1/estimates', {
@@ -1090,12 +1169,17 @@ export function Invoices() {
             subtotal: amount,
             tax,
             total: amount + tax,
+            dueDate: quickInvoiceForm.dueDate || null,
+            dueLabel,
+            reminderCadence: quickInvoiceForm.reminderCadence,
+            taxRate: quickInvoiceForm.taxMode === 'auto' ? numberValue(quickInvoiceForm.taxRate) : null,
+            taxOverride: quickInvoiceForm.taxMode === 'manual',
             items: [{
               desc: quickInvoiceForm.description || 'Painting services',
               qty: 1,
               rate: amount,
               category: 'invoice',
-              notes: [quickInvoiceForm.dueLabel, quickInvoiceForm.note].filter(Boolean).join(' - '),
+              notes: [dueLabel, reminderLabel(quickInvoiceForm.reminderCadence), quickInvoiceForm.note].filter(Boolean).join(' - '),
               customerVisible: true,
             }],
           }],
@@ -1176,6 +1260,23 @@ export function Invoices() {
             </p>
           </div>
           <Link to="/settings#business-settings" className="btn-tonal btn-sm justify-center">Review payment schedule</Link>
+        </div>
+      </Card>
+
+      <Card padding="sm">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <p className="pf-row-title">Due dates</p>
+            <p className="pf-helper mt-1">Quick invoices can be due on receipt, Net 7/14/30, or a specific date.</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <p className="pf-row-title">Reminders</p>
+            <p className="pf-helper mt-1">Set invoice reminders now; the reminder queue can send them automatically when email automation is enabled.</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <p className="pf-row-title">Tax controls</p>
+            <p className="pf-helper mt-1">Use the workspace tax rate by default, with per-invoice overrides for jurisdiction or tax-exempt work.</p>
+          </div>
         </div>
       </Card>
 
@@ -1391,9 +1492,50 @@ export function Invoices() {
               <Input label="Description" required autoComplete="off" placeholder="Touch-up work, final balance, extra room" value={quickInvoiceForm.description} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, description: event.target.value })} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input label="Amount" required type="number" min="0.01" step="0.01" inputMode="decimal" value={quickInvoiceForm.amount} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, amount: event.target.value })} />
-                <Input label="Tax" type="number" min="0" step="0.01" inputMode="decimal" value={quickInvoiceForm.tax} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, tax: event.target.value })} />
+                <Input label="Due date" type="date" value={quickInvoiceForm.dueDate} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueDate: event.target.value })} />
               </div>
-              <Input label="Payment terms" autoComplete="off" value={quickInvoiceForm.dueLabel} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueLabel: event.target.value })} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select label="Payment terms" value={quickInvoiceForm.dueLabel} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueLabel: event.target.value })}>
+                  <option value="Due on receipt">Due on receipt</option>
+                  <option value="Net 7">Net 7</option>
+                  <option value="Net 14">Net 14</option>
+                  <option value="Net 30">Net 30</option>
+                  <option value="Due before scheduling">Due before scheduling</option>
+                  <option value="Due on completion">Due on completion</option>
+                </Select>
+                <Select label="Reminder" value={quickInvoiceForm.reminderCadence} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, reminderCadence: event.target.value as QuickInvoiceFormState['reminderCadence'] })}>
+                  <option value="due_date">On due date</option>
+                  <option value="three_days_before">3 days before due</option>
+                  <option value="weekly">Weekly until paid</option>
+                  <option value="none">No reminder</option>
+                </Select>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="pf-row-title">Sales tax</p>
+                  <div className="pf-segmented-group" aria-label="Tax entry mode">
+                    <button type="button" aria-pressed={quickInvoiceForm.taxMode === 'auto'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, taxMode: 'auto' })}>Rate</button>
+                    <button type="button" aria-pressed={quickInvoiceForm.taxMode === 'manual'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, taxMode: 'manual', tax: String(quickInvoiceTax) })}>Override</button>
+                  </div>
+                </div>
+                {quickInvoiceForm.taxMode === 'auto' ? (
+                  <Input label="Tax rate (%)" type="number" min="0" step="0.01" inputMode="decimal" value={quickInvoiceForm.taxRate} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, taxRate: event.target.value })} helperText="Defaults from Settings. Override here when the invoice needs a different local rate." />
+                ) : (
+                  <Input label="Tax amount" type="number" min="0" step="0.01" inputMode="decimal" value={quickInvoiceForm.tax} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, tax: event.target.value })} helperText="Use for tax-exempt work, jurisdiction overrides, or accounting corrections." />
+                )}
+              </div>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                <p className="pf-row-title text-blue-950">Invoice preview</p>
+                <div className="mt-2 grid gap-1 text-sm text-blue-950">
+                  <div className="flex justify-between gap-3"><span>Subtotal</span><span>{formatMoney(quickInvoiceAmount)}</span></div>
+                  <div className="flex justify-between gap-3"><span>Tax{quickInvoiceForm.taxMode === 'auto' ? ` (${quickInvoiceTaxRate || 0}%)` : ' override'}</span><span>{formatMoney(quickInvoiceTax)}</span></div>
+                  <div className="flex justify-between gap-3 border-t border-blue-200 pt-2 font-semibold"><span>Total</span><span>{formatMoney(quickInvoiceTotal)}</span></div>
+                  <p className="pf-helper mt-2 text-blue-900">
+                    {quickInvoiceForm.dueDate ? `Due ${formatDateOnly(quickInvoiceForm.dueDate)}. ` : ''}
+                    {reminderLabel(quickInvoiceForm.reminderCadence)}.
+                  </p>
+                </div>
+              </div>
               <Textarea label="Internal note" rows={3} value={quickInvoiceForm.note} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, note: event.target.value })} />
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <Button type="button" variant="secondary" fullWidth onClick={closeQuickInvoiceModal}>Cancel</Button>
