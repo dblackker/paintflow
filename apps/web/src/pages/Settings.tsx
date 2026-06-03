@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
@@ -114,15 +114,34 @@ function ActionCard({ href, title, copy }: { href: string; title: string; copy: 
 }
 
 function FieldLabel({ label, help }: { label: string; help?: string }) {
+  const tooltipId = `settings-help-${useId().replace(/:/g, '')}`;
+  const [open, setOpen] = useState(false);
+
   return (
     <span className="form-label inline-flex items-center gap-1.5">
       {label}
       {help && (
-        <span className="group relative inline-flex">
-          <button type="button" className="btn-icon h-5 w-5 text-gray-500" aria-label={`Explain ${label}`}>
+        <span
+          className="group relative inline-flex"
+          onBlur={() => {
+            window.setTimeout(() => setOpen(false), 120);
+          }}
+        >
+          <button
+            type="button"
+            className="btn-icon h-5 w-5 text-gray-500"
+            aria-label={`Explain ${label}`}
+            aria-expanded={open}
+            aria-describedby={tooltipId}
+            onClick={() => setOpen((current) => !current)}
+          >
             <Icon name="info" className="h-3.5 w-3.5" />
           </button>
-          <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-72 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block sm:left-full sm:top-1/2 sm:ml-2 sm:mt-0 sm:-translate-y-1/2">
+          <span
+            id={tooltipId}
+            role="tooltip"
+            className={`pointer-events-none absolute left-1/2 top-full z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block sm:left-full sm:top-1/2 sm:ml-2 sm:mt-0 sm:-translate-y-1/2 sm:translate-x-0 ${open ? 'block' : 'hidden'}`}
+          >
             {help}
           </span>
         </span>
