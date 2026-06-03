@@ -234,13 +234,11 @@ templatesApp.get('/', async (c) => {
     orderBy: [desc(estimateTemplates.usageCount)],
   });
   
-  const existingNames = new Set(templates.map((template) => template.name));
-  const missingBuiltIns = BUILTIN_TEMPLATES.filter((template) => !existingNames.has(template.name));
-  if (missingBuiltIns.length) {
+  if (templates.length === 0) {
     const seeded = await db.insert(estimateTemplates).values(
-      missingBuiltIns.map(t => ({ orgId, createdBy: userId, ...t }))
+      BUILTIN_TEMPLATES.map(t => ({ orgId, createdBy: userId, ...t }))
     ).returning();
-    templates = [...seeded, ...templates];
+    templates = seeded;
   }
   
   return c.json({ data: templates });

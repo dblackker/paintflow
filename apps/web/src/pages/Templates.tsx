@@ -164,11 +164,9 @@ function TemplateCard({
         <Button type="button" size="sm" fullWidth isLoading={isUsing} onClick={() => onUse(template)}>
           Use template
         </Button>
-        {!template.isShared && (
-          <Button type="button" variant="secondary" size="sm" isLoading={isDeleting} onClick={() => onDelete(template)}>
-            Delete
-          </Button>
-        )}
+        <Button type="button" variant="secondary" size="sm" isLoading={isDeleting} onClick={() => onDelete(template)}>
+          Delete
+        </Button>
       </div>
     </Card>
   );
