@@ -313,7 +313,6 @@ export function Onboarding() {
                       onChange={(event) => updateSetting('salesTaxRate', event.target.value)}
                       onBlur={(event) => updateSetting('salesTaxRate', normalizePercent(event.target.value, '9.2'))}
                       labelHelp="This is the default rate used when a more specific tax rule is not available. You can configure ZIP-specific sales tax later, and invoices can calculate tax automatically or be manually overridden before sending."
-                      helperText="Enter 9.2 for a 9.2% sales tax rate."
                     />
                     <Input
                       label="Deposit required (%)"
