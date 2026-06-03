@@ -312,9 +312,21 @@ export function Onboarding() {
                       value={settings.salesTaxRate ?? '9.2'}
                       onChange={(event) => updateSetting('salesTaxRate', event.target.value)}
                       onBlur={(event) => updateSetting('salesTaxRate', normalizePercent(event.target.value, '9.2'))}
+                      labelHelp="This is the default rate used when a more specific tax rule is not available. You can configure ZIP-specific sales tax later, and invoices can calculate tax automatically or be manually overridden before sending."
                       helperText="Enter 9.2 for a 9.2% sales tax rate."
                     />
-                    <Input label="Deposit required (%)" type="number" min="0" max="100" step="0.01" inputMode="decimal" autoComplete="off" value={settings.depositPercent ?? '50'} onChange={(event) => updateSetting('depositPercent', event.target.value)} />
+                    <Input
+                      label="Deposit required (%)"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={settings.depositPercent ?? '50'}
+                      onChange={(event) => updateSetting('depositPercent', event.target.value)}
+                      labelHelp="This is the default upfront deposit. You can change payment schedules later in Settings, including milestone plans such as 10% to schedule, 40% before work starts, and the balance on completion."
+                    />
                   </div>
                 )}
 

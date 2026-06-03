@@ -1,7 +1,9 @@
-import { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes, forwardRef, useId } from 'react';
+import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, forwardRef, useId } from 'react';
+import { Icon } from './Icon';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  labelHelp?: ReactNode;
   error?: string;
   helperText?: string;
 }
@@ -11,17 +13,36 @@ function useStableFieldId(prefix: string, explicitId?: string) {
   return explicitId || `${prefix}-${reactId}`;
 }
 
+function FieldLabel({ htmlFor, label, help }: { htmlFor: string; label: string; help?: ReactNode }) {
+  return (
+    <div className="mb-1 flex items-center gap-1.5">
+      <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+      {help && (
+        <span className="group relative inline-flex">
+          <button type="button" className="btn-icon h-5 w-5 text-gray-500" aria-label={`Explain ${label}`}>
+            <Icon name="info" className="h-3.5 w-3.5" />
+          </button>
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-1/2 top-full z-30 mt-1 hidden w-72 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block sm:left-0 sm:translate-x-0"
+          >
+            {help}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, helperText, className = '', id, ...props }, ref) => {
+  ({ label, labelHelp, error, helperText, className = '', id, ...props }, ref) => {
     const inputId = useStableFieldId('input', id);
     
     return (
       <div className="w-full">
-        {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1">
-            {label}
-          </label>
-        )}
+        {label && <FieldLabel htmlFor={inputId} label={label} help={labelHelp} />}
         <input
           ref={ref}
           id={inputId}
@@ -47,21 +68,18 @@ Input.displayName = 'Input';
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
+  labelHelp?: ReactNode;
   error?: string;
   helperText?: string;
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, helperText, className = '', id, ...props }, ref) => {
+  ({ label, labelHelp, error, helperText, className = '', id, ...props }, ref) => {
     const inputId = useStableFieldId('textarea', id);
     
     return (
       <div className="w-full">
-        {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1">
-            {label}
-          </label>
-        )}
+        {label && <FieldLabel htmlFor={inputId} label={label} help={labelHelp} />}
         <textarea
           ref={ref}
           id={inputId}
@@ -87,22 +105,19 @@ Textarea.displayName = 'Textarea';
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
+  labelHelp?: ReactNode;
   error?: string;
   helperText?: string;
   options?: Array<{ value: string; label: string }>;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, helperText, options, className = '', id, ...props }, ref) => {
+  ({ label, labelHelp, error, helperText, options, className = '', id, ...props }, ref) => {
     const inputId = useStableFieldId('select', id);
     
     return (
       <div className="w-full">
-        {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1">
-            {label}
-          </label>
-        )}
+        {label && <FieldLabel htmlFor={inputId} label={label} help={labelHelp} />}
         <select
           ref={ref}
           id={inputId}
