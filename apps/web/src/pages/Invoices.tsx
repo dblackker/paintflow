@@ -242,7 +242,15 @@ interface UploadFormState {
 }
 
 interface QuickInvoiceFormState {
+  customerMode: 'existing' | 'new';
   leadId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  streetAddress: string;
+  city: string;
+  state: string;
+  postalCode: string;
   description: string;
   amount: string;
   taxMode: 'auto' | 'manual';
@@ -292,7 +300,15 @@ const emptyUploadForm: UploadFormState = {
 };
 
 const emptyQuickInvoiceForm: QuickInvoiceFormState = {
+  customerMode: 'existing',
   leadId: '',
+  customerName: '',
+  customerEmail: '',
+  customerPhone: '',
+  streetAddress: '',
+  city: '',
+  state: '',
+  postalCode: '',
   description: '',
   amount: '',
   taxMode: 'auto',
@@ -328,6 +344,22 @@ function formatDate(value?: string | null) {
 function numberValue(value: unknown) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function phoneDigits(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits.slice(0, 10);
+}
+
+function maskPhone(value: string) {
+  const digits = phoneDigits(value);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function cleanZip(value: string) {
+  return value.replace(/\D/g, '').slice(0, 5);
 }
 
 function percentValue(value: unknown) {
@@ -1137,20 +1169,62 @@ export function Invoices() {
     event.preventDefault();
     const amount = numberValue(quickInvoiceForm.amount);
     const tax = quickInvoiceTax;
-    if (!quickInvoiceForm.leadId || amount <= 0) {
-      window.showToast?.('Select a customer and enter a positive amount.', 'error');
+    if (quickInvoiceForm.customerMode === 'existing' && !quickInvoiceForm.leadId) {
+      window.showToast?.('Select a customer or create a new one.', 'error');
+      return;
+    }
+    if (quickInvoiceForm.customerMode === 'new' && !quickInvoiceForm.customerName.trim()) {
+      window.showToast?.('Enter the customer name.', 'error');
+      return;
+    }
+    if (quickInvoiceForm.customerMode === 'new' && !quickInvoiceForm.customerEmail.trim() && !quickInvoiceForm.customerPhone.trim()) {
+      window.showToast?.('Add a phone number or email for the new customer.', 'error');
+      return;
+    }
+    if (quickInvoiceForm.customerMode === 'new' && quickInvoiceForm.customerPhone && phoneDigits(quickInvoiceForm.customerPhone).length !== 10) {
+      window.showToast?.('Enter a 10-digit customer phone number.', 'error');
+      return;
+    }
+    if (amount <= 0) {
+      window.showToast?.('Enter a positive invoice amount.', 'error');
       return;
     }
     if (quickInvoiceForm.taxMode === 'auto' && numberValue(quickInvoiceForm.taxRate) < 0) {
       window.showToast?.('Tax rate cannot be negative.', 'error');
       return;
     }
-    const lead = leads.find((item) => item.id === quickInvoiceForm.leadId);
+    let lead = leads.find((item) => item.id === quickInvoiceForm.leadId);
     const dueLabel = quickInvoiceForm.dueDate
       ? `${quickInvoiceForm.dueLabel || 'Due'} (${formatDateOnly(quickInvoiceForm.dueDate)})`
       : quickInvoiceForm.dueLabel;
     setIsCreatingInvoice(true);
     try {
+      if (quickInvoiceForm.customerMode === 'new') {
+        const leadResponse = await apiJson<{ data?: Lead }>('/v1/leads', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            name: quickInvoiceForm.customerName.trim(),
+            email: quickInvoiceForm.customerEmail.trim() || undefined,
+            phone: quickInvoiceForm.customerPhone.trim() || undefined,
+            streetAddress: quickInvoiceForm.streetAddress.trim() || undefined,
+            city: quickInvoiceForm.city.trim() || undefined,
+            state: quickInvoiceForm.state.trim().toUpperCase() || undefined,
+            postalCode: cleanZip(quickInvoiceForm.postalCode) || undefined,
+            source: 'Quick invoice',
+            status: 'contacted',
+          }),
+        });
+        if (!leadResponse.data?.id) throw new Error('Customer was not created.');
+        lead = leadResponse.data;
+        setLeads((current) => [leadResponse.data as Lead, ...current]);
+      }
+
+      if (!lead?.id) throw new Error('Customer is required to create an invoice.');
+
       const response = await apiJson<{ data?: Estimate }>('/v1/estimates', {
         method: 'POST',
         headers: {
@@ -1158,7 +1232,7 @@ export function Invoices() {
           'Idempotency-Key': crypto.randomUUID(),
         },
         body: JSON.stringify({
-          leadId: quickInvoiceForm.leadId,
+          leadId: lead.id,
           status: 'sent',
           streetAddress: lead?.streetAddress || undefined,
           city: lead?.city || undefined,
@@ -1485,10 +1559,36 @@ export function Invoices() {
               </button>
             </div>
             <form className="space-y-4" onSubmit={createQuickInvoice}>
-              <Select label="Customer" required value={quickInvoiceForm.leadId} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, leadId: event.target.value })}>
-                <option value="">Select customer...</option>
-                {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name || lead.email || 'Customer'}</option>)}
-              </Select>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="pf-row-title">Customer</p>
+                  <div className="pf-segmented-group" aria-label="Customer selection mode">
+                    <button type="button" aria-pressed={quickInvoiceForm.customerMode === 'existing'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, customerMode: 'existing' })}>Existing</button>
+                    <button type="button" aria-pressed={quickInvoiceForm.customerMode === 'new'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, customerMode: 'new', leadId: '' })}>New</button>
+                  </div>
+                </div>
+                {quickInvoiceForm.customerMode === 'existing' ? (
+                  <Select label="Customer" required value={quickInvoiceForm.leadId} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, leadId: event.target.value })}>
+                    <option value="">Select customer...</option>
+                    {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name || lead.email || 'Customer'}</option>)}
+                  </Select>
+                ) : (
+                  <div className="grid gap-3">
+                    <Input label="Customer name" required autoComplete="name" value={quickInvoiceForm.customerName} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerName: event.target.value })} placeholder="Jane Homeowner" />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Input label="Email" type="email" inputMode="email" autoComplete="email" value={quickInvoiceForm.customerEmail} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerEmail: event.target.value })} placeholder="customer@example.com" />
+                      <Input label="Phone" type="tel" inputMode="numeric" autoComplete="tel" value={quickInvoiceForm.customerPhone} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerPhone: maskPhone(event.target.value) })} placeholder="(555) 123-4567" />
+                    </div>
+                    <Input label="Jobsite street" autoComplete="street-address" value={quickInvoiceForm.streetAddress} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, streetAddress: event.target.value })} placeholder="123 Main St" />
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_5rem_7rem]">
+                      <Input label="City" autoComplete="address-level2" value={quickInvoiceForm.city} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, city: event.target.value })} />
+                      <Input label="State" autoComplete="address-level1" maxLength={2} value={quickInvoiceForm.state} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, state: event.target.value.toUpperCase().slice(0, 2) })} />
+                      <Input label="ZIP" autoComplete="postal-code" inputMode="numeric" maxLength={5} value={quickInvoiceForm.postalCode} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, postalCode: cleanZip(event.target.value) })} />
+                    </div>
+                    <p className="pf-helper">This creates a CRM customer and uses the jobsite address on the invoice.</p>
+                  </div>
+                )}
+              </div>
               <Input label="Description" required autoComplete="off" placeholder="Touch-up work, final balance, extra room" value={quickInvoiceForm.description} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, description: event.target.value })} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input label="Amount" required type="number" min="0.01" step="0.01" inputMode="decimal" value={quickInvoiceForm.amount} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, amount: event.target.value })} />
