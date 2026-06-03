@@ -478,7 +478,7 @@ export function Settings() {
             <Button type="submit" isLoading={saving === 'pricing'} className="w-full sm:w-fit">Save</Button>
           </form>
 
-          <form className="mt-6 grid gap-4 border-t border-gray-200 pt-5" onSubmit={savePaymentSchedule}>
+          <form id="payment-schedule-settings" className="mt-6 grid scroll-mt-24 gap-4 border-t border-gray-200 pt-5" onSubmit={savePaymentSchedule}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h4 className="pf-section-title">Deposit & Payment Schedule</h4>

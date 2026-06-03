@@ -1259,7 +1259,7 @@ export function Invoices() {
               Use estimates and change orders as the source of truth. Quick invoices are for one-off work, legacy jobs, or emergency billing when the full estimate flow was skipped.
             </p>
           </div>
-          <Link to="/settings#business-settings" className="btn-tonal btn-sm justify-center">Review payment schedule</Link>
+          <Link to="/settings#payment-schedule-settings" className="btn-tonal btn-sm justify-center">Review payment schedule</Link>
         </div>
       </Card>
 
