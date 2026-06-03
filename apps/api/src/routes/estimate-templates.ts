@@ -20,18 +20,130 @@ const templateSchema = z.object({
     roomType: z.string().optional(),
     length: z.number().positive().optional(),
     width: z.number().positive().optional(),
+    kind: z.enum(['interior', 'exterior', 'custom']).optional(),
+    metrics: z.record(z.any()).optional(),
+    surfaces: z.array(z.object({
+      category: z.string().optional(),
+      label: z.string(),
+      quantity: z.number().positive().optional(),
+      width: z.number().positive().optional(),
+      height: z.number().positive().optional(),
+      coats: z.number().min(1).max(3).optional(),
+      prepLevel: z.string().optional(),
+      applicationMethod: z.string().optional(),
+      customerVisible: z.boolean().optional(),
+      optional: z.boolean().optional(),
+      notes: z.string().optional(),
+    })).optional(),
     items: z.array(z.object({
       category: z.string(),
       productionRateId: z.string().optional(),
       quantity: z.number().positive(),
       prepLevel: z.string().optional(),
       notes: z.string().optional(),
-    })),
+    })).optional(),
   })),
   packages: z.array(z.any()).optional(),
 });
 
 const BUILTIN_TEMPLATES = [
+  {
+    name: 'Interior Repaint - Whole Home Starter',
+    description: 'Reasonable starter scope for a small-to-mid interior repaint with rooms, walls, ceilings, trim, and doors.',
+    category: 'full_estimate',
+    isShared: true,
+    isSmart: true,
+    rooms: [
+      {
+        name: 'Bedroom 1',
+        roomType: 'bedroom',
+        kind: 'interior',
+        length: 12,
+        width: 12,
+        metrics: { length: 12, width: 12, perimeter: 48, height: 9, windows: 1, doors: 1 },
+        surfaces: [
+          { category: 'walls', label: 'Walls', quantity: 390, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'ceilings', label: 'Ceiling', width: 12, height: 12, coats: 1, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'trim', label: 'Trim', quantity: 78, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'doors', label: 'Doors', quantity: 1, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        ],
+      },
+      {
+        name: 'Bedroom 2',
+        roomType: 'bedroom',
+        kind: 'interior',
+        length: 11,
+        width: 11,
+        metrics: { length: 11, width: 11, perimeter: 44, height: 9, windows: 1, doors: 1 },
+        surfaces: [
+          { category: 'walls', label: 'Walls', quantity: 350, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'ceilings', label: 'Ceiling', width: 11, height: 11, coats: 1, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'trim', label: 'Trim', quantity: 72, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'doors', label: 'Doors', quantity: 1, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        ],
+      },
+      {
+        name: 'Living room',
+        roomType: 'living_room',
+        kind: 'interior',
+        length: 18,
+        width: 16,
+        metrics: { length: 18, width: 16, perimeter: 68, height: 9, windows: 2, doors: 1 },
+        surfaces: [
+          { category: 'walls', label: 'Walls', quantity: 540, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'ceilings', label: 'Ceiling', width: 18, height: 16, coats: 1, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'trim', label: 'Trim', quantity: 118, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        ],
+      },
+      {
+        name: 'Kitchen',
+        roomType: 'kitchen',
+        kind: 'interior',
+        length: 14,
+        width: 12,
+        metrics: { length: 14, width: 12, perimeter: 52, height: 9, windows: 1, doors: 1 },
+        surfaces: [
+          { category: 'walls', label: 'Walls', quantity: 330, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'ceilings', label: 'Ceiling', width: 14, height: 12, coats: 1, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'trim', label: 'Trim', quantity: 85, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        ],
+      },
+      {
+        name: 'Hallway',
+        roomType: 'hallway',
+        kind: 'interior',
+        length: 14,
+        width: 4,
+        metrics: { length: 14, width: 4, perimeter: 36, height: 9, windows: 0, doors: 2 },
+        surfaces: [
+          { category: 'walls', label: 'Walls', quantity: 275, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'ceilings', label: 'Ceiling', width: 14, height: 4, coats: 1, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'trim', label: 'Trim', quantity: 75, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+          { category: 'doors', label: 'Doors', quantity: 2, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'Exterior Repaint - Two Story Starter',
+    description: 'Reasonable starter scope for a two-story exterior repaint with siding, soffits, fascia, trim, and corner boards.',
+    category: 'full_estimate',
+    isShared: true,
+    isSmart: true,
+    rooms: [{
+      name: 'Exterior',
+      roomType: 'exterior',
+      kind: 'exterior',
+      metrics: { perimeter: 160, height: 20, windows: 14, doors: 3, corners: 4 },
+      surfaces: [
+        { category: 'exterior_body', label: 'Siding', quantity: 2850, coats: 2, prepLevel: 'standard', applicationMethod: 'spray_backroll' },
+        { category: 'soffit', label: 'Soffits', quantity: 352, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        { category: 'fascia', label: 'Fascia', quantity: 176, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        { category: 'trim', label: 'Window and door trim', quantity: 278, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+        { category: 'corner_boards', label: 'Corner boards', quantity: 80, coats: 2, prepLevel: 'standard', applicationMethod: 'brush_roll' },
+      ],
+    }],
+  },
   {
     name: 'Master Bedroom',
     description: '4 walls, ceiling, trim',
@@ -122,12 +234,13 @@ templatesApp.get('/', async (c) => {
     orderBy: [desc(estimateTemplates.usageCount)],
   });
   
-  // Seed built-ins if empty
-  if (templates.length === 0) {
+  const existingNames = new Set(templates.map((template) => template.name));
+  const missingBuiltIns = BUILTIN_TEMPLATES.filter((template) => !existingNames.has(template.name));
+  if (missingBuiltIns.length) {
     const seeded = await db.insert(estimateTemplates).values(
-      BUILTIN_TEMPLATES.map(t => ({ orgId, createdBy: userId, ...t }))
+      missingBuiltIns.map(t => ({ orgId, createdBy: userId, ...t }))
     ).returning();
-    templates = seeded;
+    templates = [...seeded, ...templates];
   }
   
   return c.json({ data: templates });

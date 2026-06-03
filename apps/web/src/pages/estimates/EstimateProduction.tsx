@@ -139,6 +139,31 @@ interface Room {
   surfaces: Surface[];
 }
 
+interface TemplateSurface {
+  category?: string | null;
+  label?: string | null;
+  quantity?: number | string | null;
+  width?: number | string | null;
+  height?: number | string | null;
+  coats?: number | string | null;
+  prepLevel?: PrepLevel | string | null;
+  applicationMethod?: ApplicationMethod | string | null;
+  customerVisible?: boolean | null;
+  optional?: boolean | null;
+  notes?: string | null;
+}
+
+interface TemplateRoom {
+  name?: string | null;
+  roomType?: string | null;
+  kind?: 'interior' | 'exterior' | 'custom' | string | null;
+  length?: number | string | null;
+  width?: number | string | null;
+  metrics?: Room['metrics'];
+  surfaces?: TemplateSurface[] | null;
+  items?: TemplateSurface[] | null;
+}
+
 interface Surface {
   id: string;
   rateId: string;
@@ -278,6 +303,14 @@ function packageItems(pkg?: EstimatePackage | null) {
   return Array.isArray(pkg?.items) ? pkg.items : Array.isArray(pkg?.lineItems) ? pkg.lineItems : [];
 }
 
+function normalizePrepLevel(value: unknown): PrepLevel {
+  return ['none', 'light', 'standard', 'heavy'].includes(String(value)) ? value as PrepLevel : 'standard';
+}
+
+function normalizeApplicationMethod(value: unknown, rate?: ProductionRate | null): ApplicationMethod {
+  return ['brush_roll', 'spray_backroll', 'spray_only'].includes(String(value)) ? value as ApplicationMethod : defaultMethod(rate);
+}
+
 export function EstimateProduction() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -350,7 +383,7 @@ export function EstimateProduction() {
       setMaterials(materialsRes.data || []);
       setCatalogColors(catalogColorsRes.data || []);
       if (estimateRes.data) hydrateEstimate(estimateRes.data, ratesRes.data || []);
-      else if (initialLeadId) setLeadId(initialLeadId);
+      else if (!hydrateTemplateRooms(ratesRes.data || []) && initialLeadId) setLeadId(initialLeadId);
     } catch (err) {
       setSetupError(err instanceof Error ? err.message : 'Failed to load estimator setup');
     } finally {
@@ -401,6 +434,91 @@ export function EstimateProduction() {
     setStarterCollapsed(true);
   }
 
+  function hydrateTemplateRooms(loadedRates: ProductionRate[]) {
+    const raw = sessionStorage.getItem('templateRooms');
+    if (!raw) return false;
+
+    try {
+      const templateRooms = JSON.parse(raw) as TemplateRoom[];
+      sessionStorage.removeItem('templateRooms');
+      if (!Array.isArray(templateRooms) || !templateRooms.length) return false;
+
+      const nextRooms = templateRooms.map((room, roomIndex): Room => {
+        const kind = room.kind === 'exterior' || room.roomType === 'exterior' ? 'exterior' : room.kind === 'custom' ? 'custom' : 'interior';
+        const surfaces = (Array.isArray(room.surfaces) && room.surfaces.length ? room.surfaces : room.items || [])
+          .map((surface) => templateSurfaceToProduction(surface, loadedRates))
+          .filter((surface): surface is Surface => Boolean(surface));
+        const length = num(room.length);
+        const width = num(room.width);
+        const metrics = room.metrics || (length && width ? { length, width, perimeter: (length + width) * 2 } : undefined);
+        return {
+          id: uid('room'),
+          name: room.name || (kind === 'exterior' ? 'Exterior' : `Room ${roomIndex + 1}`),
+          kind,
+          generated: true,
+          metrics,
+          surfaces,
+        };
+      }).filter((room) => room.surfaces.length);
+
+      if (!nextRooms.length) return false;
+      setEstimateType(nextRooms.some((room) => room.kind === 'exterior') ? 'exterior' : 'interior');
+      setRooms(nextRooms);
+      setStarterCollapsed(true);
+      setStarterSkipped(false);
+      window.showToast?.(`Loaded ${nextRooms.length} room${nextRooms.length === 1 ? '' : 's'} from template.`, 'success');
+      return true;
+    } catch (err) {
+      sessionStorage.removeItem('templateRooms');
+      window.showToast?.(err instanceof Error ? err.message : 'Could not load estimate template', 'error');
+      return false;
+    }
+  }
+
+  function templateSurfaceToProduction(template: TemplateSurface, loadedRates: ProductionRate[]): Surface | null {
+    const category = String(template.category || template.label || '').trim();
+    const rate = findTemplateRate(loadedRates, category);
+    const label = template.label || labelize(category || rate?.surfaceType || rate?.category || 'Substrate');
+    return {
+      id: uid('surface'),
+      rateId: rate?.id || '',
+      label,
+      width: template.width == null ? '' : String(template.width),
+      height: template.height == null ? '' : String(template.height),
+      quantity: template.quantity == null ? '' : String(template.quantity),
+      coats: num(template.coats, num(rate?.coats, 2)),
+      prepLevel: normalizePrepLevel(template.prepLevel),
+      applicationMethod: normalizeApplicationMethod(template.applicationMethod, rate),
+      prepAdjustmentHours: '',
+      paintAdjustmentHours: '',
+      materialId: '',
+      colorName: '',
+      colorCode: '',
+      colorStatus: 'TBD',
+      crewNote: template.notes || '',
+      customerVisible: template.customerVisible !== false,
+      optional: Boolean(template.optional),
+    };
+  }
+
+  function findTemplateRate(loadedRates: ProductionRate[], category: string) {
+    const normalized = category.toLowerCase();
+    const aliases: Record<string, string> = {
+      ceiling: 'ceilings',
+      ceilings: 'ceilings',
+      siding: 'exterior_body',
+      exterior_siding: 'exterior_body',
+      exterior_body: 'exterior_body',
+      corner: 'corner_boards',
+      corner_board: 'corner_boards',
+      corner_boards: 'corner_boards',
+    };
+    const desired = aliases[normalized] || normalized;
+    return loadedRates.find((rate) => rateKind(rate) === desired)
+      || loadedRates.find((rate) => rateText(rate).includes(desired.replace(/_/g, ' ')) || rateText(rate).includes(normalized.replace(/_/g, ' ')))
+      || loadedRates[0];
+  }
+
   function surfaceFromEstimateItem(item: EstimateLineItem, loadedRates: ProductionRate[]): Surface {
     const rateId = item.productionRateId && loadedRates.some((rate) => rate.id === item.productionRateId) ? item.productionRateId : '';
     const label = item.surfaceName || String(item.desc || '').split(':').pop()?.trim() || 'Substrate';
@@ -412,8 +530,8 @@ export function EstimateProduction() {
       height: String(item.dimensions?.height || ''),
       quantity: String(item.dimensions?.quantity || ''),
       coats: num(item.labor?.coats, 2),
-      prepLevel: item.labor?.prepLevel || 'standard',
-      applicationMethod: item.labor?.applicationMethod || defaultMethod(loadedRates.find((rate) => rate.id === rateId)),
+      prepLevel: normalizePrepLevel(item.labor?.prepLevel),
+      applicationMethod: normalizeApplicationMethod(item.labor?.applicationMethod, loadedRates.find((rate) => rate.id === rateId)),
       prepAdjustmentHours: String(item.labor?.prepAdjustmentHours || ''),
       paintAdjustmentHours: String(item.labor?.paintAdjustmentHours || ''),
       materialId: item.material?.id || '',

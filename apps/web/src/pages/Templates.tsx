@@ -15,14 +15,19 @@ interface TemplateRoom {
   length?: number | string | null;
   width?: number | string | null;
   items?: TemplateItem[];
-  surfaces?: unknown[];
+  surfaces?: TemplateItem[];
 }
 
 interface TemplateItem {
   id?: string;
   category?: string | null;
+  label?: string | null;
   quantity?: number | string | null;
+  width?: number | string | null;
+  height?: number | string | null;
+  coats?: number | string | null;
   prepLevel?: string | null;
+  applicationMethod?: string | null;
   notes?: string | null;
 }
 
@@ -256,15 +261,18 @@ export function Templates() {
 
   async function createTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const items = form.items
+    const surfaces = form.items
       .map((item) => ({
         category: item.category.trim(),
+        label: item.category.trim().replace(/_/g, ' '),
         quantity: numberValue(item.quantity),
         prepLevel: item.prepLevel,
+        coats: 2,
+        applicationMethod: item.category.includes('siding') ? 'spray_backroll' : 'brush_roll',
         notes: item.notes.trim() || undefined,
       }))
       .filter((item) => item.category && item.quantity > 0);
-    if (!items.length) {
+    if (!surfaces.length) {
       window.showToast?.('Add at least one substrate with a quantity.', 'error');
       return;
     }
@@ -286,9 +294,10 @@ export function Templates() {
           rooms: [{
             name: form.roomName.trim() || form.name.trim(),
             roomType: form.roomType.trim() || undefined,
+            kind: form.roomType === 'exterior' ? 'exterior' : 'interior',
             length: numberValue(form.length) > 0 ? numberValue(form.length) : undefined,
             width: numberValue(form.width) > 0 ? numberValue(form.width) : undefined,
-            items,
+            surfaces,
           }],
         }),
       });
