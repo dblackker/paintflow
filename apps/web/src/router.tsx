@@ -45,6 +45,11 @@ import { ErrorPage } from '@/pages/ErrorPage';
 
 export const router = createBrowserRouter([
   {
+    path: '/',
+    element: <Landing />,
+    errorElement: <ErrorPage />,
+  },
+  {
     path: '/estimates/:id',
     element: <EstimateDetail />,
     errorElement: <ErrorPage />,
@@ -58,7 +63,6 @@ export const router = createBrowserRouter([
     element: <BaseLayout />,
     errorElement: <ErrorPage />,
     children: [
-      { path: '/', element: <Landing /> },
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/estimates', element: <EstimatesList /> },
       { path: '/estimates/new', element: <EstimateNew /> },
