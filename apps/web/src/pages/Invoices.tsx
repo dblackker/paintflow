@@ -1566,7 +1566,7 @@ export function Invoices() {
                   </div>
                 </div>
                 {quickInvoiceForm.customerMode === 'existing' ? (
-                  <Select label="Customer" required value={quickInvoiceForm.leadId} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, leadId: event.target.value })}>
+                  <Select label="Choose customer" required value={quickInvoiceForm.leadId} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, leadId: event.target.value })}>
                     <option value="">Select customer...</option>
                     {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name || lead.email || 'Customer'}</option>)}
                   </Select>
