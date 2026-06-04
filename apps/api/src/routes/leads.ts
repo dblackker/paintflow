@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
-import { activities, auditLogs, customerPayments, emailSends, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@crewmodo/db/schema';
+import { activities, auditLogs, customerInvoices, customerPayments, emailSends, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@crewmodo/db/schema';
 import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -166,7 +166,7 @@ leadsApp.get('/:id', async (c) => {
     return c.json({ error: 'Lead not found' }, 404);
   }
 
-  const [customerEstimates, customerJobs, customerMessages, customerEmailSends, customerPaymentsRows, customerActivity, customerActivities] = await Promise.all([
+  const [customerEstimates, customerJobs, customerMessages, customerEmailSends, customerPaymentsRows, customerInvoicesRows, customerActivity, customerActivities] = await Promise.all([
     db.select().from(estimates)
       .where(and(eq(estimates.orgId, orgId), eq(estimates.leadId, id)))
       .orderBy(desc(estimates.createdAt)),
@@ -185,6 +185,10 @@ leadsApp.get('/:id', async (c) => {
       .where(and(eq(customerPayments.orgId, orgId), eq(customerPayments.leadId, id)))
       .orderBy(desc(customerPayments.receivedAt))
       .limit(100), 'Payment history'),
+    optionalRows(db.select().from(customerInvoices)
+      .where(and(eq(customerInvoices.orgId, orgId), eq(customerInvoices.leadId, id)))
+      .orderBy(desc(customerInvoices.createdAt))
+      .limit(100), 'Invoice history'),
     db.select().from(auditLogs)
       .where(and(eq(auditLogs.orgId, orgId), eq(auditLogs.entityType, 'lead'), eq(auditLogs.entityId, id)))
       .orderBy(desc(auditLogs.createdAt))
@@ -242,6 +246,10 @@ leadsApp.get('/:id', async (c) => {
       jobs: customerJobs,
       messages: customerMessages,
       emailSends: customerEmailSends,
+      invoices: customerInvoicesRows.map((invoice) => ({
+        ...invoice,
+        payments: customerPaymentsRows.filter((payment) => payment.invoiceId === invoice.id),
+      })),
       payments: customerPaymentsRows,
       activity: customerActivity,
       activities: customerActivities,

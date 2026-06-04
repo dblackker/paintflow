@@ -88,6 +88,7 @@ interface EmailSend {
 interface Payment {
   id: string;
   estimateId?: string | null;
+  invoiceId?: string | null;
   amount?: number | string | null;
   refundedAmount?: number | string | null;
   status?: string | null;
@@ -96,6 +97,24 @@ interface Payment {
   description?: string | null;
   reference?: string | null;
   receivedAt?: string | null;
+}
+
+interface CustomerInvoice {
+  id: string;
+  leadId: string;
+  estimateId?: string | null;
+  jobId?: string | null;
+  changeOrderId?: string | null;
+  invoiceNumber?: string | null;
+  description?: string | null;
+  total?: number | string | null;
+  status?: string | null;
+  dueDate?: string | null;
+  dueLabel?: string | null;
+  sentAt?: string | null;
+  paidAt?: string | null;
+  createdAt?: string | null;
+  payments?: Payment[];
 }
 
 interface Photo {
@@ -111,6 +130,7 @@ interface LeadDetailResponse {
     jobs: Job[];
     messages: Message[];
     emailSends?: EmailSend[];
+    invoices?: CustomerInvoice[];
     payments: Payment[];
     activities?: Activity[];
     activity?: Activity[];
@@ -122,7 +142,8 @@ interface LeadDetailResponse {
 }
 
 interface PaymentForm {
-  estimate: Estimate;
+  estimate?: Estimate;
+  invoice?: CustomerInvoice;
   amount: string;
   source: 'cash' | 'check' | 'ach' | 'other';
   reference: string;
@@ -169,6 +190,14 @@ function estimateContractTotal(estimate: Estimate) {
 
 function paymentNet(payment: Payment) {
   return Math.max(Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+}
+
+function invoicePaid(invoice: CustomerInvoice) {
+  return (invoice.payments || []).reduce((sum, payment) => sum + paymentNet(payment), 0);
+}
+
+function invoiceBalance(invoice: CustomerInvoice) {
+  return Math.max(Number(invoice.total || 0) - invoicePaid(invoice), 0);
 }
 
 function jobAddress(job: Job) {
@@ -283,6 +312,8 @@ export function LeadDetail() {
     ...estimatePhotos.map((photo) => ({ ...photo, source: 'Estimate' as const })),
     ...jobPhotos.map((photo) => ({ ...photo, source: 'Job' as const })),
   ];
+  const invoices = detail.invoices || [];
+  const invoiceBalanceDue = invoices.reduce((sum, invoice) => sum + invoiceBalance(invoice), 0);
   const netPaid = detail.payments.reduce((sum, payment) => sum + paymentNet(payment), 0);
   const messagesCount = detail.messages.length + (detail.emailSends?.length || 0);
 
@@ -379,16 +410,35 @@ export function LeadDetail() {
     });
   }
 
+  function openInvoicePaymentModal(invoice: CustomerInvoice) {
+    const paid = invoicePaid(invoice);
+    const remaining = invoiceBalance(invoice);
+    setPaymentForm({
+      invoice,
+      amount: remaining.toFixed(2),
+      source: 'check',
+      reference: '',
+      description: invoice.description || '',
+      receivedAt: dateTimeLocalValue(),
+      confirmAdditionalPayment: paid <= 0.005,
+    });
+  }
+
   async function submitPayment(event: FormEvent) {
     event.preventDefault();
     if (!paymentForm || isSavingPayment) return;
+    if (!paymentForm.estimate?.id && !paymentForm.invoice?.id) {
+      window.showToast?.('Select an estimate or invoice before recording payment.', 'error');
+      return;
+    }
     setIsSavingPayment(true);
     try {
       await apiJson('/v1/payments/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify({
-          estimateId: paymentForm.estimate.id,
+          estimateId: paymentForm.estimate?.id,
+          invoiceId: paymentForm.invoice?.id,
           amount: Number(paymentForm.amount),
           source: paymentForm.source,
           reference: paymentForm.reference || null,
@@ -456,8 +506,9 @@ export function LeadDetail() {
         </div>
       </section>
 
-      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatTile href="#customer-estimates" label="Estimates" value={detail.estimates.length} help={recentEstimate ? `${formatMoney(estimateContractTotal(recentEstimate))} latest` : 'No estimate yet'} />
+        <StatTile href="#customer-invoices" label="Invoices" value={invoices.length} help={invoiceBalanceDue > 0 ? `${formatMoney(invoiceBalanceDue)} open` : 'No open balance'} />
         <StatTile href="#customer-jobs" label="Jobs" value={detail.jobs.length} help={detail.jobs.some((job) => job.status !== 'completed') ? 'Active production' : 'No active job'} />
         <StatTile href="#customer-payments" label="Payments" value={formatMoney(netPaid)} help={`${detail.payments.length} recorded`} />
         <StatTile href={lead.phone ? `/sms?leadId=${lead.id}` : '#customer-messages'} label="Messages" value={messagesCount} help="Text and email history" />
@@ -474,6 +525,10 @@ export function LeadDetail() {
               onAgreementAction={agreementAction}
               onRecordPayment={openPaymentModal}
             />
+          </SectionCard>
+
+          <SectionCard id="customer-invoices" title="Invoices" eyebrow={invoiceBalanceDue > 0 ? `${formatMoney(invoiceBalanceDue)} open` : `${invoices.length} total`}>
+            <InvoicesList invoices={invoices} onRecordPayment={openInvoicePaymentModal} />
           </SectionCard>
 
           <SectionCard id="customer-jobs" title="Jobs">
@@ -605,7 +660,7 @@ export function LeadDetail() {
             {!paymentForm.confirmAdditionalPayment && (
               <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 <input type="checkbox" className="mt-1" checked={paymentForm.confirmAdditionalPayment} onChange={(event) => setPaymentForm({ ...paymentForm, confirmAdditionalPayment: event.target.checked })} />
-                <span>This estimate already has payment history. I confirm this is an additional payment and not a duplicate entry.</span>
+                <span>This item already has payment history. I confirm this is an additional payment and not a duplicate entry.</span>
               </label>
             )}
             <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
@@ -779,6 +834,46 @@ function EmailList({ emails }: { emails: EmailSend[] }) {
           </div>
         </details>
       ))}
+    </div>
+  );
+}
+
+function InvoicesList({ invoices, onRecordPayment }: { invoices: CustomerInvoice[]; onRecordPayment: (invoice: CustomerInvoice) => void }) {
+  if (!invoices.length) return <EmptySection>No invoices yet.</EmptySection>;
+  return (
+    <div className="divide-y">
+      {invoices.map((invoice) => {
+        const total = Number(invoice.total || 0);
+        const paid = invoicePaid(invoice);
+        const balance = invoiceBalance(invoice);
+        const isOpen = balance > 0.005 && !['paid', 'voided', 'canceled'].includes(String(invoice.status || ''));
+        return (
+          <div key={invoice.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <p className="pf-row-title truncate">{invoice.invoiceNumber || 'Invoice'}</p>
+                <StatusBadge status={String(invoice.status || 'sent')} />
+              </div>
+              <p className="pf-copy mt-1 truncate">{invoice.description || 'Customer invoice'}</p>
+              <div className="pf-meta mt-1 space-y-0.5 leading-5">
+                <p>{invoice.dueLabel || (invoice.dueDate ? `Due ${formatDate(invoice.dueDate)}` : 'Due on receipt')}</p>
+                <p>Sent {formatDate(invoice.sentAt || invoice.createdAt, true)}</p>
+                {invoice.paidAt && <p>Paid {formatDate(invoice.paidAt, true)}</p>}
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-center">
+              <div className="text-right">
+                <p className="pf-row-title">{formatMoney(balance)}</p>
+                <p className="pf-meta">{formatMoney(paid)} paid of {formatMoney(total)}</p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Link to="/invoices" className="btn-secondary btn-sm">View</Link>
+                {isOpen && <Button type="button" size="sm" onClick={() => onRecordPayment(invoice)}>Record payment</Button>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
