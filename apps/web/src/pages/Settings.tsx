@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useId, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -63,13 +63,16 @@ const defaultMilestones: PaymentMilestone[] = [
 ];
 
 const setupCards = [
-  ['Company', 'Business profile', 'Company name, phone, email, address, proposal branding, and review links.', '#business-settings'],
-  ['Estimating', 'Pricing defaults', 'Labor rate, material markup, tax, deposit, paint products, and production rates.', '#pricing-settings'],
+  ['Company', 'Business profile', 'Company name, phone, email, and address.', '#business-settings'],
+  ['Branding', 'Proposal branding', 'Customer-facing company name, logo, and brand color.', '#proposal-branding-settings'],
+  ['Pricing', 'Pricing defaults', 'Labor rate, material markup, tax, and payment schedule.', '#pricing-settings'],
+  ['Estimator', 'Estimator setup', 'Paint products, costs, production rates, prep defaults, and estimating assumptions.', '#estimator-settings'],
   ['Operations', 'Team and field setup', 'Crew roles, time clock policies, scheduling, notifications, and reusable templates.', '#operations-settings'],
   ['Connectors', 'Payments and integrations', 'Stripe deposits, Google Calendar, QuickBooks status, billing, and browser notifications.', '#integrations-settings'],
   ['Insights', 'Reports', 'Review sales, revenue, jobs, and operating metrics from one reporting surface.', '/reports'],
   ['Audit', 'Activity log', 'See customer events and operational changes across leads, estimates, and jobs.', '/activity'],
   ['Email', 'Email templates', 'Customize estimate emails and future drips, thank-yous, and change-order communication.', '/email-templates'],
+  ['Reviews', 'Review links', 'Google Business and Yelp review destinations for post-job follow-up.', '#review-links-settings'],
   ['Legal', 'Contract terms', 'Set company-reviewed proposal terms, disclosures, and registration details.', '#legal-settings'],
 ];
 
@@ -151,6 +154,7 @@ function FieldLabel({ label, help }: { label: string; help?: string }) {
 }
 
 export function Settings() {
+  const location = useLocation();
   const [settings, setSettings] = useState<OrgSettings>({});
   const [branding, setBranding] = useState<BrandingSettings>({ primaryColor: '#2563eb' });
   const [legal, setLegal] = useState<LegalSettings>({});
@@ -170,6 +174,15 @@ export function Settings() {
     [milestones],
   );
   const paymentTotalOk = Math.abs(paymentTotal - 100) <= 0.01;
+
+  useEffect(() => {
+    if (!location.hash || isLoading) return undefined;
+    const targetId = decodeURIComponent(location.hash.slice(1));
+    const timer = window.setTimeout(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: 'start' });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isLoading, location.hash]);
 
   useEffect(() => {
     loadSettings();
@@ -389,7 +402,7 @@ export function Settings() {
         </div>
         <div className="grid gap-3">
           {setupCards.map(([pill, title, copy, href]) => (
-            <Link key={title} to={href} className="grid gap-2 rounded-lg border border-gray-200 bg-white p-4 transition hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm sm:grid-cols-[7rem_minmax(0,1fr)_auto] sm:items-start">
+            <Link key={title} to={href.startsWith('#') ? `/settings${href}` : href} className="grid gap-2 rounded-lg border border-gray-200 bg-white p-4 transition hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm sm:grid-cols-[7rem_minmax(0,1fr)_auto] sm:items-start">
               <span className="w-fit rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold uppercase text-gray-700">{pill}</span>
               <span className="min-w-0">
                 <span className="pf-section-title block">{title}</span>
@@ -427,7 +440,7 @@ export function Settings() {
           </form>
         </Card>
 
-        <Card padding="lg">
+        <Card id="proposal-branding-settings" padding="lg" className="scroll-mt-20">
           <CardHeader title="Branding & Proposals" />
           <form className="grid gap-4" onSubmit={saveBranding}>
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
@@ -535,7 +548,7 @@ export function Settings() {
           </form>
         </Card>
 
-        <Card padding="lg">
+        <Card id="estimator-settings" padding="lg" className="scroll-mt-20">
           <CardHeader title="Estimator Setup" description="Keep labor production and paint product costs current before sending live estimates." />
           <div className="grid gap-3">
             <ActionCard href="/materials" title="Paint products and costs" copy="Enter cost per gallon/unit, coverage, supplier, SKU, and markup." />
@@ -628,7 +641,7 @@ export function Settings() {
           </div>
         </Card>
 
-        <Card padding="lg">
+        <Card id="review-links-settings" padding="lg" className="scroll-mt-20">
           <CardHeader title="Review Links" />
           <form className="grid gap-4" onSubmit={saveReviews}>
             <label className="grid gap-1.5">
