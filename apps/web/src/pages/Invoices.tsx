@@ -1339,7 +1339,7 @@ export function Invoices() {
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
             <p className="pf-row-title">Due dates</p>
-            <p className="pf-helper mt-1">Choose a clear due date with one-tap presets for today, 7, 14, or 30 days.</p>
+            <p className="pf-helper mt-1">Set the exact calendar date when payment is expected.</p>
           </div>
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
             <p className="pf-row-title">Reminders</p>
@@ -1590,32 +1590,12 @@ export function Invoices() {
               <Input label="Description" required autoComplete="off" placeholder="Touch-up work, final balance, extra room" value={quickInvoiceForm.description} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, description: event.target.value })} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input label="Amount" required type="number" min="0.01" step="0.01" inputMode="decimal" value={quickInvoiceForm.amount} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, amount: event.target.value })} />
-                <div className="space-y-2">
-                  <Input
-                    label="Due date"
-                    type="date"
-                    value={quickInvoiceForm.dueDate}
-                    onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueDate: event.target.value, dueLabel: event.target.value ? 'Custom due date' : 'Due on receipt' })}
-                  />
-                  <div className="flex flex-wrap gap-1.5" aria-label="Quick due date presets">
-                    {[
-                      { label: 'Due today', days: 0, term: 'Due on receipt' },
-                      { label: 'Net 7', days: 7, term: 'Net 7' },
-                      { label: 'Net 14', days: 14, term: 'Net 14' },
-                      { label: 'Net 30', days: 30, term: 'Net 30' },
-                    ].map((preset) => (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        className="btn-tonal btn-sm"
-                        aria-pressed={quickInvoiceForm.dueLabel === preset.term}
-                        onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, dueDate: isoDateOffset(preset.days), dueLabel: preset.term })}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <Input
+                  label="Due date"
+                  type="date"
+                  value={quickInvoiceForm.dueDate}
+                  onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, dueDate: event.target.value, dueLabel: event.target.value ? 'Custom due date' : 'Due on receipt' })}
+                />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select label="Reminder" value={quickInvoiceForm.reminderCadence} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, reminderCadence: event.target.value as QuickInvoiceFormState['reminderCadence'] })}>
