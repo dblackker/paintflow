@@ -680,7 +680,6 @@ function ImportReviewCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="warning" size="sm">Needs review</Badge>
-            <Badge variant="purple" size="sm">Premium</Badge>
             <span className="pf-meta">{formatDate(invoiceImport.createdAt)}</span>
           </div>
           <p className="pf-row-title mt-2">{invoiceImport.supplier || 'Supplier invoice'}</p>
@@ -1431,7 +1430,6 @@ export function Invoices() {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="pf-section-title">Forward supplier receipts</p>
-                  <Badge variant="purple" size="sm">Premium</Badge>
                   <Badge variant={inboundEmailConfig?.enabled ? 'success' : 'warning'} size="sm">
                     {inboundEmailConfig?.enabled ? 'Configured' : 'Needs Worker secret'}
                   </Badge>
@@ -1516,7 +1514,6 @@ export function Invoices() {
                       <p className="pf-section-title">Automation learning</p>
                       <p className="pf-helper mt-1">Supplier-specific approval trends help tune future matching without storing receipt text globally.</p>
                     </div>
-                    <Badge variant="purple" size="sm">Premium</Badge>
                   </div>
                   <div className="grid gap-3 lg:grid-cols-2">
                     {learningStats.slice(0, 4).map((stat) => <LearningStatCard key={stat.id} stat={stat} />)}
@@ -1744,15 +1741,6 @@ export function Invoices() {
                   />
                 </div>
               </details>
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-                <div className="flex items-center gap-2">
-                  <Badge variant="purple" size="sm">Premium</Badge>
-                  <p className="pf-row-title">OCR and receipt automation</p>
-                </div>
-                <p className="pf-copy mt-1">
-                  OCR requires the Worker secret <code className="rounded bg-white px-1">OPENAI_API_KEY</code>. R2 is optional; without it, Crewmodo can stage the invoice for review but will not retain the original file.
-                </p>
-              </div>
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <Button type="button" variant="secondary" fullWidth onClick={closeUploadModal}>Cancel</Button>
                 <Button type="submit" fullWidth isLoading={isUploading}>Stage for review</Button>
