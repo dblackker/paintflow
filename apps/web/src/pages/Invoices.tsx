@@ -891,6 +891,7 @@ export function Invoices() {
   const [settings, setSettings] = useState<OrgSettings>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [loadWarning, setLoadWarning] = useState('');
   const [mode, setMode] = useState<'receivables' | 'supplier'>('receivables');
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [quickInvoiceOpen, setQuickInvoiceOpen] = useState(false);
@@ -1045,6 +1046,7 @@ export function Invoices() {
   async function loadInvoices() {
     setIsLoading(true);
     setError('');
+    setLoadWarning('');
     try {
       const [purchasePayload, importPayload, learningPayload, usagePayload, inboundEmailPayload, senderRulesPayload, customerInvoicesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload, settingsPayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
@@ -1054,7 +1056,10 @@ export function Invoices() {
         apiJson<{ data?: InboundEmailConfig }>('/v1/invoices/inbound-email-config').catch(() => ({ data: null })),
         apiJson<{ data?: InvoiceSenderRule[] }>('/v1/invoices/imports/sender-rules').catch(() => ({ data: [] })),
         apiJson<{ data?: CustomerInvoice[] }>('/v1/invoices/customer').catch(() => ({ data: [] })),
-        apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
+        apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100').catch((err) => {
+          setLoadWarning(err instanceof Error ? `Estimate balances could not be loaded: ${err.message}` : 'Estimate balances could not be loaded.');
+          return { data: [] };
+        }),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
         apiJson<{ data?: ChangeOrder[] }>('/v1/change-orders').catch(() => ({ data: [] })),
         apiJson<{ data?: Payment[] }>('/v1/payments/history').catch(() => ({ data: [] })),
@@ -1445,6 +1450,11 @@ export function Invoices() {
             />
             <CardContent className="p-4">
               {isLoading && <PurchaseSkeleton />}
+              {!isLoading && !error && loadWarning && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {loadWarning}
+                </div>
+              )}
               {!isLoading && error && (
                 <div className="p-8 text-center">
                   <Icon name="warning" className="mx-auto h-6 w-6 text-red-600" />
