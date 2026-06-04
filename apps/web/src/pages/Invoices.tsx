@@ -1569,7 +1569,7 @@ export function Invoices() {
                   </Select>
                 ) : (
                   <div className="grid gap-3">
-                    <Input label="Customer name" required autoComplete="name" value={quickInvoiceForm.customerName} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerName: event.target.value })} placeholder="Jane Homeowner" />
+                    <Input label="Name" required autoComplete="name" value={quickInvoiceForm.customerName} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerName: event.target.value })} placeholder="Jane Homeowner" />
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Input label="Email" type="email" inputMode="email" autoComplete="email" value={quickInvoiceForm.customerEmail} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerEmail: event.target.value })} placeholder="customer@example.com" />
                       <Input label="Phone" type="tel" inputMode="numeric" autoComplete="tel" value={quickInvoiceForm.customerPhone} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerPhone: maskPhone(event.target.value) })} placeholder="(555) 123-4567" />
