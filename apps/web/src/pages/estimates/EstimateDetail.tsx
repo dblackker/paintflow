@@ -90,6 +90,7 @@ interface PublicEstimate {
     signedAt?: string | null;
     capacity?: string | null;
   } | null;
+  portalUrl?: string | null;
   paymentSummary?: {
     paidAmount?: number | string;
     paymentCount?: number;
@@ -524,11 +525,13 @@ export function EstimateDetail() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Failed to sign estimate');
       setShowSignature(false);
-      setMessage({ tone: 'success', text: 'Proposal signed. Any payment due is shown below.' });
+      setMessage({ tone: 'success', text: 'Proposal signed. Open the customer portal to pay any deposit invoice and see project next steps.' });
       setEstimate((current) => current ? {
         ...current,
+        status: payload.data?.status || 'accepted',
         signedName: name,
         signedAt: payload.data?.signedAt || new Date().toISOString(),
+        portalUrl: payload.data?.portalUrl || current.portalUrl || null,
       } : current);
     } catch (error) {
       setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Failed to process signature.' });
@@ -920,18 +923,14 @@ function ActionPanel({
                 Countersigned by {estimate.contractorSignature.name || estimate.contractorSignature.companyName || 'Contractor'} for {estimate.contractorSignature.companyName || 'the contractor'} on {new Date(estimate.contractorSignature.signedAt).toLocaleDateString()}.
               </p>
             )}
-            <p className="mt-2 text-sm text-gray-700">{paidAmount > 0 ? `${money(paidAmount)} payment recorded.` : 'No online payment is recorded on this copy yet.'}</p>
-            {nextPayment ? (
-              <p className="mt-1 text-sm text-gray-700">Next payment: <strong>{nextPayment.label}</strong> {money(num(nextPayment.amount) - num(nextPayment.paidAmount))}.</p>
-            ) : (
-              <p className="mt-1 text-sm text-gray-700">No online payment is due right now.</p>
-            )}
+            <p className="mt-2 text-sm text-gray-700">{paidAmount > 0 ? `${money(paidAmount)} payment recorded.` : 'Your deposit invoice and payment status are handled separately from this agreement.'}</p>
+            {nextPayment && <p className="mt-1 text-sm text-gray-700">Next invoice: <strong>{nextPayment.label}</strong> {money(num(nextPayment.amount) - num(nextPayment.paidAmount))}.</p>}
           </div>
           <div className="flex flex-col gap-2 sm:min-w-44">
-            {nextPayment && (
-              <button type="button" className="btn-primary btn-sm justify-center" disabled={Boolean(isPaying)} onClick={() => onPay(nextPayment.key)}>
-                {isPaying ? 'Preparing...' : `Pay ${nextPayment.label}`}
-              </button>
+            {estimate.portalUrl && (
+              <a className="btn-primary btn-sm justify-center" href={estimate.portalUrl}>
+                Open customer portal
+              </a>
             )}
             <button type="button" className="btn-secondary btn-sm justify-center" onClick={() => window.print()}>Print / save copy</button>
           </div>

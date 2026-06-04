@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { createDb } from '@crewmodo/db';
-import { auditLogs, changeOrders, estimates, jobs, leads, notificationEvents, portalTokens, stripeConnections } from '@crewmodo/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { auditLogs, changeOrders, customerInvoices, customerPayments, estimates, jobs, leads, notificationEvents, portalTokens, stripeConnections } from '@crewmodo/db/schema';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
-import { createJobFromAcceptedEstimate } from '../lib/estimate-handoff';
 import { createCheckoutSession } from '../lib/stripe';
+import { createInvoiceForChangeOrder } from '../lib/customer-invoices';
 
 const portalApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -14,6 +14,11 @@ function isValidSignatureData(value: unknown) {
 
 function leadNameFromApproval(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : 'Customer';
+}
+
+function netPayment(payment: typeof customerPayments.$inferSelect) {
+  if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status)) return 0;
+  return Number(payment.amount || 0) - Number(payment.refundedAmount || 0);
 }
 
 portalApp.get('/:token', async (c) => {
@@ -42,7 +47,7 @@ portalApp.get('/:token', async (c) => {
     where: and(
       eq(estimates.leadId, portalToken.leadId),
       eq(estimates.orgId, portalToken.orgId),
-      eq(estimates.status, 'sent')
+      inArray(estimates.status, ['sent', 'accepted'])
     ),
     orderBy: [desc(estimates.createdAt)],
   });
@@ -62,6 +67,28 @@ portalApp.get('/:token', async (c) => {
       orderBy: [desc(changeOrders.createdAt)],
     })
     : [];
+
+  const invoiceRows = await db.query.customerInvoices.findMany({
+    where: focusedChangeOrder
+      ? and(eq(customerInvoices.orgId, portalToken.orgId), eq(customerInvoices.leadId, portalToken.leadId), eq(customerInvoices.changeOrderId, focusedChangeOrder.id))
+      : and(eq(customerInvoices.orgId, portalToken.orgId), eq(customerInvoices.leadId, portalToken.leadId)),
+    orderBy: (table, { desc }) => [desc(table.createdAt)],
+    limit: 25,
+  });
+  const invoicePayments = invoiceRows.length
+    ? await db.query.customerPayments.findMany({
+      where: and(eq(customerPayments.orgId, portalToken.orgId), eq(customerPayments.leadId, portalToken.leadId)),
+      orderBy: (table, { desc }) => [desc(table.receivedAt)],
+      limit: 100,
+    })
+    : [];
+  const paymentsByInvoice = new Map<string, Array<typeof customerPayments.$inferSelect>>();
+  invoicePayments.forEach((payment) => {
+    if (!payment.invoiceId) return;
+    const list = paymentsByInvoice.get(payment.invoiceId) || [];
+    list.push(payment);
+    paymentsByInvoice.set(payment.invoiceId, list);
+  });
   
   return c.json({ 
     data: {
@@ -69,43 +96,24 @@ portalApp.get('/:token', async (c) => {
       estimate,
       job,
       changeOrders: orders,
+      invoices: invoiceRows
+        .filter((invoice) => !['voided', 'canceled'].includes(invoice.status))
+        .map((invoice) => {
+          const payments = paymentsByInvoice.get(invoice.id) || [];
+          const paidAmount = payments.reduce((sum, payment) => sum + netPayment(payment), 0);
+          return {
+            ...invoice,
+            payments,
+            paidAmount,
+            balanceDue: Math.max(Number(invoice.total || 0) - paidAmount, 0),
+          };
+        }),
     }
   });
 });
 
 portalApp.post('/:token/approve', async (c) => {
-  const token = c.req.param('token');
-  const db = createDb(c.env.DATABASE_URL);
-  
-  const portalToken = await db.query.portalTokens.findFirst({
-    where: eq(portalTokens.token, token),
-  });
-  
-  if (!portalToken || new Date() > portalToken.expiresAt) {
-    return c.json({ error: 'Invalid token' }, 404);
-  }
-  
-  const estimate = await db.query.estimates.findFirst({
-    where: and(
-      eq(estimates.leadId, portalToken.leadId),
-      eq(estimates.orgId, portalToken.orgId),
-      eq(estimates.status, 'sent')
-    ),
-    orderBy: [desc(estimates.createdAt)],
-  });
-  
-  let jobId: string | undefined;
-  if (estimate) {
-    const [acceptedEstimate] = await db.update(estimates)
-      .set({ status: 'accepted', signedAt: new Date() })
-      .where(eq(estimates.id, estimate.id))
-      .returning();
-
-    const job = await createJobFromAcceptedEstimate(db, acceptedEstimate);
-    jobId = job.id;
-  }
-  
-  return c.json({ success: true, jobId });
+  return c.json({ error: 'Open the proposal and complete e-signature before payment or scheduling.' }, 410);
 });
 
 portalApp.post('/:token/change-orders/:id/approve', async (c) => {
@@ -168,6 +176,8 @@ portalApp.post('/:token/change-orders/:id/approve', async (c) => {
     .where(and(eq(changeOrders.id, id), eq(changeOrders.orgId, portalToken.orgId)))
     .returning();
 
+  const invoice = await createInvoiceForChangeOrder(db, updated, portalToken.leadId);
+
   await db.insert(auditLogs).values({
     orgId: portalToken.orgId,
     action: 'change_order.approved',
@@ -178,6 +188,7 @@ portalApp.post('/:token/change-orders/:id/approve', async (c) => {
       leadId: portalToken.leadId,
       amount: order.amount,
       paymentRequired,
+      invoiceId: invoice?.id || null,
     },
     ipAddress: c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || undefined,
     userAgent: c.req.header('user-agent') || undefined,
@@ -197,10 +208,78 @@ portalApp.post('/:token/change-orders/:id/approve', async (c) => {
       jobId: job.id,
       amount: order.amount,
       paymentRequired,
+      invoiceId: invoice?.id || null,
     },
   });
 
-  return c.json({ data: updated });
+  return c.json({ data: { ...updated, invoiceId: invoice?.id || null } });
+});
+
+portalApp.post('/:token/invoices/:id/checkout', async (c) => {
+  const token = c.req.param('token');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const portalToken = await db.query.portalTokens.findFirst({
+    where: eq(portalTokens.token, token),
+  });
+  if (!portalToken || new Date() > portalToken.expiresAt) {
+    return c.json({ error: 'Invalid token' }, 404);
+  }
+
+  const invoice = await db.query.customerInvoices.findFirst({
+    where: and(eq(customerInvoices.id, id), eq(customerInvoices.orgId, portalToken.orgId), eq(customerInvoices.leadId, portalToken.leadId)),
+  });
+  if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
+  if (['paid', 'voided', 'canceled'].includes(invoice.status)) {
+    return c.json({ error: 'This invoice is not payable.' }, 409);
+  }
+
+  const stripeConnection = await db.query.stripeConnections.findFirst({
+    where: eq(stripeConnections.orgId, portalToken.orgId),
+  });
+  if (!stripeConnection?.onboardingComplete) {
+    return c.json({ error: 'Online payments are not ready for this contractor' }, 409);
+  }
+
+  const payments = await db.query.customerPayments.findMany({
+    where: and(eq(customerPayments.orgId, portalToken.orgId), eq(customerPayments.invoiceId, invoice.id)),
+    orderBy: (table, { desc }) => [desc(table.receivedAt)],
+    limit: 100,
+  });
+  const paidAmount = payments.reduce((sum, payment) => sum + netPayment(payment), 0);
+  const amountDue = Math.round(Math.max(Number(invoice.total || 0) - paidAmount, 0) * 100) / 100;
+  if (!Number.isFinite(amountDue) || amountDue <= 0.005) {
+    return c.json({ error: 'This invoice is already paid.' }, 409);
+  }
+
+  const baseUrl = c.env.PUBLIC_URL || 'https://crewmodo.com';
+  const session = await createCheckoutSession(c.env, {
+    amount: amountDue,
+    successUrl: `${baseUrl}/portal/${token}?invoicePaid=${id}`,
+    cancelUrl: `${baseUrl}/portal/${token}?invoicePaymentCanceled=${id}`,
+    productName: invoice.description || invoice.invoiceNumber || 'Crewmodo Invoice',
+    connectedAccountId: stripeConnection.stripeAccountId,
+    metadata: {
+      orgId: portalToken.orgId,
+      leadId: portalToken.leadId,
+      invoiceId: invoice.id,
+      estimateId: invoice.estimateId || '',
+      jobId: invoice.jobId || '',
+      changeOrderId: invoice.changeOrderId || '',
+      portalToken: token,
+    },
+  });
+
+  await db.update(customerInvoices)
+    .set({
+      status: 'payment_pending',
+      stripeCheckoutSessionId: session.id,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, portalToken.orgId)));
+
+  return c.json({ data: { checkoutUrl: session.url, sessionId: session.id } });
 });
 
 portalApp.post('/:token/change-orders/:id/checkout', async (c) => {

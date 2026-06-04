@@ -51,11 +51,27 @@ interface ChangeOrder {
   customerSignedAt?: string | null;
 }
 
+interface ClientInvoice {
+  id: string;
+  invoiceNumber?: string | null;
+  description?: string | null;
+  total?: number | string | null;
+  status?: string | null;
+  dueLabel?: string | null;
+  dueDate?: string | null;
+  estimateId?: string | null;
+  jobId?: string | null;
+  changeOrderId?: string | null;
+  paidAmount?: number | string | null;
+  balanceDue?: number | string | null;
+}
+
 interface PortalData {
   customer?: Customer;
   estimate?: Estimate | null;
   job?: Job | null;
   changeOrders?: ChangeOrder[];
+  invoices?: ClientInvoice[];
 }
 
 async function portalJson<T>(path: string, options: RequestInit = {}) {
@@ -97,23 +113,6 @@ export function Portal() {
   useEffect(() => {
     void loadPortal();
   }, [token, searchParams]);
-
-  async function approveEstimate() {
-    if (!token) return;
-    setBusyAction('approve-estimate');
-    try {
-      await portalJson(`/v1/portal/${token}/approve`, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
-      });
-      window.showToast?.('Approved. The contractor will contact you to schedule.', 'success');
-      await loadPortal();
-    } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Unable to approve estimate', 'error');
-    } finally {
-      setBusyAction(null);
-    }
-  }
 
   async function approveChangeOrder(event: FormEvent<HTMLFormElement>, order: ChangeOrder) {
     event.preventDefault();
@@ -158,6 +157,22 @@ export function Portal() {
     }
   }
 
+  async function payInvoice(invoice: ClientInvoice) {
+    if (!token) return;
+    setBusyAction(`pay-invoice-${invoice.id}`);
+    try {
+      const payload = await portalJson<{ data?: { checkoutUrl?: string } }>(`/v1/portal/${token}/invoices/${invoice.id}/checkout`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      if (!payload.data?.checkoutUrl) throw new Error('Unable to start payment');
+      window.location.href = payload.data.checkoutUrl;
+    } catch (err) {
+      window.showToast?.(paymentErrorMessage(err, 'Unable to start payment'), 'error');
+      setBusyAction(null);
+    }
+  }
+
   if (isLoading) {
     return <div className="py-12 text-center text-gray-500">Loading customer portal...</div>;
   }
@@ -166,8 +181,10 @@ export function Portal() {
     return <div className="py-12 text-center text-red-600">{error || 'Invalid or expired link'}</div>;
   }
 
-  const { customer, estimate, job, changeOrders = [] } = data;
+  const { customer, estimate, job, changeOrders = [], invoices = [] } = data;
   const activeChangeOrders = changeOrders.filter((order) => ['pending', 'approved'].includes(order.status) || order.paymentStatus === 'pending');
+  const invoicesByChangeOrder = new Map(invoices.filter((invoice) => invoice.changeOrderId).map((invoice) => [invoice.changeOrderId as string, invoice]));
+  const activeInvoices = invoices.filter((invoice) => !['voided', 'canceled'].includes(String(invoice.status || '')));
   const balance = Number(job?.balance || 0);
 
   return (
@@ -178,7 +195,7 @@ export function Portal() {
         {customer?.email && <p className="pf-copy mt-1">{customer.email}</p>}
       </div>
 
-      {!estimate && !job && !activeChangeOrders.length && (
+      {!estimate && !job && !activeChangeOrders.length && !activeInvoices.length && (
         <Card>
           <CardContent className="p-8 text-center text-gray-500">No active items are available from this link.</CardContent>
         </Card>
@@ -194,9 +211,26 @@ export function Portal() {
               </div>
               {estimate.status && <StatusBadge status={estimate.status} />}
             </div>
-            <Button className="mt-6 w-full" onClick={() => void approveEstimate()} isLoading={busyAction === 'approve-estimate'}>
-              Approve Estimate
+            <Button as="a" href={`/estimates/${estimate.id}`} className="mt-6 w-full">
+              Review and sign proposal
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {estimate?.signedAt && (
+        <Card className="mb-6">
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="pf-section-title">{estimate.title || 'Signed proposal'}</h2>
+                  <StatusBadge status="signed" />
+                </div>
+                <p className="pf-copy mt-1">Signed on {new Date(estimate.signedAt).toLocaleDateString()}. The proposal is the agreement; invoices below handle deposits and payments.</p>
+              </div>
+              <Button as="a" href={`/estimates/${estimate.id}`} variant="secondary" size="sm">View signed copy</Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -221,6 +255,24 @@ export function Portal() {
         </Card>
       )}
 
+      {activeInvoices.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader title="Invoices & Payments" description="Pay deposits, progress payments, final balances, and approved change orders here." />
+          <CardContent>
+            <div className="grid gap-3">
+              {activeInvoices.map((invoice) => (
+                <InvoiceCard
+                  key={invoice.id}
+                  invoice={invoice}
+                  isPaying={busyAction === `pay-invoice-${invoice.id}`}
+                  onPay={() => void payInvoice(invoice)}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {activeChangeOrders.length > 0 && (
         <Card className="mb-6">
           <CardHeader title="Change Orders" description="Review requested changes, approve them, and pay any required deposit." />
@@ -234,6 +286,7 @@ export function Portal() {
                   approvalName={approvalNameByOrder[order.id] || ''}
                   isApproving={busyAction === `approve-${order.id}`}
                   isPaying={busyAction === `pay-${order.id}`}
+                  hasPaymentInvoice={Boolean(invoicesByChangeOrder.get(order.id))}
                   onApprovalNameChange={(value) => setApprovalNameByOrder((current) => ({ ...current, [order.id]: value }))}
                   onApprove={(event) => void approveChangeOrder(event, order)}
                   onPay={() => void payChangeOrder(order)}
@@ -256,12 +309,46 @@ export function Portal() {
   );
 }
 
+function InvoiceCard({ invoice, isPaying, onPay }: { invoice: ClientInvoice; isPaying: boolean; onPay: () => void }) {
+  const total = Number(invoice.total || 0);
+  const paid = Number(invoice.paidAmount || 0);
+  const balance = Number(invoice.balanceDue ?? Math.max(total - paid, 0));
+  const isPaid = balance <= 0.005 || invoice.status === 'paid';
+  return (
+    <article className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="pf-row-title">{invoice.invoiceNumber || 'Invoice'}</p>
+            <StatusBadge status={invoice.status || 'sent'} />
+          </div>
+          <p className="pf-copy mt-1">{invoice.description || 'Payment request'}</p>
+          <p className="pf-helper mt-1">{invoice.dueLabel || (invoice.dueDate ? `Due ${new Date(invoice.dueDate).toLocaleDateString()}` : 'Due on receipt')}</p>
+        </div>
+        <div className="text-left sm:text-right">
+          <p className="pf-meta">Balance due</p>
+          <p className="pf-section-title">{formatMoney(balance)}</p>
+          {paid > 0.005 && <p className="pf-helper">{formatMoney(paid)} paid</p>}
+        </div>
+      </div>
+      <div className="mt-4">
+        {isPaid ? (
+          <p className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">Payment received. Thank you.</p>
+        ) : (
+          <Button onClick={onPay} isLoading={isPaying} className="w-full sm:w-auto">Pay {formatMoney(balance)}</Button>
+        )}
+      </div>
+    </article>
+  );
+}
+
 function ChangeOrderCard({
   order,
   job,
   approvalName,
   isApproving,
   isPaying,
+  hasPaymentInvoice,
   onApprovalNameChange,
   onApprove,
   onPay,
@@ -271,6 +358,7 @@ function ChangeOrderCard({
   approvalName: string;
   isApproving: boolean;
   isPaying: boolean;
+  hasPaymentInvoice: boolean;
   onApprovalNameChange: (value: string) => void;
   onApprove: (event: FormEvent<HTMLFormElement>) => void;
   onPay: () => void;
@@ -405,7 +493,10 @@ function ChangeOrderCard({
               Signed by {order.customerSignatureName || 'Customer'} on {new Date(order.customerSignedAt).toLocaleString()}.
             </div>
           )}
-          {needsPayment && <Button onClick={onPay} isLoading={isPaying}>Pay {formatMoney(paymentDue)}</Button>}
+          {needsPayment && hasPaymentInvoice && (
+            <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Payment is listed in Invoices & Payments above.</p>
+          )}
+          {needsPayment && !hasPaymentInvoice && <Button onClick={onPay} isLoading={isPaying}>Pay {formatMoney(paymentDue)}</Button>}
           {isPaid && <p className="text-sm font-medium text-green-700">Payment received. Thank you.</p>}
           {!needsPayment && !isPaid && <p className="text-sm text-gray-600">{labelize(order.paymentStatus || 'Approved')}</p>}
         </div>

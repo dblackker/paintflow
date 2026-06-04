@@ -153,6 +153,17 @@ billing.post('/manual', async (c) => {
       })
       .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)));
 
+    if (remainingAfterPayment <= 0.005 && invoice.changeOrderId) {
+      await db.update(changeOrders)
+        .set({ paymentStatus: 'paid', paidAt: receivedAt })
+        .where(and(eq(changeOrders.id, invoice.changeOrderId), eq(changeOrders.orgId, orgId)));
+    }
+    if (remainingAfterPayment <= 0.005 && invoice.jobId && invoice.estimateId) {
+      await db.update(jobs)
+        .set({ status: 'scheduled', updatedAt: new Date() })
+        .where(and(eq(jobs.id, invoice.jobId), eq(jobs.orgId, orgId), eq(jobs.status, 'deposit_pending')));
+    }
+
     await db.insert(auditLogs).values({
       orgId,
       userId: c.get('userId'),
@@ -372,11 +383,89 @@ billing.post('/webhook', async (c) => {
       const metadata = event.data?.object?.metadata;
       const changeOrderId = metadata?.changeOrderId;
       const estimateId = metadata?.estimateId;
+      const invoiceId = metadata?.invoiceId;
       const orgId = metadata?.orgId;
       const packageName = metadata?.packageName;
       const milestoneLabel = metadata?.milestoneLabel;
       const selectedOptions = metadata?.selectedOptions ? JSON.parse(metadata.selectedOptions) : [];
       const amountTotal = (event.data?.object?.amount_total ?? 0) / 100;
+
+      if (invoiceId && orgId && amountTotal > 0) {
+        const db = createDb(c.env.DATABASE_URL);
+        if (await paymentAlreadyRecorded(db, event.data?.object?.id)) {
+          return c.json({ received: true, duplicate: true });
+        }
+        const invoice = await db.query.customerInvoices.findFirst({
+          where: and(eq(customerInvoices.id, invoiceId), eq(customerInvoices.orgId, orgId)),
+        });
+        if (!invoice) {
+          return c.json({ error: 'Invoice metadata mismatch' }, 400);
+        }
+
+        const existingPayments = await db.select().from(customerPayments)
+          .where(and(eq(customerPayments.invoiceId, invoice.id), eq(customerPayments.orgId, orgId)));
+        const paidBefore = existingPayments.reduce((sum, payment) => sum + netPaymentAmount(payment), 0);
+        const remainingAfterPayment = roundMoney(Math.max(Number(invoice.total || 0) - paidBefore - amountTotal, 0));
+        const paidAt = new Date();
+
+        const [payment] = await db.insert(customerPayments).values({
+          orgId,
+          leadId: invoice.leadId,
+          estimateId: invoice.estimateId || null,
+          jobId: invoice.jobId || null,
+          changeOrderId: invoice.changeOrderId || null,
+          invoiceId: invoice.id,
+          source: 'stripe',
+          status: 'succeeded',
+          amount: amountTotal.toFixed(2),
+          currency: event.data?.object?.currency || 'usd',
+          description: invoice.description || 'Invoice payment',
+          stripeCheckoutSessionId: event.data?.object?.id || null,
+          stripePaymentIntentId: event.data?.object?.payment_intent || null,
+          metadata: {
+            paymentStatus: event.data?.object?.payment_status,
+            customerEmail: event.data?.object?.customer_details?.email,
+          },
+        }).returning();
+
+        await db.update(customerInvoices)
+          .set({
+            status: remainingAfterPayment <= 0.005 ? 'paid' : 'partially_paid',
+            paidAt: remainingAfterPayment <= 0.005 ? paidAt : null,
+            updatedAt: paidAt,
+          })
+          .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)));
+
+        if (remainingAfterPayment <= 0.005 && invoice.changeOrderId) {
+          await db.update(changeOrders)
+            .set({ paymentStatus: 'paid', paidAt })
+            .where(and(eq(changeOrders.id, invoice.changeOrderId), eq(changeOrders.orgId, orgId)));
+        }
+
+        if (remainingAfterPayment <= 0.005 && invoice.jobId && invoice.estimateId) {
+          await db.update(jobs)
+            .set({ status: 'scheduled', updatedAt: paidAt })
+            .where(and(eq(jobs.id, invoice.jobId), eq(jobs.orgId, orgId), eq(jobs.status, 'deposit_pending')));
+        }
+
+        await db.insert(auditLogs).values({
+          orgId,
+          action: 'invoice.payment_received',
+          entityType: 'invoice',
+          entityId: invoice.id,
+          metadata: {
+            leadId: invoice.leadId,
+            estimateId: invoice.estimateId,
+            jobId: invoice.jobId,
+            changeOrderId: invoice.changeOrderId,
+            paymentId: payment.id,
+            amount: amountTotal,
+            remainingAfterPayment,
+          },
+        });
+
+        return c.json({ received: true });
+      }
 
       if (changeOrderId && orgId && amountTotal > 0) {
         const db = createDb(c.env.DATABASE_URL);

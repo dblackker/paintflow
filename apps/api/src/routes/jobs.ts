@@ -111,7 +111,7 @@ jobsApp.get('/:id', async (c) => {
 
 const updateJobSchema = z.object({
   name: z.string().min(1).optional(),
-  status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']).optional(),
+  status: z.enum(['deposit_pending', 'scheduled', 'in_progress', 'completed', 'cancelled']).optional(),
   budget: z.coerce.number().min(0).optional(),
   streetAddress: z.string().trim().max(255).nullable().optional(),
   city: z.string().trim().max(100).nullable().optional(),

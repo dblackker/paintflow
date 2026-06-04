@@ -2,14 +2,15 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
-import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, leads, orgBranding, orgSettings, portalTokens, users } from '@crewmodo/db/schema';
+import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, jobs, leads, orgBranding, orgSettings, portalTokens, users } from '@crewmodo/db/schema';
 import { and, eq, desc, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { sendEmail, renderEstimateEmail } from '../lib/email';
-import { estimateContractValue } from '../lib/estimate-handoff';
+import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule } from '../lib/payment-schedule';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
+import { createDepositInvoiceForEstimate } from '../lib/customer-invoices';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
@@ -214,6 +215,38 @@ function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, pack
     }));
 }
 
+function createPortalToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function depositInvoiceEmailHtml(input: {
+  customerName: string;
+  companyName: string;
+  invoiceAmount: string;
+  portalUrl: string;
+}) {
+  return `<!doctype html>
+  <html>
+    <body style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
+      <p>Hi ${input.customerName},</p>
+      <p>Your proposal with ${input.companyName} has been signed. The next step is to pay the deposit invoice so your contractor can reserve the schedule.</p>
+      <p><strong>Deposit due:</strong> ${input.invoiceAmount}</p>
+      <p><a href="${input.portalUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;">Open customer portal</a></p>
+      <p>The portal includes your signed proposal, outstanding invoices, and any future change orders.</p>
+      <p>Thank you.</p>
+    </body>
+  </html>`;
+}
+
+async function createClientPortalLink(db: ReturnType<typeof createDb>, env: Env, orgId: string, leadId: string) {
+  const token = createPortalToken();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await db.insert(portalTokens).values({ orgId, leadId, token, expiresAt });
+  return `${env.PUBLIC_URL || 'https://crewmodo.com'}/portal/${token}`;
+}
+
 function estimateJobsite(estimate: typeof estimates.$inferSelect, lead?: typeof leads.$inferSelect | null) {
   return {
     streetAddress: estimate.streetAddress || lead?.streetAddress || null,
@@ -290,6 +323,12 @@ estimatesApp.get('/:id/public', async (c) => {
   const total = estimateContractValue(estimate);
   const paymentSchedule = estimatePaymentSchedule(settings || {}, total, paidAmount);
   const contractorSignature = await estimateContractorSignature(db, estimate);
+  const latestPortalToken = estimate.signedAt
+    ? await db.query.portalTokens.findFirst({
+      where: and(eq(portalTokens.orgId, estimate.orgId), eq(portalTokens.leadId, estimate.leadId)),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+    })
+    : null;
   await recordPublicEstimateView(db, c, estimate);
   
   return c.json({ 
@@ -305,6 +344,9 @@ estimatesApp.get('/:id/public', async (c) => {
       signedName: estimate.signedName,
       signedAt: estimate.signedAt,
       contractorSignature,
+      portalUrl: latestPortalToken && new Date() <= latestPortalToken.expiresAt
+        ? `${c.env.PUBLIC_URL || 'https://crewmodo.com'}/portal/${latestPortalToken.token}`
+        : null,
       paymentSummary: {
         paidAmount: Math.max(paidAmount, 0),
         paymentCount: payments.length,
@@ -372,6 +414,7 @@ estimatesApp.post('/:id/sign', async (c) => {
   
   const [estimate] = await db.update(estimates)
     .set({
+      status: 'accepted',
       signedName: name,
       signatureData,
       signedAt: new Date(),
@@ -383,6 +426,73 @@ estimatesApp.post('/:id/sign', async (c) => {
     .returning();
 
   const cleanOptions = selectedOptionsForPackage(estimate, packageName, selectedOptions);
+  const job = await createJobFromAcceptedEstimate(db, estimate, {
+    packageName,
+    signedBy: name,
+    selectedOptions: cleanOptions,
+    ipAddress: ip,
+    userAgent,
+    initialStatus: 'deposit_pending',
+  });
+  const depositInvoice = await createDepositInvoiceForEstimate(db, estimate, {
+    packageName,
+    selectedOptions: cleanOptions,
+    jobId: job.id,
+  });
+  if (!depositInvoice) {
+    await db.update(jobs)
+      .set({ status: 'scheduled', updatedAt: new Date() })
+      .where(and(eq(jobs.id, job.id), eq(jobs.orgId, estimate.orgId)));
+  }
+  const portalUrl = await createClientPortalLink(db, c.env, estimate.orgId, estimate.leadId);
+  if (depositInvoice) {
+    const [lead, branding] = await Promise.all([
+      db.query.leads.findFirst({ where: and(eq(leads.id, estimate.leadId), eq(leads.orgId, estimate.orgId)) }),
+      db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, estimate.orgId) }),
+    ]);
+    if (lead?.email) {
+      const companyName = branding?.companyName || settings?.companyName || 'your contractor';
+      const subject = `Your deposit invoice from ${companyName}`;
+      const renderedHtml = depositInvoiceEmailHtml({
+        customerName: lead.name || 'there',
+        companyName,
+        invoiceAmount: `$${Number(depositInvoice.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        portalUrl,
+      });
+      try {
+        const providerResult = await sendEmail(c.env, lead.email, subject, renderedHtml, undefined, {
+          replyTo: settings?.email || undefined,
+          text: `Your proposal has been signed. Pay your deposit invoice here: ${portalUrl}`,
+        }) as { id?: string; message_id?: string };
+        await recordEmailSend(db, {
+          orgId: estimate.orgId,
+          leadId: lead.id,
+          estimateId: estimate.id,
+          jobId: job.id,
+          templateKey: 'invoice.deposit.created',
+          templateName: 'Deposit invoice created',
+          channel: 'transactional',
+          toEmail: lead.email,
+          fromEmail: c.env.EMAIL_FROM || 'billing@crewmodo.com',
+          replyTo: settings?.email || null,
+          subject,
+          previewText: 'Your project is signed. Please pay the deposit invoice to reserve the schedule.',
+          renderedHtml,
+          renderedText: `Your proposal has been signed. Pay your deposit invoice here: ${portalUrl}`,
+          status: 'sent',
+          provider: c.env.EMAIL_PROVIDER || (c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'resend'),
+          providerMessageId: providerResult?.id || providerResult?.message_id || null,
+          metadata: {
+            invoiceId: depositInvoice.id,
+            portalUrl,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to send deposit invoice email:', error);
+      }
+    }
+  }
+
   await db.insert(auditLogs).values({
     orgId: estimate.orgId,
     action: 'estimate.signed',
@@ -393,6 +503,9 @@ estimatesApp.post('/:id/sign', async (c) => {
       contractValue: estimateContractValue(estimate, packageName, cleanOptions),
       selectedOptions: cleanOptions,
       awaitingPayment: true,
+      jobId: job.id,
+      depositInvoiceId: depositInvoice?.id || null,
+      portalUrl,
       contractorSignature,
       legalSnapshot: legal,
       acknowledgedDisclosure: Boolean(legal.disclosureEnabled && acknowledgedDisclosure),
@@ -401,7 +514,17 @@ estimatesApp.post('/:id/sign', async (c) => {
     userAgent,
   });
   
-  return c.json({ data: { id: estimate.id, status: estimate.status, signedAt: estimate.signedAt, awaitingPayment: true } });
+  return c.json({
+    data: {
+      id: estimate.id,
+      status: estimate.status,
+      signedAt: estimate.signedAt,
+      jobId: job.id,
+      depositInvoiceId: depositInvoice?.id || null,
+      portalUrl,
+      awaitingPayment: Boolean(depositInvoice),
+    },
+  });
 });
 
 estimatesApp.use('*', authMiddleware);

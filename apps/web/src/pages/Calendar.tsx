@@ -359,7 +359,7 @@ export function Calendar() {
   }, new Map<string, number>()), [timeEntries]);
 
   const unscheduledJobs = useMemo(() => jobs
-    .filter((job) => activeJob(job) && !jobHasSchedule(job))
+    .filter((job) => activeJob(job) && job.status !== 'deposit_pending' && !jobHasSchedule(job))
     .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))), [jobs]);
 
   const stats = useMemo(() => {
@@ -367,7 +367,7 @@ export function Calendar() {
     const scheduledCount = active.filter((job) => jobHasSchedule(job) && statsDays.some((day) => jobIntersectsDay(job, day))).length;
     return {
       scheduled: scheduledCount,
-      needsDate: active.filter((job) => !jobHasSchedule(job)).length,
+      needsDate: active.filter((job) => job.status !== 'deposit_pending' && !jobHasSchedule(job)).length,
       inProgress: active.filter((job) => job.status === 'in_progress').length,
     };
   }, [jobs, statsDays]);

@@ -23,6 +23,7 @@ type HandoffInput = {
   selectedOptions?: SelectedOption[];
   ipAddress?: string | null;
   userAgent?: string | null;
+  initialStatus?: string | null;
 };
 
 function money(value: unknown): number {
@@ -143,7 +144,7 @@ export async function createJobFromAcceptedEstimate(
       jobNumber: generateJobNumber(),
       name: buildJobNameFromEstimate(estimate, lead, selectedPackage),
       ...jobsite,
-      status: 'scheduled',
+      status: input.initialStatus || 'scheduled',
       budget: contractValue.toFixed(2),
     })
     .returning();

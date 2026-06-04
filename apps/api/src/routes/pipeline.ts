@@ -54,6 +54,7 @@ function stageFor(lead: typeof leads.$inferSelect, estimate?: typeof estimates.$
     if (job.status === 'in_progress') return 'in_production';
     if (job.status === 'punch_list') return 'punch_list';
     if (job.status === 'scheduled') return 'scheduled';
+    if (job.status === 'deposit_pending') return 'won_deposit_pending';
     return 'ready_to_schedule';
   }
   if (estimate) {
