@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
-import { auditLogs, changeOrders, customerPayments, estimates, jobs, leads, orgSettings, quickbooksConnections, stripeConnections } from '@crewmodo/db/schema';
+import { auditLogs, changeOrders, customerInvoices, customerPayments, estimates, jobs, leads, orgSettings, quickbooksConnections, stripeConnections } from '@crewmodo/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -18,13 +18,17 @@ const refundSchema = z.object({
 });
 
 const manualPaymentSchema = z.object({
-  estimateId: z.string().uuid(),
+  estimateId: z.string().uuid().optional(),
+  invoiceId: z.string().uuid().optional(),
   amount: z.coerce.number().positive(),
   source: z.enum(['cash', 'check', 'ach', 'other']).default('check'),
   reference: z.string().trim().max(120).optional().nullable(),
   description: z.string().trim().max(255).optional().nullable(),
   receivedAt: z.string().datetime().optional().nullable(),
   confirmAdditionalPayment: z.boolean().optional(),
+}).refine((data) => Boolean(data.estimateId) !== Boolean(data.invoiceId), {
+  message: 'Select either an estimate or an invoice.',
+  path: ['estimateId'],
 });
 
 function roundMoney(value: number) {
@@ -92,6 +96,84 @@ billing.post('/manual', async (c) => {
   }
 
   const db = createDb(c.env.DATABASE_URL);
+  if (parsed.data.invoiceId) {
+    const invoice = await db.query.customerInvoices.findFirst({
+      where: and(eq(customerInvoices.id, parsed.data.invoiceId), eq(customerInvoices.orgId, orgId)),
+    });
+    if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
+    if (['canceled', 'voided'].includes(invoice.status)) return c.json({ error: 'Cannot record payment on an inactive invoice.' }, 409);
+
+    const existingPayments = await db.select().from(customerPayments)
+      .where(and(eq(customerPayments.invoiceId, invoice.id), eq(customerPayments.orgId, orgId)));
+    const duplicate = existingPayments.find((payment) => metadataObject(payment.metadata).idempotencyKey === idempotencyKey);
+    if (duplicate) return c.json({ data: duplicate, duplicate: true });
+
+    const invoiceTotal = roundMoney(Number(invoice.total || 0));
+    const paidAmount = roundMoney(existingPayments.reduce((sum, payment) => sum + netPaymentAmount(payment), 0));
+    const remaining = roundMoney(Math.max(invoiceTotal - paidAmount, 0));
+    const amount = roundMoney(parsed.data.amount);
+    if (paidAmount > 0.005 && !parsed.data.confirmAdditionalPayment) {
+      return c.json({ error: `This invoice already has ${paidAmount.toFixed(2)} recorded. Confirm this is an additional payment before saving.` }, 409);
+    }
+    if (remaining <= 0) {
+      return c.json({ error: 'This invoice is already paid in full.' }, 409);
+    }
+    if (amount > remaining + 0.005) {
+      return c.json({ error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(2)}.` }, 409);
+    }
+
+    const receivedAt = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
+    const description = parsed.data.description || `${parsed.data.source.toUpperCase()} payment`;
+    const [payment] = await db.insert(customerPayments).values({
+      orgId,
+      leadId: invoice.leadId,
+      invoiceId: invoice.id,
+      jobId: invoice.jobId || null,
+      source: parsed.data.source,
+      status: 'succeeded',
+      amount: amount.toFixed(2),
+      currency: 'usd',
+      description,
+      receivedAt,
+      metadata: {
+        idempotencyKey,
+        reference: parsed.data.reference || null,
+        confirmedAdditionalPayment: paidAmount > 0.005,
+        recordedByUserId: c.get('userId') || null,
+        note: 'Manual payment recorded by contractor. No Stripe charge was created.',
+      },
+    }).returning();
+
+    const remainingAfterPayment = roundMoney(remaining - amount);
+    await db.update(customerInvoices)
+      .set({
+        status: remainingAfterPayment <= 0.005 ? 'paid' : 'partially_paid',
+        paidAt: remainingAfterPayment <= 0.005 ? receivedAt : null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)));
+
+    await db.insert(auditLogs).values({
+      orgId,
+      userId: c.get('userId'),
+      action: 'payment.manual_recorded',
+      entityType: 'payment',
+      entityId: payment.id,
+      metadata: {
+        leadId: invoice.leadId,
+        invoiceId: invoice.id,
+        jobId: invoice.jobId || null,
+        amount,
+        source: parsed.data.source,
+        reference: parsed.data.reference || null,
+        remainingAfterPayment,
+      },
+    });
+
+    return c.json({ data: payment }, 201);
+  }
+
+  if (!parsed.data.estimateId) return c.json({ error: 'Estimate is required.' }, 400);
   const estimate = await db.query.estimates.findFirst({
     where: and(eq(estimates.id, parsed.data.estimateId), eq(estimates.orgId, orgId)),
   });
@@ -445,10 +527,12 @@ billing.get('/history', async (c) => {
   const orgId = c.get('orgId');
   if (!orgId) return c.json({ error: 'Unauthorized' }, 401);
   const estimateId = c.req.query('estimateId');
+  const invoiceId = c.req.query('invoiceId');
   const leadId = c.req.query('leadId');
   const db = createDb(c.env.DATABASE_URL);
   const filters = [eq(customerPayments.orgId, orgId)];
   if (estimateId) filters.push(eq(customerPayments.estimateId, estimateId));
+  if (invoiceId) filters.push(eq(customerPayments.invoiceId, invoiceId));
   if (leadId) filters.push(eq(customerPayments.leadId, leadId));
 
   try {

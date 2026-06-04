@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
 import {
   aiUsageEvents,
+  auditLogs,
+  customerInvoices,
+  customerPayments,
   jobCosts,
   jobs,
   leads,
@@ -16,7 +19,7 @@ import {
   supplierInvoiceLearningStats,
   supplierInvoiceSenderRules,
 } from '@crewmodo/db/schema';
-import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createNotificationAndPush } from '../lib/web-push';
@@ -114,6 +117,20 @@ const senderRuleSchema = z.object({
   senderEmail: z.string().trim().email(),
   autoStage: z.boolean().default(true),
   isActive: z.boolean().default(true),
+});
+
+const customerInvoiceCreateSchema = z.object({
+  leadId: z.string().uuid(),
+  jobId: z.string().uuid().optional().nullable(),
+  description: z.string().trim().min(1).max(255),
+  amount: z.coerce.number().positive(),
+  tax: z.coerce.number().min(0).default(0),
+  dueDate: z.string().trim().optional().nullable(),
+  dueLabel: z.string().trim().max(120).optional().nullable(),
+  reminderCadence: z.string().trim().max(50).optional().nullable(),
+  taxRate: z.coerce.number().min(0).max(100).optional().nullable(),
+  taxOverride: z.boolean().default(false),
+  note: z.string().trim().max(1000).optional().nullable(),
 });
 
 const inboundEmailSchema = z.object({
@@ -1263,6 +1280,144 @@ invoicesApp.get('/inbound-email-config', async (c) => {
       requiresTrustedSender: true,
     },
   });
+});
+
+invoicesApp.get('/customer', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const rows = await db
+    .select({
+      invoice: customerInvoices,
+      leadName: leads.name,
+      leadEmail: leads.email,
+      leadPhone: leads.phone,
+      leadStreetAddress: leads.streetAddress,
+      leadCity: leads.city,
+      leadState: leads.state,
+      leadPostalCode: leads.postalCode,
+      jobName: jobs.name,
+      jobNumber: jobs.jobNumber,
+      jobStreetAddress: jobs.streetAddress,
+      jobCity: jobs.city,
+      jobState: jobs.state,
+      jobPostalCode: jobs.postalCode,
+    })
+    .from(customerInvoices)
+    .leftJoin(leads, eq(customerInvoices.leadId, leads.id))
+    .leftJoin(jobs, eq(customerInvoices.jobId, jobs.id))
+    .where(eq(customerInvoices.orgId, orgId))
+    .orderBy(desc(customerInvoices.createdAt))
+    .limit(100);
+
+  const payments = await db.query.customerPayments.findMany({
+    where: and(eq(customerPayments.orgId, orgId), isNotNull(customerPayments.invoiceId)),
+    orderBy: (table, { desc }) => [desc(table.receivedAt)],
+    limit: 500,
+  });
+  const paymentsByInvoice = new Map<string, typeof payments>();
+  payments.forEach((payment) => {
+    if (!payment.invoiceId) return;
+    const list = paymentsByInvoice.get(payment.invoiceId) || [];
+    list.push(payment);
+    paymentsByInvoice.set(payment.invoiceId, list);
+  });
+
+  return c.json({
+    data: rows.map((row) => ({
+      ...row.invoice,
+      leadName: row.leadName,
+      leadEmail: row.leadEmail,
+      leadPhone: row.leadPhone,
+      leadStreetAddress: row.leadStreetAddress,
+      leadCity: row.leadCity,
+      leadState: row.leadState,
+      leadPostalCode: row.leadPostalCode,
+      jobName: row.jobName,
+      jobNumber: row.jobNumber,
+      jobStreetAddress: row.jobStreetAddress,
+      jobCity: row.jobCity,
+      jobState: row.jobState,
+      jobPostalCode: row.jobPostalCode,
+      payments: paymentsByInvoice.get(row.invoice.id) || [],
+    })),
+  });
+});
+
+invoicesApp.post('/customer', async (c) => {
+  const idempotencyError = requireIdempotency(c);
+  if (idempotencyError) return idempotencyError;
+  const idempotencyKey = c.req.header('Idempotency-Key')!.trim();
+  const orgId = c.get('orgId');
+  const userId = c.get('userId') || null;
+  const input = customerInvoiceCreateSchema.parse(await c.req.json());
+  const db = createDb(c.env.DATABASE_URL);
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, input.leadId), eq(leads.orgId, orgId)),
+  });
+  if (!lead) return c.json({ error: 'Customer not found' }, 404);
+
+  if (input.jobId) {
+    const job = await db.query.jobs.findFirst({
+      where: and(eq(jobs.id, input.jobId), eq(jobs.orgId, orgId)),
+    });
+    if (!job) return c.json({ error: 'Job not found' }, 404);
+  }
+
+  const token = idempotencyKey.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || crypto.randomUUID().slice(0, 8).toUpperCase();
+  const invoiceNumber = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${token}`;
+  const existing = await db.query.customerInvoices.findFirst({
+    where: and(eq(customerInvoices.orgId, orgId), eq(customerInvoices.invoiceNumber, invoiceNumber)),
+  });
+  if (existing) return c.json({ data: existing, duplicate: true });
+
+  const subtotal = Math.round(Number(input.amount) * 100) / 100;
+  const tax = Math.round(Number(input.tax || 0) * 100) / 100;
+  const total = Math.round((subtotal + tax) * 100) / 100;
+  const lineItems = [{
+    description: input.description,
+    quantity: 1,
+    unitPrice: subtotal,
+    total: subtotal,
+    category: 'service',
+  }];
+
+  const [invoice] = await db.insert(customerInvoices).values({
+    orgId,
+    leadId: lead.id,
+    jobId: input.jobId || null,
+    invoiceNumber,
+    description: input.description,
+    lineItems,
+    subtotal: subtotal.toFixed(2),
+    tax: tax.toFixed(2),
+    total: total.toFixed(2),
+    status: 'sent',
+    dueDate: dateValue(input.dueDate),
+    dueLabel: input.dueLabel || (input.dueDate ? `Due ${dateValue(input.dueDate)?.toLocaleDateString('en-US')}` : 'Due on receipt'),
+    reminderCadence: input.reminderCadence || 'due_date',
+    taxRate: input.taxRate == null ? null : (Number(input.taxRate) > 1 ? Number(input.taxRate) / 100 : Number(input.taxRate)).toFixed(4),
+    taxOverride: Boolean(input.taxOverride),
+    note: input.note || null,
+    createdBy: userId,
+  }).returning();
+
+  await db.insert(auditLogs).values({
+    orgId,
+    userId,
+    action: 'invoice.created',
+    entityType: 'invoice',
+    entityId: invoice.id,
+    metadata: {
+      leadId: lead.id,
+      jobId: input.jobId || null,
+      invoiceNumber,
+      total,
+      idempotencyKey,
+    },
+  });
+
+  return c.json({ data: invoice }, 201);
 });
 
 invoicesApp.post('/imports', async (c) => {

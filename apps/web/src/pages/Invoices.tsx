@@ -184,6 +184,37 @@ interface Estimate {
   customerPreviewUrl?: string | null;
 }
 
+interface CustomerInvoice {
+  id: string;
+  leadId: string;
+  jobId?: string | null;
+  invoiceNumber?: string | null;
+  description?: string | null;
+  subtotal?: string | number | null;
+  tax?: string | number | null;
+  total?: string | number | null;
+  status?: string | null;
+  dueDate?: string | null;
+  dueLabel?: string | null;
+  reminderCadence?: string | null;
+  createdAt?: string | null;
+  sentAt?: string | null;
+  paidAt?: string | null;
+  payments?: Payment[];
+  leadName?: string | null;
+  leadEmail?: string | null;
+  leadStreetAddress?: string | null;
+  leadCity?: string | null;
+  leadState?: string | null;
+  leadPostalCode?: string | null;
+  jobName?: string | null;
+  jobNumber?: string | null;
+  jobStreetAddress?: string | null;
+  jobCity?: string | null;
+  jobState?: string | null;
+  jobPostalCode?: string | null;
+}
+
 interface Job {
   id: string;
   estimateId?: string | null;
@@ -217,6 +248,7 @@ interface ChangeOrder {
 interface Payment {
   id: string;
   estimateId?: string | null;
+  invoiceId?: string | null;
   changeOrderId?: string | null;
   amount?: string | number | null;
   refundedAmount?: string | number | null;
@@ -269,7 +301,7 @@ interface PaymentFormState {
   description: string;
 }
 
-type ReceivableKind = 'estimate' | 'change_order';
+type ReceivableKind = 'estimate' | 'change_order' | 'invoice';
 
 interface Receivable {
   id: string;
@@ -288,6 +320,7 @@ interface Receivable {
   jobHref?: string | null;
   address?: string;
   estimate?: Estimate;
+  invoice?: CustomerInvoice;
   changeOrder?: ChangeOrder;
   usesPaymentSchedule?: boolean;
 }
@@ -775,8 +808,8 @@ function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivabl
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={receivable.kind === 'estimate' ? 'info' : 'purple'} size="sm">
-              {receivable.kind === 'estimate' ? 'Estimate' : 'Change order'}
+            <Badge variant={receivable.kind === 'estimate' ? 'info' : receivable.kind === 'invoice' ? 'success' : 'purple'} size="sm">
+              {receivable.kind === 'estimate' ? 'Estimate' : receivable.kind === 'invoice' ? 'Invoice' : 'Change order'}
             </Badge>
             <StatusBadge status={receivable.status || 'pending'} />
           </div>
@@ -828,7 +861,7 @@ function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivabl
           <Button as="a" href={receivable.previewHref || receivable.href} variant="secondary" size="sm" fullWidth>
             View details
           </Button>
-          {receivable.kind === 'estimate' && (
+          {(receivable.kind === 'estimate' || receivable.kind === 'invoice') && (
             <Button type="button" variant="secondary" size="sm" fullWidth onClick={() => onRecordPayment(receivable)}>
               Record payment
             </Button>
@@ -848,6 +881,7 @@ export function Invoices() {
   const [aiUsage, setAiUsage] = useState<AiUsageSummary | null>(null);
   const [inboundEmailConfig, setInboundEmailConfig] = useState<InboundEmailConfig | null>(null);
   const [senderRules, setSenderRules] = useState<InvoiceSenderRule[]>([]);
+  const [customerInvoices, setCustomerInvoices] = useState<CustomerInvoice[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
@@ -885,6 +919,40 @@ export function Invoices() {
   }, [payments]);
 
   const receivables = useMemo(() => {
+    const invoiceReceivables = customerInvoices
+      .filter((invoice) => !['canceled', 'voided', 'paid'].includes(String(invoice.status || '')))
+      .map((invoice) => {
+        const amount = numberValue(invoice.total);
+        const paid = (invoice.payments || []).reduce((sum, payment) => sum + netPayment(payment), 0);
+        const balance = Math.max(amount - paid, 0);
+        const address = formatAddress({
+          streetAddress: invoice.jobStreetAddress || invoice.leadStreetAddress,
+          city: invoice.jobCity || invoice.leadCity,
+          state: invoice.jobState || invoice.leadState,
+          postalCode: invoice.jobPostalCode || invoice.leadPostalCode,
+        }).replace(/\s+\d{5}$/, '');
+        return {
+          id: invoice.id,
+          kind: 'invoice' as ReceivableKind,
+          title: invoice.invoiceNumber ? `Invoice ${invoice.invoiceNumber}` : 'Invoice',
+          customerName: invoice.leadName || 'Customer',
+          customerEmail: invoice.leadEmail,
+          status: invoice.status || 'sent',
+          amount,
+          paid,
+          balance,
+          createdAt: invoice.sentAt || invoice.createdAt,
+          dueLabel: invoice.dueLabel || (invoice.dueDate ? `Due ${formatDateOnly(invoice.dueDate)}` : 'Due on receipt'),
+          href: '/invoices',
+          previewHref: null,
+          jobHref: invoice.jobId ? `/jobs/${invoice.jobId}` : null,
+          address,
+          invoice,
+          usesPaymentSchedule: false,
+        };
+      })
+      .filter((item) => item.balance > 0.005);
+
     const estimateReceivables = estimates
       .filter((estimate) => {
         const isQuickInvoice = estimate.packages?.some((pkg) => /quick invoice/i.test(String(pkg.name)));
@@ -950,9 +1018,9 @@ export function Invoices() {
       })
       .filter((item) => item.balance > 0.005);
 
-    return [...estimateReceivables, ...changeOrderReceivables]
+    return [...invoiceReceivables, ...estimateReceivables, ...changeOrderReceivables]
       .sort((a, b) => b.balance - a.balance);
-  }, [changeOrders, estimates, jobsByEstimateId, jobsById, paymentsByChangeOrder]);
+  }, [changeOrders, customerInvoices, estimates, jobsByEstimateId, jobsById, paymentsByChangeOrder]);
 
   const totalReceivable = useMemo(() => receivables.reduce((sum, item) => sum + item.balance, 0), [receivables]);
   const totalSpend = useMemo(
@@ -978,13 +1046,14 @@ export function Invoices() {
     setIsLoading(true);
     setError('');
     try {
-      const [purchasePayload, importPayload, learningPayload, usagePayload, inboundEmailPayload, senderRulesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload, settingsPayload] = await Promise.all([
+      const [purchasePayload, importPayload, learningPayload, usagePayload, inboundEmailPayload, senderRulesPayload, customerInvoicesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload, settingsPayload] = await Promise.all([
         apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
         apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
         apiJson<{ data?: { stats?: InvoiceLearningStat[] } }>('/v1/invoices/imports/learning').catch(() => ({ data: { stats: [] } })),
         apiJson<{ data?: AiUsageSummary }>('/v1/invoices/imports/ai-usage').catch(() => ({ data: null })),
         apiJson<{ data?: InboundEmailConfig }>('/v1/invoices/inbound-email-config').catch(() => ({ data: null })),
         apiJson<{ data?: InvoiceSenderRule[] }>('/v1/invoices/imports/sender-rules').catch(() => ({ data: [] })),
+        apiJson<{ data?: CustomerInvoice[] }>('/v1/invoices/customer').catch(() => ({ data: [] })),
         apiJson<{ data?: Estimate[] }>('/v1/estimates?limit=100'),
         apiJson<{ data?: Job[] }>('/v1/jobs').catch(() => ({ data: [] })),
         apiJson<{ data?: ChangeOrder[] }>('/v1/change-orders').catch(() => ({ data: [] })),
@@ -999,6 +1068,7 @@ export function Invoices() {
       setAiUsage(usagePayload.data || null);
       setInboundEmailConfig(inboundEmailPayload.data || null);
       setSenderRules(senderRulesPayload.data || []);
+      setCustomerInvoices(customerInvoicesPayload.data || []);
       setReviewJobByImport(Object.fromEntries((importPayload.data || []).map((item) => [item.id, item.jobId || item.matchCandidates?.[0]?.id || ''])));
       setEstimates(estimatesPayload.data || []);
       setJobs(jobsPayload.data || []);
@@ -1222,7 +1292,7 @@ export function Invoices() {
 
       if (!lead?.id) throw new Error('Customer is required to create an invoice.');
 
-      const response = await apiJson<{ data?: Estimate }>('/v1/estimates', {
+      const response = await apiJson<{ data?: CustomerInvoice }>('/v1/invoices/customer', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1230,36 +1300,21 @@ export function Invoices() {
         },
         body: JSON.stringify({
           leadId: lead.id,
-          status: 'sent',
-          streetAddress: lead?.streetAddress || undefined,
-          city: lead?.city || undefined,
-          state: lead?.state || undefined,
-          postalCode: lead?.postalCode || undefined,
-          packages: [{
-            name: 'Quick invoice',
-            subtotal: amount,
-            tax,
-            total: amount + tax,
-            dueDate: quickInvoiceForm.dueDate || null,
-            dueLabel,
-            reminderCadence: quickInvoiceForm.reminderCadence,
-            taxRate: quickInvoiceForm.taxMode === 'auto' ? numberValue(quickInvoiceForm.taxRate) : null,
-            taxOverride: quickInvoiceForm.taxMode === 'manual',
-            items: [{
-              desc: quickInvoiceForm.description || 'Painting services',
-              qty: 1,
-              rate: amount,
-              category: 'invoice',
-              notes: [dueLabel, reminderLabel(quickInvoiceForm.reminderCadence), quickInvoiceForm.note].filter(Boolean).join(' - '),
-              customerVisible: true,
-            }],
-          }],
+          description: quickInvoiceForm.description || 'Services',
+          amount,
+          tax,
+          dueDate: quickInvoiceForm.dueDate || null,
+          dueLabel,
+          reminderCadence: quickInvoiceForm.reminderCadence,
+          taxRate: quickInvoiceForm.taxMode === 'auto' ? numberValue(quickInvoiceForm.taxRate) : null,
+          taxOverride: quickInvoiceForm.taxMode === 'manual',
+          note: [reminderLabel(quickInvoiceForm.reminderCadence), quickInvoiceForm.note].filter(Boolean).join(' - ') || null,
         }),
       });
-      window.showToast?.('Quick invoice created', 'success');
+      window.showToast?.('Invoice created', 'success');
       setQuickInvoiceOpen(false);
       await loadInvoices();
-      if (response.data?.id) navigate(`/estimates/${response.data.id}/details`);
+      if (response.data?.id) navigate('/invoices');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to create invoice', 'error');
     } finally {
@@ -1269,7 +1324,16 @@ export function Invoices() {
 
   async function recordPayment(event: FormEvent) {
     event.preventDefault();
-    if (!paymentReceivable?.estimate?.id) return;
+    if (!paymentReceivable) return;
+    const paymentTarget = paymentReceivable.invoice?.id
+      ? { invoiceId: paymentReceivable.invoice.id }
+      : paymentReceivable.estimate?.id
+        ? { estimateId: paymentReceivable.estimate.id }
+        : null;
+    if (!paymentTarget) {
+      window.showToast?.('Payments can be recorded for invoices and estimates.', 'error');
+      return;
+    }
     const amount = numberValue(paymentForm.amount);
     if (amount <= 0 || amount > paymentReceivable.balance + 0.005) {
       window.showToast?.(`Payment must be between $0.01 and ${formatMoney(paymentReceivable.balance)}.`, 'error');
@@ -1286,7 +1350,7 @@ export function Invoices() {
           'Idempotency-Key': crypto.randomUUID(),
         },
         body: JSON.stringify({
-          estimateId: paymentReceivable.estimate.id,
+          ...paymentTarget,
           amount,
           source: paymentForm.source,
           reference: paymentForm.reference || null,

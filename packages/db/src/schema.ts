@@ -322,6 +322,33 @@ export const changeOrders = pgTable('change_orders', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const customerInvoices = pgTable('customer_invoices', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  leadId: uuid('lead_id').references(() => leads.id).notNull(),
+  jobId: uuid('job_id').references(() => jobs.id),
+  invoiceNumber: varchar('invoice_number', { length: 80 }).notNull(),
+  description: text('description').notNull(),
+  lineItems: jsonb('line_items').notNull(),
+  subtotal: decimal('subtotal', { precision: 10, scale: 2 }).notNull(),
+  tax: decimal('tax', { precision: 10, scale: 2 }).notNull().default('0'),
+  total: decimal('total', { precision: 10, scale: 2 }).notNull(),
+  status: varchar('status', { length: 50 }).notNull().default('sent'),
+  dueDate: timestamp('due_date'),
+  dueLabel: varchar('due_label', { length: 120 }),
+  reminderCadence: varchar('reminder_cadence', { length: 50 }),
+  taxRate: decimal('tax_rate', { precision: 7, scale: 4 }),
+  taxOverride: boolean('tax_override').notNull().default(false),
+  note: text('note'),
+  sentAt: timestamp('sent_at').defaultNow().notNull(),
+  paidAt: timestamp('paid_at'),
+  voidedAt: timestamp('voided_at'),
+  voidReason: text('void_reason'),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const emailSends = pgTable('email_sends', {
   id: uuid('id').defaultRandom().primaryKey(),
   orgId: uuid('org_id').references(() => organizations.id).notNull(),
@@ -355,6 +382,7 @@ export const customerPayments = pgTable('customer_payments', {
   estimateId: uuid('estimate_id').references(() => estimates.id),
   jobId: uuid('job_id').references(() => jobs.id),
   changeOrderId: uuid('change_order_id').references(() => changeOrders.id),
+  invoiceId: uuid('invoice_id').references(() => customerInvoices.id),
   source: varchar('source', { length: 50 }).notNull().default('stripe'),
   status: varchar('status', { length: 50 }).notNull().default('succeeded'),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
