@@ -1443,7 +1443,40 @@ invoicesApp.post('/customer', async (c) => {
     },
   });
 
-  return c.json({ data: invoice }, 201);
+  let emailSendId: string | null = null;
+  let emailSent = false;
+  try {
+    const result = await sendInvoiceEmail(c.env, db, {
+      orgId,
+      invoice,
+      templateKey: 'invoice.quick.created',
+      balanceDue: total,
+      sentBy: userId,
+    });
+    emailSent = result.sent;
+    emailSendId = result.emailSendId || null;
+  } catch (error) {
+    console.error('Failed to send customer invoice email:', error);
+  }
+
+  if (emailSent) {
+    await db.insert(auditLogs).values({
+      orgId,
+      userId,
+      action: 'invoice.sent',
+      entityType: 'invoice',
+      entityId: invoice.id,
+      metadata: {
+        leadId: lead.id,
+        jobId: input.jobId || null,
+        invoiceNumber,
+        total,
+        emailSendId,
+      },
+    });
+  }
+
+  return c.json({ data: { ...invoice, emailSent, emailSendId } }, 201);
 });
 
 invoicesApp.post('/customer/:id/send-reminder', async (c) => {

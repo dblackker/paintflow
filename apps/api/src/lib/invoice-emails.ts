@@ -19,7 +19,7 @@ type InvoiceEmailInput = {
     total: string | number;
     dueLabel?: string | null;
   };
-  templateKey: 'invoice.deposit.created' | 'invoice.change_order.created' | 'invoice.payment.receipt' | 'invoice.payment.reminder';
+  templateKey: 'invoice.quick.created' | 'invoice.deposit.created' | 'invoice.change_order.created' | 'invoice.payment.receipt' | 'invoice.payment.reminder';
   payment?: {
     id?: string | null;
     amount: string | number;
@@ -49,7 +49,12 @@ async function latestPortalUrl(db: Db, env: Env, orgId: string, leadId: string) 
     where: and(eq(portalTokens.orgId, orgId), eq(portalTokens.leadId, leadId)),
     orderBy: (table, { desc }) => [desc(table.createdAt)],
   });
-  if (!token || new Date() > token.expiresAt) return env.PUBLIC_URL || 'https://crewmodo.com';
+  if (!token || new Date() > token.expiresAt) {
+    const nextToken = crypto.randomUUID().replace(/-/g, '');
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+    await db.insert(portalTokens).values({ orgId, leadId, token: nextToken, expiresAt });
+    return `${env.PUBLIC_URL || 'https://crewmodo.com'}/portal/${nextToken}`;
+  }
   return `${env.PUBLIC_URL || 'https://crewmodo.com'}/portal/${token.token}`;
 }
 
@@ -80,7 +85,8 @@ export async function sendInvoiceEmail(env: Env, db: Db, input: InvoiceEmailInpu
 
   if (!lead?.email) return { sent: false, reason: 'missing_customer_email' as const };
 
-  const portalUrl = input.portalUrl || await latestPortalUrl(db, env, input.orgId, input.invoice.leadId);
+  const basePortalUrl = await latestPortalUrl(db, env, input.orgId, input.invoice.leadId);
+  const portalUrl = input.portalUrl || `${basePortalUrl}${basePortalUrl.includes('?') ? '&' : '?'}invoiceId=${input.invoice.id}`;
   const companyName = branding?.companyName || settings?.companyName || 'your contractor';
   const rendered = renderInvoiceEmail({
     templateKey: input.templateKey,

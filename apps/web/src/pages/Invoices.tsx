@@ -1310,7 +1310,7 @@ export function Invoices() {
 
       if (!lead?.id) throw new Error('Customer is required to create an invoice.');
 
-      const response = await apiJson<{ data?: CustomerInvoice }>('/v1/invoices/customer', {
+      const response = await apiJson<{ data?: CustomerInvoice & { emailSent?: boolean } }>('/v1/invoices/customer', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1329,7 +1329,7 @@ export function Invoices() {
           note: [reminderLabel(quickInvoiceForm.reminderCadence), quickInvoiceForm.note].filter(Boolean).join(' - ') || null,
         }),
       });
-      window.showToast?.('Invoice created', 'success');
+      window.showToast?.(response.data?.emailSent ? 'Invoice created and emailed' : 'Invoice created', 'success');
       setQuickInvoiceOpen(false);
       await loadInvoices();
       if (response.data?.id) navigate('/invoices');

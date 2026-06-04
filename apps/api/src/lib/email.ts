@@ -339,6 +339,17 @@ export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
     cta: 'Open customer portal',
     outro: 'The portal keeps your signed proposal, approved change orders, invoices, and payment history together.',
   },
+  'invoice.quick.created': {
+    key: 'invoice.quick.created',
+    name: 'Invoice ready',
+    category: 'invoice',
+    channel: 'transactional',
+    subject: 'Invoice from {{companyName}}',
+    preheader: '{{invoiceAmount}} is due for {{invoiceNumber}}.',
+    intro: '{{companyName}} sent you an invoice. Open your customer portal to review the invoice, payment status, and secure payment options.',
+    cta: 'View and pay invoice',
+    outro: 'If you have already arranged payment another way, reply to this email so the contractor can confirm the record.',
+  },
   'invoice.payment.receipt': {
     key: 'invoice.payment.receipt',
     name: 'Payment receipt',
