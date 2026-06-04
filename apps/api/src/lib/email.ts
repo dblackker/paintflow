@@ -372,6 +372,17 @@ export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
     cta: 'View and pay invoice',
     outro: 'If you have already sent payment, thank you. Reply to this email if anything looks off.',
   },
+  'invoice.canceled': {
+    key: 'invoice.canceled',
+    name: 'Invoice canceled',
+    category: 'invoice',
+    channel: 'transactional',
+    subject: 'Invoice canceled by {{companyName}}',
+    preheader: '{{invoiceNumber}} has been canceled.',
+    intro: '{{companyName}} canceled this invoice. No payment is due on this invoice.',
+    cta: 'View customer portal',
+    outro: 'If you have questions or already sent payment, reply to this email so the contractor can reconcile the account.',
+  },
 };
 
 function escapeHtml(value: string) {
@@ -637,9 +648,12 @@ export function renderInvoiceEmail(input: InvoiceEmailInput, override?: EmailTem
   const intro = replaceMergeTags(template.intro, mergeFields);
   const outro = replaceMergeTags(template.outro, mergeFields);
   const isReceipt = template.key === 'invoice.payment.receipt';
-  const headline = isReceipt ? 'Payment received' : 'Invoice ready';
-  const amountLabel = isReceipt ? 'Payment received' : 'Amount due';
-  const statusCopy = isReceipt && balanceDue && balanceDue !== '$0.00'
+  const isCanceled = template.key === 'invoice.canceled';
+  const headline = isReceipt ? 'Payment received' : isCanceled ? 'Invoice canceled' : 'Invoice ready';
+  const amountLabel = isReceipt ? 'Payment received' : isCanceled ? 'Canceled amount' : 'Amount due';
+  const statusCopy = isCanceled
+    ? 'This invoice has been canceled. No payment is due on this invoice.'
+    : isReceipt && balanceDue && balanceDue !== '$0.00'
     ? `Remaining balance: ${balanceDue}`
     : isReceipt
       ? 'This invoice is paid in full.'

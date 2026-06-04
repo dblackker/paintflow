@@ -134,6 +134,10 @@ const customerInvoiceCreateSchema = z.object({
   note: z.string().trim().max(1000).optional().nullable(),
 });
 
+const customerInvoiceCancelSchema = z.object({
+  reason: z.string().trim().max(500).optional().nullable(),
+});
+
 const inboundEmailSchema = z.object({
   from: z.string().trim().email(),
   to: z.union([z.string().trim(), z.array(z.string().trim())]).optional(),
@@ -1517,6 +1521,87 @@ invoicesApp.post('/customer', async (c) => {
   }
 
   return c.json({ data: { ...invoice, emailSent, emailSendId } }, 201);
+});
+
+invoicesApp.post('/customer/:id/cancel', async (c) => {
+  const idempotencyError = requireIdempotency(c);
+  if (idempotencyError) return idempotencyError;
+  const orgId = c.get('orgId');
+  const userId = c.get('userId') || null;
+  const id = c.req.param('id');
+  const parsed = customerInvoiceCancelSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid cancellation request', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const invoice = await db.query.customerInvoices.findFirst({
+    where: and(eq(customerInvoices.id, id), eq(customerInvoices.orgId, orgId)),
+  });
+  if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
+  if (['canceled', 'voided'].includes(invoice.status)) {
+    return c.json({ data: invoice, alreadyCanceled: true });
+  }
+  if (invoice.status === 'paid' || invoice.paidAt) {
+    return c.json({ error: 'Paid invoices cannot be canceled. Record a refund or credit instead.' }, 409);
+  }
+
+  const payments = await db.query.customerPayments.findMany({
+    where: and(eq(customerPayments.orgId, orgId), eq(customerPayments.invoiceId, invoice.id)),
+    limit: 100,
+  });
+  const paid = payments
+    .filter((payment) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+  if (paid > 0.005) {
+    return c.json({ error: 'Invoices with recorded payment cannot be canceled. Record a refund or credit instead.' }, 409);
+  }
+
+  const canceledAt = new Date();
+  const reason = parsed.data.reason || 'Canceled by contractor';
+  const [updated] = await db.update(customerInvoices)
+    .set({
+      status: 'canceled',
+      voidedAt: canceledAt,
+      voidReason: reason,
+      updatedAt: canceledAt,
+    })
+    .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)))
+    .returning();
+
+  let emailSendId: string | null = null;
+  let emailSent = false;
+  try {
+    const result = await sendInvoiceEmail(c.env, db, {
+      orgId,
+      invoice: updated,
+      templateKey: 'invoice.canceled',
+      balanceDue: 0,
+      sentBy: userId,
+    });
+    emailSent = result.sent;
+    emailSendId = result.emailSendId || null;
+  } catch (error) {
+    console.error('Failed to send invoice cancellation email:', error);
+  }
+
+  await db.insert(auditLogs).values({
+    orgId,
+    userId,
+    action: 'invoice.canceled',
+    entityType: 'invoice',
+    entityId: updated.id,
+    metadata: {
+      leadId: updated.leadId,
+      jobId: updated.jobId || null,
+      invoiceNumber: updated.invoiceNumber,
+      reason,
+      emailSent,
+      emailSendId,
+    },
+  });
+
+  return c.json({ data: { ...updated, emailSent, emailSendId } });
 });
 
 invoicesApp.post('/customer/:id/send-reminder', async (c) => {

@@ -804,12 +804,14 @@ function ReceivableCard({
   milestones,
   onRecordPayment,
   onSendReminder,
+  onCancelInvoice,
   sendingReminderId,
 }: {
   receivable: Receivable;
   milestones: PaymentMilestone[];
   onRecordPayment: (receivable: Receivable) => void;
   onSendReminder: (receivable: Receivable) => void;
+  onCancelInvoice: (receivable: Receivable) => void;
   sendingReminderId: string;
 }) {
   const schedule = receivable.usesPaymentSchedule
@@ -886,6 +888,11 @@ function ReceivableCard({
             </Button>
           )}
           <ReminderButton receivable={receivable} isSending={sendingReminderId === receivable.id} onSend={onSendReminder} />
+          {receivable.kind === 'invoice' && (
+            <Button type="button" variant="dangerSubtle" size="sm" fullWidth onClick={() => onCancelInvoice(receivable)}>
+              Cancel invoice
+            </Button>
+          )}
         </div>
       </div>
     </Card>
@@ -915,12 +922,15 @@ export function Invoices() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [quickInvoiceOpen, setQuickInvoiceOpen] = useState(false);
   const [paymentReceivable, setPaymentReceivable] = useState<Receivable | null>(null);
+  const [cancelInvoiceTarget, setCancelInvoiceTarget] = useState<Receivable | null>(null);
+  const [cancelInvoiceReason, setCancelInvoiceReason] = useState('');
   const [form, setForm] = useState<UploadFormState>(emptyUploadForm);
   const [quickInvoiceForm, setQuickInvoiceForm] = useState<QuickInvoiceFormState>(emptyQuickInvoiceForm);
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(emptyPaymentForm);
   const [isUploading, setIsUploading] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+  const [isCancelingInvoice, setIsCancelingInvoice] = useState(false);
   const [sendingReminderId, setSendingReminderId] = useState('');
   const [reviewJobByImport, setReviewJobByImport] = useState<Record<string, string>>({});
   const [busyImportId, setBusyImportId] = useState('');
@@ -1062,9 +1072,9 @@ export function Invoices() {
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle('pf-modal-open', uploadModalOpen || quickInvoiceOpen || Boolean(paymentReceivable));
+    document.body.classList.toggle('pf-modal-open', uploadModalOpen || quickInvoiceOpen || Boolean(paymentReceivable) || Boolean(cancelInvoiceTarget));
     return () => document.body.classList.remove('pf-modal-open');
-  }, [paymentReceivable, uploadModalOpen, quickInvoiceOpen]);
+  }, [cancelInvoiceTarget, paymentReceivable, uploadModalOpen, quickInvoiceOpen]);
 
   async function loadInvoices() {
     setIsLoading(true);
@@ -1151,6 +1161,17 @@ export function Invoices() {
   function closePaymentModal() {
     if (isRecordingPayment) return;
     setPaymentReceivable(null);
+  }
+
+  function openCancelInvoiceModal(receivable: Receivable) {
+    setCancelInvoiceTarget(receivable);
+    setCancelInvoiceReason('');
+  }
+
+  function closeCancelInvoiceModal() {
+    if (isCancelingInvoice) return;
+    setCancelInvoiceTarget(null);
+    setCancelInvoiceReason('');
   }
 
   async function uploadInvoice(event: FormEvent) {
@@ -1415,6 +1436,30 @@ export function Invoices() {
     }
   }
 
+  async function cancelInvoice(event: FormEvent) {
+    event.preventDefault();
+    if (!cancelInvoiceTarget?.invoice?.id) return;
+    setIsCancelingInvoice(true);
+    try {
+      const response = await apiJson<{ data?: CustomerInvoice & { emailSent?: boolean } }>(`/v1/invoices/customer/${cancelInvoiceTarget.invoice.id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({ reason: cancelInvoiceReason.trim() || null }),
+      });
+      window.showToast?.(response.data?.emailSent ? 'Invoice canceled and customer emailed' : 'Invoice canceled', 'success');
+      setCancelInvoiceTarget(null);
+      setCancelInvoiceReason('');
+      await loadInvoices();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to cancel invoice', 'error');
+    } finally {
+      setIsCancelingInvoice(false);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl space-y-5 px-1 pb-24 sm:px-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1515,14 +1560,15 @@ export function Invoices() {
               {!isLoading && !error && receivables.length > 0 && (
                 <div className="space-y-3">
                   {receivables.map((receivable) => (
-                    <ReceivableCard
-                      key={`${receivable.kind}-${receivable.id}`}
-                      receivable={receivable}
-                      milestones={milestones}
-                      onRecordPayment={openPaymentModal}
-                      onSendReminder={sendPaymentReminder}
-                      sendingReminderId={sendingReminderId}
-                    />
+                      <ReceivableCard
+                        key={`${receivable.kind}-${receivable.id}`}
+                        receivable={receivable}
+                        milestones={milestones}
+                        onRecordPayment={openPaymentModal}
+                        onSendReminder={sendPaymentReminder}
+                        onCancelInvoice={openCancelInvoiceModal}
+                        sendingReminderId={sendingReminderId}
+                      />
                   ))}
                 </div>
               )}
@@ -1755,6 +1801,39 @@ export function Invoices() {
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <Button type="button" variant="secondary" fullWidth onClick={closeQuickInvoiceModal}>Cancel</Button>
                 <Button type="submit" fullWidth isLoading={isCreatingInvoice}>Create invoice</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {cancelInvoiceTarget && (
+        <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCancelInvoiceModal(); }}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="cancel-invoice-title" className="pf-section-title">Cancel invoice</h2>
+                <p className="pf-copy mt-1">{cancelInvoiceTarget.title} will be closed and the customer will be emailed.</p>
+              </div>
+              <button type="button" className="btn-icon" aria-label="Close cancel invoice" onClick={closeCancelInvoiceModal}>
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+            </div>
+            <form className="space-y-4" onSubmit={cancelInvoice}>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                Canceling an invoice does not refund money. If payment has already been recorded, use the refund or credit workflow instead.
+              </div>
+              <Textarea
+                label="Internal reason"
+                rows={3}
+                maxLength={500}
+                value={cancelInvoiceReason}
+                onChange={(event) => setCancelInvoiceReason(event.target.value)}
+                placeholder="Created in error, customer requested updated invoice, duplicate invoice"
+              />
+              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
+                <Button type="button" variant="secondary" fullWidth onClick={closeCancelInvoiceModal}>Keep invoice</Button>
+                <Button type="submit" variant="dangerSubtle" fullWidth isLoading={isCancelingInvoice}>Cancel invoice</Button>
               </div>
             </form>
           </div>

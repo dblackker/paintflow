@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
+import { Textarea } from '@/components/Input';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface Payment {
@@ -91,6 +92,9 @@ export function InvoiceDetail() {
   const [invoice, setInvoice] = useState<CustomerInvoiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCanceling, setIsCanceling] = useState(false);
   const [error, setError] = useState('');
 
   async function loadInvoice() {
@@ -111,6 +115,11 @@ export function InvoiceDetail() {
     void loadInvoice();
   }, [id]);
 
+  useEffect(() => {
+    document.body.classList.toggle('pf-modal-open', cancelModalOpen);
+    return () => document.body.classList.remove('pf-modal-open');
+  }, [cancelModalOpen]);
+
   async function sendReminder() {
     if (!invoice?.id) return;
     setIsSendingReminder(true);
@@ -124,6 +133,36 @@ export function InvoiceDetail() {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to send reminder', 'error');
     } finally {
       setIsSendingReminder(false);
+    }
+  }
+
+  function closeCancelModal() {
+    if (isCanceling) return;
+    setCancelModalOpen(false);
+    setCancelReason('');
+  }
+
+  async function cancelInvoice(event: FormEvent) {
+    event.preventDefault();
+    if (!invoice?.id) return;
+    setIsCanceling(true);
+    try {
+      const response = await apiJson<{ data?: CustomerInvoiceDetail & { emailSent?: boolean } }>(`/v1/invoices/customer/${invoice.id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({ reason: cancelReason.trim() || null }),
+      });
+      window.showToast?.(response.data?.emailSent ? 'Invoice canceled and customer emailed' : 'Invoice canceled', 'success');
+      setCancelModalOpen(false);
+      setCancelReason('');
+      await loadInvoice();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to cancel invoice', 'error');
+    } finally {
+      setIsCanceling(false);
     }
   }
 
@@ -195,6 +234,11 @@ export function InvoiceDetail() {
           )}
           <Button as="a" href={`/leads/${invoice.leadId}`} variant="secondary" size="sm">Open customer</Button>
           {invoice.jobId && <Button as="a" href={`/jobs/${invoice.jobId}`} variant="secondary" size="sm">Open job</Button>}
+          {isOpen && (
+            <Button type="button" variant="dangerSubtle" size="sm" onClick={() => setCancelModalOpen(true)}>
+              Cancel invoice
+            </Button>
+          )}
         </div>
       </section>
 
@@ -294,8 +338,40 @@ export function InvoiceDetail() {
               )}
             </CardContent>
           </Card>
-        </aside>
-      </div>
+          </aside>
+        </div>
+      {cancelModalOpen && (
+        <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCancelModal(); }}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="cancel-invoice-title" className="pf-section-title">Cancel invoice</h2>
+                <p className="pf-copy mt-1">{invoice.invoiceNumber || 'This invoice'} will be closed and the customer will be emailed.</p>
+              </div>
+              <button type="button" className="btn-icon" aria-label="Close cancel invoice" onClick={closeCancelModal}>
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+            </div>
+            <form className="space-y-4" onSubmit={cancelInvoice}>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                Canceling an invoice does not refund money. If payment has already been recorded, use the refund or credit workflow instead.
+              </div>
+              <Textarea
+                label="Internal reason"
+                rows={3}
+                maxLength={500}
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder="Created in error, customer requested updated invoice, duplicate invoice"
+              />
+              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
+                <Button type="button" variant="secondary" fullWidth onClick={closeCancelModal}>Keep invoice</Button>
+                <Button type="submit" variant="dangerSubtle" fullWidth isLoading={isCanceling}>Cancel invoice</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
