@@ -1369,6 +1369,46 @@ invoicesApp.get('/customer', async (c) => {
   });
 });
 
+invoicesApp.get('/customer/:id', async (c) => {
+  const orgId = c.get('orgId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+  const invoice = await db.query.customerInvoices.findFirst({
+    where: and(eq(customerInvoices.id, id), eq(customerInvoices.orgId, orgId)),
+  });
+  if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
+
+  const [lead, job, payments] = await Promise.all([
+    db.query.leads.findFirst({ where: and(eq(leads.id, invoice.leadId), eq(leads.orgId, orgId)) }),
+    invoice.jobId ? db.query.jobs.findFirst({ where: and(eq(jobs.id, invoice.jobId), eq(jobs.orgId, orgId)) }) : Promise.resolve(null),
+    db.query.customerPayments.findMany({
+      where: and(eq(customerPayments.orgId, orgId), eq(customerPayments.invoiceId, invoice.id)),
+      orderBy: (table, { desc }) => [desc(table.receivedAt)],
+      limit: 100,
+    }),
+  ]);
+
+  return c.json({
+    data: {
+      ...invoice,
+      leadName: lead?.name || null,
+      leadEmail: lead?.email || null,
+      leadPhone: lead?.phone || null,
+      leadStreetAddress: lead?.streetAddress || null,
+      leadCity: lead?.city || null,
+      leadState: lead?.state || null,
+      leadPostalCode: lead?.postalCode || null,
+      jobName: job?.name || null,
+      jobNumber: job?.jobNumber || null,
+      jobStreetAddress: job?.streetAddress || null,
+      jobCity: job?.city || null,
+      jobState: job?.state || null,
+      jobPostalCode: job?.postalCode || null,
+      payments,
+    },
+  });
+});
+
 invoicesApp.post('/customer', async (c) => {
   const idempotencyError = requireIdempotency(c);
   if (idempotencyError) return idempotencyError;

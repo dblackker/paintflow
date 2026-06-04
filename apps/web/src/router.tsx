@@ -23,6 +23,7 @@ import { Signup } from '@/pages/auth/Signup';
 import { Onboarding } from '@/pages/Onboarding';
 import { Activity } from '@/pages/Activity';
 import { Invoices } from '@/pages/Invoices';
+import { InvoiceDetail } from '@/pages/invoices/InvoiceDetail';
 import { Materials } from '@/pages/Materials';
 import { Notifications } from '@/pages/Notifications';
 import { Payroll } from '@/pages/Payroll';
@@ -86,6 +87,7 @@ export const router = createBrowserRouter([
       { path: '/help', element: <Help /> },
       { path: '/activity', element: <Activity /> },
       { path: '/invoices', element: <Invoices /> },
+      { path: '/invoices/:id', element: <InvoiceDetail /> },
       { path: '/materials', element: <Materials /> },
       { path: '/notifications', element: <Notifications /> },
       { path: '/onboarding', element: <Onboarding /> },

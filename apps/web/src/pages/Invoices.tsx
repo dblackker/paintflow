@@ -317,6 +317,7 @@ interface Receivable {
   dueLabel: string;
   href: string;
   previewHref?: string | null;
+  leadHref?: string | null;
   jobHref?: string | null;
   address?: string;
   estimate?: Estimate;
@@ -828,7 +829,13 @@ function ReceivableCard({
           <Link to={receivable.href} className="mt-2 block truncate pf-row-title hover:text-blue-700">
             {receivable.title}
           </Link>
-          <p className="pf-copy mt-1">{receivable.customerName}</p>
+          {receivable.leadHref ? (
+            <Link to={receivable.leadHref} className="pf-copy mt-1 block w-fit hover:text-blue-700 hover:underline">
+              {receivable.customerName}
+            </Link>
+          ) : (
+            <p className="pf-copy mt-1">{receivable.customerName}</p>
+          )}
           {receivable.address && <p className="pf-helper mt-1">{receivable.address}</p>}
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             <div className="rounded-lg bg-gray-50 px-3 py-2">
@@ -870,8 +877,8 @@ function ReceivableCard({
           )}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row lg:w-44 lg:flex-col">
-          <Button as="a" href={receivable.previewHref || receivable.href} variant="secondary" size="sm" fullWidth>
-            View details
+          <Button as="a" href={receivable.href} variant="secondary" size="sm" fullWidth>
+            {receivable.kind === 'invoice' ? 'View invoice' : 'View details'}
           </Button>
           {(receivable.kind === 'estimate' || receivable.kind === 'invoice') && (
             <Button type="button" variant="secondary" size="sm" fullWidth onClick={() => onRecordPayment(receivable)}>
@@ -957,8 +964,9 @@ export function Invoices() {
           balance,
           createdAt: invoice.sentAt || invoice.createdAt,
           dueLabel: invoice.dueLabel || (invoice.dueDate ? `Due ${formatDateOnly(invoice.dueDate)}` : 'Due on receipt'),
-          href: '/invoices',
+          href: `/invoices/${invoice.id}`,
           previewHref: null,
+          leadHref: `/leads/${invoice.leadId}`,
           jobHref: invoice.jobId ? `/jobs/${invoice.jobId}` : null,
           address,
           invoice,
@@ -995,6 +1003,7 @@ export function Invoices() {
           dueLabel: isQuickInvoice ? quickDueLabel : 'Per payment schedule',
           href: `/estimates/${estimate.id}/details`,
           previewHref: estimate.customerPreviewUrl || `/estimates/${estimate.id}`,
+          leadHref: estimate.leadId ? `/leads/${estimate.leadId}` : null,
           jobHref: job ? `/jobs/${job.id}` : null,
           address: formatAddress(estimate).replace(/\s+\d{5}$/, ''),
           estimate,
@@ -1024,6 +1033,7 @@ export function Invoices() {
           dueLabel: 'Due after approval',
           href: job ? `/jobs/${job.id}` : '/jobs',
           previewHref: order.portalUrl || (job ? `/jobs/${job.id}` : null),
+          leadHref: null,
           jobHref: job ? `/jobs/${job.id}` : null,
           address: jobAddress(job),
           changeOrder: order,
