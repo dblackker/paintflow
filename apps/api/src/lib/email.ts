@@ -210,10 +210,29 @@ type ChangeOrderEmailInput = {
   portalUrl: string;
 };
 
+type InvoiceEmailInput = {
+  templateKey?: string;
+  leadName: string;
+  companyName?: string;
+  companyLogoUrl?: string | null;
+  estimatorEmail?: string | null;
+  estimatorPhone?: string | null;
+  invoiceNumber: string;
+  invoiceDescription: string;
+  invoiceAmount: string;
+  paymentAmount?: string | null;
+  balanceDue?: string | null;
+  paymentSource?: string | null;
+  jobName?: string | null;
+  jobAddress?: string | null;
+  dueLabel?: string | null;
+  portalUrl: string;
+};
+
 type EmailTemplateDefinition = {
   key: string;
   name: string;
-  category: 'estimate' | 'change_order' | 'drip' | 'review' | 'system';
+  category: 'estimate' | 'change_order' | 'invoice' | 'drip' | 'review' | 'system';
   channel: 'transactional' | 'marketing' | 'operational';
   subject: string;
   preheader: string;
@@ -297,6 +316,39 @@ export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
     intro: '{{companyName}} created a change order for work outside the current approved scope. Please review the added scope before the crew proceeds.',
     cta: 'Review change order',
     outro: 'If the scope or price does not look right, reply before approving so the production team can update the change order.',
+  },
+  'invoice.deposit.created': {
+    key: 'invoice.deposit.created',
+    name: 'Deposit invoice ready',
+    category: 'invoice',
+    channel: 'transactional',
+    subject: 'Deposit invoice from {{companyName}}',
+    preheader: 'Your proposal is signed. Pay the deposit invoice to reserve your project schedule.',
+    intro: 'Your proposal with {{companyName}} has been signed. The next step is to pay the deposit invoice so your contractor can reserve your project on the schedule.',
+    cta: 'Open customer portal',
+    outro: 'The customer portal includes your signed proposal, outstanding invoices, and any future change orders.',
+  },
+  'invoice.change_order.created': {
+    key: 'invoice.change_order.created',
+    name: 'Change order invoice ready',
+    category: 'invoice',
+    channel: 'transactional',
+    subject: 'Change order invoice from {{companyName}}',
+    preheader: 'Your approved change order has an invoice ready for payment.',
+    intro: 'Your change order with {{companyName}} has been approved. The related invoice is ready in your customer portal.',
+    cta: 'Open customer portal',
+    outro: 'The portal keeps your signed proposal, approved change orders, invoices, and payment history together.',
+  },
+  'invoice.payment.receipt': {
+    key: 'invoice.payment.receipt',
+    name: 'Payment receipt',
+    category: 'invoice',
+    channel: 'transactional',
+    subject: 'Payment received by {{companyName}}',
+    preheader: 'Your payment for {{invoiceNumber}} has been recorded.',
+    intro: '{{companyName}} received your payment. A summary is below for your records.',
+    cta: 'View customer portal',
+    outro: 'If you have questions about this payment or remaining balance, reply to this email.',
   },
 };
 
@@ -490,6 +542,108 @@ export function renderChangeOrderEmail(input: ChangeOrderEmailInput, override?: 
   <p>Questions? Reply to this email${estimatorPhone ? ` or call ${estimatorPhone}` : ''}.</p>
   <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
   <p style="color: #6b7280; font-size: 14px;">Sent by ${estimatorName}${estimatorEmail ? ` &lt;${estimatorEmail}&gt;` : ''}</p>
+</body>
+</html>
+  `;
+
+  return {
+    templateKey: template.key,
+    templateName: template.name,
+    channel: template.channel,
+    subject,
+    preheader,
+    html,
+    text: plainTextFromHtml(html),
+  };
+}
+
+function invoiceTemplateFor(key?: string | null) {
+  return estimateEmailTemplates[key || 'invoice.deposit.created'] || estimateEmailTemplates['invoice.deposit.created'];
+}
+
+export function renderInvoiceEmail(input: InvoiceEmailInput, override?: EmailTemplateOverride | null): RenderedEmail {
+  const template = invoiceTemplateFor(input.templateKey);
+  const logoUrl = input.companyLogoUrl || '';
+  const leadName = escapeHtml(input.leadName || 'there');
+  const companyName = escapeHtml(input.companyName || 'your contractor');
+  const invoiceNumber = escapeHtml(input.invoiceNumber);
+  const invoiceDescription = escapeHtml(input.invoiceDescription || 'Invoice');
+  const invoiceAmount = escapeHtml(input.invoiceAmount);
+  const paymentAmount = input.paymentAmount ? escapeHtml(input.paymentAmount) : '';
+  const balanceDue = input.balanceDue ? escapeHtml(input.balanceDue) : '';
+  const paymentSource = input.paymentSource ? escapeHtml(input.paymentSource) : '';
+  const jobName = input.jobName ? escapeHtml(input.jobName) : '';
+  const jobAddress = input.jobAddress ? escapeHtml(input.jobAddress) : '';
+  const dueLabel = input.dueLabel ? escapeHtml(input.dueLabel) : '';
+  const estimatorEmail = input.estimatorEmail ? escapeHtml(input.estimatorEmail) : '';
+  const estimatorPhone = input.estimatorPhone ? escapeHtml(input.estimatorPhone) : '';
+  const portalUrl = input.portalUrl;
+  const mergeFields = {
+    leadName: input.leadName || 'there',
+    companyName: input.companyName || 'your contractor',
+    companyLogoUrl: input.companyLogoUrl || '',
+    invoiceNumber: input.invoiceNumber,
+    invoiceDescription: input.invoiceDescription || 'Invoice',
+    invoiceAmount: input.invoiceAmount,
+    paymentAmount: input.paymentAmount || '',
+    balanceDue: input.balanceDue || '',
+    paymentSource: input.paymentSource || '',
+    jobName: input.jobName || '',
+    jobAddress: input.jobAddress || '',
+    dueLabel: input.dueLabel || '',
+    portalUrl,
+    estimatorEmail: input.estimatorEmail || '',
+    estimatorPhone: input.estimatorPhone || '',
+    ctaText: template.cta,
+  };
+  const subject = replaceMergeTags(override?.subject || template.subject, mergeFields);
+  const preheader = replaceMergeTags(override?.preheader || template.preheader, mergeFields);
+  if (override?.html) {
+    const html = replaceMergeTags(override.html, mergeFields);
+    const text = override.text ? replaceMergeTags(override.text, mergeFields) : plainTextFromHtml(html);
+    return {
+      templateKey: override.key || template.key,
+      templateName: override.name || template.name,
+      channel: override.channel || template.channel,
+      subject,
+      preheader,
+      html,
+      text,
+    };
+  }
+
+  const intro = replaceMergeTags(template.intro, mergeFields);
+  const outro = replaceMergeTags(template.outro, mergeFields);
+  const isReceipt = template.key === 'invoice.payment.receipt';
+  const headline = isReceipt ? 'Payment received' : 'Invoice ready';
+  const amountLabel = isReceipt ? 'Payment received' : 'Amount due';
+  const statusCopy = isReceipt && balanceDue && balanceDue !== '$0.00'
+    ? `Remaining balance: ${balanceDue}`
+    : isReceipt
+      ? 'This invoice is paid in full.'
+      : (dueLabel ? `Due: ${dueLabel}` : 'Open the portal to review and pay securely.');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 24px; color: #111827; line-height: 1.5;">
+  ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${companyName}" style="max-height: 48px; max-width: 180px; margin-bottom: 20px;">` : ''}
+  <h1 style="color: #145ea8; font-size: 24px; line-height: 1.2; margin: 0 0 16px;">${headline}</h1>
+  <p>Hi ${leadName},</p>
+  <p>${escapeHtml(intro)}</p>
+  <div style="border: 1px solid #d7e2ee; border-radius: 12px; padding: 16px; margin: 18px 0; background: #f8fbff;">
+    <p style="margin: 0 0 8px;"><strong>Invoice:</strong> ${invoiceNumber}</p>
+    <p style="margin: 0 0 8px;"><strong>For:</strong> ${invoiceDescription}</p>
+    ${jobName || jobAddress ? `<p style="margin: 0 0 8px;"><strong>Project:</strong> ${jobName}${jobAddress ? ` &mdash; ${jobAddress}` : ''}</p>` : ''}
+    <p style="margin: 0 0 8px;"><strong>${amountLabel}:</strong> ${isReceipt ? (paymentAmount || invoiceAmount) : invoiceAmount}</p>
+    ${paymentSource ? `<p style="margin: 0 0 8px;"><strong>Payment method:</strong> ${paymentSource}</p>` : ''}
+    <p style="margin: 0; color: #4b5563;">${escapeHtml(statusCopy)}</p>
+  </div>
+  <a href="${portalUrl}" style="display: inline-block; background: #145ea8; color: white; padding: 12px 18px; text-decoration: none; border-radius: 8px; margin: 8px 0 18px;">${escapeHtml(template.cta)}</a>
+  <p>${escapeHtml(outro)}</p>
+  <p>Questions? Reply to this email${estimatorPhone ? ` or call ${estimatorPhone}` : ''}.</p>
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 28px 0;">
+  <p style="color: #6b7280; font-size: 14px;">Sent by ${companyName}${estimatorEmail ? ` &lt;${estimatorEmail}&gt;` : ''}</p>
 </body>
 </html>
   `;

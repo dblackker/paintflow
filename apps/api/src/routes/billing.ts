@@ -9,6 +9,7 @@ import { createCheckoutSession, createRefund, verifyWebhookSignature } from '../
 import { createQBInvoice, createQBPayment } from '../lib/quickbooks';
 import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule, nextPayableMilestone } from '../lib/payment-schedule';
+import { sendInvoiceEmail } from '../lib/invoice-emails';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -180,6 +181,19 @@ billing.post('/manual', async (c) => {
         remainingAfterPayment,
       },
     });
+
+    try {
+      await sendInvoiceEmail(c.env, db, {
+        orgId,
+        invoice,
+        templateKey: 'invoice.payment.receipt',
+        payment,
+        balanceDue: remainingAfterPayment,
+        sentBy: c.get('userId') || null,
+      });
+    } catch (error) {
+      console.error('Failed to send manual invoice payment receipt:', error);
+    }
 
     return c.json({ data: payment }, 201);
   }
@@ -463,6 +477,18 @@ billing.post('/webhook', async (c) => {
             remainingAfterPayment,
           },
         });
+
+        try {
+          await sendInvoiceEmail(c.env, db, {
+            orgId,
+            invoice,
+            templateKey: 'invoice.payment.receipt',
+            payment,
+            balanceDue: remainingAfterPayment,
+          });
+        } catch (error) {
+          console.error('Failed to send invoice payment receipt:', error);
+        }
 
         return c.json({ received: true });
       }

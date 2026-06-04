@@ -42,23 +42,27 @@ function systemTemplates() {
       '<!DOCTYPE html>',
       '<html>',
       '<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">',
-      `<h1 style="color: #2563eb;">${template.category === 'change_order' ? 'Change order approval needed' : template.key === 'estimate.updated.sent' ? 'Your painting proposal was updated' : 'Your painting proposal is ready'}</h1>`,
+      `<h1 style="color: #145ea8;">${template.category === 'change_order' ? 'Change order approval needed' : template.category === 'invoice' ? (template.key === 'invoice.payment.receipt' ? 'Payment received' : 'Invoice ready') : template.key === 'estimate.updated.sent' ? 'Your proposal was updated' : 'Your proposal is ready'}</h1>`,
       '<p>Hi {{leadName}},</p>',
       `<p>${template.intro}</p>`,
-      template.category === 'change_order'
+      template.category === 'invoice'
+        ? '<div style="border: 1px solid #d7e2ee; border-radius: 12px; padding: 16px; margin: 18px 0; background: #f8fbff;"><p><strong>Invoice:</strong> {{invoiceNumber}}</p><p><strong>For:</strong> {{invoiceDescription}}</p><p><strong>Project:</strong> {{jobName}} {{jobAddress}}</p><p><strong>Amount:</strong> {{invoiceAmount}}</p><p><strong>Payment received:</strong> {{paymentAmount}}</p><p><strong>Balance:</strong> {{balanceDue}}</p></div>'
+        : template.category === 'change_order'
         ? '<div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; margin: 18px 0;"><h2 style="font-size: 16px; margin: 0 0 10px; color: #111827;">Change order summary</h2><p><strong>Job:</strong> {{jobName}}</p><p><strong>Jobsite:</strong> {{jobAddress}}</p><p><strong>Added scope:</strong> {{description}}</p><p><strong>Change order total:</strong> ${{amount}}</p><p style="color: #4b5563;"><strong>Payment schedule:</strong> {{paymentSchedule}}</p></div>'
         : '<p><strong>Base proposal total: ${{total}}</strong></p>\n{{scopeSummaryHtml}}',
-      template.category === 'change_order'
+      template.category === 'invoice'
+        ? '<p>Use the secure portal link below to view the invoice, payment status, signed proposal, and change orders in one place.</p>'
+        : template.category === 'change_order'
         ? '<p>Use the secure link below to approve the added work. Approval is recorded with the job so the office and field crew can see that the scope is authorized.</p>'
         : '<p>Use the secure link below to review the included scope, choose any optional add-ons, approve the proposal, sign, and view the expected payment schedule.</p>',
-      `<a href="${template.category === 'change_order' ? '{{portalUrl}}' : '{{proposalUrl}}'}" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${template.cta}</a>`,
+      `<a href="${template.category === 'change_order' || template.category === 'invoice' ? '{{portalUrl}}' : '{{proposalUrl}}'}" style="display: inline-block; background: #145ea8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">${template.cta}</a>`,
       template.category === 'change_order'
         ? '<p style="color: #4b5563;">If this scope or price does not look right, reply before approving so the production team can update the change order.</p>'
         : '<p style="color: #4b5563;">A PDF copy can be provided for your records, but approvals, selected options, signatures, and deposits should happen through the secure proposal link so everyone is working from the current version.</p>',
       `<p>${template.outro}</p>`,
       '<p>Questions? Reply to this email or call {{estimatorPhone}}.</p>',
       '<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">',
-      '<p style="color: #6b7280; font-size: 14px;">Sent by {{estimatorName}} &lt;{{estimatorEmail}}&gt;</p>',
+      '<p style="color: #6b7280; font-size: 14px;">Sent by {{companyName}} &lt;{{estimatorEmail}}&gt;</p>',
       '</body>',
       '</html>',
     ].join('\n'),
@@ -106,7 +110,7 @@ emailTemplatesRoute.post('/', async (c) => {
       text: data.text || null,
       isActive: data.isActive,
       createdBy: userId,
-      mergeFields: ['companyName', 'leadName', 'total', 'estimatorName', 'estimatorEmail', 'estimatorPhone', 'proposalUrl', 'scopeSummaryHtml', 'jobName', 'jobAddress', 'description', 'amount', 'paymentDue', 'paymentSchedule', 'portalUrl'],
+      mergeFields: ['companyName', 'companyLogoUrl', 'leadName', 'total', 'estimatorName', 'estimatorEmail', 'estimatorPhone', 'proposalUrl', 'scopeSummaryHtml', 'jobName', 'jobAddress', 'description', 'amount', 'paymentDue', 'paymentSchedule', 'portalUrl', 'invoiceNumber', 'invoiceDescription', 'invoiceAmount', 'paymentAmount', 'balanceDue', 'paymentSource', 'dueLabel'],
     })
     .onConflictDoUpdate({
       target: [emailTemplates.orgId, emailTemplates.key],

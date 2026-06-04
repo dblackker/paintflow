@@ -11,6 +11,7 @@ import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/est
 import { estimatePaymentSchedule } from '../lib/payment-schedule';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 import { createDepositInvoiceForEstimate } from '../lib/customer-invoices';
+import { sendInvoiceEmail } from '../lib/invoice-emails';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
@@ -221,25 +222,6 @@ function createPortalToken() {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function depositInvoiceEmailHtml(input: {
-  customerName: string;
-  companyName: string;
-  invoiceAmount: string;
-  portalUrl: string;
-}) {
-  return `<!doctype html>
-  <html>
-    <body style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <p>Hi ${input.customerName},</p>
-      <p>Your proposal with ${input.companyName} has been signed. The next step is to pay the deposit invoice so your contractor can reserve the schedule.</p>
-      <p><strong>Deposit due:</strong> ${input.invoiceAmount}</p>
-      <p><a href="${input.portalUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;">Open customer portal</a></p>
-      <p>The portal includes your signed proposal, outstanding invoices, and any future change orders.</p>
-      <p>Thank you.</p>
-    </body>
-  </html>`;
-}
-
 async function createClientPortalLink(db: ReturnType<typeof createDb>, env: Env, orgId: string, leadId: string) {
   const token = createPortalToken();
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -446,50 +428,15 @@ estimatesApp.post('/:id/sign', async (c) => {
   }
   const portalUrl = await createClientPortalLink(db, c.env, estimate.orgId, estimate.leadId);
   if (depositInvoice) {
-    const [lead, branding] = await Promise.all([
-      db.query.leads.findFirst({ where: and(eq(leads.id, estimate.leadId), eq(leads.orgId, estimate.orgId)) }),
-      db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, estimate.orgId) }),
-    ]);
-    if (lead?.email) {
-      const companyName = branding?.companyName || settings?.companyName || 'your contractor';
-      const subject = `Your deposit invoice from ${companyName}`;
-      const renderedHtml = depositInvoiceEmailHtml({
-        customerName: lead.name || 'there',
-        companyName,
-        invoiceAmount: `$${Number(depositInvoice.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    try {
+      await sendInvoiceEmail(c.env, db, {
+        orgId: estimate.orgId,
+        invoice: depositInvoice,
+        templateKey: 'invoice.deposit.created',
         portalUrl,
       });
-      try {
-        const providerResult = await sendEmail(c.env, lead.email, subject, renderedHtml, undefined, {
-          replyTo: settings?.email || undefined,
-          text: `Your proposal has been signed. Pay your deposit invoice here: ${portalUrl}`,
-        }) as { id?: string; message_id?: string };
-        await recordEmailSend(db, {
-          orgId: estimate.orgId,
-          leadId: lead.id,
-          estimateId: estimate.id,
-          jobId: job.id,
-          templateKey: 'invoice.deposit.created',
-          templateName: 'Deposit invoice created',
-          channel: 'transactional',
-          toEmail: lead.email,
-          fromEmail: c.env.EMAIL_FROM || 'billing@crewmodo.com',
-          replyTo: settings?.email || null,
-          subject,
-          previewText: 'Your project is signed. Please pay the deposit invoice to reserve the schedule.',
-          renderedHtml,
-          renderedText: `Your proposal has been signed. Pay your deposit invoice here: ${portalUrl}`,
-          status: 'sent',
-          provider: c.env.EMAIL_PROVIDER || (c.env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'resend'),
-          providerMessageId: providerResult?.id || providerResult?.message_id || null,
-          metadata: {
-            invoiceId: depositInvoice.id,
-            portalUrl,
-          },
-        });
-      } catch (error) {
-        console.error('Failed to send deposit invoice email:', error);
-      }
+    } catch (error) {
+      console.error('Failed to send deposit invoice email:', error);
     }
   }
 

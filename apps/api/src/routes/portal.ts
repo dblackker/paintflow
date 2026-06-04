@@ -5,6 +5,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { createCheckoutSession } from '../lib/stripe';
 import { createInvoiceForChangeOrder } from '../lib/customer-invoices';
+import { sendInvoiceEmail } from '../lib/invoice-emails';
 
 const portalApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -177,6 +178,17 @@ portalApp.post('/:token/change-orders/:id/approve', async (c) => {
     .returning();
 
   const invoice = await createInvoiceForChangeOrder(db, updated, portalToken.leadId);
+  if (invoice) {
+    try {
+      await sendInvoiceEmail(c.env, db, {
+        orgId: portalToken.orgId,
+        invoice,
+        templateKey: 'invoice.change_order.created',
+      });
+    } catch (error) {
+      console.error('Failed to send change order invoice email:', error);
+    }
+  }
 
   await db.insert(auditLogs).values({
     orgId: portalToken.orgId,
