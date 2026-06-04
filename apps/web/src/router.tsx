@@ -60,6 +60,11 @@ export const router = createBrowserRouter([
     errorElement: <ErrorPage />,
   },
   {
+    path: '/portal/:token',
+    element: <Portal />,
+    errorElement: <ErrorPage />,
+  },
+  {
     element: <BaseLayout />,
     errorElement: <ErrorPage />,
     children: [
@@ -78,7 +83,6 @@ export const router = createBrowserRouter([
       { path: '/reporting', element: <Reporting /> },
       { path: '/reporting/lead-sources', element: <LeadSources /> },
       { path: '/sms', element: <SMS /> },
-      { path: '/portal/:token', element: <Portal /> },
       { path: '/help', element: <Help /> },
       { path: '/activity', element: <Activity /> },
       { path: '/invoices', element: <Invoices /> },

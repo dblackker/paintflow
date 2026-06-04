@@ -184,138 +184,157 @@ export function Portal() {
   const { customer, estimate, job, changeOrders = [], invoices = [] } = data;
   const activeChangeOrders = changeOrders.filter((order) => ['pending', 'approved'].includes(order.status) || order.paymentStatus === 'pending');
   const invoicesByChangeOrder = new Map(invoices.filter((invoice) => invoice.changeOrderId).map((invoice) => [invoice.changeOrderId as string, invoice]));
-  const activeInvoices = invoices.filter((invoice) => !['voided', 'canceled'].includes(String(invoice.status || '')));
+  const focusedInvoiceId = searchParams.get('invoiceId') || '';
+  const activeInvoices = invoices
+    .filter((invoice) => !['voided', 'canceled'].includes(String(invoice.status || '')))
+    .sort((a, b) => (a.id === focusedInvoiceId ? -1 : b.id === focusedInvoiceId ? 1 : 0));
   const balance = Number(job?.balance || 0);
 
   return (
-    <div className="mx-auto max-w-4xl px-1 pb-24 sm:px-0">
-      <div className="mb-5">
-        <p className="pf-kicker">Customer portal</p>
-        <h1 className="pf-section-title mt-1">{customer?.name || 'Customer'}</h1>
-        {customer?.email && <p className="pf-copy mt-1">{customer.email}</p>}
+    <div className="min-h-screen bg-gray-50">
+      <header className="border-b border-gray-200 bg-white/95 px-4 py-3">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="pf-kicker">Secure customer portal</p>
+            <h1 className="pf-section-title truncate">{customer?.name || 'Customer'}</h1>
+          </div>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-700 text-sm font-semibold text-white" aria-label="Crewmodo">
+            C
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-4xl px-4 py-5 pb-24 sm:px-6">
+        <div className="mb-5">
+          <p className="pf-page-copy">
+            Review proposals, invoices, approved changes, and project details shared by your contractor.
+          </p>
+          {customer?.email && <p className="pf-copy mt-1">{customer.email}</p>}
+        </div>
+
+        {!estimate && !job && !activeChangeOrders.length && !activeInvoices.length && (
+          <Card>
+            <CardContent className="p-8 text-center text-gray-500">No active items are available from this link.</CardContent>
+          </Card>
+        )}
+
+        {estimate && !estimate.signedAt && (
+          <Card className="mb-6">
+            <CardContent>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-950">{estimate.title || 'Painting proposal'}</h2>
+                  <p className="mt-2 text-3xl font-bold text-blue-700">{formatMoney(estimate.total)}</p>
+                </div>
+                {estimate.status && <StatusBadge status={estimate.status} />}
+              </div>
+              <Button as="a" href={`/estimates/${estimate.id}`} className="mt-6 w-full">
+                Review and sign proposal
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {estimate?.signedAt && (
+          <Card className="mb-6">
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="pf-section-title">{estimate.title || 'Signed proposal'}</h2>
+                    <StatusBadge status="signed" />
+                  </div>
+                  <p className="pf-copy mt-1">Signed on {new Date(estimate.signedAt).toLocaleDateString()}. The proposal is the agreement; invoices below handle deposits and payments.</p>
+                </div>
+                <Button as="a" href={`/estimates/${estimate.id}`} variant="secondary" size="sm">View signed copy</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {job && (
+          <Card className="mb-6">
+            <CardContent>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-950">{job.name || job.title || 'Painting project'}</h2>
+                  <div className="pf-copy mt-2 flex flex-wrap gap-2">
+                    {job.jobNumber && <span className="pf-row-title">{job.jobNumber}</span>}
+                    {[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ') && (
+                      <span>{[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ')}</span>
+                    )}
+                  </div>
+                  {balance > 0 && <p className="pf-copy mt-2">Outstanding balance: <span className="font-semibold text-gray-950">{formatMoney(balance)}</span></p>}
+                </div>
+                <StatusBadge status={job.status || 'active'} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeInvoices.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader title="Invoices & Payments" description="Pay deposits, progress payments, final balances, and approved change orders here." />
+            <CardContent>
+              <div className="grid gap-3">
+                {activeInvoices.map((invoice) => (
+                  <InvoiceCard
+                    key={invoice.id}
+                    invoice={invoice}
+                    isFocused={invoice.id === focusedInvoiceId}
+                    isPaying={busyAction === `pay-invoice-${invoice.id}`}
+                    onPay={() => void payInvoice(invoice)}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeChangeOrders.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader title="Change Orders" description="Review requested changes, approve them, and pay any required deposit." />
+            <CardContent>
+              <div className="grid gap-4">
+                {activeChangeOrders.map((order) => (
+                  <ChangeOrderCard
+                    key={order.id}
+                    order={order}
+                    job={job}
+                    approvalName={approvalNameByOrder[order.id] || ''}
+                    isApproving={busyAction === `approve-${order.id}`}
+                    isPaying={busyAction === `pay-${order.id}`}
+                    hasPaymentInvoice={Boolean(invoicesByChangeOrder.get(order.id))}
+                    onApprovalNameChange={(value) => setApprovalNameByOrder((current) => ({ ...current, [order.id]: value }))}
+                    onApprove={(event) => void approveChangeOrder(event, order)}
+                    onPay={() => void payChangeOrder(order)}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {job && balance > 0 && (
+          <Card>
+            <CardHeader title="Outstanding Balance" description="Online balance payment will be available here once the contractor enables portal card payments." />
+            <CardContent>
+              <p className="text-3xl font-bold text-gray-950">{formatMoney(balance)}</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
-
-      {!estimate && !job && !activeChangeOrders.length && !activeInvoices.length && (
-        <Card>
-          <CardContent className="p-8 text-center text-gray-500">No active items are available from this link.</CardContent>
-        </Card>
-      )}
-
-      {estimate && !estimate.signedAt && (
-        <Card className="mb-6">
-          <CardContent>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-950">{estimate.title || 'Painting proposal'}</h2>
-                <p className="mt-2 text-3xl font-bold text-blue-700">{formatMoney(estimate.total)}</p>
-              </div>
-              {estimate.status && <StatusBadge status={estimate.status} />}
-            </div>
-            <Button as="a" href={`/estimates/${estimate.id}`} className="mt-6 w-full">
-              Review and sign proposal
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {estimate?.signedAt && (
-        <Card className="mb-6">
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="pf-section-title">{estimate.title || 'Signed proposal'}</h2>
-                  <StatusBadge status="signed" />
-                </div>
-                <p className="pf-copy mt-1">Signed on {new Date(estimate.signedAt).toLocaleDateString()}. The proposal is the agreement; invoices below handle deposits and payments.</p>
-              </div>
-              <Button as="a" href={`/estimates/${estimate.id}`} variant="secondary" size="sm">View signed copy</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {job && (
-        <Card className="mb-6">
-          <CardContent>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-950">{job.name || job.title || 'Painting project'}</h2>
-                <div className="pf-copy mt-2 flex flex-wrap gap-2">
-                  {job.jobNumber && <span className="pf-row-title">{job.jobNumber}</span>}
-                  {[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ') && (
-                    <span>{[job.streetAddress, [job.city, job.state].filter(Boolean).join(', '), String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ')}</span>
-                  )}
-                </div>
-                {balance > 0 && <p className="pf-copy mt-2">Outstanding balance: <span className="font-semibold text-gray-950">{formatMoney(balance)}</span></p>}
-              </div>
-              <StatusBadge status={job.status || 'active'} />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeInvoices.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader title="Invoices & Payments" description="Pay deposits, progress payments, final balances, and approved change orders here." />
-          <CardContent>
-            <div className="grid gap-3">
-              {activeInvoices.map((invoice) => (
-                <InvoiceCard
-                  key={invoice.id}
-                  invoice={invoice}
-                  isPaying={busyAction === `pay-invoice-${invoice.id}`}
-                  onPay={() => void payInvoice(invoice)}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeChangeOrders.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader title="Change Orders" description="Review requested changes, approve them, and pay any required deposit." />
-          <CardContent>
-            <div className="grid gap-4">
-              {activeChangeOrders.map((order) => (
-                <ChangeOrderCard
-                  key={order.id}
-                  order={order}
-                  job={job}
-                  approvalName={approvalNameByOrder[order.id] || ''}
-                  isApproving={busyAction === `approve-${order.id}`}
-                  isPaying={busyAction === `pay-${order.id}`}
-                  hasPaymentInvoice={Boolean(invoicesByChangeOrder.get(order.id))}
-                  onApprovalNameChange={(value) => setApprovalNameByOrder((current) => ({ ...current, [order.id]: value }))}
-                  onApprove={(event) => void approveChangeOrder(event, order)}
-                  onPay={() => void payChangeOrder(order)}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {job && balance > 0 && (
-        <Card>
-          <CardHeader title="Outstanding Balance" description="Online balance payment will be available here once the contractor enables portal card payments." />
-          <CardContent>
-            <p className="text-3xl font-bold text-gray-950">{formatMoney(balance)}</p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
 
-function InvoiceCard({ invoice, isPaying, onPay }: { invoice: ClientInvoice; isPaying: boolean; onPay: () => void }) {
+function InvoiceCard({ invoice, isFocused, isPaying, onPay }: { invoice: ClientInvoice; isFocused: boolean; isPaying: boolean; onPay: () => void }) {
   const total = Number(invoice.total || 0);
   const paid = Number(invoice.paidAmount || 0);
   const balance = Number(invoice.balanceDue ?? Math.max(total - paid, 0));
   const isPaid = balance <= 0.005 || invoice.status === 'paid';
   return (
-    <article className="rounded-lg border border-gray-200 bg-white p-4">
+    <article className={`rounded-lg border bg-white p-4 ${isFocused ? 'border-blue-700 shadow-md' : 'border-gray-200'}`}>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

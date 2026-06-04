@@ -102,11 +102,13 @@ portalApp.get('/:token', async (c) => {
         .map((invoice) => {
           const payments = paymentsByInvoice.get(invoice.id) || [];
           const paidAmount = payments.reduce((sum, payment) => sum + netPayment(payment), 0);
+          const balanceDue = Math.max(Number(invoice.total || 0) - paidAmount, 0);
           return {
             ...invoice,
+            status: invoice.status === 'payment_pending' && balanceDue > 0.005 ? 'sent' : invoice.status,
             payments,
             paidAmount,
-            balanceDue: Math.max(Number(invoice.total || 0) - paidAmount, 0),
+            balanceDue,
           };
         }),
     }
@@ -282,14 +284,6 @@ portalApp.post('/:token/invoices/:id/checkout', async (c) => {
       portalToken: token,
     },
   });
-
-  await db.update(customerInvoices)
-    .set({
-      status: 'payment_pending',
-      stripeCheckoutSessionId: session.id,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, portalToken.orgId)));
 
   return c.json({ data: { checkoutUrl: session.url, sessionId: session.id } });
 });
