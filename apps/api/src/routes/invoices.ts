@@ -23,6 +23,7 @@ import { and, desc, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { createNotificationAndPush } from '../lib/web-push';
+import { sendInvoiceEmail } from '../lib/invoice-emails';
 
 const invoicesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -1443,6 +1444,66 @@ invoicesApp.post('/customer', async (c) => {
   });
 
   return c.json({ data: invoice }, 201);
+});
+
+invoicesApp.post('/customer/:id/send-reminder', async (c) => {
+  const idempotencyError = requireIdempotency(c);
+  if (idempotencyError) return idempotencyError;
+  const orgId = c.get('orgId');
+  const userId = c.get('userId') || null;
+  const id = c.req.param('id');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const invoice = await db.query.customerInvoices.findFirst({
+    where: and(eq(customerInvoices.id, id), eq(customerInvoices.orgId, orgId)),
+  });
+  if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
+  if (['canceled', 'voided', 'paid'].includes(invoice.status)) {
+    return c.json({ error: 'This invoice is not open for reminders.' }, 409);
+  }
+
+  const payments = await db.query.customerPayments.findMany({
+    where: and(eq(customerPayments.orgId, orgId), eq(customerPayments.invoiceId, invoice.id)),
+    orderBy: (table, { desc }) => [desc(table.receivedAt)],
+    limit: 100,
+  });
+  const paid = payments
+    .filter((payment) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status))
+    .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+  const balanceDue = Math.round(Math.max(Number(invoice.total || 0) - paid, 0) * 100) / 100;
+  if (balanceDue <= 0.005) {
+    return c.json({ error: 'This invoice is already paid in full.' }, 409);
+  }
+
+  try {
+    const result = await sendInvoiceEmail(c.env, db, {
+      orgId,
+      invoice,
+      templateKey: 'invoice.payment.reminder',
+      balanceDue,
+      sentBy: userId,
+    });
+    if (!result.sent) {
+      return c.json({ error: 'Customer email is required before sending a reminder.' }, 409);
+    }
+    await db.insert(auditLogs).values({
+      orgId,
+      userId,
+      action: 'invoice.reminder_sent',
+      entityType: 'invoice',
+      entityId: invoice.id,
+      metadata: {
+        leadId: invoice.leadId,
+        jobId: invoice.jobId || null,
+        balanceDue,
+        emailSendId: result.emailSendId || null,
+      },
+    });
+    return c.json({ data: { sent: true, emailSendId: result.emailSendId || null } });
+  } catch (error) {
+    console.error('Failed to send invoice reminder:', error);
+    return c.json({ error: 'Failed to send invoice reminder.' }, 500);
+  }
 });
 
 invoicesApp.post('/imports', async (c) => {

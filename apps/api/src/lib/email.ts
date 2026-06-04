@@ -350,6 +350,17 @@ export const estimateEmailTemplates: Record<string, EmailTemplateDefinition> = {
     cta: 'View customer portal',
     outro: 'If you have questions about this payment or remaining balance, reply to this email.',
   },
+  'invoice.payment.reminder': {
+    key: 'invoice.payment.reminder',
+    name: 'Payment reminder',
+    category: 'invoice',
+    channel: 'transactional',
+    subject: 'Payment reminder from {{companyName}}',
+    preheader: '{{balanceDue}} remains due for {{invoiceNumber}}.',
+    intro: 'This is a friendly reminder that there is still an open balance for your invoice from {{companyName}}.',
+    cta: 'View and pay invoice',
+    outro: 'If you have already sent payment, thank you. Reply to this email if anything looks off.',
+  },
 };
 
 function escapeHtml(value: string) {

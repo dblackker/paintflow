@@ -505,17 +505,17 @@ function jobAddress(job?: Job) {
   });
 }
 
-function ReminderLink({ receivable }: { receivable: Receivable }) {
-  const subject = encodeURIComponent(`Payment reminder for ${receivable.title}`);
-  const body = encodeURIComponent(`Hi ${receivable.customerName},\n\nThis is a quick reminder that ${formatMoney(receivable.balance)} remains due for ${receivable.title}.${receivable.previewHref ? `\n\nYou can review the details here: ${window.location.origin}${receivable.previewHref}` : ''}\n\nThank you.`);
+function ReminderButton({ receivable, isSending, onSend }: { receivable: Receivable; isSending: boolean; onSend: (receivable: Receivable) => void }) {
+  const canSend = Boolean(receivable.invoice?.id);
   return (
     <Button
-      as="a"
-      href={`mailto:${receivable.customerEmail || ''}?subject=${subject}&body=${body}`}
+      type="button"
       variant="secondary"
       size="sm"
       leftIcon={<Icon name="mail" className="h-4 w-4" />}
-      onClick={() => window.showToast?.('Reminder opened in your email client', 'success')}
+      onClick={() => onSend(receivable)}
+      isLoading={isSending}
+      disabled={!canSend || isSending}
     >
       Send reminder
     </Button>
@@ -798,7 +798,19 @@ function ImportReviewCard({
   );
 }
 
-function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivable: Receivable; milestones: PaymentMilestone[]; onRecordPayment: (receivable: Receivable) => void }) {
+function ReceivableCard({
+  receivable,
+  milestones,
+  onRecordPayment,
+  onSendReminder,
+  sendingReminderId,
+}: {
+  receivable: Receivable;
+  milestones: PaymentMilestone[];
+  onRecordPayment: (receivable: Receivable) => void;
+  onSendReminder: (receivable: Receivable) => void;
+  sendingReminderId: string;
+}) {
   const schedule = receivable.usesPaymentSchedule
     ? paymentScheduleFor(receivable.amount, receivable.paid, milestones)
     : [];
@@ -866,7 +878,7 @@ function ReceivableCard({ receivable, milestones, onRecordPayment }: { receivabl
               Record payment
             </Button>
           )}
-          <ReminderLink receivable={receivable} />
+          <ReminderButton receivable={receivable} isSending={sendingReminderId === receivable.id} onSend={onSendReminder} />
         </div>
       </div>
     </Card>
@@ -902,6 +914,7 @@ export function Invoices() {
   const [isUploading, setIsUploading] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+  const [sendingReminderId, setSendingReminderId] = useState('');
   const [reviewJobByImport, setReviewJobByImport] = useState<Record<string, string>>({});
   const [busyImportId, setBusyImportId] = useState('');
   const [selectedInvoiceFile, setSelectedInvoiceFile] = useState<File | null>(null);
@@ -1373,6 +1386,25 @@ export function Invoices() {
     }
   }
 
+  async function sendPaymentReminder(receivable: Receivable) {
+    if (!receivable.invoice?.id) {
+      window.showToast?.('Reminders are available for invoice records.', 'error');
+      return;
+    }
+    setSendingReminderId(receivable.id);
+    try {
+      await apiJson(`/v1/invoices/customer/${receivable.invoice.id}/send-reminder`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      window.showToast?.('Payment reminder sent', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to send reminder', 'error');
+    } finally {
+      setSendingReminderId('');
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl space-y-5 px-1 pb-24 sm:px-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1473,7 +1505,14 @@ export function Invoices() {
               {!isLoading && !error && receivables.length > 0 && (
                 <div className="space-y-3">
                   {receivables.map((receivable) => (
-                    <ReceivableCard key={`${receivable.kind}-${receivable.id}`} receivable={receivable} milestones={milestones} onRecordPayment={openPaymentModal} />
+                    <ReceivableCard
+                      key={`${receivable.kind}-${receivable.id}`}
+                      receivable={receivable}
+                      milestones={milestones}
+                      onRecordPayment={openPaymentModal}
+                      onSendReminder={sendPaymentReminder}
+                      sendingReminderId={sendingReminderId}
+                    />
                   ))}
                 </div>
               )}

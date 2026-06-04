@@ -19,7 +19,7 @@ type InvoiceEmailInput = {
     total: string | number;
     dueLabel?: string | null;
   };
-  templateKey: 'invoice.deposit.created' | 'invoice.change_order.created' | 'invoice.payment.receipt';
+  templateKey: 'invoice.deposit.created' | 'invoice.change_order.created' | 'invoice.payment.receipt' | 'invoice.payment.reminder';
   payment?: {
     id?: string | null;
     amount: string | number;
