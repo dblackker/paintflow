@@ -105,6 +105,80 @@ const brandingPatchSchema = z.object({
   primaryColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 }).strict();
 
+const logoUploadLimits = {
+  maxBytes: 512 * 1024,
+  minWidth: 64,
+  minHeight: 32,
+  maxWidth: 1600,
+  maxHeight: 800,
+  minRatio: 0.5,
+  maxRatio: 8,
+};
+
+function readAscii(bytes: Uint8Array, offset: number, length: number) {
+  return String.fromCharCode(...bytes.slice(offset, offset + length));
+}
+
+function readUint24LE(bytes: Uint8Array, offset: number) {
+  return bytes[offset] + (bytes[offset + 1] << 8) + (bytes[offset + 2] << 16);
+}
+
+function webpDimensions(bytes: Uint8Array) {
+  if (bytes.length < 24 || readAscii(bytes, 0, 4) !== 'RIFF' || readAscii(bytes, 8, 4) !== 'WEBP') return null;
+
+  let offset = 12;
+  while (offset + 8 <= bytes.length) {
+    const type = readAscii(bytes, offset, 4);
+    const size = new DataView(bytes.buffer, bytes.byteOffset + offset + 4, 4).getUint32(0, true);
+    const dataOffset = offset + 8;
+    if (dataOffset + size > bytes.length) return null;
+
+    if (type === 'VP8X' && size >= 10) {
+      return {
+        width: readUint24LE(bytes, dataOffset + 4) + 1,
+        height: readUint24LE(bytes, dataOffset + 7) + 1,
+      };
+    }
+
+    if (type === 'VP8L' && size >= 5 && bytes[dataOffset] === 0x2f) {
+      const b1 = bytes[dataOffset + 1];
+      const b2 = bytes[dataOffset + 2];
+      const b3 = bytes[dataOffset + 3];
+      const b4 = bytes[dataOffset + 4];
+      return {
+        width: 1 + (((b2 & 0x3f) << 8) | b1),
+        height: 1 + (((b4 & 0x0f) << 10) | (b3 << 2) | ((b2 & 0xc0) >> 6)),
+      };
+    }
+
+    if (type === 'VP8 ' && size >= 10 && bytes[dataOffset + 3] === 0x9d && bytes[dataOffset + 4] === 0x01 && bytes[dataOffset + 5] === 0x2a) {
+      const width = new DataView(bytes.buffer, bytes.byteOffset + dataOffset + 6, 2).getUint16(0, true) & 0x3fff;
+      const height = new DataView(bytes.buffer, bytes.byteOffset + dataOffset + 8, 2).getUint16(0, true) & 0x3fff;
+      return { width, height };
+    }
+
+    offset = dataOffset + size + (size % 2);
+  }
+
+  return null;
+}
+
+function validateLogoDimensions(dimensions: { width: number; height: number } | null) {
+  if (!dimensions) return 'Logo file is not a valid WebP image.';
+  const ratio = dimensions.width / dimensions.height;
+  if (
+    dimensions.width < logoUploadLimits.minWidth
+    || dimensions.height < logoUploadLimits.minHeight
+    || dimensions.width > logoUploadLimits.maxWidth
+    || dimensions.height > logoUploadLimits.maxHeight
+    || ratio < logoUploadLimits.minRatio
+    || ratio > logoUploadLimits.maxRatio
+  ) {
+    return `Logo must be ${logoUploadLimits.minWidth}-${logoUploadLimits.maxWidth}px wide, ${logoUploadLimits.minHeight}-${logoUploadLimits.maxHeight}px tall, and not extremely wide or tall.`;
+  }
+  return '';
+}
+
 function normalizeOrgSettingsPatch(input: z.infer<typeof orgSettingsPatchSchema>) {
   const patch: Record<string, unknown> = {};
 
@@ -479,6 +553,57 @@ settings.patch('/branding', async (c) => {
     .onConflictDoUpdate({
       target: orgBranding.orgId,
       set: { ...patch, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({ data: branding });
+});
+
+settings.put('/branding/logo', async (c) => {
+  const orgId = c.get('orgId');
+  if (!c.env.R2) {
+    return c.json({ error: 'Logo storage is not configured for this environment.' }, 503);
+  }
+
+  const formData = await c.req.formData();
+  const file = formData.get('file');
+  if (!(file instanceof File)) {
+    return c.json({ error: 'Upload a logo file.' }, 400);
+  }
+
+  if (file.type !== 'image/webp') {
+    return c.json({ error: 'Logo must be uploaded as WebP.' }, 400);
+  }
+
+  if (file.size <= 0 || file.size > logoUploadLimits.maxBytes) {
+    return c.json({ error: 'Logo must be smaller than 512 KB after optimization.' }, 400);
+  }
+
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const dimensionError = validateLogoDimensions(webpDimensions(bytes));
+  if (dimensionError) {
+    return c.json({ error: dimensionError }, 400);
+  }
+
+  const key = `branding/${orgId}/logo.webp`;
+  await c.env.R2.put(key, buffer, {
+    httpMetadata: { contentType: 'image/webp' },
+    customMetadata: {
+      orgId,
+      uploadedAt: new Date().toISOString(),
+      originalName: file.name.slice(0, 120),
+    },
+  });
+
+  const logoUrl = `${new URL(c.req.url).origin}/v1/uploads/branding/${orgId}/logo?v=${Date.now()}`;
+  const db = createDb(c.env.DATABASE_URL);
+  const [branding] = await db
+    .insert(orgBranding)
+    .values({ orgId, logoUrl })
+    .onConflictDoUpdate({
+      target: orgBranding.orgId,
+      set: { logoUrl, updatedAt: new Date() },
     })
     .returning();
 

@@ -96,6 +96,111 @@ function salesTaxDisplay(value: unknown) {
   return numeric > 0 && numeric <= 1 ? String(Number((numeric * 100).toFixed(4))) : String(numeric || '');
 }
 
+const logoUploadLimits = {
+  maxSourceBytes: 5 * 1024 * 1024,
+  maxOptimizedBytes: 512 * 1024,
+  minWidth: 64,
+  minHeight: 32,
+  maxSourceWidth: 4000,
+  maxSourceHeight: 4000,
+  maxOutputWidth: 640,
+  maxOutputHeight: 240,
+  minRatio: 0.5,
+  maxRatio: 8,
+};
+
+type PreparedLogoUpload = {
+  blob: Blob;
+  name: string;
+  previewUrl: string;
+  width: number;
+  height: number;
+};
+
+function formatBytes(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function loadLogoImage(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Logo image could not be read.'));
+    };
+    image.src = url;
+  });
+}
+
+function canvasToWebp(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('Logo could not be optimized to WebP in this browser.'));
+        return;
+      }
+      resolve(blob);
+    }, 'image/webp', quality);
+  });
+}
+
+async function prepareLogoUpload(file: File): Promise<PreparedLogoUpload> {
+  const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Use a PNG, JPG, or WebP logo.');
+  }
+  if (file.size <= 0 || file.size > logoUploadLimits.maxSourceBytes) {
+    throw new Error(`Logo must be smaller than ${formatBytes(logoUploadLimits.maxSourceBytes)} before optimization.`);
+  }
+
+  const image = await loadLogoImage(file);
+  const sourceWidth = image.naturalWidth;
+  const sourceHeight = image.naturalHeight;
+  const ratio = sourceWidth / sourceHeight;
+  if (
+    sourceWidth < logoUploadLimits.minWidth
+    || sourceHeight < logoUploadLimits.minHeight
+    || sourceWidth > logoUploadLimits.maxSourceWidth
+    || sourceHeight > logoUploadLimits.maxSourceHeight
+    || ratio < logoUploadLimits.minRatio
+    || ratio > logoUploadLimits.maxRatio
+  ) {
+    throw new Error(`Logo must be at least ${logoUploadLimits.minWidth}x${logoUploadLimits.minHeight}px, no larger than ${logoUploadLimits.maxSourceWidth}x${logoUploadLimits.maxSourceHeight}px, and not extremely wide or tall.`);
+  }
+
+  const scale = Math.min(1, logoUploadLimits.maxOutputWidth / sourceWidth, logoUploadLimits.maxOutputHeight / sourceHeight);
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Logo could not be prepared in this browser.');
+  context.drawImage(image, 0, 0, width, height);
+
+  let blob = await canvasToWebp(canvas, 0.9);
+  if (blob.size > logoUploadLimits.maxOptimizedBytes) {
+    blob = await canvasToWebp(canvas, 0.75);
+  }
+  if (blob.size > logoUploadLimits.maxOptimizedBytes) {
+    throw new Error(`Optimized logo must be smaller than ${formatBytes(logoUploadLimits.maxOptimizedBytes)}.`);
+  }
+
+  return {
+    blob,
+    name: file.name,
+    previewUrl: URL.createObjectURL(blob),
+    width,
+    height,
+  };
+}
+
 function slugify(value: string, fallback: string) {
   return value
     .toLowerCase()
@@ -158,6 +263,8 @@ export function Settings() {
   const [settings, setSettings] = useState<OrgSettings>({});
   const [branding, setBranding] = useState<BrandingSettings>({ primaryColor: '#2563eb' });
   const [legal, setLegal] = useState<LegalSettings>({});
+  const [logoUpload, setLogoUpload] = useState<PreparedLogoUpload | null>(null);
+  const [logoUploadError, setLogoUploadError] = useState('');
   const [milestones, setMilestones] = useState<PaymentMilestone[]>(defaultMilestones);
   const [connectors, setConnectors] = useState<ConnectorStatus>({
     stripe: 'Checking...',
@@ -187,6 +294,10 @@ export function Settings() {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  useEffect(() => () => {
+    if (logoUpload?.previewUrl) URL.revokeObjectURL(logoUpload.previewUrl);
+  }, [logoUpload?.previewUrl]);
 
   async function loadSettings() {
     setIsLoading(true);
@@ -290,17 +401,47 @@ export function Settings() {
     event.preventDefault();
     setSaving('branding');
     try {
+      let nextBranding = branding;
+      if (logoUpload) {
+        const formData = new FormData();
+        formData.append('file', new File([logoUpload.blob], 'logo.webp', { type: 'image/webp' }));
+        const uploadPayload = await apiJson<{ data?: BrandingSettings }>('/v1/settings/branding/logo', {
+          method: 'PUT',
+          body: formData,
+        });
+        nextBranding = { ...nextBranding, ...(uploadPayload.data || {}) };
+      }
+
       const payload = await apiJson<{ data?: BrandingSettings }>('/v1/settings/branding', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(branding),
+        body: JSON.stringify({
+          companyName: nextBranding.companyName,
+          primaryColor: nextBranding.primaryColor,
+        }),
       });
-      setBranding({ primaryColor: '#2563eb', ...(payload.data || branding) });
+      setBranding({ primaryColor: '#2563eb', ...nextBranding, ...(payload.data || {}) });
+      if (logoUpload?.previewUrl) URL.revokeObjectURL(logoUpload.previewUrl);
+      setLogoUpload(null);
+      setLogoUploadError('');
       window.showToast?.('Branding saved', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to save branding', 'error');
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function handleLogoChange(file: File | null) {
+    if (logoUpload?.previewUrl) URL.revokeObjectURL(logoUpload.previewUrl);
+    setLogoUpload(null);
+    setLogoUploadError('');
+    if (!file) return;
+
+    try {
+      setLogoUpload(await prepareLogoUpload(file));
+    } catch (err) {
+      setLogoUploadError(err instanceof Error ? err.message : 'Logo could not be prepared.');
     }
   }
 
@@ -454,12 +595,34 @@ export function Settings() {
               </label>
             </div>
             <label className="grid gap-1.5">
-              <FieldLabel label="Logo URL for customer estimates" />
-              <input className="input" type="url" inputMode="url" autoComplete="url" value={branding.logoUrl || ''} onChange={(event) => setBranding({ ...branding, logoUrl: event.target.value })} placeholder="https://example.com/logo.png" />
+              <FieldLabel label="Logo" help="Upload a PNG, JPG, or WebP logo. Crewmodo optimizes it to WebP and stores it for customer-facing proposals." />
+              <input
+                className="input py-3"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  void handleLogoChange(event.target.files?.[0] || null);
+                  event.target.value = '';
+                }}
+              />
+              <span className="pf-meta">PNG, JPG, or WebP. Source file under 5 MB. Recommended landscape logo, at least 64x32px.</span>
             </label>
-            {branding.logoUrl && (
-              <div className="rounded-lg border border-gray-200 p-4">
-                <img src={branding.logoUrl} className="h-12 max-w-48 object-contain" alt="Logo preview" />
+            {logoUploadError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{logoUploadError}</p>
+            )}
+            {(logoUpload?.previewUrl || branding.logoUrl) && (
+              <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="pf-row-title">Logo preview</p>
+                  <p className="pf-helper mt-1">
+                    {logoUpload
+                      ? `Prepared as WebP (${logoUpload.width}x${logoUpload.height}, ${formatBytes(logoUpload.blob.size)}). Save branding to publish it.`
+                      : 'Current logo used on customer-facing proposals.'}
+                  </p>
+                </div>
+                <div className="flex h-16 min-w-36 items-center justify-center rounded-lg border border-gray-200 bg-white px-4">
+                  <img src={logoUpload?.previewUrl || branding.logoUrl || ''} className="max-h-12 max-w-48 object-contain" alt="Logo preview" />
+                </div>
               </div>
             )}
             <Button type="submit" isLoading={saving === 'branding'} className="w-full sm:w-fit">Save Branding</Button>

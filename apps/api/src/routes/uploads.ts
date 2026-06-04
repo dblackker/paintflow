@@ -1,11 +1,43 @@
 import { Hono } from 'hono';
 import { createDb } from '@crewmodo/db';
-import { expenses, jobPhotos, jobs } from '@crewmodo/db/schema';
+import { expenses, jobPhotos, jobs, orgBranding } from '@crewmodo/db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
 const uploads = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// Public logo endpoint used by customer-facing proposal links.
+uploads.get('/branding/:orgId/logo', async (c) => {
+  const orgId = c.req.param('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const branding = await db.query.orgBranding.findFirst({
+    where: eq(orgBranding.orgId, orgId),
+  });
+
+  if (!branding?.logoUrl) {
+    return c.json({ error: 'Logo not found' }, 404);
+  }
+
+  const key = `branding/${orgId}/logo.webp`;
+  if (!c.env.R2) {
+    if (branding.logoUrl.includes('/v1/uploads/branding/')) {
+      return c.json({ error: 'Logo storage is not configured' }, 503);
+    }
+    return c.redirect(branding.logoUrl, 302);
+  }
+
+  const object = await c.env.R2.get(key);
+  if (!object) {
+    return c.json({ error: 'Logo not found' }, 404);
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set('Cache-Control', 'public, max-age=86400');
+  headers.set('ETag', object.httpEtag);
+  return new Response(object.body, { headers });
+});
 
 uploads.use('*', authMiddleware);
 
