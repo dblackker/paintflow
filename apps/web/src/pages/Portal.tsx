@@ -114,6 +114,20 @@ export function Portal() {
     void loadPortal();
   }, [token, searchParams]);
 
+  useEffect(() => {
+    const resetPaymentNavigationState = () => {
+      setBusyAction((current) => (current?.startsWith('pay-') ? null : current));
+    };
+    window.addEventListener('pageshow', resetPaymentNavigationState);
+    window.addEventListener('focus', resetPaymentNavigationState);
+    document.addEventListener('visibilitychange', resetPaymentNavigationState);
+    return () => {
+      window.removeEventListener('pageshow', resetPaymentNavigationState);
+      window.removeEventListener('focus', resetPaymentNavigationState);
+      document.removeEventListener('visibilitychange', resetPaymentNavigationState);
+    };
+  }, []);
+
   async function approveChangeOrder(event: FormEvent<HTMLFormElement>, order: ChangeOrder) {
     event.preventDefault();
     if (!token) return;
@@ -150,6 +164,7 @@ export function Portal() {
         headers: { 'Idempotency-Key': crypto.randomUUID() },
       });
       if (!payload.data?.checkoutUrl) throw new Error('Unable to start payment');
+      setBusyAction(null);
       window.location.href = payload.data.checkoutUrl;
     } catch (err) {
       window.showToast?.(paymentErrorMessage(err, 'Unable to start payment'), 'error');
@@ -166,6 +181,7 @@ export function Portal() {
         headers: { 'Idempotency-Key': crypto.randomUUID() },
       });
       if (!payload.data?.checkoutUrl) throw new Error('Unable to start payment');
+      setBusyAction(null);
       window.location.href = payload.data.checkoutUrl;
     } catch (err) {
       window.showToast?.(paymentErrorMessage(err, 'Unable to start payment'), 'error');
