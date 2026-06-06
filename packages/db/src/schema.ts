@@ -298,8 +298,9 @@ export const changeOrders = pgTable('change_orders', {
   jobId: uuid('job_id').references(() => jobs.id).notNull(),
   estimateId: uuid('estimate_id').references(() => estimates.id).notNull(),
   description: text('description').notNull(),
+  scopeDetails: jsonb('scope_details'),
   amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-  status: varchar('status', { length: 50 }).notNull().default('pending'), // pending, approved, rejected, completed
+  status: varchar('status', { length: 50 }).notNull().default('pending'), // draft, pending, approved, rejected, completed, canceled
   sentAt: timestamp('sent_at'),
   paymentRequired: boolean('payment_required').notNull().default(false),
   depositPercent: decimal('deposit_percent', { precision: 5, scale: 2 }).notNull().default('100'),

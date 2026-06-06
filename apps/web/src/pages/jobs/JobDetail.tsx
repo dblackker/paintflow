@@ -23,6 +23,7 @@ interface ChangeOrder {
   id: string;
   description?: string | null;
   title?: string | null;
+  scopeDetails?: ChangeOrderScopeDetails | null;
   status?: string | null;
   amount?: string | number | null;
   createdBy?: string | null;
@@ -35,6 +36,32 @@ interface ChangeOrder {
   customerSignedAt?: string | null;
   customerSignatureName?: string | null;
   canceledAt?: string | null;
+}
+
+interface ChangeOrderScopeItem {
+  area: string;
+  substrate: string;
+  prep: string;
+  applicationMethod: string;
+  paintProduct: string;
+  color: string;
+  coats: string;
+  quantity: string;
+  unit: string;
+  notes: string;
+}
+
+interface ChangeOrderScopeDetails {
+  items?: ChangeOrderScopeItem[];
+}
+
+interface ChangeOrderFormState {
+  description: string;
+  amount: string;
+  createdBy: 'contractor' | 'customer';
+  paymentRequired: boolean;
+  depositPercent: string;
+  scopeItems: ChangeOrderScopeItem[];
 }
 
 interface ChangeOrderEmailPreview {
@@ -131,6 +158,28 @@ interface JobCostingResponse {
 
 const costCategories = ['materials', 'supplies', 'labor', 'subcontractor', 'equipment', 'other'];
 
+const blankChangeOrderScopeItem = (): ChangeOrderScopeItem => ({
+  area: '',
+  substrate: 'Walls',
+  prep: 'Standard prep',
+  applicationMethod: 'Brush and roll',
+  paintProduct: '',
+  color: '',
+  coats: '2',
+  quantity: '',
+  unit: 'sq ft',
+  notes: '',
+});
+
+const initialChangeOrderForm = (): ChangeOrderFormState => ({
+  description: '',
+  amount: '',
+  createdBy: 'contractor',
+  paymentRequired: false,
+  depositPercent: '100',
+  scopeItems: [blankChangeOrderScopeItem()],
+});
+
 function formatDate(value?: string | null) {
   if (!value) return 'Not recorded';
   const date = new Date(value);
@@ -211,6 +260,8 @@ export function JobDetail() {
   const [editingCost, setEditingCost] = useState<JobCost | null>(null);
   const [savingCost, setSavingCost] = useState(false);
   const [changeOrderOpen, setChangeOrderOpen] = useState(false);
+  const [editingChangeOrderId, setEditingChangeOrderId] = useState<string | null>(null);
+  const [changeOrderForm, setChangeOrderForm] = useState<ChangeOrderFormState>(() => initialChangeOrderForm());
   const [savingChangeOrder, setSavingChangeOrder] = useState(false);
   const [approvalLink, setApprovalLink] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -252,8 +303,46 @@ export function JobDetail() {
 
   const job = detail?.job;
   const address = job ? formatAddress(job) : '';
+  const canCreateChangeOrder = Boolean(job?.estimateId);
   const totalTimeHours = timeEntries.reduce((sum, entry) => sum + numberValue(entry.hours), 0);
   const totalTimeCost = timeEntries.reduce((sum, entry) => sum + numberValue(entry.totalCost), 0);
+
+  function openChangeOrderEditor(order?: ChangeOrder) {
+    if (!canCreateChangeOrder) {
+      window.showToast?.('This job was not created from an estimate, so use a quick invoice or create an estimate before adding change orders.', 'error');
+      return;
+    }
+    setEditingChangeOrderId(order?.id || null);
+    setChangeOrderForm(order ? {
+      description: order.description || '',
+      amount: String(order.amount || ''),
+      createdBy: (order.createdBy === 'customer' ? 'customer' : 'contractor'),
+      paymentRequired: Boolean(order.paymentRequired),
+      depositPercent: String(order.paymentDueAmount && order.amount ? Math.round((Number(order.paymentDueAmount) / Math.max(Number(order.amount), 1)) * 100) : 100),
+      scopeItems: order.scopeDetails?.items?.length ? order.scopeDetails.items : [blankChangeOrderScopeItem()],
+    } : initialChangeOrderForm());
+    setChangeOrderOpen(true);
+  }
+
+  function closeChangeOrderEditor() {
+    setChangeOrderOpen(false);
+    setEditingChangeOrderId(null);
+    setChangeOrderForm(initialChangeOrderForm());
+  }
+
+  function updateChangeOrderScopeItem(index: number, patch: Partial<ChangeOrderScopeItem>) {
+    setChangeOrderForm((current) => ({
+      ...current,
+      scopeItems: current.scopeItems.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
+    }));
+  }
+
+  function removeChangeOrderScopeItem(index: number) {
+    setChangeOrderForm((current) => ({
+      ...current,
+      scopeItems: current.scopeItems.length <= 1 ? [blankChangeOrderScopeItem()] : current.scopeItems.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  }
 
   function openCostModal(cost?: JobCost) {
     setEditingCost(cost || null);
@@ -401,43 +490,57 @@ export function JobDetail() {
 
   async function saveChangeOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!id || !job?.estimateId) {
-      window.showToast?.('Change orders require a job created from an estimate.', 'error');
+    if (!id || !job?.estimateId || !canCreateChangeOrder) {
+      window.showToast?.('This job needs an estimate before change orders can be added.', 'error');
       return;
     }
-    const formData = new FormData(event.currentTarget);
-    const amount = Number(formData.get('amount') || 0);
-    const description = String(formData.get('description') || '').trim();
-    const paymentRequired = formData.get('paymentRequired') === 'true';
-    if (!description || amount <= 0) {
-      window.showToast?.('Enter a description and positive amount.', 'error');
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const status = submitter?.value === 'draft' ? 'draft' : 'pending';
+    const amount = Number(changeOrderForm.amount || 0);
+    const description = changeOrderForm.description.trim();
+    const scopeItems = changeOrderForm.scopeItems
+      .map((item) => ({
+        ...item,
+        area: item.area.trim(),
+        substrate: item.substrate.trim(),
+        prep: item.prep.trim(),
+        applicationMethod: item.applicationMethod.trim(),
+        paintProduct: item.paintProduct.trim(),
+        color: item.color.trim(),
+        notes: item.notes.trim(),
+      }))
+      .filter((item) => item.area || item.substrate || item.paintProduct || item.color || item.notes || Number(item.quantity || 0) > 0);
+    if (status !== 'draft' && (!description || amount <= 0)) {
+      window.showToast?.('Add a description and positive amount before sending a change order for approval.', 'error');
       return;
     }
     setSavingChangeOrder(true);
     try {
-      const response = await apiJson<{ data?: ChangeOrder & { approvalLink?: string | null } }>('/v1/change-orders', {
-        method: 'POST',
+      const body = JSON.stringify({
+        jobId: id,
+        estimateId: job.estimateId,
+        description,
+        amount,
+        status,
+        createdBy: changeOrderForm.createdBy,
+        paymentRequired: changeOrderForm.paymentRequired,
+        depositPercent: changeOrderForm.paymentRequired ? Number(changeOrderForm.depositPercent || 100) : 0,
+        scopeDetails: { items: scopeItems },
+      });
+      const response = await apiJson<{ data?: ChangeOrder & { approvalLink?: string | null } }>(editingChangeOrderId ? `/v1/change-orders/${editingChangeOrderId}` : '/v1/change-orders', {
+        method: editingChangeOrderId ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        body: JSON.stringify({
-          jobId: id,
-          estimateId: job.estimateId,
-          description,
-          amount,
-          status: String(formData.get('status') || 'pending'),
-          createdBy: String(formData.get('createdBy') || 'contractor'),
-          paymentRequired,
-          depositPercent: paymentRequired ? Number(formData.get('depositPercent') || 100) : 0,
-        }),
+        body,
       });
-      setChangeOrderOpen(false);
+      closeChangeOrderEditor();
       await loadJob();
-      window.showToast?.('Change order added. Review the email before sending.', 'success');
-      if (response.data) await previewChangeOrderEmail(response.data);
+      window.showToast?.(status === 'draft' ? 'Change order draft saved' : 'Change order ready. Review the email before sending.', 'success');
+      if (status !== 'draft' && response.data) await previewChangeOrderEmail(response.data);
     } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Failed to add change order', 'error');
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save change order', 'error');
     } finally {
       setSavingChangeOrder(false);
     }
@@ -640,7 +743,7 @@ export function JobDetail() {
                 <div className="absolute right-0 z-30 mt-2 w-52 rounded-lg border bg-white p-1 shadow-lg">
                   {job.estimateId && <Link to={`/estimates/${job.estimateId}`} className="btn-text btn-sm w-full justify-start">View estimate</Link>}
                   <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => openCostModal()}>Add cost</button>
-                  <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => setChangeOrderOpen(true)}>Add change order</button>
+                  <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => openChangeOrderEditor()} disabled={!canCreateChangeOrder}>Add change order</button>
                   {isCompleted ? (
                     <button type="button" className="btn-text btn-sm w-full justify-start" onClick={requestReview} disabled={requestingReview}>
                       {requestingReview ? 'Sending request...' : 'Request review'}
@@ -807,10 +910,19 @@ export function JobDetail() {
           <Card padding="none" id="job-change-orders" className="scroll-mt-24">
             <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
               <CardHeader className="mb-0" title="Change Orders" />
-              <button type="button" className="btn-secondary btn-sm" onClick={() => setChangeOrderOpen(true)}>Add change order</button>
+              <button type="button" className="btn-secondary btn-sm" onClick={() => openChangeOrderEditor()} disabled={!canCreateChangeOrder}>Add change order</button>
             </div>
             <div className="divide-y">
-              {detail.lists.changeOrders.length === 0 ? (
+              {!canCreateChangeOrder ? (
+                <div className="p-6">
+                  <p className="pf-row-title">Change orders need an estimate-backed job</p>
+                  <p className="pf-copy mt-1">This job was created without an estimate, so there is no signed agreement to amend. Use a quick invoice for one-off billing, or create an estimate first if you need a formal customer approval flow.</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Link to="/invoices" className="btn-secondary btn-sm">Create quick invoice</Link>
+                    {job?.leadId && <Link to={`/estimates/production?leadId=${job.leadId}`} className="btn-text btn-sm">Create estimate</Link>}
+                  </div>
+                </div>
+              ) : detail.lists.changeOrders.length === 0 ? (
                 <div className="p-6 text-sm text-gray-500">No change orders yet.</div>
               ) : detail.lists.changeOrders.map((order) => (
                 <div key={order.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -819,6 +931,15 @@ export function JobDetail() {
                     <p className="text-sm text-gray-600">
                       {[job.jobNumber, labelize(order.createdBy || 'contractor'), formatDate(order.createdAt)].filter(Boolean).join(' - ')}
                     </p>
+                    {order.scopeDetails?.items?.length ? (
+                      <div className="mt-2 space-y-1">
+                        {order.scopeDetails.items.slice(0, 3).map((item, index) => (
+                          <p key={`${order.id}-scope-${index}`} className="pf-meta">
+                            {[item.area, item.substrate, item.paintProduct, item.color, item.coats ? `${item.coats} coats` : ''].filter(Boolean).join(' - ')}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-2">
                       <StatusBadge status={String(order.status || 'pending')} />
                       {order.paymentRequired && <StatusBadge status={String(order.paymentStatus || 'pending')} />}
@@ -831,6 +952,11 @@ export function JobDetail() {
                       {order.paymentRequired ? `${formatMoney(order.paymentDueAmount || order.amount || 0)} due on approval` : 'No payment required'}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
+                      {order.status === 'draft' && (
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => openChangeOrderEditor(order)}>
+                          Edit draft
+                        </button>
+                      )}
                       {order.status === 'pending' && (
                         <button type="button" className="btn-secondary btn-sm" onClick={() => previewChangeOrderEmail(order)} disabled={previewingChangeOrderId === order.id}>
                           {previewingChangeOrderId === order.id ? 'Preparing...' : order.sentAt ? 'Preview resend' : 'Preview email'}
@@ -851,7 +977,7 @@ export function JobDetail() {
                           {updatingChangeOrderId === order.id ? 'Completing...' : 'Mark complete'}
                         </button>
                       )}
-                      {['pending', 'rejected'].includes(String(order.status || 'pending')) && (
+                      {['draft', 'pending', 'rejected'].includes(String(order.status || 'pending')) && (
                         <button type="button" className="btn-text btn-sm text-red-700" onClick={() => updateChangeOrderStatus(order, 'canceled')} disabled={updatingChangeOrderId === order.id}>
                           Cancel
                         </button>
@@ -1014,37 +1140,141 @@ export function JobDetail() {
         onSubmit={saveBulkTimecard}
       />
 
-      <Modal isOpen={changeOrderOpen} onClose={() => setChangeOrderOpen(false)} title="Add Change Order" size="lg">
+      <Modal isOpen={changeOrderOpen} onClose={closeChangeOrderEditor} title={editingChangeOrderId ? 'Edit Change Order' : 'Add Change Order'} size="lg">
         <form onSubmit={saveChangeOrder} className="space-y-5">
-          <p className="pf-copy">Track approved or pending scope changes separately from the original contract.</p>
+          <p className="pf-copy">Draft the added scope first. When it is ready, preview the customer email and send the approval link for signature and any required payment.</p>
           <label className="block space-y-1.5">
-            <span className="form-label">Description</span>
-            <textarea name="description" required rows={3} autoComplete="off" className="input resize-none" placeholder="Add garage door trim, extra prep, color change" />
+            <span className="form-label">Customer-facing summary</span>
+            <textarea
+              value={changeOrderForm.description}
+              onChange={(event) => setChangeOrderForm({ ...changeOrderForm, description: event.target.value })}
+              rows={3}
+              autoComplete="off"
+              className="input resize-none"
+              placeholder="Add garage door trim, extra prep, or a separate ceiling color"
+            />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-1.5">
-              <span className="form-label">Amount</span>
-              <input name="amount" type="number" min="0.01" step="0.01" inputMode="decimal" autoComplete="off" required className="input" placeholder="0.00" />
+              <span className="form-label">Change order total</span>
+              <input
+                value={changeOrderForm.amount}
+                onChange={(event) => setChangeOrderForm({ ...changeOrderForm, amount: event.target.value })}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                autoComplete="off"
+                className="input"
+                placeholder="0.00"
+              />
             </label>
             <label className="block space-y-1.5">
-              <span className="form-label">Status</span>
-              <select name="status" className="input" defaultValue="pending">
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="completed">Completed</option>
+              <span className="form-label">Requested by</span>
+              <select value={changeOrderForm.createdBy} onChange={(event) => setChangeOrderForm({ ...changeOrderForm, createdBy: event.target.value as ChangeOrderFormState['createdBy'] })} className="input">
+                <option value="contractor">Contractor</option>
+                <option value="customer">Customer</option>
               </select>
             </label>
           </div>
-          <label className="block space-y-1.5">
-            <span className="form-label">Requested by</span>
-            <select name="createdBy" className="input" defaultValue="contractor">
-              <option value="contractor">Contractor</option>
-              <option value="customer">Customer</option>
-            </select>
-          </label>
+
+          <div className="rounded-lg border border-gray-200">
+            <div className="flex items-center justify-between gap-3 border-b p-4">
+              <div>
+                <p className="pf-row-title">Scope details</p>
+                <p className="pf-meta">Area, substrate, paint, coats, and notes for production clarity.</p>
+              </div>
+              <button type="button" className="btn-secondary btn-sm" onClick={() => setChangeOrderForm({ ...changeOrderForm, scopeItems: [...changeOrderForm.scopeItems, blankChangeOrderScopeItem()] })}>Add item</button>
+            </div>
+            <div className="divide-y">
+              {changeOrderForm.scopeItems.map((item, index) => (
+                <div key={index} className="space-y-3 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="pf-row-title">Item {index + 1}</p>
+                    <button type="button" className="btn-text btn-sm text-red-700" onClick={() => removeChangeOrderScopeItem(index)}>Remove</button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1.5">
+                      <span className="form-label">Area / room</span>
+                      <input className="input" value={item.area} onChange={(event) => updateChangeOrderScopeItem(index, { area: event.target.value })} placeholder="Kitchen, exterior trim, garage" />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="form-label">Substrate</span>
+                      <select className="input" value={item.substrate} onChange={(event) => updateChangeOrderScopeItem(index, { substrate: event.target.value })}>
+                        <option>Walls</option>
+                        <option>Ceiling</option>
+                        <option>Trim</option>
+                        <option>Doors</option>
+                        <option>Siding</option>
+                        <option>Soffits</option>
+                        <option>Fascia</option>
+                        <option>Cabinets</option>
+                        <option>Other</option>
+                      </select>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="form-label">Prep</span>
+                      <select className="input" value={item.prep} onChange={(event) => updateChangeOrderScopeItem(index, { prep: event.target.value })}>
+                        <option>Light prep</option>
+                        <option>Standard prep</option>
+                        <option>Heavy prep</option>
+                        <option>Masking / color separation</option>
+                        <option>Repair work</option>
+                      </select>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="form-label">Application</span>
+                      <select className="input" value={item.applicationMethod} onChange={(event) => updateChangeOrderScopeItem(index, { applicationMethod: event.target.value })}>
+                        <option>Brush and roll</option>
+                        <option>Spray</option>
+                        <option>Spray and back-roll</option>
+                        <option>Brush only</option>
+                      </select>
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="form-label">Paint product</span>
+                      <input className="input" value={item.paintProduct} onChange={(event) => updateChangeOrderScopeItem(index, { paintProduct: event.target.value })} placeholder="SuperPaint Interior Satin" />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="form-label">Color</span>
+                      <input className="input" value={item.color} onChange={(event) => updateChangeOrderScopeItem(index, { color: event.target.value })} placeholder="SW 7008 Alabaster" />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="form-label">Coats</span>
+                      <select className="input" value={item.coats} onChange={(event) => updateChangeOrderScopeItem(index, { coats: event.target.value })}>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                      </select>
+                    </label>
+                    <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3">
+                      <label className="block space-y-1.5">
+                        <span className="form-label">Quantity</span>
+                        <input className="input" type="number" min="0" step="0.25" inputMode="decimal" value={item.quantity} onChange={(event) => updateChangeOrderScopeItem(index, { quantity: event.target.value })} placeholder="0" />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="form-label">Unit</span>
+                        <select className="input" value={item.unit} onChange={(event) => updateChangeOrderScopeItem(index, { unit: event.target.value })}>
+                          <option value="sq ft">sq ft</option>
+                          <option value="lin ft">lin ft</option>
+                          <option value="each">each</option>
+                          <option value="hour">hour</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label className="block space-y-1.5 sm:col-span-2">
+                      <span className="form-label">Production notes</span>
+                      <input className="input" value={item.notes} onChange={(event) => updateChangeOrderScopeItem(index, { notes: event.target.value })} placeholder="Separate ceiling color; additional masking required" />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
             <label className="flex items-start gap-3">
-              <input name="paymentRequired" type="checkbox" value="true" className="mt-1" />
+              <input type="checkbox" checked={changeOrderForm.paymentRequired} onChange={(event) => setChangeOrderForm({ ...changeOrderForm, paymentRequired: event.target.checked })} className="mt-1" />
               <span>
                 <span className="block text-sm font-medium text-gray-900">Require online payment after approval</span>
                 <span className="block text-xs text-gray-600">Use this for added work that should be paid before or during production.</span>
@@ -1052,7 +1282,7 @@ export function JobDetail() {
             </label>
             <label className="mt-4 block space-y-1.5">
               <span className="form-label">Amount due at approval</span>
-              <select name="depositPercent" className="input" defaultValue="100">
+              <select value={changeOrderForm.depositPercent} onChange={(event) => setChangeOrderForm({ ...changeOrderForm, depositPercent: event.target.value })} className="input" disabled={!changeOrderForm.paymentRequired}>
                 <option value="100">100% of change order</option>
                 <option value="50">50% deposit</option>
                 <option value="25">25% deposit</option>
@@ -1060,8 +1290,9 @@ export function JobDetail() {
             </label>
           </div>
           <ModalFooter className="-mx-6 -mb-4 mt-6">
-            <button type="button" className="btn-secondary" onClick={() => setChangeOrderOpen(false)}>Cancel</button>
-            <button className="btn-primary" disabled={savingChangeOrder}>{savingChangeOrder ? 'Adding...' : 'Add'}</button>
+            <button type="button" className="btn-secondary" onClick={closeChangeOrderEditor}>Cancel</button>
+            <button type="submit" name="intent" value="draft" className="btn-secondary" disabled={savingChangeOrder}>{savingChangeOrder ? 'Saving...' : 'Save draft'}</button>
+            <button type="submit" name="intent" value="pending" className="btn-primary" disabled={savingChangeOrder}>{savingChangeOrder ? 'Saving...' : 'Save and preview'}</button>
           </ModalFooter>
         </form>
       </Modal>

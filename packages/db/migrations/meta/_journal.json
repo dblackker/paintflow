@@ -176,6 +176,27 @@
       "when": 1779166020000,
       "tag": "0024_supplier_invoice_dedupe",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1779166021000,
+      "tag": "0025_customer_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779166022000,
+      "tag": "0026_customer_invoice_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1779166023000,
+      "tag": "0027_change_order_drafts_scope",
+      "breakpoints": true
     }
   ]
 }
