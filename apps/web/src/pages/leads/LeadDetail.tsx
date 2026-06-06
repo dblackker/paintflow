@@ -880,6 +880,26 @@ function ActivityList({ activities, onComplete }: { activities: Activity[]; onCo
   );
 }
 
+function emailPreviewHtml(html?: string | null) {
+  const base = '<base target="_blank">';
+  const fallback = '<p>Email preview unavailable.</p>';
+  const content = (html || fallback).replace(/<a\b([^>]*)>/gi, (match, attrs: string) => {
+    const nextAttrs = /\starget=/i.test(attrs)
+      ? attrs.replace(/\starget=(["']).*?\1/i, ' target="_blank"')
+      : `${attrs} target="_blank"`;
+    const withRel = /\srel=/i.test(nextAttrs) ? nextAttrs : `${nextAttrs} rel="noopener noreferrer"`;
+    return `<a${withRel}>`;
+  });
+  if (/<base\s/i.test(content)) return content;
+  if (/<head[\s>]/i.test(content)) {
+    return content.replace(/<head([^>]*)>/i, `<head$1>${base}`);
+  }
+  if (/<html[\s>]/i.test(content)) {
+    return content.replace(/<html([^>]*)>/i, `<html$1><head>${base}</head>`);
+  }
+  return `<!doctype html><html><head>${base}</head><body>${content}</body></html>`;
+}
+
 function EmailList({ emails }: { emails: EmailSend[] }) {
   if (!emails.length) return <EmptySection>No email history yet.</EmptySection>;
   return (
@@ -900,7 +920,12 @@ function EmailList({ emails }: { emails: EmailSend[] }) {
             </div>
           </summary>
           <div className="mt-3 rounded-lg border bg-gray-50 p-2">
-            <iframe title="Sent email preview" className="h-80 w-full rounded-md bg-white" sandbox="" srcDoc={email.renderedHtml || '<p>Email preview unavailable.</p>'} />
+            <iframe
+              title="Sent email preview"
+              className="h-80 w-full rounded-md bg-white"
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              srcDoc={emailPreviewHtml(email.renderedHtml)}
+            />
           </div>
         </details>
       ))}
