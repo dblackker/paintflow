@@ -16,6 +16,9 @@ const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 const refundSchema = z.object({
   amount: z.coerce.number().positive(),
   reason: z.string().trim().max(500).optional(),
+  method: z.enum(['cash', 'check', 'ach', 'credit', 'other']).optional(),
+  reference: z.string().trim().max(120).optional().nullable(),
+  confirmManualRefund: z.boolean().optional(),
 });
 
 const manualPaymentSchema = z.object({
@@ -43,6 +46,49 @@ function metadataObject(value: unknown) {
 function netPaymentAmount(payment: typeof customerPayments.$inferSelect) {
   if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status)) return 0;
   return Number(payment.amount || 0) - Number(payment.refundedAmount || 0);
+}
+
+function paymentMetadata(value: unknown) {
+  const metadata = metadataObject(value);
+  const refundHistory = Array.isArray(metadata.refundHistory)
+    ? metadata.refundHistory.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    : [];
+  return { metadata, refundHistory };
+}
+
+async function reconcileInvoiceAfterRefund(db: ReturnType<typeof createDb>, orgId: string, invoiceId?: string | null) {
+  if (!invoiceId) return;
+  const invoice = await db.query.customerInvoices.findFirst({
+    where: and(eq(customerInvoices.id, invoiceId), eq(customerInvoices.orgId, orgId)),
+  });
+  if (!invoice) return;
+
+  const payments = await db.select().from(customerPayments)
+    .where(and(eq(customerPayments.invoiceId, invoice.id), eq(customerPayments.orgId, orgId)));
+  const paidAmount = roundMoney(payments.reduce((sum, row) => sum + netPaymentAmount(row), 0));
+  const invoiceTotal = roundMoney(Number(invoice.total || 0));
+  const nextStatus = paidAmount >= invoiceTotal - 0.005
+    ? 'paid'
+    : paidAmount > 0.005
+      ? 'partially_paid'
+      : 'sent';
+
+  await db.update(customerInvoices)
+    .set({
+      status: nextStatus,
+      paidAt: nextStatus === 'paid' ? (invoice.paidAt || new Date()) : null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)));
+
+  if (invoice.changeOrderId) {
+    await db.update(changeOrders)
+      .set({
+        paymentStatus: nextStatus === 'paid' ? 'paid' : 'pending',
+        paidAt: nextStatus === 'paid' ? (invoice.paidAt || new Date()) : null,
+      })
+      .where(and(eq(changeOrders.id, invoice.changeOrderId), eq(changeOrders.orgId, orgId)));
+  }
 }
 
 async function paymentAlreadyRecorded(db: ReturnType<typeof createDb>, stripeCheckoutSessionId?: string) {
@@ -671,6 +717,10 @@ billing.post('/:id/refund', async (c) => {
   const orgId = c.get('orgId');
   if (!orgId) return c.json({ error: 'Unauthorized' }, 401);
   const paymentId = c.req.param('id');
+  const idempotencyKey = c.req.header('Idempotency-Key')?.trim();
+  if (!idempotencyKey) {
+    return c.json({ error: 'Idempotency-Key is required when issuing refunds.' }, 400);
+  }
   const parsed = refundSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {
     return c.json({ error: 'Invalid refund request', details: parsed.error.flatten() }, 400);
@@ -687,6 +737,10 @@ billing.post('/:id/refund', async (c) => {
   const paidAmount = Number(payment.amount || 0);
   const refundedAmount = Number(payment.refundedAmount || 0);
   const refundableAmount = Math.max(paidAmount - refundedAmount, 0);
+  const { metadata, refundHistory } = paymentMetadata(payment.metadata);
+  if (refundHistory.some((item) => item.idempotencyKey === idempotencyKey)) {
+    return c.json({ data: payment, duplicate: true });
+  }
   if (refundableAmount <= 0) {
     return c.json({ error: 'Payment is already fully refunded' }, 409);
   }
@@ -695,6 +749,17 @@ billing.post('/:id/refund', async (c) => {
   }
 
   const hasStripeReference = Boolean(payment.stripePaymentIntentId || payment.stripeChargeId);
+  if (!hasStripeReference) {
+    if (!parsed.data.confirmManualRefund) {
+      return c.json({ error: 'Confirm that this refund or credit was handled outside Stripe before recording it.' }, 409);
+    }
+    if (!parsed.data.method) {
+      return c.json({ error: 'Select how the manual refund or credit was handled.' }, 400);
+    }
+    if (!parsed.data.reason?.trim()) {
+      return c.json({ error: 'Add a reason for the manual refund or credit.' }, 400);
+    }
+  }
   const refund = hasStripeReference
     ? await createRefund(c.env, {
       paymentIntentId: payment.stripePaymentIntentId,
@@ -718,14 +783,36 @@ billing.post('/:id/refund', async (c) => {
       refundedAt: new Date(),
       updatedAt: new Date(),
       metadata: {
-        ...metadataObject(payment.metadata),
+        ...metadata,
         lastRefundReason: parsed.data.reason || null,
         lastRefundStatus: refund.status || null,
         lastRefundMode: hasStripeReference ? 'stripe' : 'manual',
+        lastRefundMethod: hasStripeReference ? 'stripe' : parsed.data.method,
+        lastRefundReference: parsed.data.reference || null,
+        refundHistory: [
+          ...refundHistory,
+          {
+            idempotencyKey,
+            amount: parsed.data.amount,
+            reason: parsed.data.reason || null,
+            status: refund.status || null,
+            mode: hasStripeReference ? 'stripe' : 'manual',
+            method: hasStripeReference ? 'stripe' : parsed.data.method,
+            reference: parsed.data.reference || null,
+            stripeRefundId: refund.id,
+            recordedByUserId: c.get('userId') || null,
+            recordedAt: new Date().toISOString(),
+            note: hasStripeReference
+              ? 'Refund requested through Stripe.'
+              : 'Manual refund or credit recorded by contractor. No Stripe refund was created.',
+          },
+        ],
       },
     })
     .where(and(eq(customerPayments.id, paymentId), eq(customerPayments.orgId, orgId)))
     .returning();
+
+  await reconcileInvoiceAfterRefund(db, orgId, payment.invoiceId);
 
   await db.insert(auditLogs).values({
     orgId,
@@ -743,6 +830,9 @@ billing.post('/:id/refund', async (c) => {
       reason: parsed.data.reason,
       stripeRefundId: refund.id,
       refundMode: hasStripeReference ? 'stripe' : 'manual',
+      refundMethod: hasStripeReference ? 'stripe' : parsed.data.method,
+      refundReference: parsed.data.reference || null,
+      invoiceId: payment.invoiceId,
     },
   });
 

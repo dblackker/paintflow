@@ -96,6 +96,8 @@ interface Payment {
   source?: string | null;
   description?: string | null;
   reference?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeChargeId?: string | null;
   receivedAt?: string | null;
 }
 
@@ -156,6 +158,9 @@ interface RefundForm {
   payment: Payment;
   amount: string;
   reason: string;
+  method: 'cash' | 'check' | 'ach' | 'credit' | 'other';
+  reference: string;
+  confirmManualRefund: boolean;
 }
 
 const activityTypeOptions = [
@@ -190,6 +195,10 @@ function estimateContractTotal(estimate: Estimate) {
 
 function paymentNet(payment: Payment) {
   return Math.max(Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+}
+
+function isStripePayment(payment: Payment) {
+  return Boolean(payment.stripePaymentIntentId || payment.stripeChargeId || payment.source === 'stripe');
 }
 
 function invoicePaid(invoice: CustomerInvoice) {
@@ -468,9 +477,12 @@ export function LeadDetail() {
         body: JSON.stringify({
           amount: Number(refundForm.amount),
           reason: refundForm.reason || undefined,
+          method: isStripePayment(refundForm.payment) ? undefined : refundForm.method,
+          reference: isStripePayment(refundForm.payment) ? undefined : refundForm.reference || undefined,
+          confirmManualRefund: isStripePayment(refundForm.payment) ? undefined : refundForm.confirmManualRefund,
         }),
       });
-      window.showToast?.('Refund submitted', 'success');
+      window.showToast?.(isStripePayment(refundForm.payment) ? 'Stripe refund submitted' : 'Manual refund recorded', 'success');
       setRefundForm(null);
       await loadDetail();
     } catch (err) {
@@ -628,7 +640,7 @@ export function LeadDetail() {
           </SectionCard>
 
           <SectionCard id="customer-payments" title="Payments" eyebrow={`${detail.payments.length} recorded`}>
-            <PaymentList payments={detail.payments} onRefund={(payment) => setRefundForm({ payment, amount: paymentNet(payment).toFixed(2), reason: '' })} />
+            <PaymentList payments={detail.payments} onRefund={(payment) => setRefundForm({ payment, amount: paymentNet(payment).toFixed(2), reason: '', method: 'check', reference: '', confirmManualRefund: false })} />
           </SectionCard>
 
           <SectionCard id="customer-messages" title="Messages" action={lead.phone ? <Link to={`/sms?leadId=${lead.id}`} className="btn-secondary btn-sm">Open thread</Link> : undefined}>
@@ -674,12 +686,37 @@ export function LeadDetail() {
       {refundForm && (
         <Modal title="Issue refund" onClose={() => setRefundForm(null)}>
           <form className="space-y-4" onSubmit={submitRefund}>
-            <p className="pf-copy">Refunds use Stripe only when the payment has a Stripe reference. Manual payments are recorded as manual credits.</p>
+            {isStripePayment(refundForm.payment) ? (
+              <p className="pf-copy">This payment has a Stripe reference. Crewmodo will request the refund through Stripe and record the result in payment history.</p>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="pf-row-title text-amber-950">Manual refund or credit</p>
+                <p className="pf-copy mt-1 text-amber-900">Crewmodo records the ledger adjustment only. Issue the cash, check, ACH, or credit outside Crewmodo, then record how it was handled here.</p>
+              </div>
+            )}
             <Input label="Amount" type="number" min="0.01" max={paymentNet(refundForm.payment).toFixed(2)} step="0.01" inputMode="decimal" value={refundForm.amount} onChange={(event) => setRefundForm({ ...refundForm, amount: event.target.value })} />
-            <Textarea label="Reason" rows={3} value={refundForm.reason} onChange={(event) => setRefundForm({ ...refundForm, reason: event.target.value })} placeholder="Reason, credit, or damage note" />
+            {!isStripePayment(refundForm.payment) && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select label="How was it handled?" value={refundForm.method} onChange={(event) => setRefundForm({ ...refundForm, method: event.target.value as RefundForm['method'] })}>
+                  <option value="check">Check</option>
+                  <option value="cash">Cash</option>
+                  <option value="ach">ACH</option>
+                  <option value="credit">Account credit</option>
+                  <option value="other">Other</option>
+                </Select>
+                <Input label="Reference" value={refundForm.reference} onChange={(event) => setRefundForm({ ...refundForm, reference: event.target.value })} placeholder="Check #, ACH memo, or credit note" />
+              </div>
+            )}
+            <Textarea label="Reason" rows={3} value={refundForm.reason} onChange={(event) => setRefundForm({ ...refundForm, reason: event.target.value })} placeholder="Reason, credit, or damage note" required={!isStripePayment(refundForm.payment)} />
+            {!isStripePayment(refundForm.payment) && (
+              <label className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                <input type="checkbox" className="mt-1" checked={refundForm.confirmManualRefund} onChange={(event) => setRefundForm({ ...refundForm, confirmManualRefund: event.target.checked })} />
+                <span>I confirm this money or credit was handled outside Stripe and should reduce this customer&apos;s recorded balance.</span>
+              </label>
+            )}
             <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
               <Button type="button" variant="secondary" fullWidth onClick={() => setRefundForm(null)}>Cancel</Button>
-              <Button type="submit" variant="danger" fullWidth isLoading={isSavingRefund} disabled={!refundForm.amount}>Issue refund</Button>
+              <Button type="submit" variant="danger" fullWidth isLoading={isSavingRefund} disabled={!refundForm.amount || (!isStripePayment(refundForm.payment) && (!refundForm.reason.trim() || !refundForm.confirmManualRefund))}>{isStripePayment(refundForm.payment) ? 'Issue refund' : 'Record refund'}</Button>
             </div>
           </form>
         </Modal>
