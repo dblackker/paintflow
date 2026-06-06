@@ -348,6 +348,8 @@ function InvoiceCard({ invoice, isFocused, isPaying, onPay }: { invoice: ClientI
   const total = Number(invoice.total || 0);
   const paid = Number(invoice.paidAmount || 0);
   const balance = Number(invoice.balanceDue ?? Math.max(total - paid, 0));
+  const isRefunded = invoice.status === 'refunded';
+  const displayBalance = isRefunded ? 0 : balance;
   const isPaid = balance <= 0.005 || invoice.status === 'paid';
   return (
     <article className={`rounded-lg border bg-white p-4 ${isFocused ? 'border-blue-700 shadow-md' : 'border-gray-200'}`}>
@@ -362,15 +364,17 @@ function InvoiceCard({ invoice, isFocused, isPaying, onPay }: { invoice: ClientI
         </div>
         <div className="text-left sm:text-right">
           <p className="pf-meta">Balance due</p>
-          <p className="pf-section-title">{formatMoney(balance)}</p>
+          <p className="pf-section-title">{formatMoney(displayBalance)}</p>
           {paid > 0.005 && <p className="pf-helper">{formatMoney(paid)} paid</p>}
         </div>
       </div>
       <div className="mt-4">
-        {isPaid ? (
+        {isRefunded ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">This invoice payment was refunded. Contact your contractor if you have questions.</p>
+        ) : isPaid ? (
           <p className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">Payment received. Thank you.</p>
         ) : (
-          <Button onClick={onPay} isLoading={isPaying} className="w-full sm:w-auto">Pay {formatMoney(balance)}</Button>
+          <Button onClick={onPay} isLoading={isPaying} className="w-full sm:w-auto">Pay {formatMoney(displayBalance)}</Button>
         )}
       </div>
     </article>

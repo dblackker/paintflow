@@ -953,7 +953,7 @@ export function Invoices() {
 
   const receivables = useMemo(() => {
     const invoiceReceivables = customerInvoices
-      .filter((invoice) => !['canceled', 'voided', 'paid'].includes(String(invoice.status || '')))
+      .filter((invoice) => !['canceled', 'voided', 'paid', 'refunded'].includes(String(invoice.status || '')))
       .map((invoice) => {
         const amount = numberValue(invoice.total);
         const paid = (invoice.payments || []).reduce((sum, payment) => sum + netPayment(payment), 0);

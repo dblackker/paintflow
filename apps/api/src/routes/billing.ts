@@ -66,18 +66,26 @@ async function reconcileInvoiceAfterRefund(db: ReturnType<typeof createDb>, orgI
 
   const payments = await db.select().from(customerPayments)
     .where(and(eq(customerPayments.invoiceId, invoice.id), eq(customerPayments.orgId, orgId)));
-  const paidAmount = roundMoney(payments.reduce((sum, row) => sum + netPaymentAmount(row), 0));
+  const payablePayments = payments.filter((row) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(row.status));
+  const grossPaidAmount = roundMoney(payablePayments.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+  const refundedAmount = roundMoney(payablePayments.reduce((sum, row) => sum + Number(row.refundedAmount || 0), 0));
+  const paidAmount = roundMoney(payablePayments.reduce((sum, row) => sum + netPaymentAmount(row), 0));
   const invoiceTotal = roundMoney(Number(invoice.total || 0));
-  const nextStatus = paidAmount >= invoiceTotal - 0.005
-    ? 'paid'
-    : paidAmount > 0.005
-      ? 'partially_paid'
-      : 'sent';
+  let nextStatus = 'sent';
+  if (grossPaidAmount > 0.005 && refundedAmount >= grossPaidAmount - 0.005) {
+    nextStatus = 'refunded';
+  } else if (refundedAmount > 0.005) {
+    nextStatus = 'partially_refunded';
+  } else if (paidAmount >= invoiceTotal - 0.005) {
+    nextStatus = 'paid';
+  } else if (paidAmount > 0.005) {
+    nextStatus = 'partially_paid';
+  }
 
   await db.update(customerInvoices)
     .set({
       status: nextStatus,
-      paidAt: nextStatus === 'paid' ? (invoice.paidAt || new Date()) : null,
+      paidAt: ['paid', 'partially_refunded', 'refunded'].includes(nextStatus) ? (invoice.paidAt || new Date()) : null,
       updatedAt: new Date(),
     })
     .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)));

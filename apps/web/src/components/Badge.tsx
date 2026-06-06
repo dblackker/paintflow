@@ -60,6 +60,8 @@ export function StatusBadge({ status, className = '' }: StatusBadgeProps) {
     payment_pending: { variant: 'warning', label: 'Payment Pending' },
     partially_paid: { variant: 'warning', label: 'Partially Paid' },
     paid: { variant: 'success', label: 'Paid' },
+    refunded: { variant: 'danger', label: 'Refunded' },
+    partially_refunded: { variant: 'warning', label: 'Partially Refunded' },
     active: { variant: 'success', label: 'Active' },
     inactive: { variant: 'default', label: 'Inactive' },
     won: { variant: 'success', label: 'Won' },

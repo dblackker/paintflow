@@ -22,6 +22,20 @@ function netPayment(payment: typeof customerPayments.$inferSelect) {
   return Number(payment.amount || 0) - Number(payment.refundedAmount || 0);
 }
 
+function effectiveInvoiceStatus(invoice: typeof customerInvoices.$inferSelect, payments: Array<typeof customerPayments.$inferSelect>) {
+  if (['canceled', 'voided'].includes(invoice.status)) return invoice.status;
+  const payable = payments.filter((payment) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status));
+  const grossPaid = payable.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const refunded = payable.reduce((sum, payment) => sum + Number(payment.refundedAmount || 0), 0);
+  const netPaid = Math.max(grossPaid - refunded, 0);
+  const total = Number(invoice.total || 0);
+  if (grossPaid > 0.005 && refunded >= grossPaid - 0.005) return 'refunded';
+  if (refunded > 0.005) return 'partially_refunded';
+  if (netPaid >= total - 0.005) return 'paid';
+  if (netPaid > 0.005) return 'partially_paid';
+  return invoice.status === 'payment_pending' && total - netPaid > 0.005 ? 'sent' : invoice.status;
+}
+
 portalApp.get('/:token', async (c) => {
   const token = c.req.param('token');
   const changeOrderId = c.req.query('changeOrderId');
@@ -103,9 +117,10 @@ portalApp.get('/:token', async (c) => {
           const payments = paymentsByInvoice.get(invoice.id) || [];
           const paidAmount = payments.reduce((sum, payment) => sum + netPayment(payment), 0);
           const balanceDue = Math.max(Number(invoice.total || 0) - paidAmount, 0);
+          const status = effectiveInvoiceStatus(invoice, payments);
           return {
             ...invoice,
-            status: invoice.status === 'payment_pending' && balanceDue > 0.005 ? 'sent' : invoice.status,
+            status,
             payments,
             paidAmount,
             balanceDue,
@@ -245,7 +260,7 @@ portalApp.post('/:token/invoices/:id/checkout', async (c) => {
     where: and(eq(customerInvoices.id, id), eq(customerInvoices.orgId, portalToken.orgId), eq(customerInvoices.leadId, portalToken.leadId)),
   });
   if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
-  if (['paid', 'voided', 'canceled'].includes(invoice.status)) {
+  if (['paid', 'refunded', 'voided', 'canceled'].includes(invoice.status)) {
     return c.json({ error: 'This invoice is not payable.' }, 409);
   }
 

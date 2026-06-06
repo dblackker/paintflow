@@ -17,6 +17,7 @@ interface Payment {
   status?: string | null;
   description?: string | null;
   receivedAt?: string | null;
+  refundedAt?: string | null;
   stripeCheckoutSessionId?: string | null;
   stripePaymentIntentId?: string | null;
   stripeChargeId?: string | null;
@@ -132,6 +133,16 @@ function paymentReference(payment: Payment) {
 
 function isCompletedPayment(payment: Payment) {
   return ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(String(payment.status || ''));
+}
+
+function latestRefundAt(payment: Payment) {
+  const history = Array.isArray(payment.metadata?.refundHistory) ? payment.metadata.refundHistory : [];
+  const latest = history
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => typeof item.recordedAt === 'string' ? item.recordedAt : null)
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  return payment.refundedAt || latest || payment.updatedAt || payment.receivedAt;
 }
 
 export function InvoiceDetail() {
@@ -304,7 +315,9 @@ export function InvoiceDetail() {
   const paid = useMemo(() => payments.reduce((sum, payment) => sum + netPayment(payment), 0), [payments]);
   const total = numberValue(invoice?.total);
   const balance = Math.max(total - paid, 0);
-  const isOpen = invoice && balance > 0.005 && !['paid', 'voided', 'canceled'].includes(String(invoice.status || ''));
+  const isRefundedInvoice = String(invoice?.status || '') === 'refunded';
+  const collectibleBalance = isRefundedInvoice ? 0 : balance;
+  const isOpen = invoice && collectibleBalance > 0.005 && !['paid', 'refunded', 'voided', 'canceled'].includes(String(invoice.status || ''));
   const lineItems = Array.isArray(invoice?.lineItems) ? invoice.lineItems : [];
   const invoiceAddress = invoice ? formatAddress({
     streetAddress: invoice.jobStreetAddress || invoice.leadStreetAddress,
@@ -314,27 +327,42 @@ export function InvoiceDetail() {
   }) : '';
   const activity = useMemo<ActivityTimelineItem[]>(() => {
     if (!invoice) return [];
-    const items: ActivityTimelineItem[] = [];
+    const items: Array<ActivityTimelineItem & { sortAt?: string | null }> = [];
     const completedPayments = payments.filter(isCompletedPayment);
     if (completedPayments.length) {
       completedPayments.forEach((payment) => {
-        const net = netPayment(payment);
+        const gross = numberValue(payment.amount);
+        const refunded = numberValue(payment.refundedAmount);
         items.push({
           id: `payment-${payment.id}`,
-          title: net >= total - 0.005 ? `Paid in full | ${formatMoney(net)}` : `Payment received | ${formatMoney(net)}`,
+          title: gross >= total - 0.005 ? `Payment received in full | ${formatMoney(gross)}` : `Payment received | ${formatMoney(gross)}`,
           meta: formatDate(payment.receivedAt, true),
-          description: `${formatMoney(net)} ${net >= total - 0.005 ? 'paid in full' : 'recorded'} by ${invoice.leadName || 'customer'} via ${paymentSourceLabel(payment.source)}`,
+          description: `${formatMoney(gross)} recorded from ${invoice.leadName || 'customer'} via ${paymentSourceLabel(payment.source)}${refunded > 0.005 ? `, with ${formatMoney(refunded)} later refunded` : ''}`,
           tone: 'success',
+          sortAt: payment.receivedAt,
         });
+        if (refunded > 0.005) {
+          const fullyRefunded = refunded >= gross - 0.005;
+          items.push({
+            id: `refund-${payment.id}`,
+            title: fullyRefunded ? `Payment refunded | ${formatMoney(refunded)}` : `Partial refund | ${formatMoney(refunded)}`,
+            meta: formatDate(latestRefundAt(payment), true),
+            description: `${formatMoney(refunded)} returned or credited against the ${paymentSourceLabel(payment.source)} payment`,
+            tone: fullyRefunded ? 'danger' : 'warning',
+            sortAt: latestRefundAt(payment),
+          });
+        }
       });
     }
     if (invoice.dueDate) {
+      const isRefunded = String(invoice.status || '') === 'refunded';
       items.push({
         id: 'invoice-due',
-        title: balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'Invoice overdue' : 'Invoice due',
+        title: isRefunded ? 'Invoice closed after refund' : balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'Invoice overdue' : 'Invoice due',
         meta: formatDate(invoice.dueDate),
-        description: balance > 0.005 ? `${formatMoney(balance)} open balance` : 'No balance remaining',
-        tone: balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'danger' : balance > 0.005 ? 'warning' : 'success',
+        description: isRefunded ? 'No payment is collectible on this refunded invoice' : balance > 0.005 ? `${formatMoney(balance)} open balance` : 'No balance remaining',
+        tone: isRefunded ? 'danger' : balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'danger' : balance > 0.005 ? 'warning' : 'success',
+        sortAt: invoice.dueDate,
       });
     }
     if (invoice.sentAt) {
@@ -343,6 +371,7 @@ export function InvoiceDetail() {
         title: `Invoice sent${invoice.leadName ? ` to ${invoice.leadName}` : ''}`,
         meta: formatDate(invoice.sentAt, true),
         tone: 'info',
+        sortAt: invoice.sentAt,
       });
     }
     if (invoice.createdAt) {
@@ -351,14 +380,15 @@ export function InvoiceDetail() {
         title: 'Invoice created',
         meta: formatDate(invoice.createdAt, true),
         tone: 'default',
+        sortAt: invoice.createdAt,
       });
     }
     return items.sort((a, b) => {
-      const dateA = Date.parse(a.meta || '') || 0;
-      const dateB = Date.parse(b.meta || '') || 0;
+      const dateA = Date.parse(a.sortAt || a.meta || '') || 0;
+      const dateB = Date.parse(b.sortAt || b.meta || '') || 0;
       return dateB - dateA;
-    });
-  }, [balance, invoice, paid, payments, total]);
+    }).map(({ sortAt: _sortAt, ...item }) => item);
+  }, [balance, invoice, payments, total]);
 
   if (isLoading) {
     return (
@@ -401,9 +431,9 @@ export function InvoiceDetail() {
               <p className="pf-metric-label">Total</p>
               <p className="pf-row-title">{formatMoney(total)}</p>
             </div>
-            <div className="rounded-lg bg-amber-50 p-3">
-              <p className="pf-metric-label text-amber-800">Balance</p>
-              <p className="pf-row-title text-amber-950">{formatMoney(balance)}</p>
+            <div className={isRefundedInvoice ? 'rounded-lg bg-red-50 p-3' : 'rounded-lg bg-amber-50 p-3'}>
+              <p className={isRefundedInvoice ? 'pf-metric-label text-red-800' : 'pf-metric-label text-amber-800'}>{isRefundedInvoice ? 'Collectible balance' : 'Balance'}</p>
+              <p className={isRefundedInvoice ? 'pf-row-title text-red-950' : 'pf-row-title text-amber-950'}>{formatMoney(collectibleBalance)}</p>
             </div>
           </div>
         </div>
@@ -539,8 +569,16 @@ export function InvoiceDetail() {
               </div>
               {invoice.paidAt && (
                 <div>
-                  <p className="pf-meta">Paid</p>
+                  <p className="pf-meta">{['refunded', 'partially_refunded'].includes(String(invoice.status || '')) ? 'Original payment' : 'Paid'}</p>
                   <p className="pf-copy">{formatDate(invoice.paidAt, true)}</p>
+                </div>
+              )}
+              {payments.some((payment) => numberValue(payment.refundedAmount) > 0.005) && (
+                <div>
+                  <p className="pf-meta">Refunded</p>
+                  <p className="pf-copy text-red-700">
+                    {formatMoney(payments.reduce((sum, payment) => sum + numberValue(payment.refundedAmount), 0))}
+                  </p>
                 </div>
               )}
               {invoice.note && (
@@ -621,7 +659,7 @@ export function InvoiceDetail() {
                   </div>
                   <div className="flex justify-between gap-4">
                     <span className="pf-copy">Remaining balance</span>
-                    <span className="pf-row-title">{formatMoney(balance)}</span>
+                    <span className="pf-row-title">{formatMoney(collectibleBalance)}</span>
                   </div>
                 </div>
               </div>

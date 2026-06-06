@@ -27,6 +27,24 @@ import { sendInvoiceEmail } from '../lib/invoice-emails';
 
 const invoicesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+function effectiveCustomerInvoiceStatus(
+  invoice: { status?: string | null; total?: string | number | null },
+  payments: Array<{ status?: string | null; amount?: string | number | null; refundedAmount?: string | number | null }>,
+) {
+  const status = String(invoice.status || 'sent');
+  if (['canceled', 'voided'].includes(status)) return status;
+  const payable = payments.filter((payment) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status));
+  const grossPaid = payable.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const refunded = payable.reduce((sum, payment) => sum + Number(payment.refundedAmount || 0), 0);
+  const netPaid = Math.max(grossPaid - refunded, 0);
+  const total = Number(invoice.total || 0);
+  if (grossPaid > 0.005 && refunded >= grossPaid - 0.005) return 'refunded';
+  if (refunded > 0.005) return 'partially_refunded';
+  if (netPaid >= total - 0.005) return 'paid';
+  if (netPaid > 0.005) return 'partially_paid';
+  return invoice.status;
+}
+
 type InvoiceItem = {
   description: string;
   sku?: string | null;
@@ -1355,6 +1373,7 @@ invoicesApp.get('/customer', async (c) => {
   return c.json({
     data: rows.map((row) => ({
       ...row.invoice,
+      status: effectiveCustomerInvoiceStatus(row.invoice, paymentsByInvoice.get(row.invoice.id) || []),
       leadName: row.leadName,
       leadEmail: row.leadEmail,
       leadPhone: row.leadPhone,
@@ -1396,6 +1415,7 @@ invoicesApp.get('/customer/:id', async (c) => {
   return c.json({
     data: {
       ...invoice,
+      status: effectiveCustomerInvoiceStatus(invoice, payments),
       leadName: lead?.name || null,
       leadEmail: lead?.email || null,
       leadPhone: lead?.phone || null,
@@ -1618,7 +1638,7 @@ invoicesApp.post('/customer/:id/send-reminder', async (c) => {
     where: and(eq(customerInvoices.id, id), eq(customerInvoices.orgId, orgId)),
   });
   if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
-  if (['canceled', 'voided', 'paid'].includes(invoice.status)) {
+  if (['canceled', 'voided', 'paid', 'refunded'].includes(invoice.status)) {
     return c.json({ error: 'This invoice is not open for reminders.' }, 409);
   }
 

@@ -210,6 +210,21 @@ function invoiceBalance(invoice: CustomerInvoice) {
   return Math.max(Number(invoice.total || 0) - invoicePaid(invoice), 0);
 }
 
+function invoiceDisplayStatus(invoice: CustomerInvoice) {
+  const status = String(invoice.status || 'sent');
+  if (['canceled', 'voided'].includes(status)) return status;
+  const payments = invoice.payments || [];
+  const grossPaid = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const refunded = payments.reduce((sum, payment) => sum + Number(payment.refundedAmount || 0), 0);
+  const netPaid = Math.max(grossPaid - refunded, 0);
+  const total = Number(invoice.total || 0);
+  if (grossPaid > 0.005 && refunded >= grossPaid - 0.005) return 'refunded';
+  if (refunded > 0.005) return 'partially_refunded';
+  if (netPaid >= total - 0.005) return 'paid';
+  if (netPaid > 0.005) return 'partially_paid';
+  return status;
+}
+
 function jobAddress(job: Job) {
   const locality = [job.city, job.state].filter(Boolean).join(', ');
   return [job.streetAddress, locality, String(job.postalCode || '').slice(0, 5)].filter(Boolean).join(' ');
@@ -901,19 +916,22 @@ function InvoicesList({ invoices, onRecordPayment }: { invoices: CustomerInvoice
         const total = Number(invoice.total || 0);
         const paid = invoicePaid(invoice);
         const balance = invoiceBalance(invoice);
-        const isOpen = balance > 0.005 && !['paid', 'voided', 'canceled'].includes(String(invoice.status || ''));
+        const refunded = (invoice.payments || []).reduce((sum, payment) => sum + Number(payment.refundedAmount || 0), 0);
+        const displayStatus = invoiceDisplayStatus(invoice);
+        const isOpen = balance > 0.005 && !['paid', 'refunded', 'voided', 'canceled'].includes(displayStatus);
         return (
           <div key={invoice.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <p className="pf-row-title truncate">{invoice.invoiceNumber || 'Invoice'}</p>
-                <StatusBadge status={String(invoice.status || 'sent')} />
+                <StatusBadge status={displayStatus} />
               </div>
               <p className="pf-copy mt-1 truncate">{invoice.description || 'Customer invoice'}</p>
               <div className="pf-meta mt-1 space-y-0.5 leading-5">
                 <p>{invoice.dueLabel || (invoice.dueDate ? `Due ${formatDate(invoice.dueDate)}` : 'Due on receipt')}</p>
                 <p>Sent {formatDate(invoice.sentAt || invoice.createdAt, true)}</p>
-                {invoice.paidAt && <p>Paid {formatDate(invoice.paidAt, true)}</p>}
+                {invoice.paidAt && <p>{refunded > 0 ? 'Original payment' : 'Paid'} {formatDate(invoice.paidAt, true)}</p>}
+                {refunded > 0 && <p className="text-red-700">{formatMoney(refunded)} refunded</p>}
               </div>
             </div>
             <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-center">
