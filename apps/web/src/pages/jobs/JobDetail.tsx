@@ -56,6 +56,7 @@ interface ChangeOrderScopeDetails {
 }
 
 interface ChangeOrderFormState {
+  mode: 'simple' | 'detailed';
   description: string;
   amount: string;
   createdBy: 'contractor' | 'customer';
@@ -172,6 +173,7 @@ const blankChangeOrderScopeItem = (): ChangeOrderScopeItem => ({
 });
 
 const initialChangeOrderForm = (): ChangeOrderFormState => ({
+  mode: 'simple',
   description: '',
   amount: '',
   createdBy: 'contractor',
@@ -313,13 +315,15 @@ export function JobDetail() {
       return;
     }
     setEditingChangeOrderId(order?.id || null);
+    const hasDetailedScope = Boolean(order?.scopeDetails?.items?.length);
     setChangeOrderForm(order ? {
+      mode: hasDetailedScope ? 'detailed' : 'simple',
       description: order.description || '',
       amount: String(order.amount || ''),
       createdBy: (order.createdBy === 'customer' ? 'customer' : 'contractor'),
       paymentRequired: Boolean(order.paymentRequired),
       depositPercent: String(order.paymentDueAmount && order.amount ? Math.round((Number(order.paymentDueAmount) / Math.max(Number(order.amount), 1)) * 100) : 100),
-      scopeItems: order.scopeDetails?.items?.length ? order.scopeDetails.items : [blankChangeOrderScopeItem()],
+      scopeItems: hasDetailedScope ? order.scopeDetails?.items || [blankChangeOrderScopeItem()] : [blankChangeOrderScopeItem()],
     } : initialChangeOrderForm());
     setChangeOrderOpen(true);
   }
@@ -498,18 +502,20 @@ export function JobDetail() {
     const status = submitter?.value === 'draft' ? 'draft' : 'pending';
     const amount = Number(changeOrderForm.amount || 0);
     const description = changeOrderForm.description.trim();
-    const scopeItems = changeOrderForm.scopeItems
-      .map((item) => ({
-        ...item,
-        area: item.area.trim(),
-        substrate: item.substrate.trim(),
-        prep: item.prep.trim(),
-        applicationMethod: item.applicationMethod.trim(),
-        paintProduct: item.paintProduct.trim(),
-        color: item.color.trim(),
-        notes: item.notes.trim(),
-      }))
-      .filter((item) => item.area || item.substrate || item.paintProduct || item.color || item.notes || Number(item.quantity || 0) > 0);
+    const scopeItems = changeOrderForm.mode === 'detailed'
+      ? changeOrderForm.scopeItems
+        .map((item) => ({
+          ...item,
+          area: item.area.trim(),
+          substrate: item.substrate.trim(),
+          prep: item.prep.trim(),
+          applicationMethod: item.applicationMethod.trim(),
+          paintProduct: item.paintProduct.trim(),
+          color: item.color.trim(),
+          notes: item.notes.trim(),
+        }))
+        .filter((item) => item.area || item.substrate || item.paintProduct || item.color || item.notes || Number(item.quantity || 0) > 0)
+      : [];
     if (status !== 'draft' && (!description || amount <= 0)) {
       window.showToast?.('Add a description and positive amount before sending a change order for approval.', 'error');
       return;
@@ -525,7 +531,7 @@ export function JobDetail() {
         createdBy: changeOrderForm.createdBy,
         paymentRequired: changeOrderForm.paymentRequired,
         depositPercent: changeOrderForm.paymentRequired ? Number(changeOrderForm.depositPercent || 100) : 0,
-        scopeDetails: { items: scopeItems },
+        scopeDetails: scopeItems.length ? { items: scopeItems } : { items: [] },
       });
       const response = await apiJson<{ data?: ChangeOrder & { approvalLink?: string | null } }>(editingChangeOrderId ? `/v1/change-orders/${editingChangeOrderId}` : '/v1/change-orders', {
         method: editingChangeOrderId ? 'PATCH' : 'POST',
@@ -1143,6 +1149,33 @@ export function JobDetail() {
       <Modal isOpen={changeOrderOpen} onClose={closeChangeOrderEditor} title={editingChangeOrderId ? 'Edit Change Order' : 'Add Change Order'} size="lg">
         <form onSubmit={saveChangeOrder} className="space-y-5">
           <p className="pf-copy">Draft the added scope first. When it is ready, preview the customer email and send the approval link for signature and any required payment.</p>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className={changeOrderForm.mode === 'simple' ? 'btn-primary btn-sm justify-center' : 'btn-text btn-sm justify-center'}
+                onClick={() => setChangeOrderForm({ ...changeOrderForm, mode: 'simple' })}
+              >
+                Simple
+              </button>
+              <button
+                type="button"
+                className={changeOrderForm.mode === 'detailed' ? 'btn-primary btn-sm justify-center' : 'btn-text btn-sm justify-center'}
+                onClick={() => setChangeOrderForm({
+                  ...changeOrderForm,
+                  mode: 'detailed',
+                  scopeItems: changeOrderForm.scopeItems.length ? changeOrderForm.scopeItems : [blankChangeOrderScopeItem()],
+                })}
+              >
+                Detailed scope
+              </button>
+            </div>
+            <p className="pf-meta mt-2 px-2">
+              {changeOrderForm.mode === 'simple'
+                ? 'Use simple for common add-ons where the summary and price are enough.'
+                : 'Use detailed scope when production needs room, substrate, paint, coats, or measurement detail.'}
+            </p>
+          </div>
           <label className="block space-y-1.5">
             <span className="form-label">Customer-facing summary</span>
             <textarea
@@ -1178,6 +1211,7 @@ export function JobDetail() {
             </label>
           </div>
 
+          {changeOrderForm.mode === 'detailed' && (
           <div className="rounded-lg border border-gray-200">
             <div className="flex items-center justify-between gap-3 border-b p-4">
               <div>
@@ -1271,6 +1305,7 @@ export function JobDetail() {
               ))}
             </div>
           </div>
+          )}
 
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
             <label className="flex items-start gap-3">
