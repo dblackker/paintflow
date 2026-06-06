@@ -299,6 +299,7 @@ interface PaymentFormState {
   source: 'cash' | 'check' | 'ach' | 'other';
   reference: string;
   description: string;
+  sendReceipt: boolean;
 }
 
 type ReceivableKind = 'estimate' | 'change_order' | 'invoice';
@@ -359,6 +360,7 @@ const emptyPaymentForm: PaymentFormState = {
   source: 'check',
   reference: '',
   description: '',
+  sendReceipt: true,
 };
 
 const supplierOptions = [
@@ -1405,9 +1407,10 @@ export function Invoices() {
           reference: paymentForm.reference || null,
           description: paymentForm.description || null,
           confirmAdditionalPayment,
+          sendReceipt: paymentReceivable.kind === 'invoice' ? paymentForm.sendReceipt : false,
         }),
       });
-      window.showToast?.('Payment recorded', 'success');
+      window.showToast?.(paymentReceivable.kind === 'invoice' && paymentForm.sendReceipt ? 'Payment recorded and receipt queued' : 'Payment recorded', 'success');
       setPaymentReceivable(null);
       await loadInvoices();
     } catch (err) {
@@ -1862,6 +1865,20 @@ export function Invoices() {
               </Select>
               <Input label="Reference" autoComplete="off" placeholder="Check #, ACH confirmation, note" value={paymentForm.reference} onChange={(event) => setPaymentForm({ ...paymentForm, reference: event.target.value })} />
               <Input label="Description" autoComplete="off" value={paymentForm.description} onChange={(event) => setPaymentForm({ ...paymentForm, description: event.target.value })} />
+              {paymentReceivable.kind === 'invoice' && (
+                <label className="flex gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={paymentForm.sendReceipt}
+                    onChange={(event) => setPaymentForm({ ...paymentForm, sendReceipt: event.target.checked })}
+                  />
+                  <span>
+                    <span className="block font-medium">Send receipt to customer</span>
+                    <span className="block text-blue-800">Uses the invoice payment receipt email template after the manual payment is recorded.</span>
+                  </span>
+                </label>
+              )}
               {paymentReceivable.paid > 0.005 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                   This invoice already has {formatMoney(paymentReceivable.paid)} recorded. You will be asked to confirm this is not a duplicate.
@@ -1869,7 +1886,7 @@ export function Invoices() {
               )}
               <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <Button type="button" variant="secondary" fullWidth onClick={closePaymentModal}>Cancel</Button>
-                <Button type="submit" fullWidth isLoading={isRecordingPayment}>Record payment</Button>
+                <Button type="submit" fullWidth isLoading={isRecordingPayment}>{paymentReceivable.kind === 'invoice' && numberValue(paymentForm.amount) >= paymentReceivable.balance - 0.005 ? 'Mark paid' : 'Record payment'}</Button>
               </div>
             </form>
           </div>

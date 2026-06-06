@@ -30,6 +30,7 @@ const manualPaymentSchema = z.object({
   description: z.string().trim().max(255).optional().nullable(),
   receivedAt: z.string().datetime().optional().nullable(),
   confirmAdditionalPayment: z.boolean().optional(),
+  sendReceipt: z.boolean().optional(),
 }).refine((data) => Boolean(data.estimateId) !== Boolean(data.invoiceId), {
   message: 'Select either an estimate or an invoice.',
   path: ['estimateId'],
@@ -171,6 +172,7 @@ billing.post('/manual', async (c) => {
 
     const receivedAt = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
     const description = parsed.data.description || `${parsed.data.source.toUpperCase()} payment`;
+    const sendReceipt = parsed.data.sendReceipt !== false;
     const [payment] = await db.insert(customerPayments).values({
       orgId,
       leadId: invoice.leadId,
@@ -187,6 +189,7 @@ billing.post('/manual', async (c) => {
         reference: parsed.data.reference || null,
         confirmedAdditionalPayment: paidAmount > 0.005,
         recordedByUserId: c.get('userId') || null,
+        receiptRequested: sendReceipt,
         note: 'Manual payment recorded by contractor. No Stripe charge was created.',
       },
     }).returning();
@@ -225,20 +228,23 @@ billing.post('/manual', async (c) => {
         source: parsed.data.source,
         reference: parsed.data.reference || null,
         remainingAfterPayment,
+        receiptRequested: sendReceipt,
       },
     });
 
-    try {
-      await sendInvoiceEmail(c.env, db, {
-        orgId,
-        invoice,
-        templateKey: 'invoice.payment.receipt',
-        payment,
-        balanceDue: remainingAfterPayment,
-        sentBy: c.get('userId') || null,
-      });
-    } catch (error) {
-      console.error('Failed to send manual invoice payment receipt:', error);
+    if (sendReceipt) {
+      try {
+        await sendInvoiceEmail(c.env, db, {
+          orgId,
+          invoice,
+          templateKey: 'invoice.payment.receipt',
+          payment,
+          balanceDue: remainingAfterPayment,
+          sentBy: c.get('userId') || null,
+        });
+      } catch (error) {
+        console.error('Failed to send manual invoice payment receipt:', error);
+      }
     }
 
     return c.json({ data: payment }, 201);

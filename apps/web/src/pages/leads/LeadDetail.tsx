@@ -152,6 +152,7 @@ interface PaymentForm {
   description: string;
   receivedAt: string;
   confirmAdditionalPayment: boolean;
+  sendReceipt: boolean;
 }
 
 interface RefundForm {
@@ -416,6 +417,7 @@ export function LeadDetail() {
       description: '',
       receivedAt: dateTimeLocalValue(),
       confirmAdditionalPayment: paid <= 0.005,
+      sendReceipt: false,
     });
   }
 
@@ -430,6 +432,7 @@ export function LeadDetail() {
       description: invoice.description || '',
       receivedAt: dateTimeLocalValue(),
       confirmAdditionalPayment: paid <= 0.005,
+      sendReceipt: true,
     });
   }
 
@@ -454,9 +457,10 @@ export function LeadDetail() {
           description: paymentForm.description || null,
           receivedAt: paymentForm.receivedAt ? new Date(paymentForm.receivedAt).toISOString() : null,
           confirmAdditionalPayment: paymentForm.confirmAdditionalPayment,
+          sendReceipt: Boolean(paymentForm.invoice?.id && paymentForm.sendReceipt),
         }),
       });
-      window.showToast?.('Payment recorded', 'success');
+      window.showToast?.(paymentForm.invoice?.id && paymentForm.sendReceipt ? 'Payment recorded and receipt queued' : 'Payment recorded', 'success');
       setPaymentForm(null);
       await loadDetail();
     } catch (err) {
@@ -669,6 +673,20 @@ export function LeadDetail() {
             <Input label="Reference" value={paymentForm.reference} onChange={(event) => setPaymentForm({ ...paymentForm, reference: event.target.value })} placeholder="Check number or note" />
             <Input label="Received" type="datetime-local" value={paymentForm.receivedAt} onChange={(event) => setPaymentForm({ ...paymentForm, receivedAt: event.target.value })} />
             <Textarea label="Description" rows={2} value={paymentForm.description} onChange={(event) => setPaymentForm({ ...paymentForm, description: event.target.value })} />
+            {paymentForm.invoice && (
+              <label className="flex gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={paymentForm.sendReceipt}
+                  onChange={(event) => setPaymentForm({ ...paymentForm, sendReceipt: event.target.checked })}
+                />
+                <span>
+                  <span className="block font-medium">Send receipt to customer</span>
+                  <span className="block text-blue-800">Uses the invoice payment receipt email template after the manual payment is recorded.</span>
+                </span>
+              </label>
+            )}
             {!paymentForm.confirmAdditionalPayment && (
               <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                 <input type="checkbox" className="mt-1" checked={paymentForm.confirmAdditionalPayment} onChange={(event) => setPaymentForm({ ...paymentForm, confirmAdditionalPayment: event.target.checked })} />
@@ -677,7 +695,7 @@ export function LeadDetail() {
             )}
             <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
               <Button type="button" variant="secondary" fullWidth onClick={() => setPaymentForm(null)}>Cancel</Button>
-              <Button type="submit" fullWidth isLoading={isSavingPayment} disabled={!paymentForm.amount || !paymentForm.confirmAdditionalPayment}>Record payment</Button>
+              <Button type="submit" fullWidth isLoading={isSavingPayment} disabled={!paymentForm.amount || !paymentForm.confirmAdditionalPayment}>{paymentForm.invoice && Number(paymentForm.amount || 0) >= invoiceBalance(paymentForm.invoice) - 0.005 ? 'Mark paid' : 'Record payment'}</Button>
             </div>
           </form>
         </Modal>

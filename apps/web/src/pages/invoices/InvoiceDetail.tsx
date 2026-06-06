@@ -5,7 +5,7 @@ import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
-import { Textarea } from '@/components/Input';
+import { Input, Select, Textarea } from '@/components/Input';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface Payment {
@@ -61,6 +61,22 @@ interface CustomerInvoiceDetail {
   payments?: Payment[];
 }
 
+interface ManualPaymentForm {
+  amount: string;
+  source: 'cash' | 'check' | 'ach' | 'other';
+  reference: string;
+  description: string;
+  sendReceipt: boolean;
+}
+
+const emptyManualPaymentForm: ManualPaymentForm = {
+  amount: '',
+  source: 'check',
+  reference: '',
+  description: '',
+  sendReceipt: true,
+};
+
 function numberValue(value: unknown) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -92,6 +108,9 @@ export function InvoiceDetail() {
   const [invoice, setInvoice] = useState<CustomerInvoiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSendingReminder, setIsSendingReminder] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState<ManualPaymentForm>(emptyManualPaymentForm);
+  const [isRecordingPayment, setIsRecordingPayment] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [isCanceling, setIsCanceling] = useState(false);
@@ -116,9 +135,9 @@ export function InvoiceDetail() {
   }, [id]);
 
   useEffect(() => {
-    document.body.classList.toggle('pf-modal-open', cancelModalOpen);
+    document.body.classList.toggle('pf-modal-open', cancelModalOpen || paymentModalOpen);
     return () => document.body.classList.remove('pf-modal-open');
-  }, [cancelModalOpen]);
+  }, [cancelModalOpen, paymentModalOpen]);
 
   async function sendReminder() {
     if (!invoice?.id) return;
@@ -133,6 +152,72 @@ export function InvoiceDetail() {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to send reminder', 'error');
     } finally {
       setIsSendingReminder(false);
+    }
+  }
+
+  function openPaymentModal() {
+    if (!invoice) return;
+    setPaymentForm({
+      ...emptyManualPaymentForm,
+      amount: balance.toFixed(2),
+      description: `${invoice.invoiceNumber || 'Invoice'} payment`,
+      sendReceipt: true,
+    });
+    setPaymentModalOpen(true);
+  }
+
+  function closePaymentModal() {
+    if (isRecordingPayment) return;
+    setPaymentModalOpen(false);
+    setPaymentForm(emptyManualPaymentForm);
+  }
+
+  async function recordManualPayment(event: FormEvent) {
+    event.preventDefault();
+    if (!invoice?.id || isRecordingPayment) return;
+
+    const amount = numberValue(paymentForm.amount);
+    if (amount <= 0) {
+      window.showToast?.('Enter a payment amount greater than $0.00.', 'error');
+      return;
+    }
+    if (amount > balance + 0.005) {
+      window.showToast?.(`Payment cannot exceed the open balance of ${formatMoney(balance)}.`, 'error');
+      return;
+    }
+
+    const confirmAdditionalPayment = paid > 0.005;
+    if (confirmAdditionalPayment) {
+      const confirmed = window.confirm(`This invoice already has ${formatMoney(paid)} recorded. Confirm this is an additional payment and not a duplicate.`);
+      if (!confirmed) return;
+    }
+
+    setIsRecordingPayment(true);
+    try {
+      await apiJson('/v1/payments/manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          invoiceId: invoice.id,
+          amount,
+          source: paymentForm.source,
+          reference: paymentForm.reference || null,
+          description: paymentForm.description || null,
+          confirmAdditionalPayment,
+          sendReceipt: paymentForm.sendReceipt,
+        }),
+      });
+      window.showToast?.(paymentForm.sendReceipt ? 'Payment recorded and receipt queued' : 'Payment recorded', 'success');
+      setPaymentModalOpen(false);
+      setPaymentForm(emptyManualPaymentForm);
+      await loadInvoice();
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to record payment', 'error');
+    } finally {
+      setIsRecordingPayment(false);
     }
   }
 
@@ -227,6 +312,11 @@ export function InvoiceDetail() {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
+          {isOpen && (
+            <Button type="button" size="sm" onClick={openPaymentModal}>
+              Mark paid manually
+            </Button>
+          )}
           {isOpen && (
             <Button type="button" size="sm" leftIcon={<Icon name="mail" className="h-4 w-4" />} isLoading={isSendingReminder} onClick={sendReminder}>
               Send reminder
@@ -340,6 +430,79 @@ export function InvoiceDetail() {
           </Card>
           </aside>
         </div>
+      {paymentModalOpen && (
+        <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="manual-payment-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closePaymentModal(); }}>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 id="manual-payment-title" className="pf-section-title">Mark paid manually</h2>
+                <p className="pf-copy mt-1">{invoice.invoiceNumber || 'This invoice'} has {formatMoney(balance)} open.</p>
+              </div>
+              <button type="button" className="btn-icon" aria-label="Close manual payment" onClick={closePaymentModal}>
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+            </div>
+            <form className="space-y-4" onSubmit={recordManualPayment}>
+              <Input
+                label="Amount"
+                type="number"
+                min="0.01"
+                max={balance.toFixed(2)}
+                step="0.01"
+                inputMode="decimal"
+                value={paymentForm.amount}
+                onChange={(event) => setPaymentForm((current) => ({ ...current, amount: event.target.value }))}
+                required
+              />
+              <Select
+                label="Payment method"
+                value={paymentForm.source}
+                onChange={(event) => setPaymentForm((current) => ({ ...current, source: event.target.value as ManualPaymentForm['source'] }))}
+              >
+                <option value="check">Check</option>
+                <option value="cash">Cash</option>
+                <option value="ach">ACH</option>
+                <option value="other">Other</option>
+              </Select>
+              <Input
+                label="Reference"
+                value={paymentForm.reference}
+                onChange={(event) => setPaymentForm((current) => ({ ...current, reference: event.target.value }))}
+                placeholder="Check number, memo, or bank reference"
+              />
+              <Input
+                label="Description"
+                value={paymentForm.description}
+                onChange={(event) => setPaymentForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Invoice payment"
+              />
+              <label className="flex gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={paymentForm.sendReceipt}
+                  onChange={(event) => setPaymentForm((current) => ({ ...current, sendReceipt: event.target.checked }))}
+                />
+                <span>
+                  <span className="block font-medium">Send receipt to customer</span>
+                  <span className="block text-blue-800">Uses the invoice payment receipt email template after the manual payment is recorded.</span>
+                </span>
+              </label>
+              {paid > 0.005 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  This invoice already has {formatMoney(paid)} recorded. You will be asked to confirm this is an additional payment.
+                </div>
+              )}
+              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
+                <Button type="button" variant="secondary" fullWidth onClick={closePaymentModal}>Cancel</Button>
+                <Button type="submit" fullWidth isLoading={isRecordingPayment}>
+                  {numberValue(paymentForm.amount) >= balance - 0.005 ? 'Mark paid' : 'Record payment'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {cancelModalOpen && (
         <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCancelModal(); }}>
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
