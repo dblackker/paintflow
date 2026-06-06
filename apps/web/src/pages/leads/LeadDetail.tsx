@@ -923,7 +923,9 @@ function InvoicesList({ invoices, onRecordPayment }: { invoices: CustomerInvoice
           <div key={invoice.id} className="grid gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <p className="pf-row-title truncate">{invoice.invoiceNumber || 'Invoice'}</p>
+                <Link to={`/invoices/${invoice.id}`} className="pf-row-title truncate transition hover:text-blue-700 hover:underline">
+                  {invoice.invoiceNumber || 'Invoice'}
+                </Link>
                 <StatusBadge status={displayStatus} />
               </div>
               <p className="pf-copy mt-1 truncate">{invoice.description || 'Customer invoice'}</p>
