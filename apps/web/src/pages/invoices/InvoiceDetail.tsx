@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { ActivityTimeline, type ActivityTimelineItem } from '@/components/ActivityTimeline';
 import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
@@ -16,6 +17,12 @@ interface Payment {
   status?: string | null;
   description?: string | null;
   receivedAt?: string | null;
+  stripeCheckoutSessionId?: string | null;
+  stripePaymentIntentId?: string | null;
+  stripeChargeId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 interface InvoiceLineItem {
@@ -58,6 +65,7 @@ interface CustomerInvoiceDetail {
   jobCity?: string | null;
   jobState?: string | null;
   jobPostalCode?: string | null;
+  orgName?: string | null;
   payments?: Payment[];
 }
 
@@ -83,7 +91,7 @@ function numberValue(value: unknown) {
 }
 
 function netPayment(payment: Payment) {
-  if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(String(payment.status || ''))) return 0;
+  if (!isCompletedPayment(payment)) return 0;
   return Math.max(numberValue(payment.amount) - numberValue(payment.refundedAmount), 0);
 }
 
@@ -103,6 +111,29 @@ function reminderCopy(value?: string | null) {
   return 'Reminder on due date';
 }
 
+function paymentSourceLabel(source?: string | null) {
+  if (source === 'ach') return 'ACH';
+  if (source === 'stripe') return 'Card';
+  return labelize(source || 'payment');
+}
+
+function metadataString(payment: Payment, key: string) {
+  const value = payment.metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function paymentReference(payment: Payment) {
+  return metadataString(payment, 'reference')
+    || payment.stripeChargeId
+    || payment.stripePaymentIntentId
+    || payment.stripeCheckoutSessionId
+    || null;
+}
+
+function isCompletedPayment(payment: Payment) {
+  return ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(String(payment.status || ''));
+}
+
 export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
   const [invoice, setInvoice] = useState<CustomerInvoiceDetail | null>(null);
@@ -111,6 +142,8 @@ export function InvoiceDetail() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState<ManualPaymentForm>(emptyManualPaymentForm);
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [isSendingReceipt, setIsSendingReceipt] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [isCanceling, setIsCanceling] = useState(false);
@@ -135,9 +168,9 @@ export function InvoiceDetail() {
   }, [id]);
 
   useEffect(() => {
-    document.body.classList.toggle('pf-modal-open', cancelModalOpen || paymentModalOpen);
+    document.body.classList.toggle('pf-modal-open', cancelModalOpen || paymentModalOpen || Boolean(selectedPayment));
     return () => document.body.classList.remove('pf-modal-open');
-  }, [cancelModalOpen, paymentModalOpen]);
+  }, [cancelModalOpen, paymentModalOpen, selectedPayment]);
 
   async function sendReminder() {
     if (!invoice?.id) return;
@@ -221,6 +254,22 @@ export function InvoiceDetail() {
     }
   }
 
+  async function sendPaymentReceipt(payment: Payment) {
+    if (!invoice?.id || isSendingReceipt) return;
+    setIsSendingReceipt(true);
+    try {
+      await apiJson(`/v1/invoices/customer/${invoice.id}/payments/${payment.id}/send-receipt`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      window.showToast?.('Receipt sent', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to send receipt', 'error');
+    } finally {
+      setIsSendingReceipt(false);
+    }
+  }
+
   function closeCancelModal() {
     if (isCanceling) return;
     setCancelModalOpen(false);
@@ -263,6 +312,53 @@ export function InvoiceDetail() {
     state: invoice.jobState || invoice.leadState,
     postalCode: invoice.jobPostalCode || invoice.leadPostalCode,
   }) : '';
+  const activity = useMemo<ActivityTimelineItem[]>(() => {
+    if (!invoice) return [];
+    const items: ActivityTimelineItem[] = [];
+    const completedPayments = payments.filter(isCompletedPayment);
+    if (completedPayments.length) {
+      completedPayments.forEach((payment) => {
+        const net = netPayment(payment);
+        items.push({
+          id: `payment-${payment.id}`,
+          title: net >= total - 0.005 ? `Paid ${formatMoney(net)}` : `Payment received ${formatMoney(net)}`,
+          meta: formatDate(payment.receivedAt, true),
+          description: `${formatMoney(net)} ${net >= total - 0.005 ? 'paid in full' : 'recorded'} by ${invoice.leadName || 'customer'} via ${paymentSourceLabel(payment.source)}`,
+          tone: 'success',
+        });
+      });
+    }
+    if (invoice.dueDate) {
+      items.push({
+        id: 'invoice-due',
+        title: balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'Invoice overdue' : 'Invoice due',
+        meta: formatDate(invoice.dueDate),
+        description: balance > 0.005 ? `${formatMoney(balance)} open balance` : 'No balance remaining',
+        tone: balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'danger' : 'default',
+      });
+    }
+    if (invoice.sentAt) {
+      items.push({
+        id: 'invoice-sent',
+        title: `Invoice sent${invoice.leadName ? ` to ${invoice.leadName}` : ''}`,
+        meta: formatDate(invoice.sentAt, true),
+        tone: 'default',
+      });
+    }
+    if (invoice.createdAt) {
+      items.push({
+        id: 'invoice-created',
+        title: 'Invoice created',
+        meta: formatDate(invoice.createdAt, true),
+        tone: 'default',
+      });
+    }
+    return items.sort((a, b) => {
+      const dateA = Date.parse(a.meta || '') || 0;
+      const dateB = Date.parse(b.meta || '') || 0;
+      return dateB - dateA;
+    });
+  }, [balance, invoice, paid, payments, total]);
 
   if (isLoading) {
     return (
@@ -364,21 +460,48 @@ export function InvoiceDetail() {
           </Card>
 
           <Card padding="none">
-            <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5" title="Payment history" />
+            <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5" title="Recent activity" />
+            <CardContent className="p-4">
+              <ActivityTimeline
+                items={activity}
+                empty={<p className="pf-copy text-gray-500">No invoice activity has been recorded yet.</p>}
+              />
+            </CardContent>
+          </Card>
+
+          <Card padding="none">
+            <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="pf-section-title">Payments</h3>
+                {payments.length > 0 && (
+                  <button type="button" className="btn-text btn-sm" onClick={() => setSelectedPayment(payments[0])}>
+                    View payment details
+                  </button>
+                )}
+              </div>
+            </CardHeader>
             <CardContent className="p-4">
               {payments.length ? (
                 <div className="space-y-2">
                   {payments.map((payment) => (
-                    <div key={payment.id} className="grid gap-2 rounded-lg border border-gray-200 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                      <div>
-                        <p className="pf-row-title">{payment.description || `${labelize(payment.source)} payment`}</p>
-                        <p className="pf-helper">{formatDate(payment.receivedAt, true)} · {labelize(payment.status)}</p>
+                    <button
+                      key={payment.id}
+                      type="button"
+                      className="grid w-full gap-3 rounded-lg border border-gray-200 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+                      onClick={() => setSelectedPayment(payment)}
+                    >
+                      <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-700" aria-hidden="true">
+                        <Icon name={payment.source === 'check' ? 'receipt' : 'credit-card'} className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="pf-row-title truncate">{paymentSourceLabel(payment.source)}</p>
+                        <p className="pf-helper truncate">{formatDate(payment.receivedAt, true)} · {labelize(payment.status)}</p>
                       </div>
                       <div className="sm:text-right">
                         <p className="pf-row-title">{formatMoney(payment.amount)}</p>
                         {numberValue(payment.refundedAmount) > 0 && <p className="pf-helper text-red-700">{formatMoney(payment.refundedAmount)} refunded</p>}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : (
@@ -430,6 +553,85 @@ export function InvoiceDetail() {
           </Card>
           </aside>
         </div>
+      {selectedPayment && (
+        <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="payment-detail-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSendingReceipt) setSelectedPayment(null); }}>
+          <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-xl bg-white shadow-xl sm:rounded-xl">
+            <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-200 bg-white p-4">
+              <Button type="button" variant="secondary" size="sm" fullWidth isLoading={isSendingReceipt} onClick={() => sendPaymentReceipt(selectedPayment)}>
+                Send receipt
+              </Button>
+              <button type="button" className="btn-icon h-10 w-10 shrink-0" aria-label="Close payment details" onClick={() => setSelectedPayment(null)} disabled={isSendingReceipt}>
+                <Icon name="close" className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 sm:p-7">
+              <div className="rounded-xl border border-gray-200 bg-white p-5 sm:p-7">
+                <h2 id="payment-detail-title" className="text-2xl font-semibold text-gray-950">
+                  {formatMoney(selectedPayment.amount)} Payment
+                </h2>
+                <p className="pf-copy mt-2 text-gray-600">{formatDate(selectedPayment.receivedAt, true)}</p>
+
+                <dl className="mt-6 space-y-1 text-sm text-gray-600">
+                  <div>Invoice: <span className="font-medium text-gray-950">{invoice.invoiceNumber || 'Invoice'}</span></div>
+                  <div>Collected at: <span className="font-medium text-gray-950">{invoice.orgName || 'Contractor workspace'}</span></div>
+                  <div>Order source: <span className="font-medium text-gray-950">Invoices</span></div>
+                  <div>Paid by: <Link to={`/leads/${invoice.leadId}`} className="font-medium text-blue-700 hover:underline">{invoice.leadName || 'Customer'}</Link></div>
+                  <div>Method: <span className="font-medium text-gray-950">{paymentSourceLabel(selectedPayment.source)}</span></div>
+                  {paymentReference(selectedPayment) && (
+                    <div>Reference: <span className="font-medium text-gray-950">{paymentReference(selectedPayment)}</span></div>
+                  )}
+                </dl>
+
+                <div className="my-7 border-t border-gray-200" />
+
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="pf-row-title">{selectedPayment.description || 'Invoice payment'}</p>
+                      <p className="pf-helper">{labelize(selectedPayment.status || 'succeeded')}</p>
+                    </div>
+                    <p className="pf-row-title">{formatMoney(selectedPayment.amount)}</p>
+                  </div>
+                  {numberValue(selectedPayment.refundedAmount) > 0 && (
+                    <div className="flex items-start justify-between gap-4 text-red-700">
+                      <p className="pf-copy font-medium">Refunded</p>
+                      <p className="pf-row-title text-red-700">-{formatMoney(selectedPayment.refundedAmount)}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="my-7 border-t border-gray-200" />
+
+                <div className="space-y-3">
+                  <div className="flex justify-between gap-4">
+                    <span className="pf-copy">Subtotal</span>
+                    <span className="pf-row-title">{formatMoney(invoice.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="pf-copy">Tax</span>
+                    <span className="pf-row-title">{formatMoney(invoice.tax)}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 border-t border-gray-200 pt-3">
+                    <span className="pf-copy font-semibold text-gray-950">Total</span>
+                    <span className="pf-section-title">{formatMoney(total)}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="pf-copy uppercase tracking-wide">{paymentSourceLabel(selectedPayment.source)}</span>
+                    <span className="pf-row-title">{formatMoney(selectedPayment.amount)}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="pf-copy">Remaining balance</span>
+                    <span className="pf-row-title">{formatMoney(balance)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mobile-sticky-actions mt-4 flex justify-end sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
+                <Button type="button" onClick={() => setSelectedPayment(null)} disabled={isSendingReceipt}>Done</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {paymentModalOpen && (
         <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="manual-payment-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closePaymentModal(); }}>
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">

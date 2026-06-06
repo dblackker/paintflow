@@ -1382,9 +1382,10 @@ invoicesApp.get('/customer/:id', async (c) => {
   });
   if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
 
-  const [lead, job, payments] = await Promise.all([
+  const [lead, job, org, payments] = await Promise.all([
     db.query.leads.findFirst({ where: and(eq(leads.id, invoice.leadId), eq(leads.orgId, orgId)) }),
     invoice.jobId ? db.query.jobs.findFirst({ where: and(eq(jobs.id, invoice.jobId), eq(jobs.orgId, orgId)) }) : Promise.resolve(null),
+    db.query.organizations.findFirst({ where: eq(organizations.id, orgId) }),
     db.query.customerPayments.findMany({
       where: and(eq(customerPayments.orgId, orgId), eq(customerPayments.invoiceId, invoice.id)),
       orderBy: (table, { desc }) => [desc(table.receivedAt)],
@@ -1408,6 +1409,7 @@ invoicesApp.get('/customer/:id', async (c) => {
       jobCity: job?.city || null,
       jobState: job?.state || null,
       jobPostalCode: job?.postalCode || null,
+      orgName: org?.name || null,
       payments,
     },
   });
@@ -1661,6 +1663,73 @@ invoicesApp.post('/customer/:id/send-reminder', async (c) => {
   } catch (error) {
     console.error('Failed to send invoice reminder:', error);
     return c.json({ error: 'Failed to send invoice reminder.' }, 500);
+  }
+});
+
+invoicesApp.post('/customer/:id/payments/:paymentId/send-receipt', async (c) => {
+  const idempotencyError = requireIdempotency(c);
+  if (idempotencyError) return idempotencyError;
+  const orgId = c.get('orgId');
+  const userId = c.get('userId') || null;
+  const id = c.req.param('id');
+  const paymentId = c.req.param('paymentId');
+  const db = createDb(c.env.DATABASE_URL);
+
+  const [invoice, payment] = await Promise.all([
+    db.query.customerInvoices.findFirst({
+      where: and(eq(customerInvoices.id, id), eq(customerInvoices.orgId, orgId)),
+    }),
+    db.query.customerPayments.findFirst({
+      where: and(eq(customerPayments.id, paymentId), eq(customerPayments.orgId, orgId)),
+    }),
+  ]);
+  if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
+  if (!payment || payment.invoiceId !== invoice.id) return c.json({ error: 'Payment not found' }, 404);
+  if (!['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status)) {
+    return c.json({ error: 'Only completed payments can receive receipts.' }, 409);
+  }
+
+  const payments = await db.query.customerPayments.findMany({
+    where: and(eq(customerPayments.orgId, orgId), eq(customerPayments.invoiceId, invoice.id)),
+    limit: 100,
+  });
+  const paid = payments
+    .filter((row) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(row.status))
+    .reduce((sum, row) => sum + Number(row.amount || 0) - Number(row.refundedAmount || 0), 0);
+  const balanceDue = Math.round(Math.max(Number(invoice.total || 0) - paid, 0) * 100) / 100;
+
+  try {
+    const result = await sendInvoiceEmail(c.env, db, {
+      orgId,
+      invoice,
+      templateKey: 'invoice.payment.receipt',
+      payment,
+      balanceDue,
+      sentBy: userId,
+    });
+    if (!result.sent) {
+      return c.json({ error: 'Customer email is required before sending a receipt.' }, 409);
+    }
+    await db.insert(auditLogs).values({
+      orgId,
+      userId,
+      action: 'invoice.receipt_sent',
+      entityType: 'payment',
+      entityId: payment.id,
+      metadata: {
+        invoiceId: invoice.id,
+        leadId: invoice.leadId,
+        jobId: invoice.jobId || null,
+        amount: payment.amount,
+        source: payment.source,
+        balanceDue,
+        emailSendId: result.emailSendId || null,
+      },
+    });
+    return c.json({ data: { sent: true, emailSendId: result.emailSendId || null } });
+  } catch (error) {
+    console.error('Failed to send invoice payment receipt:', error);
+    return c.json({ error: 'Failed to send payment receipt.' }, 500);
   }
 });
 
