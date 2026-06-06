@@ -867,7 +867,7 @@ function InvoicesList({ invoices, onRecordPayment }: { invoices: CustomerInvoice
                 <p className="pf-meta">{formatMoney(paid)} paid of {formatMoney(total)}</p>
               </div>
               <div className="flex shrink-0 gap-2">
-                <Link to="/invoices" className="btn-secondary btn-sm">View</Link>
+                <Link to={`/invoices/${invoice.id}`} className="btn-secondary btn-sm">View invoice</Link>
                 {isOpen && <Button type="button" size="sm" onClick={() => onRecordPayment(invoice)}>Record payment</Button>}
               </div>
             </div>
