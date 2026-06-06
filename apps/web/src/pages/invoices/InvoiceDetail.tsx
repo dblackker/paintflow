@@ -321,7 +321,7 @@ export function InvoiceDetail() {
         const net = netPayment(payment);
         items.push({
           id: `payment-${payment.id}`,
-          title: net >= total - 0.005 ? `Paid ${formatMoney(net)}` : `Payment received ${formatMoney(net)}`,
+          title: net >= total - 0.005 ? `Paid in full | ${formatMoney(net)}` : `Payment received | ${formatMoney(net)}`,
           meta: formatDate(payment.receivedAt, true),
           description: `${formatMoney(net)} ${net >= total - 0.005 ? 'paid in full' : 'recorded'} by ${invoice.leadName || 'customer'} via ${paymentSourceLabel(payment.source)}`,
           tone: 'success',
@@ -334,7 +334,7 @@ export function InvoiceDetail() {
         title: balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'Invoice overdue' : 'Invoice due',
         meta: formatDate(invoice.dueDate),
         description: balance > 0.005 ? `${formatMoney(balance)} open balance` : 'No balance remaining',
-        tone: balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'danger' : 'default',
+        tone: balance > 0.005 && new Date(invoice.dueDate).getTime() < Date.now() ? 'danger' : balance > 0.005 ? 'warning' : 'success',
       });
     }
     if (invoice.sentAt) {
@@ -342,7 +342,7 @@ export function InvoiceDetail() {
         id: 'invoice-sent',
         title: `Invoice sent${invoice.leadName ? ` to ${invoice.leadName}` : ''}`,
         meta: formatDate(invoice.sentAt, true),
-        tone: 'default',
+        tone: 'info',
       });
     }
     if (invoice.createdAt) {
@@ -441,7 +441,7 @@ export function InvoiceDetail() {
                         <p className="pf-row-title truncate">{item.description || 'Invoice item'}</p>
                         <p className="pf-helper">
                           {numberValue(item.quantity || 1).toLocaleString('en-US')} x {formatMoney(item.unitPrice)}
-                          {item.category ? ` · ${labelize(item.category)}` : ''}
+                          {item.category ? ` | ${labelize(item.category)}` : ''}
                         </p>
                       </div>
                       <p className="pf-row-title sm:text-right">{formatMoney(item.total)}</p>
@@ -495,7 +495,7 @@ export function InvoiceDetail() {
                       </span>
                       <div className="min-w-0">
                         <p className="pf-row-title truncate">{paymentSourceLabel(payment.source)}</p>
-                        <p className="pf-helper truncate">{formatDate(payment.receivedAt, true)} · {labelize(payment.status)}</p>
+                        <p className="pf-helper truncate">{formatDate(payment.receivedAt, true)} | {labelize(payment.status)}</p>
                       </div>
                       <div className="sm:text-right">
                         <p className="pf-row-title">{formatMoney(payment.amount)}</p>
