@@ -130,6 +130,7 @@ function routeTitle(pathname: string) {
   if (pathname.startsWith('/billing')) return 'Billing';
   if (pathname.startsWith('/payments/stripe')) return 'Stripe';
   if (pathname.startsWith('/dev/design-system')) return 'Design System';
+  if (pathname.startsWith('/developers/lead-intake')) return 'Lead Intake API';
   return 'Crewmodo';
 }
 

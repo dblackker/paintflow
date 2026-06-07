@@ -41,6 +41,7 @@ import { Review } from '@/pages/Review';
 import { EmailTemplates } from '@/pages/EmailTemplates';
 import { StripePayments } from '@/pages/payments/StripePayments';
 import { DesignSystem } from '@/pages/dev/DesignSystem';
+import { LeadIntakeDocs } from '@/pages/developers/LeadIntakeDocs';
 import { Landing } from '@/pages/landing/Landing';
 import { ErrorPage } from '@/pages/ErrorPage';
 
@@ -106,6 +107,7 @@ export const router = createBrowserRouter([
       { path: '/email-templates', element: <EmailTemplates /> },
       { path: '/payments/stripe', element: <StripePayments /> },
       { path: '/dev/design-system', element: <DesignSystem /> },
+      { path: '/developers/lead-intake', element: <LeadIntakeDocs /> },
     ],
   },
   {

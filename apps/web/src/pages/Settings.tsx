@@ -864,9 +864,14 @@ document.getElementById('crewmodo-lead-form').addEventListener('submit', async f
                     <p className="pf-meta">Webhook endpoint</p>
                     <p className="mt-1 break-all font-mono text-sm text-gray-950">{leadIntake.endpointUrl}</p>
                   </div>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => copyText(leadIntake.endpointUrl, 'Lead endpoint copied')}>
-                    Copy endpoint
-                  </Button>
+                  <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    <Button as="a" href="/developers/lead-intake" variant="ghost" size="sm" leftIcon={<Icon name="file-text" className="h-4 w-4" />}>
+                      Developer docs
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => copyText(leadIntake.endpointUrl, 'Lead endpoint copied')}>
+                      Copy endpoint
+                    </Button>
+                  </div>
                 </div>
                 <p className="pf-helper">Use this URL as the POST target from the contractor website or automation tool. Crewmodo creates the lead, source, activity, audit log, and notification.</p>
               </div>
