@@ -741,21 +741,24 @@ document.getElementById('crewmodo-lead-form').addEventListener('submit', async f
                     <Icon name="chevron-right" className="h-4 w-4 transition group-open:rotate-90" />
                   </span>
                 </summary>
-                <div className="grid gap-2 border-t border-gray-200 bg-gray-50/50 p-3">
+                <div className="divide-y divide-gray-100 border-t border-gray-200 bg-white">
                   {group.items.map((item) => (
                     <Link
                       key={item.title}
                       to={item.href.startsWith('#') ? `/settings${item.href}` : item.href}
-                      className={`grid gap-2 rounded-lg border bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm sm:grid-cols-[6.5rem_minmax(0,1fr)_auto] sm:items-start ${
-                        item.href === currentSettingsHash ? 'border-blue-300 ring-1 ring-blue-200' : 'border-gray-200'
+                      className={`grid gap-2 px-4 py-3 transition hover:bg-blue-50/50 sm:grid-cols-[6.5rem_minmax(0,1fr)_auto] sm:items-center ${
+                        item.href === currentSettingsHash ? 'border-l-4 border-blue-500 bg-blue-50/60 pl-3' : ''
                       }`}
                     >
-                      <span className="w-fit rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold uppercase text-gray-700">{item.label}</span>
+                      <span className="pf-meta text-gray-500">{item.label}</span>
                       <span className="min-w-0">
-                        <span className="pf-section-title block">{item.title}</span>
+                        <span className="pf-row-title block">{item.title}</span>
                         <span className="pf-copy mt-1 block">{item.copy}</span>
                       </span>
-                      <span className="btn-text btn-sm pointer-events-none hidden sm:inline-flex">Open</span>
+                      <span className="pointer-events-none hidden items-center gap-1 text-sm font-medium text-blue-700 sm:inline-flex">
+                        Open
+                        <Icon name="chevron-right" className="h-4 w-4" />
+                      </span>
                     </Link>
                   ))}
                 </div>
