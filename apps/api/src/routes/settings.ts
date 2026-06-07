@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
-import { orgSettings, serviceAreas, teamMembers, orgBranding, stripeConnections } from '@crewmodo/db/schema';
+import { orgSettings, organizations, serviceAreas, teamMembers, orgBranding, stripeConnections } from '@crewmodo/db/schema';
 import { and, eq } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -103,6 +103,14 @@ const brandingPatchSchema = z.object({
   companyName: optionalText(255),
   logoUrl: optionalText(2000),
   primaryColor: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+}).strict();
+
+const leadIntakeSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  defaultSource: optionalText(100),
+  allowedDomains: z.array(z.string().trim().toLowerCase().max(120)).max(20).optional(),
+  requireSecret: z.boolean().optional(),
+  notifyOwners: z.boolean().optional(),
 }).strict();
 
 const logoUploadLimits = {
@@ -247,6 +255,44 @@ function timeClockSettingsFromPreferences(preferences: Record<string, unknown>) 
     reminderWindowStartHour: start >= 0 && start <= 23 ? start : 18,
     reminderWindowEndHour: end >= 1 && end <= 24 ? end : 22,
   };
+}
+
+function normalizeDomain(value: string) {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+    return url.hostname.replace(/^www\./, '');
+  } catch {
+    return trimmed.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || '';
+  }
+}
+
+function generateLeadIntakeSecret() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function leadIntakeSettingsFromPreferences(preferences: Record<string, unknown>) {
+  const raw = preferences.leadIntake && typeof preferences.leadIntake === 'object' && !Array.isArray(preferences.leadIntake)
+    ? preferences.leadIntake as Record<string, unknown>
+    : {};
+  const allowedDomains = Array.isArray(raw.allowedDomains)
+    ? raw.allowedDomains.map((domain) => normalizeDomain(String(domain))).filter(Boolean)
+    : [];
+  return {
+    enabled: raw.enabled !== false,
+    defaultSource: typeof raw.defaultSource === 'string' && raw.defaultSource.trim() ? raw.defaultSource.trim() : 'Website form',
+    allowedDomains: Array.from(new Set(allowedDomains)),
+    requireSecret: Boolean(raw.requireSecret),
+    notifyOwners: raw.notifyOwners !== false,
+    secret: typeof raw.secret === 'string' && raw.secret.trim() ? raw.secret.trim() : '',
+  };
+}
+
+function publicLeadCaptureUrl(requestUrl: string, orgSlug: string) {
+  return `${new URL(requestUrl).origin}/v1/lead-capture/${orgSlug}`;
 }
 
 // GET /v1/settings/org
@@ -409,6 +455,102 @@ settings.put('/time-clock', async (c) => {
     .returning();
 
   return c.json({ data: timeClockSettingsFromPreferences(readBusinessHours(settings.businessHours)) });
+});
+
+settings.get('/lead-intake', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const [org, settings] = await Promise.all([
+    db.query.organizations.findFirst({ where: eq(organizations.id, orgId) }),
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+  ]);
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  const preferences = readBusinessHours(settings?.businessHours);
+  const leadIntake = leadIntakeSettingsFromPreferences(preferences);
+  return c.json({
+    data: {
+      ...leadIntake,
+      orgSlug: org.slug,
+      endpointUrl: publicLeadCaptureUrl(c.req.url, org.slug),
+    },
+  });
+});
+
+settings.put('/lead-intake', async (c) => {
+  const orgId = c.get('orgId');
+  const parsed = leadIntakeSettingsSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = createDb(c.env.DATABASE_URL);
+  const [org, existing] = await Promise.all([
+    db.query.organizations.findFirst({ where: eq(organizations.id, orgId) }),
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+  ]);
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  const preferences = readBusinessHours(existing?.businessHours);
+  const current = leadIntakeSettingsFromPreferences(preferences);
+  const leadIntake = {
+    ...current,
+    enabled: parsed.data.enabled ?? current.enabled,
+    defaultSource: parsed.data.defaultSource || current.defaultSource,
+    allowedDomains: Array.from(new Set((parsed.data.allowedDomains || current.allowedDomains).map(normalizeDomain).filter(Boolean))),
+    requireSecret: parsed.data.requireSecret ?? current.requireSecret,
+    notifyOwners: parsed.data.notifyOwners ?? current.notifyOwners,
+    secret: current.secret || generateLeadIntakeSecret(),
+  };
+  const businessHours = { ...preferences, leadIntake };
+
+  const [settings] = await db.insert(orgSettings)
+    .values({ orgId, businessHours })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { businessHours, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({
+    data: {
+      ...leadIntakeSettingsFromPreferences(readBusinessHours(settings.businessHours)),
+      orgSlug: org.slug,
+      endpointUrl: publicLeadCaptureUrl(c.req.url, org.slug),
+    },
+  });
+});
+
+settings.post('/lead-intake/rotate-secret', async (c) => {
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const [org, existing] = await Promise.all([
+    db.query.organizations.findFirst({ where: eq(organizations.id, orgId) }),
+    db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }),
+  ]);
+  if (!org) return c.json({ error: 'Organization not found' }, 404);
+
+  const preferences = readBusinessHours(existing?.businessHours);
+  const leadIntake = {
+    ...leadIntakeSettingsFromPreferences(preferences),
+    secret: generateLeadIntakeSecret(),
+  };
+  const businessHours = { ...preferences, leadIntake };
+  const [settings] = await db.insert(orgSettings)
+    .values({ orgId, businessHours })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { businessHours, updatedAt: new Date() },
+    })
+    .returning();
+
+  return c.json({
+    data: {
+      ...leadIntakeSettingsFromPreferences(readBusinessHours(settings.businessHours)),
+      orgSlug: org.slug,
+      endpointUrl: publicLeadCaptureUrl(c.req.url, org.slug),
+    },
+  });
 });
 
 settings.get('/legal', async (c) => {

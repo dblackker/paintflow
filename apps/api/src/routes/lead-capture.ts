@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
-import { activities, auditLogs, leads, leadSources, notificationEvents, organizations } from '@crewmodo/db/schema';
+import { activities, auditLogs, leads, leadSources, notificationEvents, organizations, orgSettings } from '@crewmodo/db/schema';
 import { and, eq, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { formatPhoneNumber } from '../lib/twilio';
@@ -65,6 +65,54 @@ function sourceType(input: z.infer<typeof captureSchema>) {
   return input.sourceType || (input.utmMedium ? `utm:${input.utmMedium}` : 'website');
 }
 
+function readPreferences(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function normalizeDomain(value: string) {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+    return url.hostname.replace(/^www\./, '');
+  } catch {
+    return trimmed.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || '';
+  }
+}
+
+function leadIntakeSettings(settings: typeof orgSettings.$inferSelect | null) {
+  const preferences = readPreferences(settings?.businessHours);
+  const raw = preferences.leadIntake && typeof preferences.leadIntake === 'object' && !Array.isArray(preferences.leadIntake)
+    ? preferences.leadIntake as Record<string, unknown>
+    : {};
+  const allowedDomains = Array.isArray(raw.allowedDomains)
+    ? raw.allowedDomains.map((domain) => normalizeDomain(String(domain))).filter(Boolean)
+    : [];
+  return {
+    enabled: raw.enabled !== false,
+    defaultSource: typeof raw.defaultSource === 'string' && raw.defaultSource.trim() ? raw.defaultSource.trim() : 'Website form',
+    allowedDomains: Array.from(new Set(allowedDomains)),
+    requireSecret: Boolean(raw.requireSecret),
+    secret: typeof raw.secret === 'string' && raw.secret.trim() ? raw.secret.trim() : '',
+  };
+}
+
+function requestOriginHost(request: Request) {
+  const origin = request.headers.get('Origin') || request.headers.get('Referer') || '';
+  if (!origin) return '';
+  try {
+    return normalizeDomain(new URL(origin).hostname);
+  } catch {
+    return normalizeDomain(origin);
+  }
+}
+
+function domainAllowed(host: string, allowedDomains: string[]) {
+  if (!allowedDomains.length || !host) return true;
+  return allowedDomains.some((domain) => host === domain || host.endsWith(`.${domain}`));
+}
+
 function metadataFor(input: z.infer<typeof captureSchema>, request: Request) {
   return {
     message: input.message || null,
@@ -113,6 +161,24 @@ leadCaptureRoute.post('/:orgSlug', async (c) => {
     return c.json({ error: 'Lead capture destination not found' }, 404);
   }
 
+  const settings = await db.query.orgSettings.findFirst({
+    where: eq(orgSettings.orgId, org.id),
+  });
+  const intake = leadIntakeSettings(settings);
+  if (!intake.enabled) {
+    return c.json({ error: 'Lead capture is disabled for this contractor.' }, 403);
+  }
+  const host = requestOriginHost(c.req.raw);
+  if (!domainAllowed(host, intake.allowedDomains)) {
+    return c.json({ error: 'This lead capture origin is not allowed.' }, 403);
+  }
+  if (intake.requireSecret) {
+    const provided = c.req.header('x-crewmodo-lead-secret')?.trim();
+    if (!provided || provided !== intake.secret) {
+      return c.json({ error: 'Lead capture secret is required.' }, 401);
+    }
+  }
+
   const phone = normalizePhone(parsed.data.phone);
   const email = normalizeEmail(parsed.data.email);
   if (parsed.data.phone && !phone && !email) {
@@ -128,7 +194,7 @@ leadCaptureRoute.post('/:orgSlug', async (c) => {
     if (cached) return c.json(cached.payload, cached.status as 200 | 201 | 202);
   }
 
-  const source = sourceName(parsed.data);
+  const source = parsed.data.source || parsed.data.utmSource || intake.defaultSource || sourceName(parsed.data);
   const metadata = metadataFor(parsed.data, c.req.raw);
   const duplicateFilters = [
     email ? eq(leads.email, email) : null,

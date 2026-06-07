@@ -56,6 +56,17 @@ interface ConnectorStatus {
   calendar: React.ReactNode;
 }
 
+interface LeadIntakeSettings {
+  enabled: boolean;
+  defaultSource: string;
+  allowedDomains: string[];
+  requireSecret: boolean;
+  notifyOwners: boolean;
+  secret: string;
+  orgSlug: string;
+  endpointUrl: string;
+}
+
 const defaultMilestones: PaymentMilestone[] = [
   { key: 'deposit', label: 'Deposit', due: 'Due after approval to reserve the schedule', percent: 40, payable: true },
   { key: 'progress', label: 'Progress payment', due: 'Due before production starts', percent: 30, payable: true },
@@ -67,6 +78,7 @@ const setupCards = [
   ['Branding', 'Proposal branding', 'Customer-facing company name, logo, and brand color.', '#proposal-branding-settings'],
   ['Pricing', 'Pricing defaults', 'Labor rate, material markup, tax, and payment schedule.', '#pricing-settings'],
   ['Estimator', 'Estimator setup', 'Paint products, costs, production rates, prep defaults, and estimating assumptions.', '#estimator-settings'],
+  ['Intake', 'Website lead intake', 'Connect contractor website forms, landing pages, and automation tools to Crewmodo leads.', '#lead-intake-settings'],
   ['Operations', 'Team and field setup', 'Crew roles, time clock policies, scheduling, notifications, and reusable templates.', '#operations-settings'],
   ['Connectors', 'Payments and integrations', 'Stripe deposits, Google Calendar, QuickBooks status, billing, and browser notifications.', '#integrations-settings'],
   ['Insights', 'Reports', 'Review sales, revenue, jobs, and operating metrics from one reporting surface.', '/reports'],
@@ -271,6 +283,9 @@ export function Settings() {
     quickbooks: 'Check QuickBooks settings',
     calendar: 'Checking...',
   });
+  const [leadIntake, setLeadIntake] = useState<LeadIntakeSettings | null>(null);
+  const [allowedDomainsText, setAllowedDomainsText] = useState('');
+  const [testLeadEmail, setTestLeadEmail] = useState('demo-lead@example.com');
   const [stripeReady, setStripeReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -303,11 +318,12 @@ export function Settings() {
     setIsLoading(true);
     setError('');
     try {
-      const [orgPayload, brandingPayload, legalPayload, schedulePayload] = await Promise.all([
+      const [orgPayload, brandingPayload, legalPayload, schedulePayload, leadIntakePayload] = await Promise.all([
         apiJson<{ data?: OrgSettings }>('/v1/settings/org'),
         apiJson<{ data?: BrandingSettings }>('/v1/settings/branding'),
         apiJson<{ data?: LegalSettings }>('/v1/settings/legal'),
         apiJson<{ data?: PaymentSchedule }>('/v1/settings/payment-schedule'),
+        apiJson<{ data?: LeadIntakeSettings }>('/v1/settings/lead-intake'),
       ]);
       const org = orgPayload.data || {};
       setSettings({ ...org, phone: org.phone ? maskPhone(String(org.phone)) : '', salesTaxRate: salesTaxDisplay(org.salesTaxRate) });
@@ -317,6 +333,9 @@ export function Settings() {
         ...milestone,
         payable: milestone.payable !== false,
       })));
+      const intake = leadIntakePayload.data || null;
+      setLeadIntake(intake);
+      setAllowedDomainsText((intake?.allowedDomains || []).join('\n'));
       void loadConnectorStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -501,6 +520,119 @@ export function Settings() {
   function updateMilestone(index: number, patch: Partial<PaymentMilestone>) {
     setMilestones((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   }
+
+  async function saveLeadIntake(event: FormEvent) {
+    event.preventDefault();
+    if (!leadIntake) return;
+    setSaving('lead-intake');
+    try {
+      const payload = await apiJson<{ data?: LeadIntakeSettings }>('/v1/settings/lead-intake', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: leadIntake.enabled,
+          defaultSource: leadIntake.defaultSource,
+          allowedDomains: allowedDomainsText.split(/\r?\n|,/).map((domain) => domain.trim()).filter(Boolean),
+          requireSecret: leadIntake.requireSecret,
+          notifyOwners: leadIntake.notifyOwners,
+        }),
+      });
+      const next = payload.data || leadIntake;
+      setLeadIntake(next);
+      setAllowedDomainsText((next.allowedDomains || []).join('\n'));
+      window.showToast?.('Lead intake settings saved', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to save lead intake settings', 'error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function rotateLeadSecret() {
+    setSaving('lead-secret');
+    try {
+      const payload = await apiJson<{ data?: LeadIntakeSettings }>('/v1/settings/lead-intake/rotate-secret', {
+        method: 'POST',
+      });
+      if (payload.data) {
+        setLeadIntake(payload.data);
+        setAllowedDomainsText((payload.data.allowedDomains || []).join('\n'));
+      }
+      window.showToast?.('Lead intake secret rotated', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to rotate secret', 'error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function submitTestLead() {
+    if (!leadIntake?.endpointUrl) return;
+    setSaving('lead-test');
+    try {
+      const headers = new Headers({ 'Content-Type': 'application/json', 'Idempotency-Key': `settings-test-${Date.now()}` });
+      if (leadIntake.requireSecret && leadIntake.secret) {
+        headers.set('x-crewmodo-lead-secret', leadIntake.secret);
+      }
+      const response = await fetch(leadIntake.endpointUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: 'Crewmodo Test Lead',
+          email: testLeadEmail,
+          phone: '(555) 010-0101',
+          city: 'San Francisco',
+          state: 'CA',
+          source: leadIntake.defaultSource || 'Website form',
+          sourceType: 'website_test',
+          message: 'Test submission from Crewmodo lead intake settings.',
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.error || 'Test lead failed');
+      window.showToast?.(body?.data?.duplicate ? 'Test matched an existing lead' : 'Test lead created', 'success');
+    } catch (err) {
+      window.showToast?.(err instanceof Error ? err.message : 'Failed to submit test lead', 'error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function copyText(value: string, success: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      window.showToast?.(success, 'success');
+    } catch {
+      window.showToast?.('Copy failed. Select the text and copy it manually.', 'error');
+    }
+  }
+
+  const leadEmbedSnippet = useMemo(() => {
+    if (!leadIntake?.endpointUrl) return '';
+    return `<form id="crewmodo-lead-form">
+  <input name="name" placeholder="Name" required />
+  <input name="email" type="email" placeholder="Email" />
+  <input name="phone" type="tel" placeholder="Phone" />
+  <input name="streetAddress" placeholder="Project address" />
+  <textarea name="message" placeholder="Tell us about the project"></textarea>
+  <input name="company" tabindex="-1" autocomplete="off" style="display:none" />
+  <button type="submit">Request estimate</button>
+</form>
+<script>
+document.getElementById('crewmodo-lead-form').addEventListener('submit', async function (event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const response = await fetch('${leadIntake.endpointUrl}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+    body: JSON.stringify({ ...data, source: '${leadIntake.defaultSource || 'Website form'}', sourceType: 'website' })
+  });
+  if (!response.ok) throw new Error('Lead submission failed');
+  form.reset();
+});
+</script>`;
+  }, [leadIntake]);
 
   if (isLoading) {
     return (
@@ -717,6 +849,130 @@ export function Settings() {
             <ActionCard href="/materials" title="Paint products and costs" copy="Enter cost per gallon/unit, coverage, supplier, SKU, and markup." />
             <ActionCard href="/production-rates" title="Production rates" copy="Tune sqft/hr, linear ft/hr, labor rate, coats, and prep defaults." />
           </div>
+        </Card>
+
+        <Card id="lead-intake-settings" padding="lg" className="scroll-mt-20">
+          <CardHeader
+            title="Website Lead Intake"
+            description="Connect website forms, landing pages, Zapier, Make, or another CRM into Crewmodo without giving them app access."
+          />
+          {leadIntake ? (
+            <form className="grid gap-5" onSubmit={saveLeadIntake}>
+              <div className="grid gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="pf-meta">Webhook endpoint</p>
+                    <p className="mt-1 break-all font-mono text-sm text-gray-950">{leadIntake.endpointUrl}</p>
+                  </div>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => copyText(leadIntake.endpointUrl, 'Lead endpoint copied')}>
+                    Copy endpoint
+                  </Button>
+                </div>
+                <p className="pf-helper">Use this URL as the POST target from the contractor website or automation tool. Crewmodo creates the lead, source, activity, audit log, and notification.</p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 rounded border-gray-300"
+                    checked={leadIntake.enabled}
+                    onChange={(event) => setLeadIntake({ ...leadIntake, enabled: event.target.checked })}
+                  />
+                  <span>
+                    <span className="pf-row-title block">Accept website leads</span>
+                    <span className="pf-copy block">Turn this off if a form is being abused or a contractor wants to pause intake.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 rounded border-gray-300"
+                    checked={leadIntake.requireSecret}
+                    onChange={(event) => setLeadIntake({ ...leadIntake, requireSecret: event.target.checked })}
+                  />
+                  <span>
+                    <span className="pf-row-title block">Require server secret</span>
+                    <span className="pf-copy block">Best for server-to-server tools. Do not place this secret in public website JavaScript.</span>
+                  </span>
+                </label>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-1.5">
+                  <FieldLabel label="Default source" help="Used when the incoming form does not send a source. Examples: Website form, Google landing page, Meta lead ad." />
+                  <input
+                    className="input"
+                    maxLength={100}
+                    value={leadIntake.defaultSource || ''}
+                    onChange={(event) => setLeadIntake({ ...leadIntake, defaultSource: event.target.value })}
+                    placeholder="Website form"
+                  />
+                </label>
+                <label className="grid gap-1.5">
+                  <FieldLabel label="Test email" help="Used only for the test lead button below. Pick an address you can easily find and delete later." />
+                  <input
+                    className="input"
+                    type="email"
+                    inputMode="email"
+                    value={testLeadEmail}
+                    onChange={(event) => setTestLeadEmail(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-1.5">
+                <FieldLabel label="Allowed website domains" help="Optional. Add one domain per line. If populated, browser submissions must originate from these domains or their subdomains." />
+                <textarea
+                  className="input min-h-28 font-mono text-sm"
+                  value={allowedDomainsText}
+                  onChange={(event) => setAllowedDomainsText(event.target.value)}
+                  placeholder="example.com&#10;landing.example.com"
+                />
+                <span className="pf-meta">Leave blank for automation tools or if the contractor website is still being configured.</span>
+              </label>
+
+              <div className="grid gap-3 rounded-lg border border-gray-200 bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="pf-row-title">Server secret</p>
+                    <p className="pf-copy mt-1">Send as <code className="rounded bg-gray-100 px-1 py-0.5">x-crewmodo-lead-secret</code> when “Require server secret” is enabled.</p>
+                    <p className="mt-2 break-all font-mono text-xs text-gray-700">{leadIntake.secret || 'Save settings to generate a secret.'}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button type="button" variant="secondary" size="sm" disabled={!leadIntake.secret} onClick={() => copyText(leadIntake.secret, 'Lead secret copied')}>
+                      Copy
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" isLoading={saving === 'lead-secret'} onClick={rotateLeadSecret}>
+                      Rotate
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="pf-row-title">Copy/paste website snippet</p>
+                    <p className="pf-copy mt-1">This is a starter form for a contractor website. Use the server secret only from backend code, not this browser snippet.</p>
+                  </div>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => copyText(leadEmbedSnippet, 'Embed snippet copied')}>
+                    Copy snippet
+                  </Button>
+                </div>
+                <textarea className="input min-h-56 font-mono text-xs" readOnly value={leadEmbedSnippet} />
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <Button type="submit" isLoading={saving === 'lead-intake'} className="w-full sm:w-fit">Save Lead Intake</Button>
+                <Button type="button" variant="secondary" isLoading={saving === 'lead-test'} onClick={submitTestLead} className="w-full sm:w-fit">
+                  Send Test Lead
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <p className="pf-copy">Lead intake settings could not be loaded.</p>
+          )}
         </Card>
 
         <Card id="legal-settings" padding="lg" className="scroll-mt-20">
