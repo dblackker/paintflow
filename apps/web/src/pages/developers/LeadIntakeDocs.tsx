@@ -95,6 +95,14 @@ function DocsTable({ rows, columns }: { rows: string[][]; columns: string[] }) {
   );
 }
 
+function markdownTable(columns: string[], rows: string[][]) {
+  return [
+    `| ${columns.join(' | ')} |`,
+    `| ${columns.map(() => '---').join(' | ')} |`,
+    ...rows.map((row) => `| ${row.map((cell) => cell.replace(/\|/g, '\\|')).join(' | ')} |`),
+  ].join('\n');
+}
+
 export function LeadIntakeDocs() {
   const [settings, setSettings] = useState<LeadIntakeSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,7 +132,7 @@ export function LeadIntakeDocs() {
   const curlExample = useMemo(() => `curl -X POST "${endpoint}" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: website-{{unique_submission_id}}"${settings?.requireSecret ? ` \\
-  -H "x-crewmodo-lead-secret: ${settings.secret || '{{lead_secret}}'}"` : ''} \\
+  -H "x-crewmodo-lead-secret: {{lead_secret}}"` : ''} \\
   -d '{
     "name": "Jane Homeowner",
     "email": "jane@example.com",
@@ -136,7 +144,7 @@ export function LeadIntakeDocs() {
     "source": "Website form",
     "sourceType": "website",
     "message": "Looking for an exterior repaint estimate."
-  }'`, [endpoint, settings]);
+  }'`, [endpoint, settings?.requireSecret]);
 
   const fetchExample = useMemo(() => `const response = await fetch("${endpoint}", {
   method: "POST",
@@ -203,6 +211,77 @@ document.getElementById("crewmodo-lead-form").addEventListener("submit", async (
 });
 </script>`, [endpoint]);
 
+  const llmReference = useMemo(() => `# Crewmodo Lead Intake API
+
+Create a lead in Crewmodo from a contractor website, landing page, automation tool, or server-side integration.
+
+## Request
+
+\`\`\`http
+POST ${endpoint}
+Content-Type: application/json
+Idempotency-Key: website-{{unique_submission_id}}${settings?.requireSecret ? '\nx-crewmodo-lead-secret: {{lead_secret}}' : ''}
+\`\`\`
+
+\`\`\`json
+{
+  "name": "Jane Homeowner",
+  "email": "jane@example.com",
+  "phone": "(555) 010-0199",
+  "streetAddress": "120 Oak Street",
+  "city": "Bremerton",
+  "state": "WA",
+  "postalCode": "98310",
+  "source": "Website form",
+  "sourceType": "website",
+  "message": "Looking for an exterior repaint estimate."
+}
+\`\`\`
+
+### curl
+
+\`\`\`curl
+${curlExample}
+\`\`\`
+
+### JavaScript fetch
+
+\`\`\`js
+${fetchExample}
+\`\`\`
+
+## Parameters
+
+${markdownTable(['Field', 'Type', 'Requirement', 'Description'], requestFields)}
+
+## Responses
+
+${markdownTable(['Status', 'Meaning', 'Details'], responseRows)}
+
+## Authentication and Safety
+
+- Public browser forms should use the allowed domains setting. Do not expose the server secret in public JavaScript.
+- Server-to-server integrations can enable the server secret and send it as x-crewmodo-lead-secret.
+- Send a stable Idempotency-Key for retries so duplicate webhook attempts do not create duplicate leads.
+- Crewmodo rate limits each IP and organization to five submissions per minute.
+- Include a hidden company field as a honeypot. Real users should leave it blank.
+- A successful duplicate match returns HTTP 202 with duplicate: true instead of creating a second lead.
+
+## Integration Checklist
+
+- Enable lead intake in Crewmodo Settings.
+- Copy the organization-specific endpoint from Settings.
+- Set a default source label such as Website form.
+- Add allowed domains for public forms.
+- Enable the server secret only for private backend or automation integrations.
+- Send a test lead and confirm it appears in Leads with source, activity, audit log, and notification history.
+`, [curlExample, endpoint, fetchExample, settings?.requireSecret]);
+
+  async function copyForLlm() {
+    await navigator.clipboard.writeText(llmReference);
+    window.showToast?.('Lead intake API reference copied for LLM', 'success');
+  }
+
   return (
     <div className="mx-auto max-w-6xl py-6 sm:py-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -213,9 +292,14 @@ document.getElementById("crewmodo-lead-form").addEventListener("submit", async (
             Use this endpoint to create Crewmodo leads from contractor websites, landing pages, Zapier, Make, or server-side integrations.
           </p>
         </div>
-        <Button as="a" href="/settings#lead-intake-settings" variant="secondary" leftIcon={<Icon name="settings" className="h-4 w-4" />}>
-          Intake settings
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button type="button" variant="secondary" leftIcon={<Icon name="file-text" className="h-4 w-4" />} onClick={copyForLlm}>
+            Copy for LLM
+          </Button>
+          <Button as="a" href="/settings#lead-intake-settings" variant="secondary" leftIcon={<Icon name="settings" className="h-4 w-4" />}>
+            Intake settings
+          </Button>
+        </div>
       </div>
 
       {error && (
