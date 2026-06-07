@@ -73,19 +73,67 @@ const defaultMilestones: PaymentMilestone[] = [
   { key: 'completion', label: 'Final payment', due: 'Due on completion', percent: 30, payable: true },
 ];
 
-const setupCards = [
-  ['Company', 'Business profile', 'Company name, phone, email, and address.', '#business-settings'],
-  ['Branding', 'Proposal branding', 'Customer-facing company name, logo, and brand color.', '#proposal-branding-settings'],
-  ['Pricing', 'Pricing defaults', 'Labor rate, material markup, tax, and payment schedule.', '#pricing-settings'],
-  ['Estimator', 'Estimator setup', 'Paint products, costs, production rates, prep defaults, and estimating assumptions.', '#estimator-settings'],
-  ['Intake', 'Website lead intake', 'Connect contractor website forms, landing pages, and automation tools to Crewmodo leads.', '#lead-intake-settings'],
-  ['Operations', 'Team and field setup', 'Crew roles, time clock policies, scheduling, notifications, and reusable templates.', '#operations-settings'],
-  ['Connectors', 'Payments and integrations', 'Stripe deposits, Google Calendar, QuickBooks status, billing, and browser notifications.', '#integrations-settings'],
-  ['Insights', 'Reports', 'Review sales, revenue, jobs, and operating metrics from one reporting surface.', '/reports'],
-  ['Audit', 'Activity log', 'See customer events and operational changes across leads, estimates, and jobs.', '/activity'],
-  ['Email', 'Email templates', 'Customize estimate emails and future drips, thank-yous, and change-order communication.', '/email-templates'],
-  ['Reviews', 'Review links', 'Google Business and Yelp review destinations for post-job follow-up.', '#review-links-settings'],
-  ['Legal', 'Contract terms', 'Set company-reviewed proposal terms, disclosures, and registration details.', '#legal-settings'],
+interface SettingsNavItem {
+  label: string;
+  title: string;
+  copy: string;
+  href: string;
+}
+
+interface SettingsNavGroup {
+  label: string;
+  copy: string;
+  items: SettingsNavItem[];
+}
+
+const settingsNavGroups: SettingsNavGroup[] = [
+  {
+    label: 'Essentials',
+    copy: 'Company identity, branding, pricing, and legal defaults.',
+    items: [
+      { label: 'Company', title: 'Business profile', copy: 'Company name, phone, email, and address.', href: '#business-settings' },
+      { label: 'Branding', title: 'Proposal branding', copy: 'Customer-facing company name, logo, and brand color.', href: '#proposal-branding-settings' },
+      { label: 'Pricing', title: 'Pricing defaults', copy: 'Labor rate, material markup, tax, and payment schedule.', href: '#pricing-settings' },
+      { label: 'Legal', title: 'Contract terms', copy: 'Company-reviewed proposal terms, disclosures, and registration details.', href: '#legal-settings' },
+    ],
+  },
+  {
+    label: 'Sales setup',
+    copy: 'Estimate, lead capture, email, and review workflows.',
+    items: [
+      { label: 'Estimator', title: 'Estimator setup', copy: 'Paint products, costs, production rates, prep defaults, and estimating assumptions.', href: '#estimator-settings' },
+      { label: 'Intake', title: 'Website lead intake', copy: 'Connect contractor website forms, landing pages, and automation tools to Crewmodo leads.', href: '#lead-intake-settings' },
+      { label: 'Email', title: 'Email templates', copy: 'Customize estimate emails, reminders, thank-yous, and change-order communication.', href: '/email-templates' },
+      { label: 'Reviews', title: 'Review links', copy: 'Google Business and Yelp review destinations for post-job follow-up.', href: '#review-links-settings' },
+    ],
+  },
+  {
+    label: 'Operations',
+    copy: 'Crew, schedule, time, field, and production setup.',
+    items: [
+      { label: 'Operations', title: 'Team and field setup', copy: 'Crew roles, time clock policies, scheduling, notifications, and reusable templates.', href: '#operations-settings' },
+      { label: 'Products', title: 'Supplier catalog', copy: 'Review paint products and supplier catalog data.', href: '/supplier-catalog' },
+      { label: 'Templates', title: 'Estimate templates', copy: 'Manage reusable estimate and production scope templates.', href: '/templates' },
+    ],
+  },
+  {
+    label: 'Integrations',
+    copy: 'Payments, calendars, accounting, and notifications.',
+    items: [
+      { label: 'Connectors', title: 'Payments and integrations', copy: 'Stripe deposits, Google Calendar, QuickBooks status, billing, and browser notifications.', href: '#integrations-settings' },
+      { label: 'Billing', title: 'Crewmodo billing', copy: 'Review plan, trial, and subscription status.', href: '/billing' },
+      { label: 'Stripe', title: 'Stripe payments', copy: 'Set up contractor payment collection and payout status.', href: '/payments/stripe' },
+    ],
+  },
+  {
+    label: 'Admin and insights',
+    copy: 'Reporting, audit trail, and permission administration.',
+    items: [
+      { label: 'Insights', title: 'Reports', copy: 'Review sales, revenue, jobs, and operating metrics from one reporting surface.', href: '/reports' },
+      { label: 'Audit', title: 'Activity log', copy: 'See customer events and operational changes across leads, estimates, and jobs.', href: '/activity' },
+      { label: 'Roles', title: 'Roles and permissions', copy: 'Manage app access for office staff, managers, and crew.', href: '/roles' },
+    ],
+  },
 ];
 
 function phoneDigits(value: string) {
@@ -634,6 +682,8 @@ document.getElementById('crewmodo-lead-form').addEventListener('submit', async f
 </script>`;
   }, [leadIntake]);
 
+  const currentSettingsHash = location.hash || '';
+
   if (isLoading) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
@@ -671,19 +721,47 @@ document.getElementById('crewmodo-lead-form').addEventListener('submit', async f
       <section className="mb-6">
         <div className="mb-3">
           <h2 className="pf-section-title">Setup checklist</h2>
-          <p className="pf-copy mt-1">Use these sections to get a contractor workspace ready before sending live estimates or scheduling crews.</p>
+          <p className="pf-copy mt-1">Open the group you need, then jump directly to that setup area. Core settings stay on this page; larger tools open in their own screens.</p>
         </div>
         <div className="grid gap-3">
-          {setupCards.map(([pill, title, copy, href]) => (
-            <Link key={title} to={href.startsWith('#') ? `/settings${href}` : href} className="grid gap-2 rounded-lg border border-gray-200 bg-white p-4 transition hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm sm:grid-cols-[7rem_minmax(0,1fr)_auto] sm:items-start">
-              <span className="w-fit rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold uppercase text-gray-700">{pill}</span>
-              <span className="min-w-0">
-                <span className="pf-section-title block">{title}</span>
-                <span className="pf-copy mt-1 block">{copy}</span>
-              </span>
-              <span className="btn-text btn-sm pointer-events-none hidden sm:inline-flex">Open</span>
-            </Link>
-          ))}
+          {settingsNavGroups.map((group, index) => {
+            const groupHasActiveHash = group.items.some((item) => item.href === currentSettingsHash);
+            return (
+              <details
+                key={group.label}
+                className="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm"
+                open={groupHasActiveHash || (!currentSettingsHash && index === 0)}
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-blue-50/40 [&::-webkit-details-marker]:hidden">
+                  <span className="min-w-0">
+                    <span className="pf-row-title block">{group.label}</span>
+                    <span className="pf-copy mt-0.5 block">{group.copy}</span>
+                  </span>
+                  <span className="btn-icon btn-icon-tonal pointer-events-none h-8 w-8 shrink-0">
+                    <Icon name="chevron-right" className="h-4 w-4 transition group-open:rotate-90" />
+                  </span>
+                </summary>
+                <div className="grid gap-2 border-t border-gray-200 bg-gray-50/50 p-3">
+                  {group.items.map((item) => (
+                    <Link
+                      key={item.title}
+                      to={item.href.startsWith('#') ? `/settings${item.href}` : item.href}
+                      className={`grid gap-2 rounded-lg border bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-sm sm:grid-cols-[6.5rem_minmax(0,1fr)_auto] sm:items-start ${
+                        item.href === currentSettingsHash ? 'border-blue-300 ring-1 ring-blue-200' : 'border-gray-200'
+                      }`}
+                    >
+                      <span className="w-fit rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold uppercase text-gray-700">{item.label}</span>
+                      <span className="min-w-0">
+                        <span className="pf-section-title block">{item.title}</span>
+                        <span className="pf-copy mt-1 block">{item.copy}</span>
+                      </span>
+                      <span className="btn-text btn-sm pointer-events-none hidden sm:inline-flex">Open</span>
+                    </Link>
+                  ))}
+                </div>
+              </details>
+            );
+          })}
         </div>
       </section>
 
