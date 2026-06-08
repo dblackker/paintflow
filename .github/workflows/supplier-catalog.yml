@@ -3,6 +3,12 @@ name: Supplier Catalog Sync
 on:
   schedule:
     - cron: '18 11 * * 1'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/supplier-catalog.yml'
+      - 'scrapers/paint-suppliers/**'
   workflow_dispatch:
     inputs:
       supplier:
