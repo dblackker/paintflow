@@ -22,6 +22,13 @@ const weatherSettingsSchema = z.object({
 
 const weatherCacheSeconds = 30 * 60;
 
+function calendarRedirect(env: Env, status: 'connected' | 'cancelled' | 'failed', reason?: string) {
+  const url = new URL('/calendar', env.PUBLIC_URL);
+  url.searchParams.set('calendar_connect', status);
+  if (reason) url.searchParams.set('calendar_reason', reason);
+  return url.toString();
+}
+
 function firstZip(value?: string | null) {
   return String(value || '').match(/\b\d{5}(?:-\d{4})?\b/)?.[0]?.slice(0, 5) || '';
 }
@@ -153,14 +160,20 @@ calendar.get('/connect', async (c) => {
 calendar.get('/callback', async (c) => {
   const code = c.req.query('code');
   const state = c.req.query('state');
+  const error = c.req.query('error');
+
+  if (error) {
+    if (state) await consumeOAuthState(c.env, 'google-calendar', state);
+    return c.redirect(calendarRedirect(c.env, error === 'access_denied' ? 'cancelled' : 'failed', error));
+  }
   
   if (!code || !state) {
-    return c.json({ error: 'Missing code or state' }, 400);
+    return c.redirect(calendarRedirect(c.env, 'failed', 'missing_code_or_state'));
   }
 
   const stateData = await consumeOAuthState(c.env, 'google-calendar', state);
   if (!stateData) {
-    return c.json({ error: 'Invalid or expired state' }, 400);
+    return c.redirect(calendarRedirect(c.env, 'failed', 'invalid_state'));
   }
   
   try {
@@ -176,31 +189,40 @@ calendar.get('/callback', async (c) => {
       }),
     });
     
+    if (!tokenRes.ok) {
+      const tokenError = await tokenRes.text();
+      console.error('Google Calendar token error:', tokenError);
+      return c.redirect(calendarRedirect(c.env, 'failed', 'token_exchange_failed'));
+    }
+
     const orgId = stateData.orgId;
-    const tokens = await tokenRes.json() as { access_token: string; refresh_token: string; expires_in: number };
+    const tokens = await tokenRes.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+    if (!tokens.access_token || !tokens.expires_in) {
+      return c.redirect(calendarRedirect(c.env, 'failed', 'missing_tokens'));
+    }
     
     const db = createDb(c.env.DATABASE_URL);
     await db.insert(googleCalendarConnections)
       .values({
         orgId,
         accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
+        refreshToken: tokens.refresh_token || '',
         tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
       })
       .onConflictDoUpdate({
         target: googleCalendarConnections.orgId,
         set: {
           accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
+          ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
           tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
           updatedAt: new Date(),
         },
       });
     
-    return c.redirect(`${c.env.PUBLIC_URL}/settings?calendar_connected=true`);
+    return c.redirect(calendarRedirect(c.env, 'connected'));
   } catch (err) {
     console.error('Google Calendar callback error:', err);
-    return c.json({ error: 'Connection failed' }, 500);
+    return c.redirect(calendarRedirect(c.env, 'failed', 'connection_failed'));
   }
 });
 

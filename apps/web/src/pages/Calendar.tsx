@@ -1,5 +1,5 @@
 import { FormEvent, PointerEvent, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge, StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
@@ -319,6 +319,8 @@ function googleWeatherHref(zipCode?: string) {
 }
 
 export function Calendar() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -425,6 +427,25 @@ export function Calendar() {
   useEffect(() => {
     loadCalendar();
   }, [weekStart.getTime(), viewMode]);
+
+  useEffect(() => {
+    const status = searchParams.get('calendar_connect');
+    if (!status) return;
+
+    if (status === 'connected') {
+      window.showToast?.('Google Calendar connected.', 'success');
+    } else if (status === 'cancelled') {
+      window.showToast?.('Google Calendar connection canceled.', 'info');
+    } else {
+      window.showToast?.('Google Calendar could not be connected. Try again when you are ready.', 'error');
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('calendar_connect');
+    nextParams.delete('calendar_reason');
+    const nextSearch = nextParams.toString();
+    navigate({ pathname: '/calendar', search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
+  }, [navigate, searchParams]);
 
   async function patchJob(jobId: string, body: Partial<Job>, successMessage: string) {
     setSavingJobId(jobId);
