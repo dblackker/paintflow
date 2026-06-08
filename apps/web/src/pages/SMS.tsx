@@ -288,8 +288,8 @@ export function SMS() {
   const canSend = Boolean(lead?.phone || selectedConversation?.leadPhone) && Boolean(selectedLeadId);
 
   return (
-    <div className="h-[calc(100dvh-4rem)] overflow-hidden bg-gray-50">
-      <main className="mx-auto flex h-full max-w-7xl flex-col px-0 sm:px-4 lg:px-8">
+    <div className="h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] overflow-hidden bg-gray-50 sm:h-[calc(100dvh-8rem-env(safe-area-inset-bottom))] lg:h-[calc(100dvh-7rem)]">
+      <div className="mx-auto flex h-full max-w-7xl flex-col px-0 sm:px-4 lg:px-8">
         <header className="shrink-0 border-b bg-white px-4 py-3 sm:mt-5 sm:rounded-t-lg sm:border sm:border-b-0">
           <div className="flex items-center justify-between gap-3">
             <p className="pf-copy">Team-visible SMS history tied to each customer.</p>
@@ -400,7 +400,7 @@ export function SMS() {
             </section>
           )}
         </section>
-      </main>
+      </div>
     </div>
   );
 }
