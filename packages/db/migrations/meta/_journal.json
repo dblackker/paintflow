@@ -197,6 +197,13 @@
       "when": 1779166023000,
       "tag": "0027_change_order_drafts_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1780890600000,
+      "tag": "0028_time_clock_default_rounding",
+      "breakpoints": true
     }
   ]
 }

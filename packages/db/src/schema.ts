@@ -809,7 +809,7 @@ export const timePunchSessions = pgTable('time_punch_sessions', {
   endedAtActual: timestamp('ended_at_actual'),
   startedAtRounded: timestamp('started_at_rounded').notNull(),
   endedAtRounded: timestamp('ended_at_rounded'),
-  roundingIncrementMinutes: integer('rounding_increment_minutes').notNull().default(15),
+  roundingIncrementMinutes: integer('rounding_increment_minutes').notNull().default(5),
   startLatitude: decimal('start_latitude', { precision: 10, scale: 7 }).notNull(),
   startLongitude: decimal('start_longitude', { precision: 10, scale: 7 }).notNull(),
   startAccuracyMeters: decimal('start_accuracy_meters', { precision: 10, scale: 2 }),

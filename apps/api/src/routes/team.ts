@@ -590,7 +590,7 @@ type TimeClockSettings = {
 };
 
 const defaultTimeClockSettings: TimeClockSettings = {
-  roundingIncrementMinutes: 15,
+  roundingIncrementMinutes: 5,
   clockOutWarningHours: 8,
   maxShiftHours: 12,
   reminderWindowStartHour: 18,

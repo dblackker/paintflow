@@ -138,7 +138,7 @@ export function Team() {
   const [modalOpen, setModalOpen] = useState(false);
   const [memberForm, setMemberForm] = useState<MemberFormState>(emptyMemberForm);
   const [policyForm, setPolicyForm] = useState({
-    roundingIncrementMinutes: '15',
+    roundingIncrementMinutes: '5',
     clockOutWarningHours: '8',
     maxShiftHours: '12',
   });
@@ -173,7 +173,7 @@ export function Team() {
       setMembers(membersPayload.data || []);
       setSettings(nextSettings);
       setPolicyForm({
-        roundingIncrementMinutes: String(nextSettings?.roundingIncrementMinutes || 15),
+        roundingIncrementMinutes: String(nextSettings?.roundingIncrementMinutes || 5),
         clockOutWarningHours: String(nextSettings?.clockOutWarningHours || 8),
         maxShiftHours: String(nextSettings?.maxShiftHours || 12),
       });
