@@ -290,14 +290,7 @@ export function SMS() {
   return (
     <div className="h-[calc(100dvh-9.5rem-env(safe-area-inset-bottom))] overflow-hidden bg-gray-50 sm:h-[calc(100dvh-8rem-env(safe-area-inset-bottom))] lg:h-[calc(100dvh-7rem)]">
       <div className="mx-auto flex h-full max-w-7xl flex-col px-0 sm:px-4 lg:px-8">
-        <header className="shrink-0 border-b bg-white px-4 py-3 sm:mt-5 sm:rounded-t-lg sm:border sm:border-b-0">
-          <div className="flex items-center justify-between gap-3">
-            <p className="pf-copy">Team-visible SMS history tied to each customer.</p>
-            <Button as="a" href="/leads" variant="secondary" size="sm" className="shrink-0">Customers</Button>
-          </div>
-        </header>
-
-        <section className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white sm:rounded-b-lg sm:border lg:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white sm:rounded-lg sm:border lg:grid-cols-[360px_minmax(0,1fr)]">
           <div className={`${showInbox ? 'flex' : 'hidden'} min-h-0 flex-col lg:flex`}>
             <ConversationList
               conversations={conversations}
