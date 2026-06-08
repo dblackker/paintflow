@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import { createHash } from 'crypto';
 import { DatabaseClient, SupplierCatalogExport } from './db/client';
 import { Logger } from './utils/logger';
 
@@ -26,6 +27,26 @@ function nullableText(value: unknown): string | null {
   if (value == null) return null;
   const text = String(value).trim();
   return text.length > 0 ? text : null;
+}
+
+function boundedText(value: unknown, maxLength: number): string | null {
+  const text = nullableText(value);
+  if (!text) return null;
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function requiredText(value: unknown, maxLength: number, fallback: string): string {
+  return boundedText(value, maxLength) || fallback.slice(0, maxLength);
+}
+
+function stableCatalogId(value: unknown, maxLength = 255): string {
+  const text = String(value ?? '').trim();
+  if (!text) return createHash('sha256').update('missing-catalog-id').digest('hex');
+  if (text.length <= maxLength) return text;
+
+  const hash = createHash('sha256').update(text).digest('hex').slice(0, 16);
+  const prefixLength = Math.max(0, maxLength - hash.length - 1);
+  return `${text.slice(0, prefixLength)}-${hash}`;
 }
 
 function issuePayload(catalog: SupplierCatalogExport) {
@@ -107,24 +128,24 @@ async function upsertProducts(client: PoolClient, catalog: SupplierCatalogExport
         last_seen_at = EXCLUDED.last_seen_at,
         updated_at = NOW()`,
       [
-        product.supplierId,
-        product.supplierName,
-        product.id,
-        nullableText(product.sku),
-        product.name,
-        nullableText(product.productLine),
-        product.type,
-        nullableText(product.category),
+        requiredText(product.supplierId, 80, 'unknown'),
+        requiredText(product.supplierName, 255, 'Unknown supplier'),
+        stableCatalogId(product.id),
+        boundedText(product.sku, 120),
+        requiredText(product.name, 255, 'Unnamed product'),
+        boundedText(product.productLine, 255),
+        requiredText(product.type, 60, 'paint'),
+        boundedText(product.category, 100),
         JSON.stringify(parseJsonArray(product.sheens)),
         JSON.stringify(parseJsonArray(product.bases)),
         nullableText(product.description),
         JSON.stringify(parseJsonArray(product.features)),
         nullableText(product.url),
         nullableText(product.imageUrl),
-        nullableText(product.size),
+        boundedText(product.size, 80),
         product.priceCents == null ? null : Number(product.priceCents),
-        nullableText(product.currency) || 'USD',
-        nullableText(product.pricingTier) || 'retail',
+        boundedText(product.currency, 10) || 'USD',
+        boundedText(product.pricingTier, 80) || 'retail',
         product.coverageSqFtMin == null ? null : Number(product.coverageSqFtMin),
         product.coverageSqFtMax == null ? null : Number(product.coverageSqFtMax),
         nullableText(product.lastSeenAt),
@@ -160,17 +181,17 @@ async function upsertColors(client: PoolClient, catalog: SupplierCatalogExport) 
         last_seen_at = NOW(),
         updated_at = NOW()`,
       [
-        color.supplierId,
-        color.supplierName,
-        color.id,
-        color.colorCode,
-        color.name,
-        nullableText(color.hexCode),
+        requiredText(color.supplierId, 80, 'unknown'),
+        requiredText(color.supplierName, 255, 'Unknown supplier'),
+        stableCatalogId(color.id),
+        requiredText(color.colorCode, 100, stableCatalogId(color.id, 100)),
+        requiredText(color.name, 255, 'Unnamed color'),
+        boundedText(color.hexCode, 7),
         color.rgbR == null ? null : Number(color.rgbR),
         color.rgbG == null ? null : Number(color.rgbG),
         color.rgbB == null ? null : Number(color.rgbB),
-        nullableText(color.collection),
-        nullableText(color.family),
+        boundedText(color.collection, 255),
+        boundedText(color.family, 100),
         color.lrv == null ? null : Number(color.lrv),
         bool(color.isPopular),
       ]
@@ -201,12 +222,12 @@ async function upsertProductColors(client: PoolClient, catalog: SupplierCatalogE
         last_seen_at = NOW(),
         updated_at = NOW()`,
       [
-        mapping.supplierId,
+        requiredText(mapping.supplierId, 80, 'unknown'),
         mapping.isAvailable !== 0,
-        nullableText(mapping.baseRequired),
+        boundedText(mapping.baseRequired, 120),
         JSON.stringify(parseJsonArray(mapping.recommendedUse)),
-        mapping.productId,
-        mapping.colorId,
+        stableCatalogId(mapping.productId),
+        stableCatalogId(mapping.colorId),
       ]
     );
     count += 1;
