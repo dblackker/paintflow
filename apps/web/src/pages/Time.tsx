@@ -367,12 +367,12 @@ function warningIcon(content: string) {
     <span className="group relative inline-flex">
       <button
         type="button"
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-amber-700 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        className="-m-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-amber-700 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-300"
         aria-label={content}
       >
         <Icon name="warning" className="h-4 w-4" />
       </button>
-      <span className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-64 -translate-x-1/2 rounded-lg border border-amber-100 bg-white p-3 text-left text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block">
+      <span className="pointer-events-none absolute left-1/2 top-10 z-20 hidden w-64 -translate-x-1/2 rounded-lg border border-amber-100 bg-white p-3 text-left text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block">
         {content}
       </span>
     </span>

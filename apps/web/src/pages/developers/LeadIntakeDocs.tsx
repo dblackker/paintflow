@@ -68,7 +68,25 @@ function CodeBlock({ label, code }: { label: string; code: string }) {
 
 function DocsTable({ rows, columns }: { rows: string[][]; columns: string[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-[var(--pf-border)]">
+    <div className="rounded-lg border border-[var(--pf-border)]">
+      <div className="grid gap-3 p-3 md:hidden">
+        {rows.map((row) => (
+          <div key={row.join('-')} className="rounded-lg border border-[var(--pf-border)] bg-white p-3">
+            <p className="pf-row-title">
+              <code className="font-mono">{row[0]}</code>
+            </p>
+            <div className="mt-2 grid gap-2">
+              {row.slice(1).map((cell, index) => (
+                <div key={`${row[0]}-mobile-${index}`} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2 text-sm">
+                  <span className="pf-meta">{columns[index + 1]}</span>
+                  <span className="min-w-0 text-[var(--md-sys-color-on-surface-variant)]">{cell}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
       <table className="min-w-full divide-y divide-[var(--pf-border)] text-left text-sm">
         <thead className="bg-[var(--md-sys-color-surface-container)]">
           <tr>
@@ -91,6 +109,7 @@ function DocsTable({ rows, columns }: { rows: string[][]; columns: string[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

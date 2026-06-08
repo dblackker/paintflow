@@ -641,7 +641,7 @@ export function Calendar() {
             </button>
             <div className="min-w-0 text-center">
               <p className="pf-emphasis truncate">{calendarTitle()}</p>
-              <button type="button" className="mt-1 text-sm font-medium text-blue-700 hover:text-blue-800" onClick={resetCalendar}>
+              <button type="button" className="btn-text btn-sm mx-auto mt-1 min-h-11 px-3 py-2 text-blue-700" onClick={resetCalendar}>
                 Today
               </button>
             </div>

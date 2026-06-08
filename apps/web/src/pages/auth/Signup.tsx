@@ -288,7 +288,50 @@ export function Signup() {
                   <h2 id="plan-comparison-title" className="pf-section-title">Compare plans</h2>
                   <p className="pf-copy mt-1">Use the matrix for the differences that usually matter after the first month.</p>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                <div className="grid gap-3 md:hidden">
+                  {plans.map((plan) => {
+                    const selected = formData.plan === plan.key;
+                    return (
+                      <button
+                        key={`${plan.key}-mobile-compare`}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => update('plan', plan.key)}
+                        className={`rounded-lg border bg-white p-4 text-left shadow-sm ${selected ? 'border-[var(--pf-primary)] ring-2 ring-[rgb(26_86_148_/_0.18)]' : 'border-gray-200'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="pf-row-title">{plan.displayName}</p>
+                            <p className="pf-meta">${plan.price}/mo after trial</p>
+                          </div>
+                          {selected && (
+                            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-600 text-white" aria-label="Selected plan">
+                              <Icon name="check" className="h-4 w-4" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-3 grid gap-2">
+                          {comparisonRows.map((group) => (
+                            <div key={`${plan.key}-${group.section}`} className="rounded-md bg-gray-50 p-3">
+                              <p className="pf-meta font-semibold uppercase text-gray-600">{group.section}</p>
+                              <div className="mt-2 grid gap-1.5">
+                                {group.rows.map((row) => (
+                                  <div key={`${plan.key}-${row.label}`} className="flex items-start justify-between gap-3">
+                                    <span className="min-w-0 text-sm text-gray-700">{row.label}</span>
+                                    <span className={`shrink-0 text-right text-sm ${comparisonValueClass(row[plan.key])}`}>
+                                      {row[plan.key] === 'Included' ? 'Yes' : row[plan.key]}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white md:block">
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[42rem] table-fixed border-collapse text-left lg:min-w-0">
                       <thead>

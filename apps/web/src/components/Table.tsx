@@ -40,7 +40,16 @@ export function Table<T extends Record<string, any>>({
   if (isLoading) {
     return (
       <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
-        <table className="min-w-full divide-y divide-gray-300">
+        <div className="grid gap-3 bg-white p-3 md:hidden">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-lg border border-gray-200 p-3">
+              <div className="h-4 w-2/3 rounded bg-gray-200 animate-pulse" />
+              <div className="mt-3 h-3 w-full rounded bg-gray-100 animate-pulse" />
+              <div className="mt-2 h-3 w-1/2 rounded bg-gray-100 animate-pulse" />
+            </div>
+          ))}
+        </div>
+        <table className="hidden min-w-full divide-y divide-gray-300 md:table">
           <thead className="bg-gray-50">
             <tr>
               {columns.map((column) => (
@@ -80,7 +89,34 @@ export function Table<T extends Record<string, any>>({
   
   return (
     <div className={`overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg ${className}`}>
-      <table className="min-w-full divide-y divide-gray-300">
+      <div className="grid gap-3 bg-white p-3 md:hidden">
+        {data.map((row, rowIndex) => (
+          <div
+            key={rowIndex}
+            role={onRowClick ? 'button' : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
+            onClick={() => onRowClick?.(row)}
+            onKeyDown={(event) => {
+              if (!onRowClick) return;
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onRowClick(row);
+              }
+            }}
+            className={`grid min-h-12 w-full gap-3 rounded-lg border border-gray-200 p-3 text-left ${onRowClick ? 'cursor-pointer hover:border-blue-200 hover:bg-blue-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500' : 'cursor-default'}`}
+          >
+            {columns.map((column, columnIndex) => (
+              <div key={String(column.key)} className={columnIndex === 0 ? 'grid gap-1' : 'grid grid-cols-[6.5rem_minmax(0,1fr)] items-start gap-2'}>
+                {columnIndex > 0 && <span className="pf-meta truncate">{column.header}</span>}
+                <div className={columnIndex === 0 ? 'pf-row-title min-w-0' : 'min-w-0 text-sm text-gray-900'}>
+                  {column.render ? column.render(row) : String(row[column.key as keyof T] ?? '')}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <table className="hidden min-w-full divide-y divide-gray-300 md:table">
         <thead className="bg-gray-50">
           <tr>
             {columns.map((column) => (

@@ -292,12 +292,12 @@ export function Pipeline() {
 
       <section className="mobile-filter-panel mt-5 rounded-lg border bg-white p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="pf-scroll-tabs flex gap-2 overflow-x-auto pb-1">
             {groupFilters.map((filter) => (
               <button
                 key={filter.value}
                 type="button"
-                className={`shrink-0 rounded-full border px-3 py-2 text-sm font-semibold ${activeGroup === filter.value ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 text-gray-600'}`}
+                className={`min-h-11 shrink-0 rounded-full border px-3.5 py-2 text-sm font-semibold ${activeGroup === filter.value ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 text-gray-600'}`}
                 onClick={() => setActiveGroup(filter.value)}
               >
                 {filter.label}
@@ -319,7 +319,7 @@ export function Pipeline() {
         ) : visibleStages.length === 0 ? (
           <Card className="p-8 text-center text-gray-500">No stages available.</Card>
         ) : (
-          <div className={`${activeGroup === 'all' ? 'grid auto-cols-[minmax(16rem,18rem)] grid-flow-col overflow-x-auto' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5'} gap-4 pb-2`}>
+          <div className={`${activeGroup === 'all' ? 'grid grid-cols-1 md:auto-cols-[minmax(16rem,18rem)] md:grid-flow-col md:overflow-x-auto' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5'} gap-4 pb-2`}>
             {visibleStages.map((stage) => {
               const cards = cardsForStage(stage.id);
               const value = cards.reduce((sum, card) => sum + Number(card.value || 0), 0);
@@ -510,7 +510,7 @@ function PipelineCardView({ card, onMove, onActivity, onDragStart, onDragEnd }: 
         </div>
       )}
       <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
-        <Link className="text-xs font-semibold text-blue-700" to={`/leads/${card.leadId}`}>Profile</Link>
+        <Link className="btn-text btn-sm min-h-11 px-3 py-2 text-blue-700" to={`/leads/${card.leadId}`}>Profile</Link>
         <div className="flex gap-1.5">
           <Button type="button" variant="secondary" size="sm" onClick={onMove}>Move</Button>
           <Button type="button" variant="secondary" size="sm" onClick={onActivity}>Activity</Button>
@@ -522,10 +522,10 @@ function PipelineCardView({ card, onMove, onActivity, onDragStart, onDragEnd }: 
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="mobile-sheet fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-3 pt-20 sm:p-6 sm:pt-24" role="dialog" aria-modal="true" aria-labelledby="pipeline-modal-title" onMouseDown={(event) => {
+    <div className="mobile-sheet fixed inset-0 z-[200] flex items-end justify-center bg-black/40 p-0 sm:items-start sm:p-6 sm:pt-24" role="dialog" aria-modal="true" aria-labelledby="pipeline-modal-title" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <div className="max-h-[calc(100vh-6rem)] w-full max-w-lg overflow-y-auto rounded-lg border bg-white p-4 shadow-xl sm:p-5">
+      <div className="max-h-[calc(100dvh-4rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto rounded-t-2xl border bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl sm:max-h-[calc(100vh-6rem)] sm:rounded-lg sm:p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 id="pipeline-modal-title" className="pf-section-title">{title}</h3>

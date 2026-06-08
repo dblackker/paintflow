@@ -481,7 +481,24 @@ function ScopeCard({ includedItems, optionalItems }: { includedItems: EstimateLi
               <h3 className="font-medium text-gray-950">{room}</h3>
               <span className="text-xs text-gray-500">{rows.length} substrate{rows.length === 1 ? '' : 's'}</span>
             </div>
-            <div className="mt-3 overflow-x-auto">
+            <div className="mt-3 grid gap-2 md:hidden">
+              {rows.map(({ item, parts }, index) => (
+                <div key={`${parts.surface}-mobile-${index}`} className="rounded-lg border bg-gray-50 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="pf-row-title truncate">{labelize(parts.surface)}</p>
+                      <p className="pf-copy mt-1">{itemDetails(item) || item.notes || 'Included'}</p>
+                    </div>
+                    <p className="pf-row-title shrink-0">{formatMoney(Number(item.qty || 1) * Number(item.rate || 0))}</p>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
+                    <span className="rounded-full bg-white px-2 py-1">{itemMeasurement(item)}</span>
+                    <span className="rounded-full bg-white px-2 py-1">{formatMoney(item.rate || 0)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 hidden overflow-x-auto md:block">
               <table className="min-w-full text-left text-sm">
                 <thead className="text-xs uppercase tracking-wide text-gray-500">
                   <tr>

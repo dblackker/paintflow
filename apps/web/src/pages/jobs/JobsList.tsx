@@ -388,28 +388,35 @@ function JobCard({
         <MiniMetric label="Profit" value={formatMoney(profit)} />
       </div>
 
-      <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="flex items-center justify-between gap-3 p-3 sm:px-5">
         <div className="pf-meta">
           {completed ? 'Completed work' : 'Active production work'}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Link to={`/jobs/${job.id}`} className="btn-primary btn-sm">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Link to={`/jobs/${job.id}`} className="btn-primary btn-sm whitespace-nowrap">
             View job
             <Icon name="arrow-right" className="h-4 w-4" />
           </Link>
-          <button type="button" className="btn-text btn-sm" onClick={onLogTime}>
-            <Icon name="clock" className="h-4 w-4" />
-            Add time
-          </button>
-          {completed ? (
-            <button type="button" className="btn-text btn-sm" onClick={onRequestReview} disabled={isRequestingReview}>
-              {isRequestingReview ? 'Sending...' : 'Request review'}
-            </button>
-          ) : (
-            <button type="button" className="btn-text btn-sm text-green-700" onClick={onMarkComplete} disabled={isUpdating}>
-              {isUpdating ? 'Updating...' : 'Mark complete'}
-            </button>
-          )}
+          <details className="relative">
+            <summary className="btn-icon btn-icon-outlined list-none" aria-label={`More actions for ${displayJobName(job)}`}>
+              <Icon name="more-horizontal" className="h-5 w-5" />
+            </summary>
+            <div className="absolute right-0 z-20 mt-2 min-w-44 overflow-hidden rounded-lg border bg-white p-1 shadow-lg">
+              <button type="button" className="btn-text btn-sm w-full justify-start" onClick={onLogTime}>
+                <Icon name="clock" className="h-4 w-4" />
+                Add time
+              </button>
+              {completed ? (
+                <button type="button" className="btn-text btn-sm w-full justify-start" onClick={onRequestReview} disabled={isRequestingReview}>
+                  {isRequestingReview ? 'Sending...' : 'Request review'}
+                </button>
+              ) : (
+                <button type="button" className="btn-text btn-sm w-full justify-start text-green-700" onClick={onMarkComplete} disabled={isUpdating}>
+                  {isUpdating ? 'Updating...' : 'Mark complete'}
+                </button>
+              )}
+            </div>
+          </details>
         </div>
       </div>
     </article>

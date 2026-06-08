@@ -39,14 +39,16 @@ export function SearchBar({
         type="search"
         value={localValue}
         onChange={(e) => setLocalValue(e.target.value)}
-        className="block w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-3 text-sm placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="block min-h-12 w-full rounded-xl border border-gray-300 bg-white py-3 pl-10 pr-12 text-base placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:min-h-11 sm:text-sm"
         placeholder={placeholder}
+        inputMode="search"
       />
       {localValue && (
         <button
           type="button"
           onClick={() => setLocalValue('')}
-          className="absolute inset-y-0 right-0 flex items-center pr-3"
+          className="absolute inset-y-0 right-0 flex min-h-12 w-12 items-center justify-center"
+          aria-label="Clear search"
         >
           <Icon name="close" className="h-4 w-4 text-gray-400 hover:text-gray-600" />
         </button>
