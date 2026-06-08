@@ -427,6 +427,9 @@ export function Signup() {
                 <Button type="submit" size="lg" fullWidth isLoading={isSubmitting || redirectingToCheckout} rightIcon={<Icon name="arrow-right" className="h-4 w-4" />}>
                   {redirectingToCheckout ? 'Opening secure checkout' : 'Continue to secure checkout'}
                 </Button>
+                <p className="pf-meta text-center">
+                  By continuing, you agree to the <Link to="/terms" className="font-semibold text-[var(--pf-primary)] hover:underline">Terms</Link> and acknowledge the <Link to="/privacy" className="font-semibold text-[var(--pf-primary)] hover:underline">Privacy Policy</Link>.
+                </p>
               </div>
               <p className="pf-meta text-center">
                 No magic link is required during signup. After checkout, Stripe sends you back signed in. If you leave before finishing, use this same email to resume checkout or request a sign-in link.

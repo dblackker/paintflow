@@ -332,6 +332,8 @@ export function Landing() {
           <div className="flex flex-wrap gap-4 text-sm font-semibold text-gray-600">
             <a href="/login" className="hover:text-[#1a5694]">Sign in</a>
             <a href="/signup" className="hover:text-[#1a5694]">Start trial</a>
+            <a href="/privacy" className="hover:text-[#1a5694]">Privacy</a>
+            <a href="/terms" className="hover:text-[#1a5694]">Terms</a>
             <a href="mailto:support@crewmodo.com" className="hover:text-[#1a5694]">Contact</a>
           </div>
         </div>

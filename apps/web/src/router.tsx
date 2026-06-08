@@ -43,6 +43,7 @@ import { StripePayments } from '@/pages/payments/StripePayments';
 import { DesignSystem } from '@/pages/dev/DesignSystem';
 import { LeadIntakeDocs } from '@/pages/developers/LeadIntakeDocs';
 import { Landing } from '@/pages/landing/Landing';
+import { PrivacyPolicy, TermsOfService } from '@/pages/legal/LegalPages';
 import { ErrorPage } from '@/pages/ErrorPage';
 
 export const router = createBrowserRouter([
@@ -64,6 +65,16 @@ export const router = createBrowserRouter([
   {
     path: '/portal/:token',
     element: <Portal />,
+    errorElement: <ErrorPage />,
+  },
+  {
+    path: '/privacy',
+    element: <PrivacyPolicy />,
+    errorElement: <ErrorPage />,
+  },
+  {
+    path: '/terms',
+    element: <TermsOfService />,
     errorElement: <ErrorPage />,
   },
   {
