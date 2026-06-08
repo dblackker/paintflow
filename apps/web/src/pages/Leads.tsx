@@ -432,7 +432,7 @@ function LeadCard({ lead, onStatusChange }: { lead: Lead; onStatusChange: (id: s
           </p>
         </Link>
 
-        <div className="flex shrink-0 flex-col gap-2 sm:w-44">
+        <div className="flex shrink-0 flex-col gap-2 sm:w-52">
           <Select
             aria-label={`Status for ${lead.name}`}
             value={lead.status || 'new'}
@@ -440,7 +440,7 @@ function LeadCard({ lead, onStatusChange }: { lead: Lead; onStatusChange: (id: s
             onChange={(event) => onStatusChange(lead.id, event.target.value)}
             options={leadStatuses}
           />
-          <div className="flex flex-wrap gap-1 sm:justify-end" onClick={stop}>
+          <div className="flex flex-nowrap gap-1 sm:justify-end" onClick={stop}>
             {lead.phone && (
               <a href={`tel:${lead.phone}`} className="btn-icon btn-icon-outlined" aria-label={`Call ${lead.name}`} title="Call">
                 <Icon name="phone" className="pf-icon" />
