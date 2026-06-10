@@ -46,6 +46,9 @@ const comparisonRows = [
   },
 ] as const;
 
+const CHECKOUT_NAVIGATION_TIMEOUT_MS = 2500;
+const SIGNUP_REQUEST_TIMEOUT_MS = 20000;
+
 function phoneDigits(value: string) {
   const digits = value.replace(/\D/g, '');
   return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits.slice(0, 10);
@@ -120,17 +123,21 @@ export function Signup() {
     setCheckoutUrl('');
     setMessage(null);
     let isRedirecting = false;
+    const controller = new AbortController();
+    const requestTimeout = window.setTimeout(() => controller.abort(), SIGNUP_REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(`${API_URL}/v1/auth/signup`, {
         method: 'POST',
         credentials: 'include',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
         body: JSON.stringify(formData),
       });
+      window.clearTimeout(requestTimeout);
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
@@ -155,8 +162,13 @@ export function Signup() {
       }
 
       if (payload.checkoutUrl) {
+        const nextCheckoutUrl = String(payload.checkoutUrl);
+        if (!/^https?:\/\//i.test(nextCheckoutUrl)) {
+          throw new Error('Stripe checkout returned an invalid URL.');
+        }
+
         isRedirecting = true;
-        setCheckoutUrl(payload.checkoutUrl);
+        setCheckoutUrl(nextCheckoutUrl);
         setRedirectingToCheckout(true);
         showStatus({
           tone: 'success',
@@ -164,21 +176,34 @@ export function Signup() {
             ? 'Workspace found. Reopening secure checkout so you can activate the trial.'
             : 'Workspace reserved. Opening secure checkout to start your trial.',
         });
+
         window.setTimeout(() => {
-          window.location.assign(payload.checkoutUrl);
+          window.location.href = nextCheckoutUrl;
         }, 100);
+
         window.setTimeout(() => {
           setIsSubmitting(false);
           setRedirectingToCheckout(false);
-        }, 4000);
+          showStatus({
+            tone: 'info',
+            text: 'Secure checkout did not open automatically. Tap Open secure checkout to continue.',
+          });
+        }, CHECKOUT_NAVIGATION_TIMEOUT_MS);
         return;
       }
 
       throw new Error('Stripe checkout is not configured yet.');
     } catch (err) {
-      showStatus({ tone: 'error', text: err instanceof Error ? err.message : 'Something went wrong.' });
+      window.clearTimeout(requestTimeout);
+      showStatus({
+        tone: 'error',
+        text: err instanceof DOMException && err.name === 'AbortError'
+          ? 'Checkout took too long to start. Check your connection and try again.'
+          : err instanceof Error ? err.message : 'Something went wrong.',
+      });
     } finally {
       if (!isRedirecting) {
+        window.clearTimeout(requestTimeout);
         setIsSubmitting(false);
         setRedirectingToCheckout(false);
       }
