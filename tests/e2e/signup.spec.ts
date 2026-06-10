@@ -45,7 +45,7 @@ test.describe('trial signup', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           success: true,
-          checkoutUrl: '/stripe-checkout/session_123',
+          checkoutUrl: 'http://localhost:5173/stripe-checkout/session_123',
           trialDays: 14,
           plan: 'pro',
         }),
@@ -76,7 +76,7 @@ test.describe('trial signup', () => {
         body: JSON.stringify({
           success: true,
           resumedSignup: true,
-          checkoutUrl: '/stripe-checkout/resume_123',
+          checkoutUrl: 'http://localhost:5173/stripe-checkout/resume_123',
           trialDays: 14,
           plan: 'pro',
         }),
