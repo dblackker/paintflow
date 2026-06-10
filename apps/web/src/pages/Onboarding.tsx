@@ -67,6 +67,21 @@ const steps: Array<{ key: StepKey; title: string }> = [
   { key: 'ready', title: 'Ready to work' },
 ];
 
+function stepIndexFromParam(value: string | null) {
+  if (!value) return 0;
+
+  const normalized = value.toLowerCase();
+  const keyIndex = steps.findIndex((item) => item.key === normalized);
+  if (keyIndex >= 0) return keyIndex;
+
+  const numberIndex = Number(normalized) - 1;
+  if (Number.isInteger(numberIndex) && numberIndex >= 0 && numberIndex < steps.length) {
+    return numberIndex;
+  }
+
+  return 0;
+}
+
 function normalizePercent(value: unknown, fallback = '') {
   if (value === null || value === undefined || value === '') return fallback;
   const number = Number(value);
@@ -99,9 +114,9 @@ function parseZipCodes(value: string) {
 }
 
 export function Onboarding() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(() => stepIndexFromParam(searchParams.get('step')));
   const [settings, setSettings] = useState<OrgSettings>({});
   const [zipCodes, setZipCodes] = useState('');
   const [progress, setProgress] = useState<OnboardingProgress | null>(null);
@@ -114,6 +129,15 @@ export function Onboarding() {
   const step = steps[currentStep];
   const progressPercent = Math.round(((currentStep + 1) / steps.length) * 100);
   const areaCount = useMemo(() => parseZipCodes(zipCodes).length, [zipCodes]);
+
+  useEffect(() => {
+    const currentKey = steps[currentStep]?.key || steps[0].key;
+    if (searchParams.get('step') === currentKey) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('step', currentKey);
+    setSearchParams(nextParams, { replace: true });
+  }, [currentStep, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!isWelcome) return;
