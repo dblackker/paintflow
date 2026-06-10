@@ -253,31 +253,49 @@ export function Onboarding() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="pf-kicker">Setup</p>
-                  <h1 className="pf-section-title mt-1">Get Crewmodo ready for your painting business</h1>
-                </div>
-                <span className="pf-meta">Step {currentStep + 1} of {steps.length}</span>
-              </div>
-              <div className="mt-4 h-2 rounded-full bg-gray-100">
-                <div className="h-2 rounded-full bg-blue-600 transition-all" style={{ width: `${progressPercent}%` }} />
-              </div>
-            </CardHeader>
+        <div className="grid gap-5">
+          <Card padding="sm">
+            <CardHeader title="Setup checklist" className="mb-3" />
             <CardContent>
-              {alert && (
-                <div
-                  className={`mb-5 rounded-lg border p-3 text-sm ${
-                    alert.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'
-                  }`}
-                  role="alert"
-                >
-                  {alert.message}
+              <div className="grid gap-2 text-sm text-gray-700 sm:grid-cols-2 lg:grid-cols-4">
+                {(progress?.steps || []).map((item) => (
+                  <div key={item.key} className="flex items-center gap-2">
+                    <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${item.complete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {item.complete && <Icon name="check" className="h-3.5 w-3.5" />}
+                    </span>
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="pf-meta mt-3">{progress?.completedSteps || 0} of {progress?.totalSteps || 4} complete</p>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="pf-kicker">Setup</p>
+                    <h1 className="pf-section-title mt-1">Get Crewmodo ready for your painting business</h1>
+                  </div>
+                  <span className="pf-meta">Step {currentStep + 1} of {steps.length}</span>
                 </div>
-              )}
+                <div className="mt-4 h-2 rounded-full bg-gray-100">
+                  <div className="h-2 rounded-full bg-blue-600 transition-all" style={{ width: `${progressPercent}%` }} />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {alert && (
+                  <div
+                    className={`mb-5 rounded-lg border p-3 text-sm ${
+                      alert.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-green-200 bg-green-50 text-green-800'
+                    }`}
+                    role="alert"
+                  >
+                    {alert.message}
+                  </div>
+                )}
 
               <form
                 onSubmit={(event: FormEvent) => {
@@ -365,11 +383,11 @@ export function Onboarding() {
                   </div>
                 )}
 
-                <div className="sticky bottom-0 -mx-6 mt-8 flex gap-2 border-t bg-white px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:static sm:mx-0 sm:justify-between sm:border-t-0 sm:px-0 sm:pb-0">
-                  <Button type="button" variant="ghost" className={currentStep === 0 ? 'invisible' : ''} onClick={() => setCurrentStep((value) => Math.max(0, value - 1))}>
+                <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-4">
+                  <Button type="button" variant="ghost" className={currentStep === 0 ? 'hidden sm:invisible sm:inline-flex' : ''} onClick={() => setCurrentStep((value) => Math.max(0, value - 1))}>
                     Back
                   </Button>
-                  <div className="ml-auto flex gap-2">
+                  <div className="ml-auto flex flex-wrap justify-end gap-2">
                     {currentStep < steps.length - 1 && (
                       <Button type="button" variant="ghost" onClick={() => setCurrentStep(steps.length - 1)}>
                         Finish later
@@ -382,26 +400,9 @@ export function Onboarding() {
                 </div>
               </form>
             </CardContent>
-          </Card>
-
-          <aside className="grid gap-4 self-start">
-            <Card padding="sm">
-              <CardHeader title="Setup checklist" className="mb-3" />
-              <CardContent>
-                <div className="grid gap-2 text-sm text-gray-700">
-                  {(progress?.steps || []).map((item) => (
-                    <div key={item.key} className="flex items-center gap-2">
-                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${item.complete ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        {item.complete && <Icon name="check" className="h-3.5 w-3.5" />}
-                      </span>
-                      <span>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="pf-meta mt-3">{progress?.completedSteps || 0} of {progress?.totalSteps || 4} complete</p>
-              </CardContent>
             </Card>
 
+            <aside className="grid gap-4 self-start">
             <Card padding="sm">
               <CardHeader title="Trial and billing" />
               <CardContent>
@@ -434,7 +435,8 @@ export function Onboarding() {
                 </CardContent>
               </Card>
             )}
-          </aside>
+            </aside>
+          </div>
         </div>
       )}
     </div>
