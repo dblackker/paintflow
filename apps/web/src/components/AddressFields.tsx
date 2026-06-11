@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { cleanZip, isValidUsZip, lookupUsZip, type ZipLookupResult } from '@/lib/locations';
+import { isGooglePlacesConfigured, loadGooglePlaces, parseGoogleAddress } from '@/lib/googlePlaces';
 import { Button } from './Button';
 import { Input } from './Input';
 
@@ -104,15 +105,69 @@ interface AddressFieldsProps {
 }
 
 export function AddressFields({ value, onChange, streetLabel = 'Street address', required, className }: AddressFieldsProps) {
+  const streetInputRef = useRef<HTMLInputElement | null>(null);
+  const latestRef = useRef({ value, onChange });
+  const [placesReady, setPlacesReady] = useState(false);
+  const [placesUnavailable, setPlacesUnavailable] = useState(false);
+
+  useEffect(() => {
+    latestRef.current = { value, onChange };
+  }, [onChange, value]);
+
+  useEffect(() => {
+    if (!isGooglePlacesConfigured()) return;
+
+    let cancelled = false;
+    loadGooglePlaces()
+      .then(() => {
+        if (!cancelled) setPlacesReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setPlacesUnavailable(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!placesReady || !streetInputRef.current || !window.google?.maps?.places?.Autocomplete) return;
+
+    const autocomplete = new window.google.maps.places.Autocomplete(streetInputRef.current, {
+      componentRestrictions: { country: 'us' },
+      fields: ['address_components'],
+      types: ['address'],
+    });
+    autocomplete.setFields?.(['address_components']);
+    const listener = autocomplete.addListener('place_changed', () => {
+      const parsed = parseGoogleAddress(autocomplete.getPlace());
+      if (!parsed) return;
+      const current = latestRef.current.value;
+      latestRef.current.onChange({
+        streetAddress: parsed.streetAddress || current.streetAddress,
+        city: parsed.city || current.city,
+        state: parsed.state || current.state,
+        postalCode: cleanZip(parsed.postalCode) || current.postalCode,
+      });
+    });
+
+    return () => {
+      listener.remove();
+    };
+  }, [placesReady]);
+
   return (
     <div className={className || 'grid gap-3'}>
       <Input
+        ref={streetInputRef}
         label={streetLabel}
         required={required}
         autoComplete="street-address"
         placeholder="123 Main St"
         enterKeyHint="next"
         value={value.streetAddress}
+        helperText={placesReady ? 'Start typing and choose a verified Google address.' : placesUnavailable ? 'Google address suggestions are unavailable. You can still enter the address manually.' : undefined}
         onChange={(event) => onChange({ ...value, streetAddress: event.target.value })}
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_96px_120px]">
