@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { Input } from '@/components/Input';
 import { API_URL, apiJson, labelize } from '@/lib/api';
+import { ServiceAreaZipInput } from '@/components/AddressFields';
+import { cleanZip } from '@/lib/locations';
 
 interface OrgSettings {
   companyName?: string | null;
@@ -110,7 +112,7 @@ function maskPhone(value: string) {
 }
 
 function parseZipCodes(value: string) {
-  return Array.from(new Set(value.split(/[\s,]+/).map((zip) => zip.trim()).filter(Boolean)));
+  return Array.from(new Set(value.split(/[\s,]+/).map(cleanZip).filter(Boolean)));
 }
 
 export function Onboarding() {
@@ -119,6 +121,7 @@ export function Onboarding() {
   const [currentStep, setCurrentStep] = useState(() => stepIndexFromParam(searchParams.get('step')));
   const [settings, setSettings] = useState<OrgSettings>({});
   const [zipCodes, setZipCodes] = useState('');
+  const [serviceZipInput, setServiceZipInput] = useState('');
   const [progress, setProgress] = useState<OnboardingProgress | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionStatus>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -128,7 +131,8 @@ export function Onboarding() {
 
   const step = steps[currentStep];
   const progressPercent = Math.round(((currentStep + 1) / steps.length) * 100);
-  const areaCount = useMemo(() => parseZipCodes(zipCodes).length, [zipCodes]);
+  const serviceZipList = useMemo(() => parseZipCodes(zipCodes), [zipCodes]);
+  const areaCount = serviceZipList.length;
 
   useEffect(() => {
     const currentKey = steps[currentStep]?.key || steps[0].key;
@@ -224,8 +228,8 @@ export function Onboarding() {
           depositPercent: settings.depositPercent || 50,
         });
       } else if (step.key === 'areas') {
-        const zips = parseZipCodes(zipCodes);
-        const invalid = zips.find((zip) => !/^\d{5}(?:-\d{4})?$/.test(zip));
+        const zips = serviceZipList;
+        const invalid = zips.find((zip) => !/^\d{5}$/.test(zip));
         if (invalid) throw new Error(`ZIP code ${invalid} is not valid.`);
         await apiJson('/v1/settings/service-areas', {
           method: 'POST',
@@ -254,6 +258,17 @@ export function Onboarding() {
 
   function updateSetting(key: keyof OrgSettings, value: string) {
     setSettings((current) => ({ ...current, [key]: value }));
+  }
+
+  function addServiceZip(zipCode: string) {
+    setZipCodes((current) => {
+      const next = Array.from(new Set([...parseZipCodes(current), cleanZip(zipCode)].filter(Boolean)));
+      return next.join(', ');
+    });
+  }
+
+  function removeServiceZip(zipCode: string) {
+    setZipCodes((current) => parseZipCodes(current).filter((zip) => zip !== zipCode).join(', '));
   }
 
   return (
@@ -371,19 +386,38 @@ export function Onboarding() {
                   </div>
                 )}
 
-                {step.key === 'areas' && (
-                  <div className="grid gap-4">
-                    <Input
-                      label="Service ZIP codes"
-                      inputMode="numeric"
-                      autoComplete="postal-code"
-                      value={zipCodes}
-                      onChange={(event) => setZipCodes(event.target.value.replace(/[^\d,\s-]/g, ''))}
-                      placeholder="98402, 98403, 98405"
-                      helperText={`${areaCount} ZIP ${areaCount === 1 ? 'code' : 'codes'} selected. Separate each ZIP with a comma.`}
-                    />
-                  </div>
-                )}
+                  {step.key === 'areas' && (
+                    <div className="grid gap-3">
+                      <ServiceAreaZipInput
+                        value={serviceZipInput}
+                        onChange={setServiceZipInput}
+                        existingZips={serviceZipList}
+                        onAdd={(result) => addServiceZip(result.zipCode)}
+                      />
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                        <p className="pf-meta mb-2">{areaCount} service {areaCount === 1 ? 'ZIP' : 'ZIPs'} selected</p>
+                        {serviceZipList.length ? (
+                          <div className="flex flex-wrap gap-2">
+                            {serviceZipList.map((zip) => (
+                              <span key={zip} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 text-sm font-medium text-blue-900">
+                                {zip}
+                                <button
+                                  type="button"
+                                  className="btn-icon h-6 w-6 text-blue-700"
+                                  aria-label={`Remove ZIP ${zip}`}
+                                  onClick={() => removeServiceZip(zip)}
+                                >
+                                  <Icon name="close" className="h-3.5 w-3.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="pf-helper">Add the ZIP codes where crews regularly take work.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                 {step.key === 'connectors' && (
                   <div className="grid gap-3">

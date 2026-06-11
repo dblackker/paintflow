@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { AddressFields } from '@/components/AddressFields';
 import { StatusBadge } from '@/components/Badge';
 import { Card, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
@@ -1103,30 +1104,12 @@ export function EstimateProduction() {
                   </button>
                 )}
               </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px_96px_120px]">
-                <label>
-                  <span className="form-label">Street address</span>
-                  <input
-                    className="input mt-1"
-                    autoComplete="street-address"
-                    value={jobsite.streetAddress}
-                    onChange={(event) => setJobsite({ ...jobsite, streetAddress: event.target.value })}
-                    placeholder="Jobsite street"
-                  />
-                </label>
-                <label>
-                  <span className="form-label">City</span>
-                  <input className="input mt-1" autoComplete="address-level2" value={jobsite.city} onChange={(event) => setJobsite({ ...jobsite, city: event.target.value })} />
-                </label>
-                <label>
-                  <span className="form-label">State</span>
-                  <input className="input mt-1" autoComplete="address-level1" maxLength={2} value={jobsite.state} onChange={(event) => setJobsite({ ...jobsite, state: event.target.value.toUpperCase().slice(0, 2) })} />
-                </label>
-                <label>
-                  <span className="form-label">ZIP</span>
-                  <input className="input mt-1" autoComplete="postal-code" inputMode="numeric" maxLength={5} value={jobsite.postalCode} onChange={(event) => setJobsite({ ...jobsite, postalCode: event.target.value.replace(/\D/g, '').slice(0, 5) })} />
-                </label>
-              </div>
+              <AddressFields
+                streetLabel="Street address"
+                value={jobsite}
+                onChange={setJobsite}
+                className="mt-3 grid gap-3"
+              />
             </div>
           </Card>
 

@@ -5,8 +5,10 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { Input, Select } from '@/components/Input';
+import { AddressFields } from '@/components/AddressFields';
 import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
+import { cleanZip } from '@/lib/locations';
 
 const leadStatuses = [
   { value: 'new', label: 'New' },
@@ -75,10 +77,6 @@ function maskPhone(value: string) {
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
-function cleanZip(value: string) {
-  return value.replace(/\D/g, '').slice(0, 5);
 }
 
 export function Leads() {
@@ -354,39 +352,11 @@ export function Leads() {
                   onChange={(event) => setForm({ ...form, email: event.target.value })}
                 />
               </div>
-              <Input
-                label="Jobsite street address"
-                autoComplete="street-address"
-                placeholder="123 Main St"
-                enterKeyHint="next"
-                value={form.streetAddress}
-                onChange={(event) => setForm({ ...form, streetAddress: event.target.value })}
+              <AddressFields
+                streetLabel="Jobsite street address"
+                value={form}
+                onChange={(address) => setForm({ ...form, ...address })}
               />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_96px_120px]">
-                <Input
-                  label="City"
-                  autoComplete="address-level2"
-                  enterKeyHint="next"
-                  value={form.city}
-                  onChange={(event) => setForm({ ...form, city: event.target.value })}
-                />
-                <Input
-                  label="State"
-                  autoComplete="address-level1"
-                  maxLength={2}
-                  enterKeyHint="next"
-                  value={form.state}
-                  onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase().slice(0, 2) })}
-                />
-                <Input
-                  label="ZIP"
-                  autoComplete="postal-code"
-                  inputMode="numeric"
-                  enterKeyHint="next"
-                  value={form.postalCode}
-                  onChange={(event) => setForm({ ...form, postalCode: cleanZip(event.target.value) })}
-                />
-              </div>
               <Select
                 label="Source"
                 value={form.source}

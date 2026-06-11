@@ -1,12 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge, StatusBadge } from '@/components/Badge';
+import { AddressFields } from '@/components/AddressFields';
 import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { Input, Select, Textarea } from '@/components/Input';
 import { API_URL, apiJson, formatAddress, formatMoney } from '@/lib/api';
+import { cleanZip } from '@/lib/locations';
 
 interface PurchaseItem {
   description?: string;
@@ -392,10 +394,6 @@ function maskPhone(value: string) {
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
-function cleanZip(value: string) {
-  return value.replace(/\D/g, '').slice(0, 5);
 }
 
 function percentValue(value: unknown) {
@@ -1746,12 +1744,11 @@ export function Invoices() {
                       <Input label="Email" type="email" inputMode="email" autoComplete="email" value={quickInvoiceForm.customerEmail} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerEmail: event.target.value })} placeholder="customer@example.com" />
                       <Input label="Phone" type="tel" inputMode="numeric" autoComplete="tel" value={quickInvoiceForm.customerPhone} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, customerPhone: maskPhone(event.target.value) })} placeholder="(555) 123-4567" />
                     </div>
-                    <Input label="Jobsite street" autoComplete="street-address" value={quickInvoiceForm.streetAddress} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, streetAddress: event.target.value })} placeholder="123 Main St" />
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_5rem_7rem]">
-                      <Input label="City" autoComplete="address-level2" value={quickInvoiceForm.city} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, city: event.target.value })} />
-                      <Input label="State" autoComplete="address-level1" maxLength={2} value={quickInvoiceForm.state} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, state: event.target.value.toUpperCase().slice(0, 2) })} />
-                      <Input label="ZIP" autoComplete="postal-code" inputMode="numeric" maxLength={5} value={quickInvoiceForm.postalCode} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, postalCode: cleanZip(event.target.value) })} />
-                    </div>
+                    <AddressFields
+                      streetLabel="Jobsite street"
+                      value={quickInvoiceForm}
+                      onChange={(address) => setQuickInvoiceForm({ ...quickInvoiceForm, ...address })}
+                    />
                     <p className="pf-helper">This creates a CRM customer and uses the jobsite address on the invoice.</p>
                   </div>
                 )}
