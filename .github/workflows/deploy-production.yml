@@ -26,6 +26,7 @@ jobs:
       DATABASE_URL: ${{ secrets.NEON_PROD }}
       PUBLIC_API_URL: https://api.crewmodo.com
       VITE_API_URL: https://api.crewmodo.com
+      CLOUDFLARE_PAGES_PROJECT: crewmodo-web
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,6 +52,38 @@ jobs:
             exit 1
           fi
           pnpm exec wrangler whoami
+
+      - name: Load web build environment
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs/promises');
+
+          (async () => {
+          const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const projectName = process.env.CLOUDFLARE_PAGES_PROJECT;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+
+          const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.success) {
+            console.error(`Failed to load Cloudflare Pages project config for ${projectName}.`);
+            process.exit(1);
+          }
+
+          const envVar = payload.result?.deployment_configs?.production?.env_vars?.VITE_GOOGLE_MAPS_API_KEY;
+          if (envVar?.value) {
+            console.log('VITE_GOOGLE_MAPS_API_KEY loaded from Cloudflare Pages project config.');
+            await fs.appendFile(process.env.GITHUB_ENV, `VITE_GOOGLE_MAPS_API_KEY=${envVar.value}\n`);
+          } else {
+            console.warn('VITE_GOOGLE_MAPS_API_KEY is not configured in Cloudflare Pages. Address autocomplete will fall back to manual entry.');
+          }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
 
       - name: Build packages
         run: pnpm -r build
