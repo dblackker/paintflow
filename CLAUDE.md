@@ -4,56 +4,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Crewmodo is a CRM built specifically for painting contractors. It's a multi-tenant SaaS application with a focus on the painting industry workflow: leads → estimates (Good/Better/Best) → jobs → payments.
+Crewmodo is a CRM built for small trade contractors, starting with deep support for painting contractors. It is a multi-tenant SaaS application for the full workflow: lead capture → pipeline → estimates/proposals → scheduling → production → change orders → invoices/payments → follow-up.
 
 **Key Differentiator:** Unlike generic CRMs (Jobber, Housecall Pro), Crewmodo is purpose-built for painters with production rates, job costing, and painting-specific workflows.
 
 ## Tech Stack
 
-- **Frontend:** Astro + TypeScript + Tailwind CSS
+- **Frontend:** React 18 + Vite + React Router + TypeScript + Tailwind CSS + custom design-system CSS
 - **Backend:** Hono on Cloudflare Workers
 - **Database:** Drizzle ORM + PostgreSQL (Neon)
-- **Auth:** Magic links via MailChannels (no passwords)
-- **Payments:** Stripe
-- **Monorepo:** npm workspaces
+- **Auth:** Passwordless magic links, session token bridge for local/dev, RBAC middleware
+- **Payments:** Stripe subscriptions, Stripe Connect, Checkout, refunds, and webhooks
+- **Email:** Resend transactional email with editable templates
+- **Storage:** Cloudflare R2 for uploads/files and Cloudflare KV for lightweight edge state
+- **AI/OCR:** OpenAI OCR for supplier invoice import/review workflows
+- **Monorepo:** pnpm workspaces
 
 ## Development Commands
 
 ### Setup
 ```bash
-npm install
-npm run db:push      # Apply schema to database
-npm run db:seed      # Seed test data
+corepack pnpm install
+corepack pnpm db:push          # Apply schema to database
+corepack pnpm db:seed:golden   # Seed demo data
 ```
 
 ### Development
 ```bash
 # Terminal 1: API
 cd apps/api
-npm run dev          # Runs on http://localhost:8787
+corepack pnpm dev    # Runs on http://localhost:8787
 
 # Terminal 2: Web
 cd apps/web
-npm run dev          # Runs on http://localhost:4321
+corepack pnpm dev    # Runs on http://localhost:5173
 ```
 
 ### Database
 ```bash
-npm run db:generate  # Generate migration from schema changes
-npm run db:push      # Push schema to database
-npm run db:studio    # Open Drizzle Studio GUI
+corepack pnpm --filter @crewmodo/db db:generate  # Generate migration from schema changes
+corepack pnpm db:push                            # Push schema to database
+corepack pnpm db:studio                          # Open Drizzle Studio GUI
 ```
 
 ### Testing
 ```bash
-npm test             # Unit tests
-npm run test:e2e     # Playwright E2E tests
-npm run test:api     # API integration tests
+corepack pnpm test:e2e          # Playwright E2E tests
+corepack pnpm test:e2e:signup   # Signup E2E tests
 ```
 
 ### Type Checking
 ```bash
-npm run typecheck    # TypeScript check
+corepack pnpm --filter @crewmodo/web type-check
+corepack pnpm --filter @crewmodo/api build
 ```
 
 ## Architecture Decisions
@@ -65,7 +68,7 @@ npm run typecheck    # TypeScript check
 **Implementation:** 
 - `POST /v1/auth/magic-link` generates UUID token
 - Stored in Cloudflare KV with 15-min TTL
-- Email sent via MailChannels
+- Email sent via Resend
 - `GET /v1/auth/verify?token=xxx` validates and creates session
 - Session stored in KV with 7-day TTL, HttpOnly cookie
 
@@ -102,9 +105,9 @@ Every table has `org_id` foreign key. Middleware extracts `orgId` from session a
 - Better TypeScript inference
 - Faster queries
 
-### Good/Better/Best Estimates
+### Estimate, Invoice, and Change Order Workflows
 
-**Why:** Industry standard for painting. Increases average job value 20-30%. Built into core product as differentiator.
+Crewmodo keeps legal agreement and payment collection linked but distinct. Signed proposals can trigger deposit invoices; change orders can require customer approval and payment schedule handling; quick invoices exist for contractors who need to bill without a full estimate flow.
 
 ## Project Structure
 
@@ -117,14 +120,16 @@ crewmodo/
 │   │   │   ├── middleware/ # Auth, tenant
 │   │   │   └── index.ts  # App entry
 │   │   └── wrangler.toml # Cloudflare config
-│   └── web/              # Astro frontend
+│   └── web/              # Vite React PWA
 │       └── src/
-│           ├── pages/    # File-based routing
+│           ├── pages/    # React route screens
 │           └── components/
 ├── packages/
+│   ├── core/             # Runtime-agnostic business logic
 │   └── db/               # Drizzle schema
 │       └── src/
 │           └── schema.ts # All tables
+├── scrapers/             # Supplier catalog ingestion tooling
 └── package.json
 ```
 
@@ -136,7 +141,7 @@ Key tables (see `packages/db/src/schema.ts`):
 - `users` – No passwords, email only
 - `memberships` – User-org junction with role
 - `leads` – Lead management
-- `estimates` – Good/Better/Best pricing
+- `estimates` – Proposals, scopes, signatures, payment schedules
 - `jobs` – Job tracking with costing
 - `change_orders` – Post-signature modifications
 - `job_photos` – Before/progress/after
@@ -219,21 +224,21 @@ export const myTable = pgTable('my_table', {
 
 2. Generate and push:
 ```bash
-npm run db:generate
-npm run db:push
+corepack pnpm --filter @crewmodo/db db:generate
+corepack pnpm db:push
 ```
 
 ### Add a new page
 
-Create `apps/web/src/pages/my-page.astro`:
-```astro
----
-import Layout from '../components/Layout.astro';
----
-
-<Layout title="My Page">
-  <h1>Content</h1>
-</Layout>
+Create a React screen under `apps/web/src/pages/` and register it in `apps/web/src/router.tsx`:
+```tsx
+export function MyPage() {
+  return (
+    <section className="space-y-4">
+      <h1 className="pf-page-title">My page</h1>
+    </section>
+  );
+}
 ```
 
 ## Environment Variables
@@ -242,11 +247,14 @@ Required:
 - `DATABASE_URL` – Neon Postgres connection string
 - `CLOUDFLARE_API_TOKEN` – For deployments
 - `STRIPE_SECRET_KEY` – Stripe payments
-- `APP_URL` – Base URL (e.g., https://app.crewmodo.com)
+- `APP_URL` – API base URL for the current Worker environment
+- `PUBLIC_URL` – Web app base URL for customer-facing links
 - `ENVIRONMENT` – `development`, `staging`, or `production`
 
 Optional:
+- `RESEND_API_KEY` – transactional email
 - `GOOGLE_CLIENT_ID` – Google Calendar sync
+- `VITE_GOOGLE_MAPS_API_KEY` – browser key for Google Places address autocomplete
 - `TWILIO_ACCOUNT_SID` – SMS
 - `QUICKBOOKS_CLIENT_ID` – Accounting sync
 
@@ -254,27 +262,26 @@ Optional:
 
 ### Branches
 
-- `develop` → Auto-deploys to `staging.crewmodo.com`
-- `main` → Manual approval → `app.crewmodo.com`
+- `main` → dev deploy (`crewmodo-dev.pages.dev`)
+- `staging` → staging deploy (`staging.crewmodo.com`)
+- `production` → production deploy (`crewmodo.com` / `app.crewmodo.com`)
 
 ### Deploy
 
 ```bash
+# Dev
+git push origin main
+
 # Staging
-git push origin develop
+git push origin staging
 
 # Production
-git checkout main
-git merge develop
-git push origin main
+git push origin production
 ```
 
-### DNS for MailChannels
+### DNS for Resend
 
-Add to `crewmodo.com` DNS:
-```
-_mailchannels.crewmodo.com TXT "v=mc1 cfid=crewmodo.workers.dev"
-```
+Transactional email sends from `no-reply@mail.crewmodo.com`. Keep Resend DNS verification records on the `mail.crewmodo.com` sender subdomain so platform email reputation is isolated from the apex domain.
 
 ## Testing Strategy
 
@@ -306,7 +313,7 @@ _mailchannels.crewmodo.com TXT "v=mc1 cfid=crewmodo.workers.dev"
 - All data filtered by `orgId` (no cross-tenant leaks)
 - Input validation via Zod
 - SQL injection prevented by Drizzle
-- XSS prevented by Astro auto-escaping
+- XSS risk reduced by React escaping and avoiding raw HTML unless explicitly sanitized
 - Rate limiting on auth endpoints
 - Secrets in Cloudflare Workers secrets (never in code)
 
@@ -330,5 +337,6 @@ _mailchannels.crewmodo.com TXT "v=mc1 cfid=crewmodo.workers.dev"
 - `packages/db/src/schema.ts` – All database tables
 - `apps/api/src/middleware/tenant.ts` – Multi-tenancy logic
 - `apps/api/src/routes/auth.ts` – Magic link auth
-- `apps/web/src/pages/dashboard.astro` – Main dashboard
-- `wrangler.toml` – Cloudflare Workers config
+- `apps/web/src/router.tsx` – React route registration
+- `apps/web/src/pages/Dashboard.tsx` – Main dashboard
+- `apps/api/wrangler.toml` – Cloudflare Workers config

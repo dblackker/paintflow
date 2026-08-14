@@ -6,23 +6,26 @@ Crewmodo handles the entire workflow from lead capture to final payment, with fe
 
 ## Tech Stack
 
-- **Frontend:** Astro, TypeScript, Tailwind CSS
+- **Frontend:** React 18, Vite, React Router, TypeScript, Tailwind CSS, custom design-system CSS, PWA
 - **Backend:** Hono on Cloudflare Workers
-- **Database:** Drizzle ORM + PostgreSQL (Neon)
-- **Auth:** Magic links via Resend
-- **Payments:** Stripe
-- **E-signature:** Documenso
+- **Database:** Neon Postgres with Drizzle ORM + Drizzle Kit migrations
+- **Auth:** Passwordless magic links, session token bridge for local/dev, RBAC middleware
+- **Payments:** Stripe subscriptions, Stripe Connect, Checkout, refunds, and webhooks
+- **Email:** Resend transactional email with editable templates
 - **Calendar:** Google Calendar API
-- **SMS:** Twilio
-- **Accounting:** QuickBooks Online
-- **Storage:** Cloudflare R2
-- **Monorepo:** npm workspaces
+- **Address autocomplete:** Google Maps JavaScript API + Places
+- **SMS:** Twilio-style SMS integration
+- **Accounting:** QuickBooks Online integration planning
+- **Storage:** Cloudflare R2 for files/uploads, Cloudflare KV for lightweight state
+- **AI/OCR:** OpenAI OCR for supplier invoice import/review workflows
+- **Monorepo:** pnpm workspaces
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js 20+
+- Corepack / pnpm 9
 - Cloudflare account
 - Neon Postgres database
 - Resend transactional email
@@ -31,9 +34,9 @@ Crewmodo handles the entire workflow from lead capture to final payment, with fe
 
 1. **Clone and install:**
 ```bash
-git clone https://github.com/dblackker/crewmodo.git
-cd crewmodo
-npm install
+git clone https://github.com/dblackker/paintflow.git
+cd paintflow
+corepack pnpm install
 ```
 
 2. **Environment variables:**
@@ -44,7 +47,9 @@ CLOUDFLARE_API_TOKEN=...
 STRIPE_SECRET_KEY=sk_test_...
 GOOGLE_CLIENT_ID=...
 TWILIO_ACCOUNT_SID=...
-APP_URL=http://localhost:4321
+APP_URL=http://localhost:8787
+PUBLIC_URL=http://localhost:5173
+VITE_API_URL=http://localhost:8787
 ENVIRONMENT=development
 ```
 
@@ -63,14 +68,14 @@ data lives in `packages/db/src/seeds/golden-data.ts`; the executable seeder is
 ```bash
 # Terminal 1: API
 cd apps/api
-npm run dev
+corepack pnpm dev
 
 # Terminal 2: Web
 cd apps/web
-npm run dev
+corepack pnpm dev
 ```
 
-Visit `http://localhost:4321`
+Visit `http://localhost:5173`
 
 ## Architecture
 
@@ -80,9 +85,11 @@ Visit `http://localhost:4321`
 crewmodo/
 ├── apps/
 │   ├── api/          # Hono API (Cloudflare Workers)
-│   └── web/          # Astro frontend
+│   └── web/          # Vite React PWA
 ├── packages/
+│   ├── core/         # Runtime-agnostic business logic
 │   └── db/           # Drizzle schema + migrations
+├── scrapers/         # Supplier catalog ingestion tooling
 └── package.json
 ```
 
@@ -92,7 +99,7 @@ Key tables:
 - `organizations` – Tenant isolation
 - `users` + `memberships` – Auth & RBAC
 - `leads` – Lead management
-- `estimates` – Good/Better/Best pricing
+- `estimates` – Proposals, scopes, options, signatures, payment schedules
 - `jobs` – Job tracking with costing
 - `change_orders` – Post-signature modifications
 - `job_photos` – Before/progress/after
@@ -120,9 +127,9 @@ Full API docs: [OpenAPI spec](./docs/api.yaml)
 
 ### Core CRM
 - ✅ Lead management with source tracking
-- ✅ Good/Better/Best estimates
-- ✅ E-signature via Documenso
-- ✅ Stripe payments (50% deposit)
+- ✅ Production estimates, quick invoices, change orders, and proposal workflows
+- ✅ Dual-signature proposal and change-order flows
+- ✅ Stripe payments with configurable payment schedules
 - ✅ Job costing & time tracking
 - ✅ Production rate calculator
 
@@ -153,21 +160,22 @@ Full API docs: [OpenAPI spec](./docs/api.yaml)
 ### Environments
 
 - **Development:** Local, `ENVIRONMENT=development`
-- **Staging:** `staging.crewmodo.com`, auto-deploy from `develop` branch
-- **Production:** `app.crewmodo.com`, manual approval from `main` branch
+- **Dev:** `main` branch → `crewmodo-dev.pages.dev` + dev Worker
+- **Staging:** `staging` branch → `staging.crewmodo.com` + staging Worker
+- **Production:** `production` branch → `crewmodo.com` / `app.crewmodo.com` + production Worker
 
 ### Deploy to Cloudflare
 
 ```bash
+# Dev
+git push origin main
+# Auto-deploys to crewmodo-dev.pages.dev
+
 # Staging
-git push origin develop
-# Auto-deploys to staging.crewmodo.com
+git push origin staging
 
 # Production
-git checkout main
-git merge develop
-git push origin main
-# Requires approval, deploys to app.crewmodo.com
+git push origin production
 ```
 
 ### DNS Setup for Resend
@@ -245,7 +253,7 @@ Use separate webhook signing secrets for staging and production. Keep Stripe tes
 
 ### Why Monorepo?
 
-**Decision:** npm workspaces with `apps/` and `packages/`
+**Decision:** pnpm workspaces with `apps/`, `packages/`, and `scrapers/`
 
 **Rationale:**
 - Shared types between API and web
@@ -257,24 +265,24 @@ Use separate webhook signing secrets for staging and production. Keep Stripe tes
 - Larger repo size
 - Requires workspace-aware tooling
 
-### Why Good/Better/Best Estimates?
+### Why Proposal, Invoice, and Change Order Workflows?
 
-**Decision:** Tiered pricing built into core product
-
-**Rationale:**
-- Industry standard for painting (upsell strategy)
-- Increases average job value 20-30%
-- Differentiator vs generic CRMs
-- Painters think in tiers (basic paint vs premium)
-
-### Why 50% Deposit?
-
-**Decision:** Default 50% deposit on estimate acceptance
+**Decision:** Keep legal agreement, payment collection, and production changes linked but distinct
 
 **Rationale:**
-- Industry standard for painting
-- Covers material costs
-- Reduces no-shows
+- Contractors need a clear paper trail from proposal to deposit invoice
+- Signed proposals can trigger payment schedule milestones
+- Change orders need approval/signature and can roll into invoices
+- Quick invoices cover contractors who need billing without a full estimate flow
+
+### Why Configurable Payment Schedules?
+
+**Decision:** Default payment milestones are configurable per organization
+
+**Rationale:**
+- Contractors vary by state, trade, job size, and cash-flow needs
+- Common schedules include deposit to schedule, progress payment to start, and final payment on completion
+- Payment settings should flow into proposals, invoices, reminders, and customer portal language
 - Configurable per org
 
 ## Development
@@ -282,17 +290,16 @@ Use separate webhook signing secrets for staging and production. Keep Stripe tes
 ### Running Tests
 
 ```bash
-npm test                 # Unit tests
-npm run test:e2e        # Playwright E2E
-npm run test:api        # API integration tests
+corepack pnpm test:e2e          # Playwright E2E
+corepack pnpm test:e2e:signup   # Signup E2E
 ```
 
 ### Database Migrations
 
 ```bash
-npm run db:generate     # Generate migration
-npm run db:push         # Push to database
-npm run db:studio       # Open Drizzle Studio
+corepack pnpm --filter @crewmodo/db db:generate  # Generate migration
+corepack pnpm db:push                            # Push to database
+corepack pnpm db:studio                          # Open Drizzle Studio
 ```
 
 ### Code Style
