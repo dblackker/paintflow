@@ -94,8 +94,8 @@ services:
       - db_node_modules:/workspace/packages/db/node_modules
     environment:
       CI: "true"
-      PUBLIC_API_URL: http://127.0.0.1:8787
-    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && cd apps/web && corepack pnpm exec astro dev --host 0.0.0.0 --port 4321"
+      VITE_API_URL: http://127.0.0.1:8787
+    command: sh -lc "corepack enable && corepack pnpm install --frozen-lockfile && cd apps/web && corepack pnpm exec vite --host 0.0.0.0 --port 4321"
 
 volumes:
   node_modules:

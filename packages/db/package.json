@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "seed:golden": "tsx src/seeds/golden.ts"
