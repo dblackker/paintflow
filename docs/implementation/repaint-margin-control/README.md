@@ -1,6 +1,6 @@
 # Repaint Margin Control: Technical Implementation Plan
 
-Prepared October 3, 2026. Status: planning and handoff only; implementation tasks are not complete.
+Prepared October 3, 2026. Status: foundation implementation on `codex/repaint-margin-control`; the full program and production release are not complete. See [implementation evidence](EVIDENCE.md), [implemented contracts](CONTRACTS.md), and [release/recovery runbook](RUNBOOK.md) before promoting this branch.
 
 ## Start Here
 

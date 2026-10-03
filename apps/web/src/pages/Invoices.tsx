@@ -1,14 +1,25 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { invoiceCollectionPosition, type InvoiceBalance } from '@crewmodo/core';
+import { useOperationKey } from '@/lib/useOperationKey';
+import { manualPaymentFeedback, type ManualPaymentReceiptResult } from '@/lib/paymentReceipt';
 import { Badge, StatusBadge } from '@/components/Badge';
 import { AddressFields } from '@/components/AddressFields';
 import { Button } from '@/components/Button';
+import { Modal, ModalFooter } from '@/components/Modal';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { Input, Select, Textarea } from '@/components/Input';
-import { API_URL, apiJson, formatAddress, formatMoney } from '@/lib/api';
+import { apiJson, formatAddress, formatMoney } from '@/lib/api';
 import { cleanZip } from '@/lib/locations';
+import { SupplierInvoiceReview, SupplierReviewCard } from '@/components/supplier-invoices/SupplierInvoiceReview';
+import type { SupplierReviewChoices } from '@/components/supplier-invoices/SupplierInvoiceReview';
+import { SupplierUploadModal } from '@/components/supplier-invoices/SupplierUploadModal';
+import type { DuplicateInvoiceContext } from '@/components/supplier-invoices/SupplierUploadModal';
+import { SupplierFileLink } from '@/components/supplier-invoices/SupplierFileLink';
+import { SupplierRequestError, supplierErrorMessage, supplierJson } from '@/components/supplier-invoices/client';
+import { importFilePath, supplierDate } from '@/components/supplier-invoices/types';
 
 interface PurchaseItem {
   description?: string;
@@ -33,6 +44,7 @@ interface PurchaseItem {
 
 interface MaterialPurchase {
   id: string;
+  jobId?: string | null;
   supplier?: string | null;
   invoiceNumber?: string | null;
   totalAmount?: number | string | null;
@@ -47,9 +59,11 @@ type InvoiceImportStatus = 'needs_review' | 'approved' | 'rejected' | 'duplicate
 interface InvoiceImport {
   id: string;
   jobId?: string | null;
+  materialPurchaseId?: string | null;
   status: InvoiceImportStatus;
   supplier?: string | null;
   invoiceNumber?: string | null;
+  invoiceDate?: string | null;
   totalAmount?: number | string | null;
   extractedItems?: PurchaseItem[] | null;
   matchCandidates?: Array<{
@@ -73,9 +87,13 @@ interface InvoiceImport {
     storedInR2?: boolean | null;
     fileRetentionStatus?: 'stored' | 'not_configured' | 'failed' | string | null;
     fileRetentionError?: string | null;
+    possibleDuplicatePurchaseId?: string | null;
+    documentReconciliation?: { required?: boolean; status?: string; lineTotal?: string; documentTotal?: string | null };
   } | null;
   sourceType?: string | null;
   senderEmail?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
   createdAt?: string | null;
 }
 
@@ -187,6 +205,7 @@ interface Estimate {
 }
 
 interface CustomerInvoice {
+  balance?: InvoiceBalance;
   id: string;
   leadId: string;
   jobId?: string | null;
@@ -365,15 +384,6 @@ const emptyPaymentForm: PaymentFormState = {
   sendReceipt: true,
 };
 
-const supplierOptions = [
-  { value: '', label: 'Select supplier...' },
-  { value: 'Sherwin-Williams', label: 'Sherwin-Williams' },
-  { value: 'Benjamin Moore', label: 'Benjamin Moore' },
-  { value: 'Home Depot', label: 'Home Depot' },
-  { value: 'Lowes', label: 'Lowes' },
-  { value: 'Other', label: 'Other' },
-];
-
 function formatDate(value?: string | null) {
   if (!value) return 'Not set';
   return new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
@@ -543,46 +553,42 @@ function PurchaseSkeleton() {
 
 function PurchaseCard({ purchase }: { purchase: MaterialPurchase }) {
   const items = Array.isArray(purchase.parsedData) ? purchase.parsedData : [];
-  const retainedFileHref = purchase.fileUrl ? `${API_URL}${purchase.fileUrl}` : '';
   return (
-    <Card padding="sm">
+    <article id={`supplier-purchase-${purchase.id}`} tabIndex={-1} className="min-w-0 border-b border-gray-200 py-4">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
         <div className="min-w-0">
           <p className="pf-row-title">{purchase.supplier || 'Supplier invoice'}</p>
           <p className="pf-copy mt-1">
-            Invoice {purchase.invoiceNumber || 'not set'} · {formatDate(purchase.invoiceDate || purchase.createdAt)}
+            Invoice {purchase.invoiceNumber || 'not set'} · {supplierDate(purchase.invoiceDate || purchase.createdAt)}
           </p>
           {items.length > 0 && (
-            <div className="mt-3 rounded-lg bg-gray-50 p-3">
-              <p className="pf-meta">Parsed items</p>
-              <div className="mt-2 space-y-1">
-                {items.slice(0, 3).map((item, index) => (
-                  <div key={`${item.description}-${index}`} className="flex justify-between gap-3 text-sm">
+            <details className="mt-2">
+              <summary className="pf-copy min-h-12 cursor-pointer py-3">View {items.length} line{items.length === 1 ? '' : 's'}</summary>
+              <div className="space-y-3">
+                {items.map((item, index) => (
+                  <div key={`${item.description}-${index}`} className="flex justify-between gap-3">
                     <span className="min-w-0">
-                      <span className="block truncate text-gray-700">{invoiceItemTitle(item)}</span>
-                      {invoiceItemDetails(item) && <span className="block truncate text-xs text-gray-500">{invoiceItemDetails(item)}</span>}
+                      <span className="pf-copy block break-words">{invoiceItemTitle(item)}</span>
+                      {invoiceItemDetails(item) && <span className="pf-meta block break-words">{invoiceItemDetails(item)}</span>}
                     </span>
-                    <span className="shrink-0 font-medium text-gray-900">{formatMoney(item.total)}</span>
+                    <span className="pf-value shrink-0">{formatMoney(item.total)}</span>
                   </div>
                 ))}
-                {items.length > 3 && <p className="pf-helper">+{items.length - 3} more items</p>}
               </div>
-            </div>
+            </details>
           )}
-          {retainedFileHref && (
+          {purchase.fileUrl && (
             <div className="mt-3">
-              <Button as="a" href={retainedFileHref} target="_blank" rel="noreferrer" variant="secondary" size="sm" leftIcon={<Icon name="file-text" className="h-4 w-4" />}>
-                View source file
-              </Button>
+              <SupplierFileLink path={purchase.fileUrl} label="View source file" />
             </div>
           )}
         </div>
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-right">
+        <div className="text-left sm:text-right">
           <p className="pf-section-title">{formatMoney(purchase.totalAmount)}</p>
           <p className="pf-meta">{items.length} item{items.length === 1 ? '' : 's'}</p>
         </div>
       </div>
-    </Card>
+    </article>
   );
 }
 
@@ -662,142 +668,10 @@ function AiUsageCard({ usage }: { usage: AiUsageSummary }) {
   );
 }
 
-function jobOptionLabel(job?: Job) {
-  if (!job) return 'Select job...';
-  const address = jobAddress(job);
-  return [job.jobNumber, job.name, address].filter(Boolean).join(' - ');
-}
-
 function supplierRuleKey(value?: string | null) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '_') || 'unknown_supplier';
 }
 
-function ImportReviewCard({
-  invoiceImport,
-  jobs,
-  senderRules,
-  selectedJobId,
-  onSelectJob,
-  onApprove,
-  onReject,
-  onTrustSender,
-  isBusy,
-}: {
-  invoiceImport: InvoiceImport;
-  jobs: Job[];
-  senderRules: InvoiceSenderRule[];
-  selectedJobId: string;
-  onSelectJob: (jobId: string) => void;
-  onApprove: () => void;
-  onReject: () => void;
-  onTrustSender: () => void;
-  isBusy: boolean;
-}) {
-  const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems : [];
-  const selectedJob = jobs.find((job) => job.id === selectedJobId);
-  const candidate = invoiceImport.matchCandidates?.[0];
-  const canApprove = Boolean(selectedJobId);
-  const matchConfidence = percentValue(invoiceImport.matchConfidence);
-  const extractionConfidence = percentValue(invoiceImport.extractionConfidence);
-  const fileRetained = Boolean(invoiceImport.extractedData?.storedInR2 && invoiceImport.extractedData?.fileKey);
-  const fileRetentionStatus = invoiceImport.extractedData?.fileRetentionStatus;
-  const fileHref = fileRetained ? `${API_URL}/v1/invoices/imports/${invoiceImport.id}/file` : '';
-  const trustedSender = Boolean(invoiceImport.extractedData?.senderRuleMatched)
-    || senderRules.some((rule) => (
-      rule.isActive !== false
-      && rule.senderEmail.toLowerCase() === String(invoiceImport.senderEmail || '').toLowerCase()
-      && rule.supplierKey === supplierRuleKey(invoiceImport.supplier)
-    ));
-  return (
-    <Card padding="sm" className="border-amber-200 bg-amber-50/40 shadow-none">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="warning" size="sm">Needs review</Badge>
-            <span className="pf-meta">{formatDate(invoiceImport.createdAt)}</span>
-          </div>
-          <p className="pf-row-title mt-2">{invoiceImport.supplier || 'Supplier invoice'}</p>
-          <p className="pf-copy mt-1">
-            Invoice {invoiceImport.invoiceNumber || 'not detected'} · {items.length} item{items.length === 1 ? '' : 's'} · {formatMoney(invoiceImport.totalAmount)}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {invoiceImport.extractedData?.extractionMethod && (
-              <Badge variant="info" size="sm">{invoiceImport.extractedData.extractionMethod.replace(/_/g, ' ')}</Badge>
-            )}
-            {fileRetained && <Badge variant="success" size="sm">File retained</Badge>}
-            {!fileRetained && fileRetentionStatus === 'failed' && (
-              <Badge variant="warning" size="sm">File not retained</Badge>
-            )}
-            {!fileRetained && fileRetentionStatus === 'not_configured' && (
-              <Badge variant="default" size="sm">OCR only</Badge>
-            )}
-            {invoiceImport.senderEmail && (
-              <Badge variant={trustedSender ? 'success' : 'default'} size="sm">
-                {trustedSender ? 'Trusted sender' : invoiceImport.senderEmail}
-              </Badge>
-            )}
-            {fileHref && (
-              <Button as="a" href={fileHref} target="_blank" rel="noreferrer" variant="ghost" size="sm" leftIcon={<Icon name="file-text" className="h-4 w-4" />}>
-                View file
-              </Button>
-            )}
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg bg-white p-3">
-              <p className="pf-meta">Extraction confidence</p>
-              <p className="pf-row-title">{extractionConfidence}%</p>
-            </div>
-            <div className="rounded-lg bg-white p-3">
-              <p className="pf-meta">Job match</p>
-              <p className="pf-row-title">{selectedJob ? jobOptionLabel(selectedJob) : candidate ? `${candidate.name} (${matchConfidence}%)` : 'Needs assignment'}</p>
-            </div>
-          </div>
-          {items.length > 0 && (
-            <div className="mt-3 rounded-lg bg-white p-3">
-              <p className="pf-meta">Extracted lines</p>
-              <div className="mt-2 space-y-1">
-                {items.slice(0, 4).map((item, index) => (
-                  <div key={`${invoiceImport.id}-${index}`} className="flex justify-between gap-3 text-sm">
-                    <span className="min-w-0">
-                      <span className="block truncate text-gray-700">{invoiceItemTitle(item)}</span>
-                      {invoiceItemDetails(item) && <span className="block truncate text-xs text-gray-500">{invoiceItemDetails(item)}</span>}
-                    </span>
-                    <span className="shrink-0 font-medium text-gray-900">{formatMoney(item.total)}</span>
-                  </div>
-                ))}
-                {items.length > 4 && <p className="pf-helper">+{items.length - 4} more lines</p>}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="space-y-3">
-          <Select label="Assign job" value={selectedJobId} onChange={(event) => onSelectJob(event.target.value)}>
-            <option value="">Select job...</option>
-            {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
-          </Select>
-          {!canApprove && (
-            <p className="pf-helper rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-              A job is required so approved supplier costs are posted to the right project.
-            </p>
-          )}
-          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-            {invoiceImport.senderEmail && invoiceImport.supplier && !trustedSender && (
-              <Button type="button" variant="secondary" size="sm" fullWidth onClick={onTrustSender} disabled={isBusy}>
-                Trust sender
-              </Button>
-            )}
-            <Button type="button" size="sm" fullWidth onClick={onApprove} isLoading={isBusy} disabled={!canApprove || isBusy}>
-              Approve import
-            </Button>
-            <Button type="button" variant="dangerSubtle" size="sm" fullWidth onClick={onReject} disabled={isBusy}>
-              Reject
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
 
 function ReceivableCard({
   receivable,
@@ -900,6 +774,7 @@ function ReceivableCard({
 }
 
 export function Invoices() {
+  const operations = useOperationKey();
   const navigate = useNavigate();
   const [purchases, setPurchases] = useState<MaterialPurchase[]>([]);
   const [invoiceImports, setInvoiceImports] = useState<InvoiceImport[]>([]);
@@ -934,7 +809,26 @@ export function Invoices() {
   const [sendingReminderId, setSendingReminderId] = useState('');
   const [reviewJobByImport, setReviewJobByImport] = useState<Record<string, string>>({});
   const [busyImportId, setBusyImportId] = useState('');
+  const [busyImportAction, setBusyImportAction] = useState<'' | 'approve' | 'reject' | 'trust'>('');
+  const [reviewingImport, setReviewingImport] = useState<InvoiceImport | null>(null);
+  const [reviewError, setReviewError] = useState('');
+  const [supplierError, setSupplierError] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const [uploadDuplicate, setUploadDuplicate] = useState<DuplicateInvoiceContext | null>(null);
+  const [purchaseToView, setPurchaseToView] = useState('');
   const [selectedInvoiceFile, setSelectedInvoiceFile] = useState<File | null>(null);
+  const supplierBusy = useRef(false);
+  const uploadBusy = useRef(false);
+  const uploadFileIdentity = useRef('');
+  const supplierOperations = useRef(new Map<string, { fingerprint: string; key: string }>());
+
+  function supplierOperationKey(operation: string, fingerprint: string) {
+    const previous = supplierOperations.current.get(operation);
+    if (previous?.fingerprint === fingerprint) return previous.key;
+    const key = crypto.randomUUID();
+    supplierOperations.current.set(operation, { fingerprint, key });
+    return key;
+  }
 
   const jobsByEstimateId = useMemo(() => new Map(jobs.filter((job) => job.estimateId).map((job) => [job.estimateId as string, job])), [jobs]);
   const jobsById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
@@ -955,7 +849,7 @@ export function Invoices() {
       .map((invoice) => {
         const amount = numberValue(invoice.total);
         const paid = (invoice.payments || []).reduce((sum, payment) => sum + netPayment(payment), 0);
-        const balance = Math.max(amount - paid, 0);
+        const balance = invoiceCollectionPosition(invoice, invoice.payments || []).remaining;
         const address = formatAddress({
           streetAddress: invoice.jobStreetAddress || invoice.leadStreetAddress,
           city: invoice.jobCity || invoice.leadCity,
@@ -1071,19 +965,26 @@ export function Invoices() {
     loadInvoices();
   }, []);
 
+
   useEffect(() => {
-    document.body.classList.toggle('pf-modal-open', uploadModalOpen || quickInvoiceOpen || Boolean(paymentReceivable) || Boolean(cancelInvoiceTarget));
-    return () => document.body.classList.remove('pf-modal-open');
-  }, [cancelInvoiceTarget, paymentReceivable, uploadModalOpen, quickInvoiceOpen]);
+    if (!purchaseToView || reviewingImport || uploadModalOpen) return;
+    const element = document.getElementById(`supplier-purchase-${purchaseToView}`);
+    if (element) {
+      element.scrollIntoView({ block: 'center' });
+      element.focus({ preventScroll: true });
+      setPurchaseToView('');
+    }
+  }, [purchaseToView, purchases, reviewingImport, uploadModalOpen]);
 
   async function loadInvoices() {
     setIsLoading(true);
     setError('');
     setLoadWarning('');
+    setSupplierError('');
     try {
       const [purchasePayload, importPayload, learningPayload, usagePayload, inboundEmailPayload, senderRulesPayload, customerInvoicesPayload, estimatesPayload, jobsPayload, changeOrdersPayload, paymentsPayload, leadsPayload, schedulePayload, settingsPayload] = await Promise.all([
-        apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch(() => ({ data: [] })),
-        apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch(() => ({ data: [] })),
+        apiJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases').catch((err) => { setSupplierError(supplierErrorMessage(err)); return { data: undefined }; }),
+        apiJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports?status=needs_review').catch((err) => { setSupplierError(supplierErrorMessage(err)); return { data: undefined }; }),
         apiJson<{ data?: { stats?: InvoiceLearningStat[] } }>('/v1/invoices/imports/learning').catch(() => ({ data: { stats: [] } })),
         apiJson<{ data?: AiUsageSummary }>('/v1/invoices/imports/ai-usage').catch(() => ({ data: null })),
         apiJson<{ data?: InboundEmailConfig }>('/v1/invoices/inbound-email-config').catch(() => ({ data: null })),
@@ -1100,14 +1001,15 @@ export function Invoices() {
         apiJson<{ data?: { milestones?: PaymentMilestone[] } }>('/v1/settings/payment-schedule').catch(() => ({ data: { milestones: [] } })),
         apiJson<{ data?: OrgSettings }>('/v1/settings/org').catch(() => ({ data: {} })),
       ]);
-      setPurchases(purchasePayload.data || []);
-      setInvoiceImports(importPayload.data || []);
+      if (purchasePayload.data) setPurchases(purchasePayload.data);
+      if (importPayload.data) setInvoiceImports(importPayload.data.filter((item) => item.status === 'needs_review'));
       setLearningStats(learningPayload.data?.stats || []);
       setAiUsage(usagePayload.data || null);
       setInboundEmailConfig(inboundEmailPayload.data || null);
       setSenderRules(senderRulesPayload.data || []);
       setCustomerInvoices(customerInvoicesPayload.data || []);
-      setReviewJobByImport(Object.fromEntries((importPayload.data || []).map((item) => [item.id, item.jobId || item.matchCandidates?.[0]?.id || ''])));
+      const loadedImports = importPayload.data;
+      if (loadedImports) setReviewJobByImport((previous) => ({ ...Object.fromEntries(loadedImports.map((item) => [item.id, item.jobId || ''])), ...previous }));
       setEstimates(estimatesPayload.data || []);
       setJobs(jobsPayload.data || []);
       setChangeOrders(changeOrdersPayload.data || []);
@@ -1125,11 +1027,14 @@ export function Invoices() {
   function openUploadModal() {
     setForm(emptyUploadForm);
     setSelectedInvoiceFile(null);
+    uploadFileIdentity.current = '';
+    setUploadError('');
+    setUploadDuplicate(null);
     setUploadModalOpen(true);
   }
 
   function closeUploadModal() {
-    if (isUploading) return;
+    if (uploadBusy.current) return;
     setUploadModalOpen(false);
   }
 
@@ -1174,14 +1079,77 @@ export function Invoices() {
     setCancelInvoiceReason('');
   }
 
-  async function uploadInvoice(event: FormEvent) {
-    event.preventDefault();
-    const fileToUpload = selectedInvoiceFile;
-    if (!fileToUpload) {
-      window.showToast?.('Upload a supplier invoice first.', 'error');
+  function selectInvoiceFile(file: File | null) {
+    setUploadDuplicate(null);
+    setUploadError('');
+    uploadFileIdentity.current = crypto.randomUUID();
+    if (file && (!['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.type) || !file.size || file.size > 15 * 1024 * 1024)) {
+      setSelectedInvoiceFile(null);
+      setUploadError('Choose a PDF, JPG, PNG or WebP file up to 15 MB.');
       return;
     }
+    setSelectedInvoiceFile(file);
+  }
+
+  async function refreshSupplierPurchases() {
+    try {
+      const payload = await supplierJson<{ data?: MaterialPurchase[] }>('/v1/invoices/purchases');
+      setPurchases((previous) => {
+        const known = new Map(previous.map((purchase) => [purchase.id, purchase]));
+        (payload.data || []).forEach((purchase) => known.set(purchase.id, { ...known.get(purchase.id), ...purchase }));
+        return Array.from(known.values());
+      });
+      return payload.data || [];
+    } catch (err) {
+      setSupplierError('Purchase history could not refresh. ' + supplierErrorMessage(err));
+      return [];
+    }
+  }
+
+  function openImportReview(invoiceImport: InvoiceImport) {
+    setReviewError('');
+    setReviewingImport(invoiceImport);
+  }
+
+  async function viewSupplierPurchase(id: string) {
+    setMode('supplier');
+    const purchase = purchases.find((item) => item.id === id) || (await refreshSupplierPurchases()).find((item) => item.id === id);
+    if (!purchase) {
+      setReviewError('The existing purchase could not be loaded. Keep this invoice in review and try again.');
+      return;
+    }
+    setReviewingImport(null);
+    setPurchaseToView(id);
+  }
+
+  function viewUploadDuplicate() {
+    if (!uploadDuplicate) return;
+    setUploadModalOpen(false);
+    setMode('supplier');
+    if (uploadDuplicate.type === 'import') {
+      const invoiceImport = uploadDuplicate.record as InvoiceImport;
+      if (invoiceImport.status === 'needs_review') {
+        setInvoiceImports((previous) => previous.some((item) => item.id === invoiceImport.id) ? previous : [invoiceImport, ...previous]);
+      }
+      openImportReview(invoiceImport);
+    } else {
+      const purchase = uploadDuplicate.record as MaterialPurchase;
+      setPurchases((previous) => previous.some((item) => item.id === purchase.id) ? previous : [purchase, ...previous]);
+      setPurchaseToView(purchase.id);
+    }
+  }
+
+  async function uploadInvoice(event: FormEvent) {
+    event.preventDefault();
+    if (uploadBusy.current || uploadDuplicate) return;
+    const fileToUpload = selectedInvoiceFile;
+    if (!fileToUpload) {
+      setUploadError('Choose an invoice file first.');
+      return;
+    }
+    uploadBusy.current = true;
     setIsUploading(true);
+    setUploadError('');
     try {
       const body = new FormData();
       body.set('file', fileToUpload);
@@ -1189,97 +1157,150 @@ export function Invoices() {
       body.set('invoiceNumber', form.invoiceNumber || '');
       body.set('senderEmail', form.senderEmail || '');
       body.set('jobId', form.jobId || '');
-      const payload = await apiJson<{ data?: InvoiceImport }>('/v1/invoices/imports', {
+      const payload = await supplierJson<{ data?: InvoiceImport }>('/v1/invoices/imports', {
         method: 'POST',
-        headers: { 'Idempotency-Key': crypto.randomUUID() },
+        headers: { 'Idempotency-Key': supplierOperationKey('upload', JSON.stringify({ file: uploadFileIdentity.current, ...form })) },
         body,
       });
-      window.showToast?.(
-        `Invoice ready for review: ${formatMoney(payload.data?.totalAmount)}`,
-        'success',
-      );
+      if (!payload.data?.id) throw new Error('The server did not confirm staging. Retry with the same file.');
+      const invoiceImport = payload.data;
+      setInvoiceImports((previous) => previous.some((item) => item.id === invoiceImport.id) ? previous : [invoiceImport, ...previous]);
+      setReviewJobByImport((previous) => ({ ...previous, [invoiceImport.id]: invoiceImport.jobId || form.jobId || '' }));
       setUploadModalOpen(false);
-      await loadInvoices();
+      setMode('supplier');
+      openImportReview(invoiceImport);
+      supplierOperations.current.delete('upload');
+      window.showToast?.('Invoice staged for review.', 'success');
     } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Import failed', 'error');
-      await loadInvoices();
+      if (err instanceof SupplierRequestError && err.payload.duplicate && err.payload.data?.id) {
+        setUploadDuplicate({ type: err.payload.duplicateType || ('status' in err.payload.data ? 'import' : 'purchase'), record: err.payload.data });
+        if ('status' in err.payload.data && err.payload.data.status !== 'needs_review') {
+          const reviewedId = err.payload.data.id;
+          setInvoiceImports((previous) => previous.filter((item) => item.id !== reviewedId));
+        }
+      } else setUploadError(supplierErrorMessage(err));
     } finally {
+      uploadBusy.current = false;
       setIsUploading(false);
     }
   }
 
-  async function approveImport(invoiceImport: InvoiceImport) {
+  async function reconcileReviewConflict(invoiceImport: InvoiceImport, err: unknown) {
+    if (!(err instanceof SupplierRequestError) || (err.status !== 409 && err.status !== 404)) return false;
+    try {
+      const payload = await supplierJson<{ data?: InvoiceImport[] }>('/v1/invoices/imports');
+      const current = payload.data?.find((item) => item.id === invoiceImport.id);
+      if (!current) return false;
+      if (current.status === 'needs_review') {
+        setReviewingImport({ ...invoiceImport, ...current, extractedData: { ...invoiceImport.extractedData, ...current.extractedData } });
+        setReviewError(supplierErrorMessage(err));
+        return true;
+      }
+      setInvoiceImports((previous) => previous.filter((item) => item.id !== current.id));
+      setReviewingImport({ ...invoiceImport, ...current, extractedData: { ...invoiceImport.extractedData, ...current.extractedData } });
+      setReviewError(current.status === 'approved'
+        ? 'This invoice was approved in another session. No second purchase was added.'
+        : 'This invoice was rejected in another session. No costs were added; the original file is still available.');
+      await refreshSupplierPurchases();
+      return true;
+    } catch { return false; }
+  }
+
+  async function approveImport(invoiceImport: InvoiceImport, choices: SupplierReviewChoices) {
+    if (supplierBusy.current) return;
     const jobId = reviewJobByImport[invoiceImport.id] || invoiceImport.jobId || '';
-    if (!jobId) {
-      window.showToast?.('Select a job before approving this supplier invoice.', 'error');
+    if (!jobId || !jobs.some((job) => job.id === jobId)) {
+      setReviewError('Select a job before approving this invoice.');
       return;
     }
+    if (invoiceImport.extractedData?.possibleDuplicatePurchaseId && !choices.confirmSimilarPurchase) {
+      setReviewError('Compare the existing purchase and confirm this is a separate purchase.');
+      return;
+    }
+    supplierBusy.current = true;
     setBusyImportId(invoiceImport.id);
+    setBusyImportAction('approve');
+    setReviewError('');
+    const input = { jobId, ...choices };
     try {
-      await apiJson(`/v1/invoices/imports/${invoiceImport.id}/approve`, {
+      const payload = await supplierJson<{ data?: { import?: InvoiceImport; purchase?: MaterialPurchase } }>(`/v1/invoices/imports/${invoiceImport.id}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': supplierOperationKey(`approve:${invoiceImport.id}`, JSON.stringify(input)),
         },
-        body: JSON.stringify({
-          jobId,
-          applyMaterialUpdates: true,
-        }),
+        body: JSON.stringify(input),
       });
-      window.showToast?.('Supplier invoice approved', 'success');
-      await loadInvoices();
+      if (!payload.data?.purchase?.id) throw new Error('The server did not confirm approval. Retry to check the result.');
+      const purchase = { ...payload.data.purchase, fileUrl: payload.data.purchase.fileUrl || importFilePath(invoiceImport) || null };
+      setPurchases((previous) => [purchase, ...previous.filter((item) => item.id !== purchase.id)]);
+      setInvoiceImports((previous) => previous.filter((item) => item.id !== invoiceImport.id));
+      setReviewingImport(null);
+      supplierOperations.current.delete(`approve:${invoiceImport.id}`);
+      window.showToast?.('Supplier invoice approved.', 'success');
     } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Failed to approve import', 'error');
-      await loadInvoices();
+      if (!await reconcileReviewConflict(invoiceImport, err)) setReviewError(supplierErrorMessage(err));
     } finally {
+      supplierBusy.current = false;
       setBusyImportId('');
+      setBusyImportAction('');
     }
   }
 
-  async function rejectImport(invoiceImport: InvoiceImport) {
+  async function rejectImport(invoiceImport: InvoiceImport, reason: string) {
+    if (supplierBusy.current) return;
+    supplierBusy.current = true;
     setBusyImportId(invoiceImport.id);
+    setBusyImportAction('reject');
+    setReviewError('');
+    const input = { reviewNotes: reason.trim() || 'Rejected from invoice review queue.' };
     try {
-      await apiJson(`/v1/invoices/imports/${invoiceImport.id}/reject`, {
+      await supplierJson(`/v1/invoices/imports/${invoiceImport.id}/reject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': supplierOperationKey(`reject:${invoiceImport.id}`, JSON.stringify(input)),
         },
-        body: JSON.stringify({ reviewNotes: 'Rejected from invoice review queue.' }),
+        body: JSON.stringify(input),
       });
-      window.showToast?.('Supplier invoice rejected', 'success');
-      await loadInvoices();
+      setInvoiceImports((previous) => previous.filter((item) => item.id !== invoiceImport.id));
+      setReviewingImport(null);
+      supplierOperations.current.delete(`reject:${invoiceImport.id}`);
+      window.showToast?.('Supplier invoice rejected.', 'success');
     } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Failed to reject import', 'error');
+      if (!await reconcileReviewConflict(invoiceImport, err)) setReviewError(supplierErrorMessage(err));
     } finally {
+      supplierBusy.current = false;
       setBusyImportId('');
+      setBusyImportAction('');
     }
   }
 
   async function trustInvoiceSender(invoiceImport: InvoiceImport) {
-    if (!invoiceImport.senderEmail || !invoiceImport.supplier) return;
+    if (supplierBusy.current || !invoiceImport.senderEmail || !invoiceImport.supplier) return;
+    supplierBusy.current = true;
     setBusyImportId(invoiceImport.id);
+    setBusyImportAction('trust');
+    setReviewError('');
+    const input = { supplier: invoiceImport.supplier, senderEmail: invoiceImport.senderEmail, autoStage: true, isActive: true };
     try {
-      await apiJson('/v1/invoices/imports/sender-rules', {
+      const payload = await supplierJson<{ data?: InvoiceSenderRule }>('/v1/invoices/imports/sender-rules', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': supplierOperationKey(`trust:${invoiceImport.id}`, JSON.stringify(input)),
         },
-        body: JSON.stringify({
-          supplier: invoiceImport.supplier,
-          senderEmail: invoiceImport.senderEmail,
-          autoStage: true,
-          isActive: true,
-        }),
+        body: JSON.stringify(input),
       });
-      window.showToast?.('Supplier sender trusted', 'success');
-      await loadInvoices();
+      if (payload.data) setSenderRules((previous) => [payload.data!, ...previous.filter((rule) => rule.id !== payload.data!.id)]);
+      supplierOperations.current.delete(`trust:${invoiceImport.id}`);
+      window.showToast?.('Supplier sender trusted.', 'success');
     } catch (err) {
-      window.showToast?.(err instanceof Error ? err.message : 'Failed to trust sender', 'error');
+      setReviewError(supplierErrorMessage(err));
     } finally {
+      supplierBusy.current = false;
       setBusyImportId('');
+      setBusyImportAction('');
     }
   }
 
@@ -1392,23 +1413,20 @@ export function Invoices() {
     if (confirmAdditionalPayment && !window.confirm(`This customer already has ${formatMoney(paymentReceivable.paid)} recorded. Confirm this is an additional payment and not a duplicate.`)) return;
     setIsRecordingPayment(true);
     try {
-      await apiJson('/v1/payments/manual', {
+      const body = JSON.stringify({ ...paymentTarget, amount: paymentForm.amount, source: paymentForm.source,
+        reference: paymentForm.reference || null, description: paymentForm.description || null,
+        confirmAdditionalPayment, sendReceipt: paymentReceivable.kind === 'invoice' ? paymentForm.sendReceipt : false });
+      const result = await apiJson<ManualPaymentReceiptResult>('/v1/payments/manual', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': operations.keyFor('manual', body),
         },
-        body: JSON.stringify({
-          ...paymentTarget,
-          amount,
-          source: paymentForm.source,
-          reference: paymentForm.reference || null,
-          description: paymentForm.description || null,
-          confirmAdditionalPayment,
-          sendReceipt: paymentReceivable.kind === 'invoice' ? paymentForm.sendReceipt : false,
-        }),
+        body,
       });
-      window.showToast?.(paymentReceivable.kind === 'invoice' && paymentForm.sendReceipt ? 'Payment recorded and receipt queued' : 'Payment recorded', 'success');
+      operations.complete('manual');
+      const feedback = manualPaymentFeedback(result);
+      window.showToast?.(feedback.message, feedback.type);
       setPaymentReceivable(null);
       await loadInvoices();
     } catch (err) {
@@ -1577,154 +1595,52 @@ export function Invoices() {
           </Card>
         </>
       ) : (
-        <>
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <Card padding="sm" className="shadow-none">
-              <p className="pf-meta">Invoices</p>
-              <p className="pf-metric mt-1">{purchases.length}</p>
-            </Card>
-            <Card padding="sm" className="shadow-none">
-              <p className="pf-meta">Pending</p>
-              <p className="pf-metric mt-1">{invoiceImports.length}</p>
-            </Card>
-            <Card padding="sm" className="shadow-none">
-              <p className="pf-meta">Spend</p>
-              <p className="pf-metric mt-1">{formatMoney(totalSpend)}</p>
-            </Card>
+        <section aria-label="Supplier invoices" className="space-y-4 min-w-0">
+          <div className="flex flex-wrap gap-x-6 gap-y-2 border-b border-gray-200 pb-3">
+            <p className="pf-copy">{invoiceImports.length} need review</p>
+            <p className="pf-copy">{purchases.length} recent purchases</p>
+            <p className="pf-copy">{formatMoney(totalSpend)} in this list</p>
           </div>
-
-          {!isLoading && !error && aiUsage && <AiUsageCard usage={aiUsage} />}
-
-          <Card padding="sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="pf-section-title">Forward supplier receipts</p>
-                  <Badge variant={inboundEmailConfig?.enabled ? 'success' : 'warning'} size="sm">
-                    {inboundEmailConfig?.enabled ? 'Configured' : 'Needs Worker secret'}
-                  </Badge>
-                </div>
-                <p className="pf-helper mt-1">
-                  Forwarded supplier emails are accepted only from trusted sender addresses, then staged here for review before they update job costs.
-                </p>
-              </div>
-              <Button type="button" variant="secondary" size="sm" onClick={openUploadModal}>
-                Manage sender
-              </Button>
-            </div>
-            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <p className="pf-meta">Forwarding address</p>
-              <p className="pf-copy mt-1 break-all font-mono text-xs">
-                {inboundEmailConfig?.forwardingAddress || 'receipts+workspace-slug@receipts.crewmodo.com'}
-              </p>
-              {inboundEmailConfig?.alternateAddress && (
-                <p className="pf-helper mt-1 break-all">
-                  Alternate catch-all route: <span className="font-mono text-xs">{inboundEmailConfig.alternateAddress}</span>
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card padding="none">
-            <CardHeader
-              className="mb-0 border-b border-gray-200 px-4 py-3 sm:px-5"
-              title="Supplier purchases"
-              description="Review supplier invoices before they update material pricing or job costs."
-            />
-            <CardContent className="p-4">
-              {isLoading && <PurchaseSkeleton />}
-              {!isLoading && error && (
-                <div className="p-8 text-center">
-                  <Icon name="warning" className="mx-auto h-6 w-6 text-red-600" />
-                  <p className="pf-copy mt-2 text-red-700">{error}</p>
-                  <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={loadInvoices}>Retry</Button>
-                </div>
-              )}
-              {!isLoading && !error && invoiceImports.length > 0 && (
-                <div className="mb-5 space-y-3">
-                  <div>
-                    <p className="pf-section-title">Needs review</p>
-                    <p className="pf-helper mt-1">Approve only after the job match and extracted lines look right.</p>
-                  </div>
-                  {invoiceImports.map((invoiceImport) => (
-                    <ImportReviewCard
-                      key={invoiceImport.id}
-                      invoiceImport={invoiceImport}
-                      jobs={jobs}
-                      senderRules={senderRules}
-                      selectedJobId={reviewJobByImport[invoiceImport.id] || invoiceImport.jobId || ''}
-                      onSelectJob={(jobId) => setReviewJobByImport({ ...reviewJobByImport, [invoiceImport.id]: jobId })}
-                      onApprove={() => approveImport(invoiceImport)}
-                      onReject={() => rejectImport(invoiceImport)}
-                      onTrustSender={() => trustInvoiceSender(invoiceImport)}
-                      isBusy={busyImportId === invoiceImport.id}
-                    />
-                  ))}
-                </div>
-              )}
-              {!isLoading && !error && !purchases.length && (
-                <EmptyState
-                  icon={<Icon name="file-text" className="h-5 w-5" />}
-                  title="No supplier invoices uploaded yet."
-                  description="Upload a supplier invoice and Crewmodo will stage extracted material costs for review before they hit a job."
-                  action={{ label: 'Review invoice', onClick: openUploadModal }}
-                />
-              )}
-              {!isLoading && !error && purchases.length > 0 && (
-                <div className="space-y-3">
-                  {purchases.map((purchase) => (
-                    <PurchaseCard key={purchase.id} purchase={purchase} />
-                  ))}
-                </div>
-              )}
-              {!isLoading && !error && learningStats.length > 0 && (
-                <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="pf-section-title">Automation learning</p>
-                      <p className="pf-helper mt-1">Supplier-specific approval trends help tune future matching without storing receipt text globally.</p>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    {learningStats.slice(0, 4).map((stat) => <LearningStatCard key={stat.id} stat={stat} />)}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </>
+          {isLoading && <PurchaseSkeleton />}
+          {!isLoading && (supplierError || error) && <div role="alert" className="space-y-2">
+            <p className="pf-field-error">{supplierError || error}</p>
+            <Button variant="secondary" className="min-h-12 min-w-12" onClick={loadInvoices}>Retry supplier data</Button>
+          </div>}
+          {!isLoading && !supplierError && !error && <>
+            <section aria-labelledby="supplier-needs-review">
+              <h2 id="supplier-needs-review" className="pf-section-title">Needs review</h2>
+              {invoiceImports.length ? invoiceImports.map((invoiceImport) => <SupplierReviewCard
+                key={invoiceImport.id} invoiceImport={invoiceImport} onReview={() => openImportReview(invoiceImport)} />
+              ) : <p className="pf-helper mt-2">All caught up. Upload an invoice to add a purchase.</p>}
+            </section>
+            {purchases.length > 0 && <section aria-labelledby="supplier-purchase-history">
+              <h2 id="supplier-purchase-history" className="pf-section-title">Purchase history</h2>
+              {purchases.map((purchase) => <PurchaseCard key={purchase.id} purchase={purchase} />)}
+            </section>}
+            {!purchases.length && !invoiceImports.length && <Button className="min-h-12 min-w-12" leftIcon={<Icon name="file-text" />} onClick={openUploadModal}>Upload supplier invoice</Button>}
+          </>}
+          <details className="border-t border-gray-200 pt-2">
+            <summary className="pf-copy min-h-12 cursor-pointer py-3">Email forwarding</summary>
+            <p className="pf-helper">Only trusted sender addresses can forward invoices for review.</p>
+            <p className="pf-meta mt-3">{inboundEmailConfig?.enabled ? 'Configured' : 'Not configured'}</p>
+            <p className="pf-copy mt-1 break-all">{inboundEmailConfig?.forwardingAddress || 'Forwarding is not available yet.'}</p>
+            {inboundEmailConfig?.alternateAddress && <p className="pf-helper mt-2 break-all">Alternate: {inboundEmailConfig.alternateAddress}</p>}
+            {senderRules.length > 0 && <ul className="mt-3 space-y-2">{senderRules.map((rule) => <li key={rule.id} className="pf-copy break-all">{rule.senderEmail} - {rule.supplierName || rule.supplierKey}{rule.isActive === false ? ' (inactive)' : ''}</li>)}</ul>}
+          </details>
+          {(aiUsage || learningStats.length > 0) && <details className="border-t border-gray-200 pt-2">
+            <summary className="pf-copy min-h-12 cursor-pointer py-3">Usage and matching</summary>
+            {aiUsage && <AiUsageCard usage={aiUsage} />}
+            {learningStats.length > 0 && <div className="mt-4 space-y-3">
+              {learningStats.slice(0, 4).map((stat) => <LearningStatCard key={stat.id} stat={stat} />)}
+            </div>}
+          </details>}
+        </section>
       )}
 
-      <Card padding="sm">
-        <CardHeader title="Feature direction" description="This keeps billing simple today while leaving room for QuickBooks/Square-style invoice workflows." />
-        <CardContent className="grid gap-3 p-0 sm:grid-cols-3">
-          {[
-            ['Now', 'One receivables queue for estimates, change orders, quick invoices, manual payments, and reminders.'],
-            ['Next', 'Dedicated invoice records with number sequencing, due dates, reminders, receipts, and customer portal payment links.'],
-            ['Integrations', 'QuickBooks should remain the accounting ledger. Crewmodo should sync invoices and payments rather than replace bookkeeping.'],
-          ].map(([label, copy]) => (
-            <div key={label} className="rounded-lg border border-gray-200 p-3">
-              <p className="pf-meta">{label}</p>
-              <p className="pf-copy mt-1">{copy}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
       {quickInvoiceOpen && (
-        <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="quick-invoice-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closeQuickInvoiceModal(); }}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h2 id="quick-invoice-title" className="pf-section-title">Create quick invoice</h2>
-                <p className="pf-copy mt-1">For one-off billing when no estimate or change order exists.</p>
-              </div>
-              <button type="button" className="btn-icon" aria-label="Close quick invoice" onClick={closeQuickInvoiceModal}>
-                <Icon name="close" className="h-5 w-5" />
-              </button>
-            </div>
+        <Modal isOpen title="Create quick invoice" size="lg" onClose={closeQuickInvoiceModal} closeOnEscape={!isCreatingInvoice} closeOnBackdrop={false}>
             <form className="space-y-4" onSubmit={createQuickInvoice}>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="border-b border-gray-200 pb-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="pf-row-title">Customer</p>
                   <div className="pf-segmented-group" aria-label="Customer selection mode">
@@ -1771,7 +1687,7 @@ export function Invoices() {
                   <option value="none">No reminder</option>
                 </Select>
               </div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="border-y border-gray-200 py-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="pf-row-title">Sales tax</p>
                   <div className="pf-segmented-group" aria-label="Tax entry mode">
@@ -1785,42 +1701,32 @@ export function Invoices() {
                   <Input label="Tax amount" type="number" min="0" step="0.01" inputMode="decimal" value={quickInvoiceForm.tax} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, tax: event.target.value })} helperText="Use for tax-exempt work, jurisdiction overrides, or accounting corrections." />
                 )}
               </div>
-              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-                <p className="pf-row-title text-blue-950">Invoice preview</p>
-                <div className="mt-2 grid gap-1 text-sm text-blue-950">
+              <div className="border-y border-gray-200 py-4">
+                <p className="pf-row-title">Invoice total</p>
+                <div className="pf-copy mt-2 grid gap-1">
                   <div className="flex justify-between gap-3"><span>Subtotal</span><span>{formatMoney(quickInvoiceAmount)}</span></div>
                   <div className="flex justify-between gap-3"><span>Tax{quickInvoiceForm.taxMode === 'auto' ? ` (${quickInvoiceTaxRate || 0}%)` : ' override'}</span><span>{formatMoney(quickInvoiceTax)}</span></div>
-                  <div className="flex justify-between gap-3 border-t border-blue-200 pt-2 font-semibold"><span>Total</span><span>{formatMoney(quickInvoiceTotal)}</span></div>
-                  <p className="pf-helper mt-2 text-blue-900">
+                  <div className="pf-emphasis flex justify-between gap-3 border-t border-gray-200 pt-2"><span>Total</span><span>{formatMoney(quickInvoiceTotal)}</span></div>
+                  <p className="pf-helper mt-2">
                     {quickInvoiceForm.dueDate ? `Due ${formatDateOnly(quickInvoiceForm.dueDate)}. ` : ''}
                     {reminderLabel(quickInvoiceForm.reminderCadence)}.
                   </p>
                 </div>
               </div>
               <Textarea label="Internal note" rows={3} value={quickInvoiceForm.note} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, note: event.target.value })} />
-              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
-                <Button type="button" variant="secondary" fullWidth onClick={closeQuickInvoiceModal}>Cancel</Button>
+              <ModalFooter className="!grid grid-cols-2 gap-2">
+                <Button type="button" variant="ghost" fullWidth disabled={isCreatingInvoice} onClick={closeQuickInvoiceModal}>Cancel</Button>
                 <Button type="submit" fullWidth isLoading={isCreatingInvoice}>Create invoice</Button>
-              </div>
+              </ModalFooter>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {cancelInvoiceTarget && (
-        <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="cancel-invoice-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCancelInvoiceModal(); }}>
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h2 id="cancel-invoice-title" className="pf-section-title">Cancel invoice</h2>
-                <p className="pf-copy mt-1">{cancelInvoiceTarget.title} will be closed and the customer will be emailed.</p>
-              </div>
-              <button type="button" className="btn-icon" aria-label="Close cancel invoice" onClick={closeCancelInvoiceModal}>
-                <Icon name="close" className="h-5 w-5" />
-              </button>
-            </div>
+        <Modal isOpen title="Cancel invoice" size="sm" onClose={closeCancelInvoiceModal} closeOnEscape={!isCancelingInvoice} closeOnBackdrop={false}>
             <form className="space-y-4" onSubmit={cancelInvoice}>
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+              <p className="pf-copy">{cancelInvoiceTarget.title} will be closed. Crewmodo will attempt to email the customer.</p>
+              <div className="pf-field-error">
                 Canceling an invoice does not refund money. If payment has already been recorded, use the refund or credit workflow instead.
               </div>
               <Textarea
@@ -1831,28 +1737,18 @@ export function Invoices() {
                 onChange={(event) => setCancelInvoiceReason(event.target.value)}
                 placeholder="Created in error, customer requested updated invoice, duplicate invoice"
               />
-              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
-                <Button type="button" variant="secondary" fullWidth onClick={closeCancelInvoiceModal}>Keep invoice</Button>
+              <ModalFooter className="!grid grid-cols-2 gap-2">
+                <Button type="button" variant="ghost" fullWidth disabled={isCancelingInvoice} onClick={closeCancelInvoiceModal}>Keep invoice</Button>
                 <Button type="submit" variant="dangerSubtle" fullWidth isLoading={isCancelingInvoice}>Cancel invoice</Button>
-              </div>
+              </ModalFooter>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {paymentReceivable && (
-        <div className="mobile-sheet fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="record-payment-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closePaymentModal(); }}>
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:rounded-xl sm:p-6">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h2 id="record-payment-title" className="pf-section-title">Record payment</h2>
-                <p className="pf-copy mt-1">{paymentReceivable.customerName} · {formatMoney(paymentReceivable.balance)} open</p>
-              </div>
-              <button type="button" className="btn-icon" aria-label="Close payment entry" onClick={closePaymentModal}>
-                <Icon name="close" className="h-5 w-5" />
-              </button>
-            </div>
+        <Modal isOpen title="Record payment" size="sm" onClose={closePaymentModal} closeOnEscape={!isRecordingPayment} closeOnBackdrop={false}>
             <form className="space-y-4" onSubmit={recordPayment}>
+              <p className="pf-copy">{paymentReceivable.customerName} · {formatMoney(paymentReceivable.balance)} open</p>
               <Input label="Amount" required type="number" min="0.01" max={paymentReceivable.balance.toFixed(2)} step="0.01" inputMode="decimal" value={paymentForm.amount} onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })} />
               <Select label="Payment method" value={paymentForm.source} onChange={(event) => setPaymentForm({ ...paymentForm, source: event.target.value as PaymentFormState['source'] })}>
                 <option value="check">Check</option>
@@ -1871,8 +1767,7 @@ export function Invoices() {
                     onChange={(event) => setPaymentForm({ ...paymentForm, sendReceipt: event.target.checked })}
                   />
                   <span>
-                    <span className="block font-medium">Send receipt to customer</span>
-                    <span className="block text-blue-800">Uses the invoice payment receipt email template after the manual payment is recorded.</span>
+                    <span className="pf-copy block">Send receipt to customer</span>
                   </span>
                 </label>
               )}
@@ -1881,90 +1776,28 @@ export function Invoices() {
                   This invoice already has {formatMoney(paymentReceivable.paid)} recorded. You will be asked to confirm this is not a duplicate.
                 </div>
               )}
-              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
-                <Button type="button" variant="secondary" fullWidth onClick={closePaymentModal}>Cancel</Button>
+              <ModalFooter className="!grid grid-cols-2 gap-2">
+                <Button type="button" variant="ghost" fullWidth disabled={isRecordingPayment} onClick={closePaymentModal}>Cancel</Button>
                 <Button type="submit" fullWidth isLoading={isRecordingPayment}>{paymentReceivable.kind === 'invoice' && numberValue(paymentForm.amount) >= paymentReceivable.balance - 0.005 ? 'Mark paid' : 'Record payment'}</Button>
-              </div>
+              </ModalFooter>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
-      {uploadModalOpen && (
-        <div
-          className="mobile-sheet fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="invoice-upload-title"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeUploadModal();
-          }}
-        >
-          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-xl sm:p-6">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h2 id="invoice-upload-title" className="pf-section-title">Review supplier invoice</h2>
-                <p className="pf-copy mt-1">Upload a supplier invoice. Crewmodo will extract the lines, suggest a job match, and stage it for approval.</p>
-              </div>
-              <button type="button" className="btn-icon" aria-label="Close invoice upload" onClick={closeUploadModal}>
-                <Icon name="close" className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form className="space-y-4" onSubmit={uploadInvoice}>
-              <label className="block">
-                <span className="form-label">Supplier invoice</span>
-                <input
-                  className="input mt-1 py-3"
-                  type="file"
-                  accept="application/pdf,image/png,image/jpeg,image/webp"
-                  onChange={(event) => setSelectedInvoiceFile(event.target.files?.[0] || null)}
-                />
-                <span className="pf-helper mt-1 block">
-                  Use a PDF or photo of the supplier receipt. The imported costs will wait for approval before affecting the job.
-                </span>
-              </label>
-
-              <details className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <summary className="cursor-pointer text-sm font-medium text-gray-700">Optional matching details</summary>
-                <div className="mt-3 space-y-3">
-                  <Select
-                    label="Supplier"
-                    value={form.supplier}
-                    onChange={(event) => setForm({ ...form, supplier: event.target.value })}
-                    options={supplierOptions}
-                  />
-                  <Input
-                    label="Invoice #"
-                    autoComplete="off"
-                    enterKeyHint="next"
-                    placeholder="Optional"
-                    value={form.invoiceNumber}
-                    onChange={(event) => setForm({ ...form, invoiceNumber: event.target.value })}
-                  />
-                  <Select label="Suggested job" value={form.jobId} onChange={(event) => setForm({ ...form, jobId: event.target.value })}>
-                    <option value="">Let Crewmodo match it</option>
-                    {jobs.map((job) => <option key={job.id} value={job.id}>{jobOptionLabel(job)}</option>)}
-                  </Select>
-                  <Input
-                    label="Supplier sender email"
-                    type="email"
-                    autoComplete="email"
-                    enterKeyHint="next"
-                    placeholder="Optional"
-                    value={form.senderEmail}
-                    onChange={(event) => setForm({ ...form, senderEmail: event.target.value })}
-                  />
-                </div>
-              </details>
-              <div className="mobile-sticky-actions flex flex-col gap-3 pt-2 sm:static sm:m-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
-                <Button type="button" variant="secondary" fullWidth onClick={closeUploadModal}>Cancel</Button>
-                <Button type="submit" fullWidth isLoading={isUploading}>Stage for review</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <SupplierUploadModal isOpen={uploadModalOpen} onClose={closeUploadModal} form={form} onFormChange={(value) => { setForm(value); setUploadError(''); }}
+        file={selectedInvoiceFile} onFileChange={selectInvoiceFile} jobs={jobs} onSubmit={uploadInvoice} busy={isUploading}
+        error={uploadError} duplicate={uploadDuplicate} onViewDuplicate={viewUploadDuplicate} />
+      {reviewingImport && <SupplierInvoiceReview key={reviewingImport.id} invoiceImport={reviewingImport} jobs={jobs}
+        selectedJobId={reviewJobByImport[reviewingImport.id] || reviewingImport.jobId || ''}
+        onSelectJob={(jobId) => { setReviewJobByImport((previous) => ({ ...previous, [reviewingImport.id]: jobId })); setReviewError(''); }}
+        onApprove={(choices) => approveImport(reviewingImport, choices)} onReject={(reason) => rejectImport(reviewingImport, reason)}
+        onTrustSender={() => trustInvoiceSender(reviewingImport)}
+        trustedSender={Boolean(reviewingImport.extractedData?.senderRuleMatched) || senderRules.some((rule) =>
+          rule.isActive !== false && rule.senderEmail.toLowerCase() === String(reviewingImport.senderEmail || '').toLowerCase()
+          && rule.supplierKey === supplierRuleKey(reviewingImport.supplier))}
+        onClose={() => { if (!supplierBusy.current) setReviewingImport(null); }}
+        busyAction={busyImportId === reviewingImport.id ? busyImportAction : ''} error={reviewError}
+        onViewPurchase={viewSupplierPurchase} />}
     </main>
   );
 }

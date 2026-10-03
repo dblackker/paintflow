@@ -204,6 +204,27 @@
       "when": 1780890600000,
       "tag": "0028_time_clock_default_rounding",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791072000000,
+      "tag": "0030_supplier_atomic_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791072001000,
+      "tag": "0031_payment_operation_safety",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791072002000,
+      "tag": "0032_unsigned_estimate_operations",
+      "breakpoints": true
     }
   ]
 }

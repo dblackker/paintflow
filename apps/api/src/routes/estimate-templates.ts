@@ -9,7 +9,28 @@ import { authMiddleware } from '../middleware/tenant';
 const templatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 templatesApp.use('*', authMiddleware);
 
-const templateSchema = z.object({
+const templateSubstrateSchema = z.object({
+  category: z.string().trim().min(1).max(120).optional(),
+  label: z.string().trim().max(255).optional(),
+  productionRateId: z.string().uuid().optional(),
+  materialId: z.string().uuid().optional(),
+  unit: z.enum(['sqft', 'linear_ft', 'each']).optional(),
+  quantity: z.number().finite().nonnegative().optional(),
+  width: z.number().finite().nonnegative().optional(),
+  height: z.number().finite().nonnegative().optional(),
+  coatingWidthInches: z.number().finite().positive().optional(),
+  coatingSqFtPerItem: z.number().finite().positive().optional(),
+  coats: z.number().int().min(1).max(3).optional(),
+  prepLevel: z.enum(['none', 'light', 'standard', 'heavy']).optional(),
+  applicationMethod: z.enum(['brush_roll', 'spray_backroll', 'spray_only']).optional(),
+  customerVisible: z.boolean().optional(),
+  optional: z.boolean().optional(),
+  colorName: z.string().trim().max(120).optional(),
+  colorCode: z.string().trim().max(80).optional(),
+  notes: z.string().trim().max(500).optional(),
+}).refine((item) => Boolean(item.category || item.label || item.productionRateId), 'Select a substrate.');
+
+export const templateSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional(),
   category: z.enum(['room', 'full_estimate', 'package']).default('room'),
@@ -22,26 +43,8 @@ const templateSchema = z.object({
     width: z.number().positive().optional(),
     kind: z.enum(['interior', 'exterior', 'custom']).optional(),
     metrics: z.record(z.any()).optional(),
-    surfaces: z.array(z.object({
-      category: z.string().optional(),
-      label: z.string(),
-      quantity: z.number().positive().optional(),
-      width: z.number().positive().optional(),
-      height: z.number().positive().optional(),
-      coats: z.number().min(1).max(3).optional(),
-      prepLevel: z.string().optional(),
-      applicationMethod: z.string().optional(),
-      customerVisible: z.boolean().optional(),
-      optional: z.boolean().optional(),
-      notes: z.string().optional(),
-    })).optional(),
-    items: z.array(z.object({
-      category: z.string(),
-      productionRateId: z.string().optional(),
-      quantity: z.number().positive(),
-      prepLevel: z.string().optional(),
-      notes: z.string().optional(),
-    })).optional(),
+    surfaces: z.array(templateSubstrateSchema).max(500).optional(),
+    items: z.array(templateSubstrateSchema).max(500).optional(),
   })),
   packages: z.array(z.any()).optional(),
 });

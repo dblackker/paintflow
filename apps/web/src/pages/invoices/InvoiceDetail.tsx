@@ -1,5 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { invoiceCollectionPosition, type InvoiceBalance } from '@crewmodo/core';
+import { useOperationKey } from '@/lib/useOperationKey';
+import { manualPaymentFeedback, type ManualPaymentReceiptResult } from '@/lib/paymentReceipt';
 
 import { ActivityTimeline, type ActivityTimelineItem } from '@/components/ActivityTimeline';
 import { StatusBadge } from '@/components/Badge';
@@ -35,6 +38,7 @@ interface InvoiceLineItem {
 }
 
 interface CustomerInvoiceDetail {
+  balance?: InvoiceBalance;
   id: string;
   leadId: string;
   jobId?: string | null;
@@ -146,6 +150,7 @@ function latestRefundAt(payment: Payment) {
 }
 
 export function InvoiceDetail() {
+  const operations = useOperationKey();
   const { id } = useParams<{ id: string }>();
   const [invoice, setInvoice] = useState<CustomerInvoiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -238,23 +243,20 @@ export function InvoiceDetail() {
 
     setIsRecordingPayment(true);
     try {
-      await apiJson('/v1/payments/manual', {
+      const body = JSON.stringify({ invoiceId: invoice.id, amount: paymentForm.amount, source: paymentForm.source,
+        reference: paymentForm.reference || null, description: paymentForm.description || null,
+        confirmAdditionalPayment, sendReceipt: paymentForm.sendReceipt });
+      const result = await apiJson<ManualPaymentReceiptResult>('/v1/payments/manual', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': operations.keyFor('manual', body),
         },
-        body: JSON.stringify({
-          invoiceId: invoice.id,
-          amount,
-          source: paymentForm.source,
-          reference: paymentForm.reference || null,
-          description: paymentForm.description || null,
-          confirmAdditionalPayment,
-          sendReceipt: paymentForm.sendReceipt,
-        }),
+        body,
       });
-      window.showToast?.(paymentForm.sendReceipt ? 'Payment recorded and receipt queued' : 'Payment recorded', 'success');
+      operations.complete('manual');
+      const feedback = manualPaymentFeedback(result);
+      window.showToast?.(feedback.message, feedback.type);
       setPaymentModalOpen(false);
       setPaymentForm(emptyManualPaymentForm);
       await loadInvoice();
@@ -314,7 +316,8 @@ export function InvoiceDetail() {
   const payments = invoice?.payments || [];
   const paid = useMemo(() => payments.reduce((sum, payment) => sum + netPayment(payment), 0), [payments]);
   const total = numberValue(invoice?.total);
-  const balance = Math.max(total - paid, 0);
+  const collection = invoice ? invoiceCollectionPosition(invoice, payments) : { remaining: 0, needsReview: false, pendingRefunds: 0, closed: false };
+  const balance = collection.remaining;
   const isRefundedInvoice = String(invoice?.status || '') === 'refunded';
   const collectibleBalance = isRefundedInvoice ? 0 : balance;
   const isOpen = invoice && collectibleBalance > 0.005 && !['paid', 'refunded', 'voided', 'canceled'].includes(String(invoice.status || ''));
@@ -437,6 +440,11 @@ export function InvoiceDetail() {
             </div>
           </div>
         </div>
+        {(collection.needsReview || collection.pendingRefunds > 0) && (
+          <p role="status" className="pf-helper mt-3 text-amber-800">
+            {collection.needsReview ? 'Balance needs review. Payment collection is paused.' : 'Refund in progress. Payment collection is paused.'}
+          </p>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
           {isOpen && (
             <Button type="button" size="sm" onClick={openPaymentModal}>

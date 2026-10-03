@@ -290,17 +290,23 @@ Use separate webhook signing secrets for staging and production. Keep Stripe tes
 ### Running Tests
 
 ```bash
+corepack pnpm test:unit         # Calculation, financial and provider boundary tests
+corepack pnpm type-check        # API and React types
 corepack pnpm test:e2e          # Playwright E2E
 corepack pnpm test:e2e:signup   # Signup E2E
 ```
+
+Database integration tests require a disposable local PostgreSQL `_test` database and explicit reset permission. See the [repaint implementation evidence](docs/implementation/repaint-margin-control/EVIDENCE.md), [checklist](docs/implementation/repaint-margin-control/CHECKLIST.md), and [test/release runbook](docs/implementation/repaint-margin-control/RUNBOOK.md) for commands, safety guards, verified scope, and outstanding release work.
 
 ### Database Migrations
 
 ```bash
 corepack pnpm --filter @crewmodo/db db:generate  # Generate migration
-corepack pnpm db:push                            # Push to database
+corepack pnpm db:migrate                         # Apply checked-in migrations
 corepack pnpm db:studio                          # Open Drizzle Studio
 ```
+
+Use the migration journal for deployed databases. Schema push does not reproduce the application's atomic SQL functions and RLS policies; it is not a replacement for migrations.
 
 ### Code Style
 

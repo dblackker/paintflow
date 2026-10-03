@@ -1,12 +1,13 @@
-import { Hono } from 'hono';
+import { Hono, type Handler } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
 import { activities, auditLogs, customerInvoices, customerPayments, emailSends, estimatePhotos, estimates, jobPhotos, jobs, leads, messages, quickbooksConnections } from '@crewmodo/db/schema';
 import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
-import { createQBCustomer } from '../lib/quickbooks';
+import { createQBCustomer, QuickBooksTrustError } from '../lib/quickbooks';
 import { formatPhoneNumber } from '../lib/twilio';
+import { readInvoiceBalances } from '../lib/invoice-positions';
 
 const leadsApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -109,48 +110,68 @@ leadsApp.get('/', async (c) => {
   });
 });
 
-leadsApp.post('/', async (c) => {
-  const orgId = c.get('orgId');
-  const body = await c.req.json();
-  const parsed = leadInputSchema.safeParse(body);
-  
-  if (!parsed.success) {
-    return c.json({ error: 'Validation failed', details: parsed.error }, 400);
-  }
-  
-  const db = createDb(c.env.DATABASE_URL);
-  const phone = normalizePhone(parsed.data.phone);
-  
-  const [lead] = await db.insert(leads).values({
-    orgId,
-    name: parsed.data.name,
-    phone,
-    email: parsed.data.email,
-    streetAddress: parsed.data.streetAddress,
-    city: parsed.data.city,
-    state: parsed.data.state,
-    postalCode: parsed.data.postalCode,
-    source: parsed.data.source,
-    status: parsed.data.status ?? 'new',
-  }).returning();
-  
-  // Auto-sync to QuickBooks if connected
-  const qbConnection = await db.query.quickbooksConnections.findFirst({
-    where: eq(quickbooksConnections.orgId, orgId),
-  });
-  
-  if (qbConnection) {
-    try {
-      await createQBCustomer(c.env, orgId, lead);
-      console.log(`Auto-synced lead ${lead.id} to QuickBooks`);
-    } catch (qbErr) {
-      console.error('QB auto-sync failed:', qbErr);
-      // Don't fail lead creation if QB sync fails
+type CreateLeadDependencies = {
+  db: typeof createDb;
+  syncCustomer: typeof createQBCustomer;
+};
+
+export function createLeadHandler(overrides: Partial<CreateLeadDependencies> = {}): Handler<{ Bindings: Env; Variables: Variables }> {
+  const dependencies = { db: createDb, syncCustomer: createQBCustomer, ...overrides };
+  return async (c) => {
+    const orgId = c.get('orgId');
+    const body = await c.req.json();
+    const parsed = leadInputSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json({ error: 'Validation failed', details: parsed.error }, 400);
     }
-  }
-  
-  return c.json({ data: lead }, 201);
-});
+
+    const db = dependencies.db(c.env.DATABASE_URL);
+    const phone = normalizePhone(parsed.data.phone);
+
+    const [lead] = await db.insert(leads).values({
+      orgId,
+      name: parsed.data.name,
+      phone,
+      email: parsed.data.email,
+      streetAddress: parsed.data.streetAddress,
+      city: parsed.data.city,
+      state: parsed.data.state,
+      postalCode: parsed.data.postalCode,
+      source: parsed.data.source,
+      status: parsed.data.status ?? 'new',
+    }).returning();
+
+    let quickbooksSync: {
+      status: 'not_connected' | 'synced' | 'unavailable';
+      code?: 'QB_EXPORT_NOT_READY' | 'QB_SYNC_UNAVAILABLE';
+      message?: string;
+    } = { status: 'not_connected' };
+
+    // Integration lookup and export must never fail an already committed customer save.
+    try {
+      const qbConnection = await db.query.quickbooksConnections.findFirst({
+        where: eq(quickbooksConnections.orgId, orgId),
+      });
+      if (qbConnection) {
+        await dependencies.syncCustomer(c.env, orgId, lead);
+        quickbooksSync = { status: 'synced' };
+      }
+    } catch (error) {
+      const code = error instanceof QuickBooksTrustError && error.code === 'QB_EXPORT_NOT_READY'
+        ? 'QB_EXPORT_NOT_READY' : 'QB_SYNC_UNAVAILABLE';
+      quickbooksSync = {
+        status: 'unavailable', code,
+        message: 'Customer saved. QuickBooks sync is unavailable.',
+      };
+      console.warn('QuickBooks customer sync unavailable', { orgId, leadId: lead.id, code });
+    }
+
+    return c.json({ data: lead, meta: { quickbooksSync } }, 201);
+  };
+}
+
+leadsApp.post('/', createLeadHandler());
 
 leadsApp.get('/:id', async (c) => {
   const orgId = c.get('orgId');
@@ -234,6 +255,7 @@ leadsApp.get('/:id', async (c) => {
     return acc;
   }, new Map<string, { clientViewedAt: Date | null; clientViewCount: number }>());
 
+  const invoiceBalances = await readInvoiceBalances(db, orgId, customerInvoicesRows.map((invoice) => invoice.id));
   return c.json({
     data: {
       customer,
@@ -248,6 +270,7 @@ leadsApp.get('/:id', async (c) => {
       emailSends: customerEmailSends,
       invoices: customerInvoicesRows.map((invoice) => ({
         ...invoice,
+        balance: invoiceBalances.get(invoice.id),
         payments: customerPaymentsRows.filter((payment) => payment.invoiceId === invoice.id),
       })),
       payments: customerPaymentsRows,

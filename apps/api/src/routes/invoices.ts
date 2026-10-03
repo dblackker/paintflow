@@ -22,8 +22,16 @@ import {
 import { and, desc, eq, gte, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { financialAccess, supplierAccess } from '../middleware/financial-access';
+import { invoiceFileType } from '../lib/supplier-file-policy';
+import { normalizeSupplierItems, reconcileSupplierTotals, SUPPLIER_EXTRACTION_VERSION } from '../../../../packages/core/src/supplier-extraction';
 import { createNotificationAndPush } from '../lib/web-push';
 import { sendInvoiceEmail } from '../lib/invoice-emails';
+import { readOrgCapabilities } from '../lib/entitlements';
+import { readInvoiceBalances } from '../lib/invoice-positions';
+import { readPaymentBalance } from '../lib/payment-operations';
+import { queueActionEvent } from '../lib/action-telemetry';
+import { camelRecord, markExtractionUnknown, reserveOcr, retainExtraction, supplierCall, SupplierOperationError } from '../lib/supplier-operations';
 
 const invoicesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -82,6 +90,7 @@ type AiUsageEstimate = {
   outputTokens: number;
   totalTokens: number;
   estimatedCostUsd: number;
+  measured: boolean;
 };
 
 type JobCandidate = {
@@ -125,6 +134,7 @@ const approveSchema = z.object({
   jobId: z.string().uuid().optional().nullable(),
   applyMaterialUpdates: z.boolean().default(true),
   reviewNotes: z.string().trim().optional().nullable(),
+  confirmSimilarPurchase: z.boolean().default(false),
 });
 
 const rejectSchema = z.object({
@@ -184,8 +194,8 @@ class DuplicateSupplierInvoiceError extends Error {
 }
 
 function requireIdempotency(c: any) {
-  const key = c.req.header('Idempotency-Key');
-  if (!key) return c.json({ error: 'Idempotency-Key required' }, 400);
+  const key = c.req.header('Idempotency-Key')?.trim();
+  if (!key || key.length > 200) return c.json({ error: 'A valid Idempotency-Key is required.', code: 'INVALID_OPERATION_KEY' }, 400);
   return null;
 }
 
@@ -279,18 +289,23 @@ function estimateOpenAiCost(model: string, inputTokens: number, outputTokens: nu
   return (inputTokens / 1_000_000 * pricing.input) + (outputTokens / 1_000_000 * pricing.output);
 }
 
-function usageFromOpenAiResponse(response: any, model: string, fallbackInputTokens: number): AiUsageEstimate {
+function usageFromOpenAiResponse(response: any, model: string): AiUsageEstimate {
   const usage = response?.usage || {};
-  const inputTokens = Number(usage.input_tokens || usage.prompt_tokens || fallbackInputTokens || 0);
-  const outputTokens = Number(usage.output_tokens || usage.completion_tokens || 0);
-  const totalTokens = Number(usage.total_tokens || inputTokens + outputTokens);
+  const measured = Number.isSafeInteger(usage.input_tokens) && Number.isSafeInteger(usage.output_tokens)
+    && usage.input_tokens >= 0 && usage.output_tokens >= 0;
+  const inputTokens = measured ? usage.input_tokens : 0;
+  const outputTokens = measured ? usage.output_tokens : 0;
+  const totalTokens = inputTokens + outputTokens;
+  const pricing = OPENAI_PRICE_PER_MILLION_TOKENS[model];
   return {
     provider: 'openai',
     model,
     inputTokens: Number.isFinite(inputTokens) ? Math.max(0, Math.round(inputTokens)) : 0,
     outputTokens: Number.isFinite(outputTokens) ? Math.max(0, Math.round(outputTokens)) : 0,
     totalTokens: Number.isFinite(totalTokens) ? Math.max(0, Math.round(totalTokens)) : 0,
-    estimatedCostUsd: estimateOpenAiCost(model, inputTokens, outputTokens),
+    estimatedCostUsd: measured ? estimateOpenAiCost(model, inputTokens, outputTokens)
+      : (1_047_576 * pricing.input + 3000 * pricing.output) / 1_000_000 * 1.25,
+    measured,
   };
 }
 
@@ -304,39 +319,25 @@ function dayStart() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-async function enforceOcrBudget(c: any, db: ReturnType<typeof createDb>, orgId: string) {
+async function claimOcr(c: any, db: ReturnType<typeof createDb>, orgId: string, documentHash: string) {
   const burstLimit = envNumber(c.env.OCR_BURST_LIMIT_PER_MINUTE, DEFAULT_OCR_BURST_LIMIT_PER_MINUTE);
   const dailyLimit = envNumber(c.env.OCR_DAILY_LIMIT, DEFAULT_OCR_DAILY_LIMIT);
-  const monthlyCostLimit = envNumber(c.env.OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD, DEFAULT_OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD);
-
-  const burstKey = `rate:${orgId}:${OCR_FEATURE_KEY}:${Math.floor(Date.now() / 60_000)}`;
-  const burstCount = Number(await c.env.KV.get(burstKey) || '0');
-  if (burstCount >= burstLimit) {
-    throw new Error(`OCR is temporarily rate limited. Try again in a minute.`);
-  }
-  await c.env.KV.put(burstKey, String(burstCount + 1), { expirationTtl: 90 });
-
-  const [daily] = await db.select({
-    count: sql<number>`count(*)`,
-  }).from(aiUsageEvents).where(and(
-    eq(aiUsageEvents.orgId, orgId),
-    eq(aiUsageEvents.feature, OCR_FEATURE_KEY),
-    gte(aiUsageEvents.createdAt, dayStart()),
-  ));
-  if (Number(daily?.count || 0) >= dailyLimit) {
-    throw new Error(`Daily OCR limit reached for this contractor. Try again tomorrow or increase the limit.`);
-  }
-
-  const [monthly] = await db.select({
-    estimatedCostUsd: sql<number>`coalesce(sum(${aiUsageEvents.estimatedCostUsd}), 0)`,
-  }).from(aiUsageEvents).where(and(
-    eq(aiUsageEvents.orgId, orgId),
-    eq(aiUsageEvents.feature, OCR_FEATURE_KEY),
-    gte(aiUsageEvents.createdAt, monthStart()),
-  ));
-  if (Number(monthly?.estimatedCostUsd || 0) >= monthlyCostLimit) {
-    throw new Error(`Monthly OCR budget reached for this contractor. Increase the limit before running more OCR.`);
-  }
+  const capabilities = await readOrgCapabilities(db, orgId);
+  const model = c.env.OPENAI_OCR_MODEL || 'gpt-4.1-mini';
+  const pricing = OPENAI_PRICE_PER_MILLION_TOKENS[model];
+  if (!pricing) throw new SupplierOperationError('OCR model needs a configured spending policy.', 400, 'OCR_MODEL_UNPRICED');
+  if (!c.env.OPENAI_API_KEY) throw new SupplierOperationError('Document processing is not configured. Contact support.', 400, 'OCR_UNAVAILABLE');
+  // Reserve above the supported model's entire context/output cost, then settle actual usage.
+  const reserveUsd = ((1_047_576 * pricing.input + 3000 * pricing.output) / 1_000_000 * 1.25).toFixed(6);
+  const budgetUsd = Math.min(
+    envNumber(c.env.OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD, DEFAULT_OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD),
+    capabilities.limits.monthlyAiEstimatedCents / 100,
+  ).toFixed(6);
+  return reserveOcr(db, {
+    orgId, hash: documentHash, token: crypto.randomUUID(), reserveUsd,
+    burst: Math.floor(burstLimit), daily: Math.floor(dailyLimit),
+    monthly: capabilities.limits.monthlyOcrDocuments, budgetUsd,
+  });
 }
 
 function parseJsonObject(text: string) {
@@ -455,45 +456,7 @@ function parseTextInvoice(rawText: string): { items: InvoiceItem[]; extracted: R
 }
 
 function normalizeOcrItems(items: unknown): InvoiceItem[] {
-  if (!Array.isArray(items)) return [];
-  return items
-    .map((item: any) => {
-      const productName = String(item.productName || item.product_name || item.product || item.name || '').trim();
-      const description = String(item.description || item.item || productName || '').trim();
-      const size = String(item.size || item.unitSize || item.unit_size || '').trim() || null;
-      const rawGallons = currencyValue(item.gallons || item.gallonQuantity || item.gallon_quantity);
-      const quantity = currencyValue(item.quantity || item.qty || rawGallons || 1) || 1;
-      const isGallonSized = /\b(gallon|gallons|gal)\b/i.test(size || '');
-      const gallonMultiplier = isGallonSized ? currencyValue(String(size).match(/(\d+(?:\.\d+)?)\s*(?:gal|gallon)/i)?.[1]) || 1 : 0;
-      const gallons = rawGallons || (isGallonSized ? quantity * gallonMultiplier : 0);
-      const pricePerGallon = currencyValue(item.pricePerGallon || item.price_per_gallon || item.gallonPrice || item.gallon_price);
-      const unitCost = currencyValue(item.unitCost || item.unit_cost || item.unitPrice || item.unit_price || item.cost || pricePerGallon);
-      const total = currencyValue(item.total || item.amount || item.value || quantity * unitCost);
-      if (!description || total <= 0) return null;
-      const isFee = Boolean(item.isFee || item.is_fee || /\b(fee|paint care|paintcare|environmental|disposal)\b/i.test(description));
-      return {
-        description,
-        sku: item.sku || item.itemNumber || item.item_number || item.salesNumber || item.sales_number || null,
-        salesNumber: item.salesNumber || item.sales_number || item.saleNumber || item.sale_number || null,
-        productCode: item.productCode || item.product_code || null,
-        productName: productName || null,
-        size,
-        colorName: String(item.colorName || item.color_name || item.color || '').trim() || null,
-        colorCode: String(item.colorCode || item.color_code || '').trim() || null,
-        sourceInvoiceNumber: item.sourceInvoiceNumber || item.source_invoice_number || item.invoiceNumber || item.invoice_number || null,
-        poNumber: item.poNumber || item.po_number || item.po || null,
-        purchaseDate: item.purchaseDate || item.purchase_date || item.invoiceDate || item.invoice_date || null,
-        storeNumber: item.storeNumber || item.store_number || item.store || null,
-        quantity,
-        unitCost: unitCost || total / quantity,
-        total,
-        category: item.category || (isFee ? 'fees' : inferCostCategory(description)),
-        gallons: gallons || null,
-        pricePerGallon: pricePerGallon || (gallons ? total / gallons : null),
-        isFee,
-      };
-    })
-    .filter(Boolean) as InvoiceItem[];
+  return normalizeSupplierItems(items);
 }
 
 function parseInvoicePayload(input: z.infer<typeof importSchema>): ParsedInvoicePayload {
@@ -522,13 +485,13 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
   const base64 = arrayBufferToBase64(buffer);
   const isPdf = mimeType.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
   const model = env.OPENAI_OCR_MODEL || 'gpt-4.1-mini';
-  const fallbackInputTokens = Math.ceil(base64.length / 4) + 600;
   const fileContent = isPdf
     ? { type: 'input_file', filename: file.name || 'invoice.pdf', file_data: `data:${mimeType};base64,${base64}` }
     : { type: 'input_image', image_url: `data:${mimeType};base64,${base64}`, detail: 'high' };
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
+    signal: AbortSignal.timeout(75_000),
     headers: {
       'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
@@ -543,7 +506,8 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
             type: 'input_text',
             text: [
               'Extract this painting supplier invoice or statement for job-cost review.',
-              'Return JSON only with keys: supplier, invoiceNumber, invoiceDate, totalAmount, rawText, confidence, items.',
+              'Return JSON only with keys: supplier, invoiceNumber, invoiceDate, documentType, totalAmount, chargeTotals, rawText, confidence, items.',
+              'documentType is invoice, invoice_bundle, or statement. For invoice use its final charge total including every fee, tax, and credit as totalAmount, not a prior balance or amount due. For statement or invoice_bundle return chargeTotals as unique {invoiceNumber, totalAmount} entries for the actual invoices whose merchandise you extracted, including each invoice tax and fees. Never use the statement balance, payment summary, or repeated summary rows as purchases.',
               'items must be an array of {description, sku, salesNumber, productCode, productName, size, colorName, colorCode, sourceInvoiceNumber, poNumber, purchaseDate, storeNumber, quantity, unitCost, gallons, pricePerGallon, total, category, isFee}.',
               'Sherwin-Williams PDFs may contain multiple CHARGE INVOICE sections in one file. Extract each merchandise or fee row as its own item and preserve the item sourceInvoiceNumber, purchaseDate, storeNumber, and PO# as poNumber.',
               'For Sherwin-Williams rows, map SALES NUMBER to salesNumber, PRODUCT to productCode, DESCRIPTION to description, QTY to quantity, PRICE to unitCost and pricePerGallon when SIZE is GALLON, and VALUE to total.',
@@ -552,6 +516,8 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
               'Separate fees such as paint care, environmental, disposal, tax, or government imposed paint fees as category "fees" with isFee true.',
               'Prefer line-item detail for paint products, primer, sundries, rentals, supplies, colors, gallons, and price per gallon.',
               'Use null for unknown values; do not invent values.',
+              'Keep negative credit and return rows negative; never omit them. Fees and taxes are not paint gallons.',
+              'For a 5 GAL bucket PRICE is per bucket. pricePerGallon is VALUE divided by actual gallons, not the bucket price.',
             ].join(' '),
           },
         ],
@@ -561,12 +527,12 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OCR request failed: ${errorText.slice(0, 240)}`);
+    console.warn('Supplier OCR provider failed', { status: response.status, requestId: response.headers.get('x-request-id') });
+    throw new Error('Document processing could not finish. Its processing attempt has been retained for review.');
   }
 
   const payload = await response.json();
-  const usage = usageFromOpenAiResponse(payload, model, fallbackInputTokens);
+  const usage = usageFromOpenAiResponse(payload, model);
   const parsed = parseJsonObject(responseText(payload));
   const items = normalizeOcrItems(parsed.items);
   const rawText = String(parsed.rawText || parsed.raw_text || [
@@ -582,13 +548,17 @@ async function extractInvoiceWithOpenAI(env: Env, file: File, buffer: ArrayBuffe
       supplier: parsed.supplier || null,
       invoiceNumber: parsed.invoiceNumber || parsed.invoice_number || null,
       invoiceDate: parsed.invoiceDate || parsed.invoice_date || null,
-      totalAmount: parsed.totalAmount || parsed.total_amount || null,
+      totalAmount: parsed.totalAmount ?? parsed.total_amount ?? null,
+      documentType: parsed.documentType || 'invoice',
+      chargeTotals: parsed.chargeTotals || null,
     },
     confidence: clampConfidence(Number(parsed.confidence || 0.74)),
     rawText,
     metadata: {
       extractionMethod: isPdf ? 'openai_pdf_ocr' : 'openai_image_ocr',
+      extractionVersion: SUPPLIER_EXTRACTION_VERSION,
       openaiModel: model,
+      providerRequestId: response.headers.get('x-request-id'),
       aiUsage: usage,
       contentType: mimeType,
       fileName: file.name,
@@ -629,6 +599,11 @@ async function parseInvoiceFile(
   }
 
   const buffer = await file.arrayBuffer();
+  const textLike = /text|csv|json/i.test(file.type) || /\.(csv|txt|json)$/i.test(file.name || '');
+  const contentType = textLike ? 'text/plain' : invoiceFileType(new Uint8Array(buffer));
+  if (!contentType) throw new SupplierOperationError('Upload a PDF, JPG, PNG, or WebP invoice.', 400, 'UNSUPPORTED_INVOICE_FILE');
+  // Normalize the provider and retained-file MIME from the bytes, not a client-supplied header.
+  file = new File([buffer], file.name, { type: contentType });
   const documentHash = await sha256Hex(buffer);
   const duplicateImport = await db.query.supplierInvoiceImports.findFirst({
     where: and(eq(supplierInvoiceImports.orgId, orgId), eq(supplierInvoiceImports.documentHash, documentHash)),
@@ -636,6 +611,21 @@ async function parseInvoiceFile(
   });
   if (duplicateImport) {
     throw new DuplicateSupplierInvoiceError(duplicateImportMessage(duplicateImport), { invoiceImport: duplicateImport });
+  }
+  const claim = textLike ? null : await claimOcr(c, db, orgId, documentHash);
+  if (claim?.state === 'duplicate') {
+    const existing = await db.query.supplierInvoiceImports.findFirst({
+      where: and(eq(supplierInvoiceImports.id, claim.importId!), eq(supplierInvoiceImports.orgId, orgId)),
+    });
+    if (existing) throw new DuplicateSupplierInvoiceError(duplicateImportMessage(existing), { invoiceImport: existing });
+    throw new SupplierOperationError('This document is already in your invoice history. Refresh the list.', 409, 'SUPPLIER_DUPLICATE');
+  }
+  if (claim?.state === 'extracted') return { input, parsed: claim.parsed as ParsedInvoicePayload };
+  if (claim?.state === 'processing' || claim?.state === 'unknown') {
+    throw new SupplierOperationError(claim.state === 'processing'
+      ? 'This document is already processing. Wait a moment, then retry.'
+      : 'An earlier attempt has an uncertain result. Contact support before processing this document again.',
+    409, 'OCR_ALREADY_PROCESSING');
   }
   const fileName = safeFileName(file.name || `invoice-${Date.now()}`);
   let fileKey: string | null = null;
@@ -660,16 +650,17 @@ async function parseInvoiceFile(
     }
   }
 
-  const textLike = /text|csv|json/i.test(file.type) || /\.(csv|txt|json)$/i.test(file.name || '');
   const fileText = textLike ? new TextDecoder().decode(buffer) : '';
-  if (!textLike) {
-    await enforceOcrBudget(c, db, orgId);
+  let parsed: ParsedInvoicePayload;
+  try {
+    parsed = textLike
+      ? parseInvoicePayload({ ...input, rawText: fileText, csvData: /\.(csv)$/i.test(file.name || '') ? fileText : input.csvData })
+      : await extractInvoiceWithOpenAI(c.env, file, buffer);
+  } catch (error) {
+    if (claim?.token) await markExtractionUnknown(db, orgId, documentHash, claim.token).catch(() => undefined);
+    throw error;
   }
-  const parsed = textLike
-    ? parseInvoicePayload({ ...input, rawText: fileText, csvData: /\.(csv)$/i.test(file.name || '') ? fileText : input.csvData })
-    : await extractInvoiceWithOpenAI(c.env, file, buffer);
-
-  return {
+  const result = {
     input,
     parsed: {
       ...parsed,
@@ -684,6 +675,7 @@ async function parseInvoiceFile(
         storedInR2: Boolean(fileKey),
         fileRetentionStatus,
         fileRetentionError: fileRetentionError || undefined,
+        reservationToken: claim?.token,
       },
     },
     fileMetadata: {
@@ -697,6 +689,11 @@ async function parseInvoiceFile(
       fileRetentionError: fileRetentionError || undefined,
     },
   };
+  if (claim?.token) await retainExtraction(db, {
+    orgId, hash: documentHash, token: claim.token, parsed: result.parsed,
+    actualUsd: ((parsed.metadata?.aiUsage as AiUsageEstimate | undefined)?.estimatedCostUsd || 0).toFixed(6),
+  });
+  return result;
 }
 
 function inferCostCategory(description: string) {
@@ -797,114 +794,8 @@ async function getJobCandidates(db: ReturnType<typeof createDb>, orgId: string, 
 }
 
 async function ensurePremiumAccess(db: ReturnType<typeof createDb>, orgId: string, env: Env) {
-  if (env.INVOICE_AUTOMATION_ENABLED === 'true' || env.ENVIRONMENT !== 'production') return true;
-  const [subscription] = await db
-    .select({ planName: saasPlans.name, status: subscriptions.status })
-    .from(subscriptions)
-    .leftJoin(saasPlans, eq(subscriptions.planId, saasPlans.id))
-    .where(eq(subscriptions.orgId, orgId))
-    .orderBy(desc(subscriptions.createdAt))
-    .limit(1);
-  return ['trial', 'active'].includes(String(subscription?.status || ''))
-    && ['pro', 'enterprise'].includes(String(subscription?.planName || '').toLowerCase());
-}
-
-async function applyInvoiceImport(
-  db: ReturnType<typeof createDb>,
-  orgId: string,
-  invoiceImport: InvoiceImportRecord,
-  jobId: string | null | undefined,
-  applyMaterialUpdates: boolean,
-) {
-  const items = Array.isArray(invoiceImport.extractedItems) ? invoiceImport.extractedItems as InvoiceItem[] : [];
-  const supplier = invoiceImport.supplier || 'Unknown supplier';
-  const totalAmount = items.reduce((sum, item) => sum + currencyValue(item.total), 0) || currencyValue(invoiceImport.totalAmount);
-  const extractedData = invoiceImport.extractedData as { fileKey?: string; storedInR2?: boolean; documentHash?: string } | null;
-  const invoiceCostDate = dateValue(invoiceImport.invoiceDate) || dateValue(invoiceImport.createdAt) || new Date();
-  const documentHash = invoiceImport.documentHash || extractedData?.documentHash || null;
-
-  const duplicatePurchase = documentHash
-    ? await db.query.materialPurchases.findFirst({
-      where: and(eq(materialPurchases.orgId, orgId), eq(materialPurchases.documentHash, documentHash)),
-    })
-    : invoiceImport.invoiceNumber
-      ? await db.query.materialPurchases.findFirst({
-        where: and(
-          eq(materialPurchases.orgId, orgId),
-          eq(materialPurchases.supplier, supplier),
-          eq(materialPurchases.invoiceNumber, invoiceImport.invoiceNumber),
-        ),
-      })
-      : null;
-  if (duplicatePurchase) {
-    throw new DuplicateSupplierInvoiceError('This supplier invoice has already been approved.', { purchase: duplicatePurchase });
-  }
-
-  const [purchase] = await db.insert(materialPurchases).values({
-    orgId,
-    jobId: jobId || null,
-    supplier,
-    invoiceNumber: invoiceImport.invoiceNumber || null,
-    invoiceDate: invoiceImport.invoiceDate || null,
-    documentHash,
-    totalAmount: totalAmount.toFixed(2),
-    fileUrl: extractedData?.storedInR2 && extractedData?.fileKey ? `/v1/invoices/imports/${invoiceImport.id}/file` : null,
-    parsedData: items,
-  }).returning();
-
-  const existingMaterials = applyMaterialUpdates
-    ? await db.query.materials.findMany({ where: eq(materials.orgId, orgId) })
-    : [];
-
-  for (const item of items) {
-    const description = String(item.description || item.productName || 'Supplier invoice item').slice(0, 255);
-    const materialName = String(item.productName || item.description || 'Supplier invoice item').slice(0, 255);
-    const unitCost = currencyValue(item.pricePerGallon || item.unitCost);
-    if (applyMaterialUpdates && !item.isFee) {
-      const sku = String(item.sku || '').trim();
-      const normalizedName = normalizeText(materialName);
-      const material = existingMaterials.find((candidate) => (
-        (sku && candidate.sku === sku)
-        || (normalizeText(candidate.name) === normalizedName && normalizeText(candidate.supplier) === normalizeText(supplier))
-      ));
-      if (material) {
-        await db.update(materials)
-          .set({
-            costPerUnit: unitCost.toFixed(2),
-            supplier,
-            sku: sku || material.sku,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(materials.id, material.id), eq(materials.orgId, orgId)));
-      } else {
-        await db.insert(materials).values({
-          orgId,
-          name: materialName,
-          category: inferMaterialCategory(description),
-          unit: inferUnit(description),
-          costPerUnit: unitCost.toFixed(2),
-          supplier,
-          sku: sku || null,
-        });
-      }
-    }
-
-    if (jobId) {
-      await db.insert(jobCosts).values({
-        orgId,
-        jobId,
-        category: item.category || inferCostCategory(description),
-        description,
-        quantity: currencyValue(item.quantity || 1).toFixed(2),
-        unitCost: unitCost.toFixed(2),
-        totalCost: currencyValue(item.total || currencyValue(item.quantity || 1) * unitCost).toFixed(2),
-        materialPurchaseId: purchase.id,
-        costDate: dateValue(item.purchaseDate) || invoiceCostDate,
-      });
-    }
-  }
-
-  return purchase;
+  const capabilities = await readOrgCapabilities(db, orgId);
+  return capabilities.features.includes('ocrInvoiceImport');
 }
 
 function buildLearningHints(args: {
@@ -1042,7 +933,8 @@ async function stageSupplierInvoiceImport(
   const extractedSupplier = input.supplier || String(parsed.extracted.supplier || '').trim() || null;
   const invoiceNumber = input.invoiceNumber || String(parsed.extracted.invoiceNumber || '').trim() || null;
   const invoiceDate = dateValue(input.invoiceDate) || dateValue(parsed.extracted.invoiceDate);
-  const totalAmount = parsed.items.reduce((sum, item) => sum + currencyValue(item.total), 0);
+  const reconciliation = reconcileSupplierTotals(parsed.items, parsed.extracted,
+    String(parsed.metadata?.extractionMethod || '').startsWith('openai_'));
   const documentHash = String(parsed.metadata?.documentHash || '').trim()
     || await sha256Hex(normalizedDocumentText(parsed.rawText));
   const duplicateImport = await db.query.supplierInvoiceImports.findFirst({
@@ -1060,18 +952,14 @@ async function stageSupplierInvoiceImport(
   if (duplicatePurchase) {
     throw new DuplicateSupplierInvoiceError('This supplier invoice has already been approved.', { purchase: duplicatePurchase });
   }
-  if (extractedSupplier && invoiceNumber) {
-    const invoiceNumberPurchase = await db.query.materialPurchases.findFirst({
+  const possibleDuplicatePurchase = extractedSupplier && invoiceNumber
+    ? await db.query.materialPurchases.findFirst({
       where: and(
         eq(materialPurchases.orgId, orgId),
         eq(materialPurchases.supplier, extractedSupplier),
         eq(materialPurchases.invoiceNumber, invoiceNumber),
       ),
-    });
-    if (invoiceNumberPurchase) {
-      throw new DuplicateSupplierInvoiceError('This supplier invoice number has already been approved.', { purchase: invoiceNumberPurchase });
-    }
-  }
+    }) : null;
   const senderRule = input.senderEmail
     ? await db.query.supplierInvoiceSenderRules.findFirst({
       where: and(
@@ -1083,7 +971,8 @@ async function stageSupplierInvoiceImport(
     })
     : null;
 
-  const [invoiceImport] = await db.insert(supplierInvoiceImports).values({
+  const staged = await supplierCall<{ import: Record<string, unknown>; replayed: boolean }>(db, sql`select stage_supplier_import(
+    ${orgId}::uuid, ${JSON.stringify({
     orgId,
     jobId: suggestedJobId,
     sourceType: input.sourceType,
@@ -1102,38 +991,18 @@ async function stageSupplierInvoiceImport(
       source: input.sourceType,
       senderRuleMatched: Boolean(senderRule),
       trustedSenderRuleId: senderRule?.id || null,
+      possibleDuplicatePurchaseId: possibleDuplicatePurchase?.id || null,
       ...parsed.metadata,
+      documentReconciliation: reconciliation,
     },
     extractedItems: parsed.items,
-    totalAmount: totalAmount.toFixed(2),
+    totalAmount: reconciliation.lineTotal,
     matchCandidates,
     matchConfidence: clampConfidence(bestMatch?.confidence || 0).toFixed(2),
     extractionConfidence: clampConfidence(parsed.confidence).toFixed(2),
-  }).returning();
-
-  const aiUsage = parsed.metadata?.aiUsage as AiUsageEstimate | undefined;
-  if (aiUsage) {
-    await db.insert(aiUsageEvents).values({
-      orgId,
-      userId: userId || null,
-      feature: OCR_FEATURE_KEY,
-      provider: aiUsage.provider,
-      model: aiUsage.model,
-      entityType: 'supplier_invoice_import',
-      entityId: invoiceImport.id,
-      inputTokens: aiUsage.inputTokens,
-      outputTokens: aiUsage.outputTokens,
-      totalTokens: aiUsage.totalTokens,
-      estimatedCostUsd: aiUsage.estimatedCostUsd.toFixed(6),
-      metadata: {
-        sourceType: input.sourceType,
-        contentType: parsed.metadata?.contentType,
-        fileName: parsed.metadata?.fileName,
-        extractionMethod: parsed.metadata?.extractionMethod,
-      },
-    });
-  }
-
+  })}::jsonb, ${userId || null}::uuid) as result`);
+  const invoiceImport = camelRecord<InvoiceImportRecord>(staged.import);
+  if (staged.replayed) throw new DuplicateSupplierInvoiceError(duplicateImportMessage(invoiceImport), { invoiceImport });
   return invoiceImport;
 }
 
@@ -1286,6 +1155,13 @@ invoicesApp.post('/imports/email-forward', async (c) => {
 });
 
 invoicesApp.use('*', authMiddleware);
+invoicesApp.use('/imports', supplierAccess);
+invoicesApp.use('/imports/*', supplierAccess);
+invoicesApp.use('/purchases', supplierAccess);
+invoicesApp.use('/inbound-email-config', supplierAccess);
+invoicesApp.use('/upload', supplierAccess);
+invoicesApp.use('/customer', financialAccess);
+invoicesApp.use('/customer/*', financialAccess);
 
 invoicesApp.get('/inbound-email-config', async (c) => {
   const orgId = c.get('orgId');
@@ -1369,10 +1245,12 @@ invoicesApp.get('/customer', async (c) => {
     list.push(payment);
     paymentsByInvoice.set(payment.invoiceId, list);
   });
+  const balances = await readInvoiceBalances(db, orgId, rows.map((row) => row.invoice.id));
 
   return c.json({
     data: rows.map((row) => ({
       ...row.invoice,
+      balance: balances.get(row.invoice.id),
       status: effectiveCustomerInvoiceStatus(row.invoice, paymentsByInvoice.get(row.invoice.id) || []),
       leadName: row.leadName,
       leadEmail: row.leadEmail,
@@ -1411,10 +1289,12 @@ invoicesApp.get('/customer/:id', async (c) => {
       limit: 100,
     }),
   ]);
+  const balances = await readInvoiceBalances(db, orgId, [invoice.id]);
 
   return c.json({
     data: {
       ...invoice,
+      balance: balances.get(invoice.id),
       status: effectiveCustomerInvoiceStatus(invoice, payments),
       leadName: lead?.name || null,
       leadEmail: lead?.email || null,
@@ -1642,15 +1522,11 @@ invoicesApp.post('/customer/:id/send-reminder', async (c) => {
     return c.json({ error: 'This invoice is not open for reminders.' }, 409);
   }
 
-  const payments = await db.query.customerPayments.findMany({
-    where: and(eq(customerPayments.orgId, orgId), eq(customerPayments.invoiceId, invoice.id)),
-    orderBy: (table, { desc }) => [desc(table.receivedAt)],
-    limit: 100,
-  });
-  const paid = payments
-    .filter((payment) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(payment.status))
-    .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
-  const balanceDue = Math.round(Math.max(Number(invoice.total || 0) - paid, 0) * 100) / 100;
+  const balance = await readPaymentBalance(db, orgId, invoice.id, null);
+  if (balance.closed || balance.needsReview || balance.pendingRefunds > 0) {
+    return c.json({ error: 'Payment collection is paused. Review this invoice before sending a reminder.', code: 'INVOICE_COLLECTION_PAUSED' }, 409);
+  }
+  const balanceDue = Number(balance.remaining);
   if (balanceDue <= 0.005) {
     return c.json({ error: 'This invoice is already paid in full.' }, 409);
   }
@@ -1781,9 +1657,10 @@ invoicesApp.post('/imports', async (c) => {
         duplicateType: err.invoiceImport ? 'import' : 'purchase',
       }, 409);
     }
+    if (err instanceof SupplierOperationError) return c.json({ error: err.message, code: err.code }, err.status);
     return c.json({ error: err instanceof Error ? err.message : 'Failed to process supplier invoice.' }, 400);
   }
-  if (!parsed.rawText?.trim()) return c.json({ error: 'Paste supplier invoice text or CSV data.' }, 400);
+  if (!parsed.rawText?.trim()) return c.json({ error: 'The document has no readable invoice content. Try a clearer PDF or image.' }, 400);
   if (!parsed.items.length) return c.json({ error: 'No invoice line items could be extracted.' }, 400);
 
   let invoiceImport: InvoiceImportRecord;
@@ -1798,6 +1675,7 @@ invoicesApp.post('/imports', async (c) => {
         duplicateType: err.invoiceImport ? 'import' : 'purchase',
       }, 409);
     }
+    if (err instanceof SupplierOperationError) return c.json({ error: err.message, code: err.code }, err.status);
     throw err;
   }
 
@@ -1816,7 +1694,26 @@ invoicesApp.get('/imports', async (c) => {
     orderBy: (table, { desc }) => [desc(table.createdAt)],
     limit: 50,
   });
-  return c.json({ data: imports });
+  if (!imports.length) return c.json({ data: imports });
+  const duplicates = await db.execute(sql`select invoice.id, (
+    select purchase.id from material_purchases purchase where purchase.org_id = ${orgId}::uuid
+      and lower(trim(purchase.supplier)) = lower(trim(invoice.supplier))
+      and ((nullif(trim(invoice.invoice_number), '') is not null
+        and lower(trim(purchase.invoice_number)) = lower(trim(invoice.invoice_number))) or exists (
+          select 1 from jsonb_array_elements(invoice.extracted_items) incoming
+          where nullif(trim(incoming->>'sourceInvoiceNumber'), '') is not null and
+            (lower(trim(purchase.invoice_number)) = lower(trim(incoming->>'sourceInvoiceNumber')) or exists (
+              select 1 from jsonb_array_elements(coalesce(purchase.parsed_data, '[]'::jsonb)) previous
+              where lower(trim(previous->>'sourceInvoiceNumber')) = lower(trim(incoming->>'sourceInvoiceNumber'))
+            ))
+        )) order by purchase.created_at desc, purchase.id limit 1
+    ) as purchase_id from supplier_invoice_imports invoice
+    where invoice.org_id = ${orgId}::uuid and invoice.id in (${sql.join(imports.map((item) => sql`${item.id}::uuid`), sql`, `)})`);
+  const byId = new Map(duplicates.rows.map((row) => [String(row.id), row.purchase_id ? String(row.purchase_id) : null]));
+  return c.json({ data: imports.map((item) => ({ ...item, extractedData: {
+    ...(item.extractedData as Record<string, unknown> || {}),
+    possibleDuplicatePurchaseId: byId.get(item.id) || (item.extractedData as Record<string, unknown> | null)?.possibleDuplicatePurchaseId || null,
+  } })) });
 });
 
 invoicesApp.get('/imports/learning', async (c) => {
@@ -1939,12 +1836,16 @@ invoicesApp.get('/imports/:id/file', async (c) => {
   });
   if (!invoiceImport) return c.json({ error: 'Invoice import not found' }, 404);
   const data = invoiceImport.extractedData as { fileKey?: string; contentType?: string; fileName?: string } | null;
-  if (!data?.fileKey || !c.env.R2) return c.json({ error: 'Original invoice file was not retained for this import' }, 404);
+  if (!data?.fileKey?.startsWith(`supplier-invoices/${orgId}/`) || !c.env.R2) return c.json({ error: 'Original invoice file was not retained for this import' }, 404);
   const object = await c.env.R2.get(data.fileKey);
   if (!object) return c.json({ error: 'Invoice file is not available' }, 404);
   const headers = new Headers();
   headers.set('Content-Type', data.contentType || object.httpMetadata?.contentType || 'application/octet-stream');
-  headers.set('Content-Disposition', `inline; filename="${safeFileName(data.fileName || 'invoice')}"`);
+  const safeInlineType = /^(application\/pdf|image\/(png|jpeg|webp)|text\/plain)$/.test(headers.get('Content-Type')!);
+  headers.set('Content-Disposition', `${safeInlineType ? 'inline' : 'attachment'}; filename="${safeFileName(data.fileName || 'invoice')}"`);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Cache-Control', 'private, no-store');
+  headers.set('Content-Security-Policy', 'sandbox');
   return new Response(object.body, { headers });
 });
 
@@ -1961,61 +1862,31 @@ invoicesApp.post('/imports/:id/approve', async (c) => {
     where: and(eq(supplierInvoiceImports.id, c.req.param('id')), eq(supplierInvoiceImports.orgId, orgId)),
   });
   if (!invoiceImport) return c.json({ error: 'Invoice import not found' }, 404);
-  if (invoiceImport.status !== 'needs_review') {
-    const reviewedCopy: Record<string, string> = {
-      approved: 'This supplier invoice was already approved and moved into Supplier purchases.',
-      rejected: 'This supplier invoice was already rejected and removed from Needs review.',
-      duplicate: 'This supplier invoice was marked as a duplicate and removed from Needs review.',
-    };
-    return c.json({
-      error: reviewedCopy[invoiceImport.status] || 'This supplier invoice has already left Needs review. Refresh the page to see the latest status.',
-      status: invoiceImport.status,
-    }, 409);
-  }
-
   const jobId = input.jobId || invoiceImport.jobId;
   if (!jobId) return c.json({ error: 'Select a job before approving this supplier invoice.' }, 400);
   const job = await db.query.jobs.findFirst({ where: and(eq(jobs.id, jobId), eq(jobs.orgId, orgId)) });
   if (!job) return c.json({ error: 'Selected job was not found' }, 404);
 
-  let purchase: typeof materialPurchases.$inferSelect;
+  let outcome: { import: Record<string, unknown>; purchase: Record<string, unknown>; replayed: boolean };
   try {
-    purchase = await applyInvoiceImport(db, orgId, invoiceImport, jobId, input.applyMaterialUpdates);
+    outcome = await supplierCall(db, sql`select approve_supplier_import(
+      ${orgId}::uuid, ${invoiceImport.id}::uuid, ${jobId}::uuid, ${input.applyMaterialUpdates},
+      ${input.reviewNotes || null}, ${c.get('userId') || 'unknown'}, ${c.req.header('Idempotency-Key')!.trim()},
+      ${JSON.stringify({ ...input, importId: invoiceImport.id, jobId })}::jsonb
+    ) as result`);
   } catch (err) {
-    if (err instanceof DuplicateSupplierInvoiceError) {
-      const [updated] = await db.update(supplierInvoiceImports)
-        .set({
-          status: 'duplicate',
-          reviewNotes: input.reviewNotes || err.message,
-          duplicateOfImportId: err.invoiceImport?.id || null,
-          materialPurchaseId: err.purchase?.id || null,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(supplierInvoiceImports.id, invoiceImport.id), eq(supplierInvoiceImports.orgId, orgId)))
-        .returning();
-      return c.json({
-        error: err.message,
-        duplicate: true,
-        data: { import: updated, purchase: err.purchase || null, duplicateImport: err.invoiceImport || null },
-      }, 409);
-    }
+    if (err instanceof SupplierOperationError) return c.json({ error: err.message, code: err.code }, err.status);
     throw err;
   }
-  const [updated] = await db.update(supplierInvoiceImports)
-    .set({
-      status: 'approved',
-      jobId: jobId || null,
-      materialPurchaseId: purchase.id,
-      reviewNotes: input.reviewNotes || invoiceImport.reviewNotes,
-      approvedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(supplierInvoiceImports.id, invoiceImport.id), eq(supplierInvoiceImports.orgId, orgId)))
-    .returning();
-
-  await recordInvoiceImportFeedback(db, orgId, invoiceImport, 'approved', jobId || null, input.reviewNotes);
-
-  return c.json({ data: { import: updated, purchase } });
+  if (!outcome.replayed) {
+    // Feedback must never turn a committed purchase into an apparent failed approval.
+    await recordInvoiceImportFeedback(db, orgId, invoiceImport, 'approved', jobId, input.reviewNotes)
+      .catch((error) => console.warn('Supplier feedback needs reconciliation', { orgId, importId: invoiceImport.id, error: String(error) }));
+  }
+  const approved = camelRecord<{ id: string; approvedAt: string }>(outcome.import);
+  const approvedAt = new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(approved.approvedAt) ? approved.approvedAt : `${approved.approvedAt}Z`).toISOString();
+  queueActionEvent(c, { action: 'supplier.invoice.approved', orgId, actorId: c.get('userId')!, entityId: approved.id, occurredAt: approvedAt });
+  return c.json({ data: { import: camelRecord(outcome.import), purchase: camelRecord(outcome.purchase) }, replayed: outcome.replayed });
 });
 
 invoicesApp.post('/imports/:id/reject', async (c) => {
@@ -2047,72 +1918,11 @@ invoicesApp.post('/imports/:id/reject', async (c) => {
 });
 
 invoicesApp.post('/upload', async (c) => {
-  const idempotencyError = requireIdempotency(c);
-  if (idempotencyError) return idempotencyError;
-  const orgId = c.get('orgId');
-  const input = importSchema.parse(await c.req.json());
-  const db = createDb(c.env.DATABASE_URL);
-  const parsed = parseInvoicePayload(input);
-  if (!parsed.items.length || !input.supplier) {
-    return c.json({ error: 'CSV data and supplier required' }, 400);
-  }
-
-  const totalAmount = parsed.items.reduce((sum, item) => sum + item.total, 0);
-  const invoiceCostDate = dateValue(input.invoiceDate) || new Date();
-  const documentHash = await sha256Hex(normalizedDocumentText(input.csvData || input.rawText || JSON.stringify(parsed.items)));
-  const existingPurchase = await db.query.materialPurchases.findFirst({
-    where: input.invoiceNumber
-      ? and(eq(materialPurchases.orgId, orgId), eq(materialPurchases.supplier, input.supplier), eq(materialPurchases.invoiceNumber, input.invoiceNumber))
-      : and(eq(materialPurchases.orgId, orgId), eq(materialPurchases.documentHash, documentHash)),
-  });
-  if (existingPurchase) {
-    return c.json({ error: 'This supplier invoice has already been imported.', duplicate: true, data: existingPurchase }, 409);
-  }
-  const [purchase] = await db.insert(materialPurchases).values({
-    orgId,
-    jobId: input.jobId || null,
-    supplier: input.supplier,
-    invoiceNumber: input.invoiceNumber || null,
-    invoiceDate: invoiceCostDate,
-    documentHash,
-    totalAmount: totalAmount.toFixed(2),
-    parsedData: parsed.items,
-  }).returning();
-
-  for (const item of parsed.items) {
-    const material = await db.query.materials.findFirst({
-      where: and(eq(materials.orgId, orgId), eq(materials.sku, item.sku || '')),
-    });
-    const unitCost = currencyValue(item.pricePerGallon || item.unitCost);
-    if (material && Math.abs(currencyValue(material.costPerUnit) - unitCost) > 0.01) {
-      await db.update(materials)
-        .set({ costPerUnit: unitCost.toFixed(2), updatedAt: new Date() })
-        .where(eq(materials.id, material.id));
-    }
-
-    if (input.jobId) {
-      await db.insert(jobCosts).values({
-        jobId: input.jobId,
-        orgId,
-        category: 'materials',
-        description: item.description,
-        quantity: item.quantity.toFixed(2),
-        unitCost: unitCost.toFixed(2),
-        totalCost: item.total.toFixed(2),
-        materialPurchaseId: purchase.id,
-        costDate: dateValue(item.purchaseDate) || invoiceCostDate,
-      });
-    }
-  }
-
   return c.json({
-    data: {
-      purchaseId: purchase.id,
-      itemsProcessed: parsed.items.length,
-      totalAmount,
-      items: parsed.items,
-    },
-  }, 201);
+    error: 'Upload a supplier invoice for review, then select a job and approve it.',
+    code: 'REVIEW_REQUIRED',
+    replacement: '/v1/invoices/imports',
+  }, 410);
 });
 
 invoicesApp.get('/purchases', async (c) => {

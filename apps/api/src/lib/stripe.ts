@@ -41,12 +41,23 @@ export async function createCheckoutSession(env: any, params: {
 export async function createRefund(env: any, params: {
   paymentIntentId?: string | null;
   chargeId?: string | null;
-  amount: number;
+  amountMinor: number;
   reason?: string;
-  connectedAccountId?: string;
+  connectedAccountId: string;
+  idempotencyKey: string;
+  operationId: string;
+  orgId: string;
 }) {
+  if (!Number.isSafeInteger(params.amountMinor) || params.amountMinor <= 0 || params.amountMinor > 9_999_999_999) {
+    throw new Error('Refund amount must be an exact positive number of USD cents');
+  }
+  if (!params.idempotencyKey || params.idempotencyKey.length > 255 || !params.connectedAccountId || !env.STRIPE_SECRET_KEY) {
+    throw new Error('Refund requires a reserved operation key and configured Stripe account');
+  }
   const body = new URLSearchParams({
-    amount: Math.round(params.amount * 100).toString(),
+    amount: String(params.amountMinor),
+    'metadata[crewmodo_refund_operation]': params.operationId,
+    'metadata[orgId]': params.orgId,
   });
   if (params.paymentIntentId) {
     body.set('payment_intent', params.paymentIntentId);
@@ -64,18 +75,38 @@ export async function createRefund(env: any, params: {
     headers: {
       'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
       'Content-Type': 'application/x-www-form-urlencoded',
-      ...(params.connectedAccountId ? { 'Stripe-Account': params.connectedAccountId } : {}),
+      'Stripe-Account': params.connectedAccountId,
+      'Idempotency-Key': params.idempotencyKey,
     },
     body,
+    signal: AbortSignal.timeout(20_000),
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    console.error('Stripe refund error:', error);
-    throw new Error('Failed to create Stripe refund');
+    // A timeout, 5xx, or malformed response can happen AFTER Stripe committed.
+    // The caller retains the reservation; it never invents another provider key.
+    throw new Error(`Stripe refund response requires reconciliation (${response.status})`);
   }
 
-  return await response.json() as { id: string; status?: string };
+  return await response.json() as {
+    id: string; status: string; amount: number; currency: string;
+    payment_intent?: string | null; charge?: string | null;
+  };
+}
+
+export async function readCheckoutForManualPayment(env: any, sessionId: string, accountId: string) {
+  if (!/^cs_[a-zA-Z0-9_]+$/.test(sessionId) || !accountId || !env.STRIPE_SECRET_KEY) {
+    throw new Error('Checkout reconciliation is not configured');
+  }
+  const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
+    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Stripe-Account': accountId },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error('Checkout status could not be confirmed');
+  return await response.json() as {
+    id: string; status: string; payment_status: string; amount_total: number; currency: string; livemode: boolean;
+    payment_intent?: string | null; metadata?: Record<string, string>;
+  };
 }
 
 export async function verifyWebhookSignature(

@@ -1,372 +1,734 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Badge } from '@/components/Badge';
-import { Card, CardContent, CardHeader } from '@/components/Card';
-import { Icon } from '@/components/Icon';
-import { apiJson, formatMoney, labelize } from '@/lib/api';
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { Badge } from "@/components/Badge";
+import { Button } from "@/components/Button";
+import { Card, CardContent, CardHeader } from "@/components/Card";
+import { Icon } from "@/components/Icon";
+import { apiJson, formatMoney, labelize } from "@/lib/api";
 
 interface DashboardReport {
-  totalEstimates?: number;
-  approvedEstimates?: number;
-  totalRevenue?: number;
-  totalCosts?: number;
-  winRate?: number;
-  profit?: number;
-  margin?: number;
+  asOf: string;
+  totalLeads: number;
+  wonLeads: number;
+  winRate: number;
+  contractedSubtotal: number | null;
+  recordedActualCost: number;
+  approvedActualCost: number | null;
+  currentCostPosition: number | null;
+  margin: number | null;
+  collectedGross: number;
+  refundedGross: number | null;
+  netCollectedGross: number | null;
+  costCompleteness: "unknown" | "incomplete";
+  warnings: Array<{ code: string; message: string; action: string }>;
 }
 
 interface WinRateRow {
-  source?: string | null;
+  source: string;
   total: number;
   won: number;
   winRate: number;
 }
-
 interface CrewRow {
-  memberId?: string;
-  name?: string | null;
-  totalHours?: number | string | null;
-  jobsWorked?: number | string | null;
-  totalCost?: number | string | null;
+  memberId: string;
+  name: string;
+  totalHours: number | string;
+  jobsWorked: number | string;
+  totalCost: number | string;
 }
-
 interface MarginRow {
   jobId: string;
-  title?: string | null;
-  revenue: number;
+  title: string;
+  status: string;
+  revenue: number | null;
   costs: number;
-  profit: number;
-  margin: number;
+  profit: number | null;
+  margin: number | null;
+  costCompleteness: "unknown" | "incomplete";
+  unreviewedTimeCount: number;
+  contractNeedsReview: boolean;
 }
-
-interface JobRow {
-  id: string;
-  name?: string | null;
-  status?: string | null;
-  budget?: string | number | null;
-  leadCity?: string | null;
-  leadState?: string | null;
-  scheduledStartAt?: string | null;
-  completedAt?: string | null;
+interface JobMix {
+  cities: Array<{
+    label: string;
+    jobs: number;
+    contractedSubtotal: number | null;
+    knownContractedSubtotal: number;
+    unresolvedJobs: number;
+  }>;
+  statuses: Array<{ status: string; count: number }>;
 }
-
 interface ReportsState {
-  dashboard: DashboardReport;
-  winRate: WinRateRow[];
-  crew: CrewRow[];
-  margins: MarginRow[];
-  jobs: JobRow[];
+  dashboard: DashboardReport | null;
+  winRate: WinRateRow[] | null;
+  crew: CrewRow[] | null;
+  margins: MarginRow[] | null;
+  mix: JobMix | null;
+}
+type ReportKey = keyof ReportsState;
+const reportRoutes: Record<ReportKey, string> = {
+  dashboard: "/v1/reports/dashboard",
+  winRate: "/v1/reports/win-rate-by-source",
+  crew: "/v1/reports/crew-performance",
+  margins: "/v1/reports/profit-margins?limit=20",
+  mix: "/v1/reports/job-mix",
+};
+const reportKeys = Object.keys(reportRoutes) as ReportKey[];
+
+function numeric(value: unknown) {
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+function numberText(value: unknown) {
+  return numeric(value).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+function moneyText(value: number | string | null | undefined) {
+  return value == null ? "Not available" : formatMoney(value);
+}
+function percentText(value: number | null | undefined) {
+  return value == null
+    ? "Not available"
+    : `${value.toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+}
+function barWidth(value: number, max: number) {
+  return `${max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0}%`;
+}
+function marginTone(value: number | null) {
+  return value === null
+    ? "text-[var(--pf-text-muted)]"
+    : value >= 30
+      ? "text-[var(--pf-success)]"
+      : value >= 15
+        ? "text-[var(--pf-warning)]"
+        : "text-[var(--pf-danger)]";
 }
 
-function numberValue(value: unknown) {
-  const parsed = Number(value || 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatNumber(value: unknown) {
-  return numberValue(value).toLocaleString('en-US');
-}
-
-function formatPercent(value: unknown) {
-  return `${Math.round(numberValue(value))}%`;
-}
-
-function marginTone(margin: number) {
-  if (margin >= 30) return 'text-green-700';
-  if (margin >= 15) return 'text-amber-700';
-  return 'text-red-700';
-}
-
-function reportBarWidth(value: number, max: number) {
-  if (max <= 0) return '0%';
-  return `${Math.max(4, Math.min(100, Math.round((value / max) * 100)))}%`;
-}
-
-function SummaryCard({
+function Summary({
   label,
   value,
   help,
   icon,
 }: {
   label: string;
-  value: string | number;
+  value: string;
   help: string;
   icon: string;
 }) {
   return (
-    <Card padding="sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="pf-meta">{label}</p>
-          <p className="mt-1 text-2xl font-semibold text-gray-950">{value}</p>
-          <p className="pf-helper mt-1">{help}</p>
-        </div>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-          <Icon name={icon} className="h-5 w-5" />
-        </span>
+    <div className="min-w-0 border-b border-[var(--pf-border)] py-3 sm:rounded-lg sm:border sm:bg-[var(--pf-surface)] sm:p-4">
+      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="pf-meta inline-flex items-center gap-2">
+          <Icon name={icon} className="h-4 w-4 shrink-0" />
+          {label}
+        </p>
+        <p className="pf-section-title whitespace-nowrap">{value}</p>
       </div>
-    </Card>
-  );
-}
-
-function EmptyReport({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="py-8 text-center">
-      <p className="pf-emphasis">{title}</p>
-      <p className="pf-copy mt-1">{body}</p>
+      <p className="pf-helper mt-1">{help}</p>
     </div>
   );
 }
 
+function Skeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div
+      role="status"
+      aria-label="Loading report"
+      className="grid gap-3 motion-safe:animate-pulse"
+    >
+      <span className="sr-only">Loading report</span>
+      {Array.from({ length: rows }, (_, i) => (
+        <div
+          key={i}
+          className="h-14 rounded-md bg-[var(--pf-surface-muted)]"
+          aria-hidden="true"
+        />
+      ))}
+    </div>
+  );
+}
+
+function SectionState({
+  pending,
+  error,
+  empty,
+  retry,
+  children,
+}: {
+  pending: boolean;
+  error?: string;
+  empty?: string;
+  retry: () => void;
+  children: React.ReactNode;
+}) {
+  if (pending) return <Skeleton />;
+  if (error)
+    return (
+      <div
+        role="alert"
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
+        <p className="pf-copy text-[var(--pf-danger)]">{error}</p>
+        <Button variant="secondary" onClick={retry}>
+          Retry
+        </Button>
+      </div>
+    );
+  if (empty) return <p className="pf-copy py-4">{empty}</p>;
+  return <>{children}</>;
+}
+
 export function Reports() {
   const [state, setState] = useState<ReportsState>({
-    dashboard: {},
-    winRate: [],
-    crew: [],
-    margins: [],
-    jobs: [],
+    dashboard: null,
+    winRate: null,
+    crew: null,
+    margins: null,
+    mix: null,
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState<Partial<Record<ReportKey, string>>>({});
+  const [pending, setPending] = useState<Partial<Record<ReportKey, boolean>>>(
+    {},
+  );
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState("");
+  const inFlight = useRef(new Set<ReportKey>());
+  const moreInFlight = useRef(false);
 
   useEffect(() => {
-    loadReports();
+    reportKeys.forEach((key) => {
+      void loadSection(key);
+    });
   }, []);
 
-  async function loadReports() {
-    setIsLoading(true);
-    setError('');
+  async function loadSection(key: ReportKey) {
+    if (
+      inFlight.current.has(key) ||
+      (key === "margins" && moreInFlight.current)
+    )
+      return;
+    inFlight.current.add(key);
+    setPending((previous) => ({ ...previous, [key]: true }));
+    setErrors((previous) => ({ ...previous, [key]: undefined }));
     try {
-      const [dashboard, winRate, crew, margins, jobs] = await Promise.all([
-        apiJson<{ data?: DashboardReport }>('/v1/reports/dashboard'),
-        apiJson<{ data?: WinRateRow[] }>('/v1/reports/win-rate-by-source'),
-        apiJson<{ data?: CrewRow[] }>('/v1/reports/crew-performance'),
-        apiJson<{ data?: MarginRow[] }>('/v1/reports/profit-margins'),
-        apiJson<{ data?: JobRow[] }>('/v1/jobs').catch(() => ({ data: [] })),
-      ]);
-
-      setState({
-        dashboard: dashboard.data || {},
-        winRate: winRate.data || [],
-        crew: crew.data || [],
-        margins: margins.data || [],
-        jobs: jobs.data || [],
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports');
+      const response = await apiJson<{
+        data: ReportsState[ReportKey];
+        nextCursor?: string | null;
+      }>(reportRoutes[key]);
+      if (response.data == null)
+        throw new Error("This report returned no data. Please retry.");
+      setState((previous) => ({ ...previous, [key]: response.data }));
+      if (key === "margins") {
+        setNextCursor(response.nextCursor ?? null);
+        setMoreError("");
+      }
+    } catch (error) {
+      setErrors((previous) => ({
+        ...previous,
+        [key]:
+          error instanceof Error
+            ? error.message
+            : "Could not load this report.",
+      }));
     } finally {
-      setIsLoading(false);
+      inFlight.current.delete(key);
+      setPending((previous) => ({ ...previous, [key]: false }));
     }
   }
 
-  const revenueByCity = useMemo(() => {
-    const rows = new Map<string, { label: string; revenue: number; jobs: number }>();
-    state.jobs.forEach((job) => {
-      const city = [job.leadCity, job.leadState].filter(Boolean).join(', ') || 'Unassigned city';
-      const current = rows.get(city) || { label: city, revenue: 0, jobs: 0 };
-      current.revenue += numberValue(job.budget);
-      current.jobs += 1;
-      rows.set(city, current);
-    });
-    return Array.from(rows.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 6);
-  }, [state.jobs]);
-
-  const jobsByStatus = useMemo(() => {
-    const rows = new Map<string, number>();
-    state.jobs.forEach((job) => {
-      const status = String(job.status || 'unknown');
-      rows.set(status, (rows.get(status) || 0) + 1);
-    });
-    return Array.from(rows.entries()).map(([status, count]) => ({ status, count })).sort((a, b) => b.count - a.count);
-  }, [state.jobs]);
-
-  const topSource = state.winRate.slice().sort((a, b) => numberValue(b.won) - numberValue(a.won))[0];
-  const bestMargin = state.margins.slice().sort((a, b) => numberValue(b.margin) - numberValue(a.margin))[0];
-  const totalCrewHours = state.crew.reduce((sum, row) => sum + numberValue(row.totalHours), 0);
-  const maxCityRevenue = Math.max(0, ...revenueByCity.map((row) => row.revenue));
-  const maxCrewHours = Math.max(0, ...state.crew.map((row) => numberValue(row.totalHours)));
-
-  if (isLoading) {
-    return (
-      <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-b-2 border-blue-600" />
-          <p className="pf-copy mt-4">Loading reports...</p>
-        </div>
-      </main>
-    );
+  async function loadMore() {
+    if (!nextCursor || moreInFlight.current || inFlight.current.has("margins"))
+      return;
+    moreInFlight.current = true;
+    setLoadingMore(true);
+    setMoreError("");
+    try {
+      const response = await apiJson<{
+        data: MarginRow[];
+        nextCursor?: string | null;
+      }>(`${reportRoutes.margins}&cursor=${encodeURIComponent(nextCursor)}`);
+      if (!Array.isArray(response.data))
+        throw new Error("Could not load more jobs. Please retry.");
+      setState((previous) => ({
+        ...previous,
+        margins: [
+          ...(previous.margins ?? []),
+          ...response.data.filter(
+            (row) =>
+              !previous.margins?.some(
+                (existing) => existing.jobId === row.jobId,
+              ),
+          ),
+        ],
+      }));
+      setNextCursor(response.nextCursor ?? null);
+    } catch (error) {
+      setMoreError(
+        error instanceof Error ? error.message : "Could not load more jobs.",
+      );
+    } finally {
+      moreInFlight.current = false;
+      setLoadingMore(false);
+    }
   }
 
-  return (
-    <main className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <p className="pf-copy max-w-2xl">
-          One reporting surface for sales, crew performance, job profitability, and market mix. Use this to spot where leads are coming from and whether jobs are producing the margin you expect.
-        </p>
-        <Link to="/dashboard" className="btn-secondary btn-sm w-full justify-center sm:w-auto">Dashboard</Link>
-      </div>
+  const dashboard = state.dashboard;
+  const sourceRows = state.winRate ?? [];
+  const crewRows = state.crew ?? [];
+  const margins = state.margins ?? [];
+  const cities = state.mix?.cities ?? [];
+  const maxCrewHours = Math.max(
+    0,
+    ...crewRows.map((row) => numeric(row.totalHours)),
+  );
+  const maxCityValue = Math.max(
+    0,
+    ...cities.map((row) => row.knownContractedSubtotal),
+  );
+  const updating = Object.values(pending).some(Boolean);
 
-      {error && (
-        <Card className="mb-5 border-red-100 bg-red-50" padding="sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="pf-copy text-red-700">{error}</p>
-            <button type="button" className="btn-secondary btn-sm" onClick={loadReports}>Retry</button>
+  return (
+    <main className="mx-auto w-full min-w-0 max-w-7xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="pf-copy">Sales, cash and recorded job costs.</p>
+          {dashboard && (
+            <p className="pf-helper mt-1">
+              As of{" "}
+              {new Date(dashboard.asOf).toLocaleString("en-US", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </p>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          disabled={updating || loadingMore}
+          leftIcon={<Icon name="refresh" className="pf-icon" />}
+          onClick={() =>
+            reportKeys.forEach((key) => {
+              void loadSection(key);
+            })
+          }
+        >
+          {updating ? "Updating" : "Refresh reports"}
+        </Button>
+      </header>
+
+      {errors.dashboard && (
+        <div
+          role="alert"
+          className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--pf-danger)] p-4"
+        >
+          <p className="pf-copy text-[var(--pf-danger)]">
+            Financial totals could not be loaded. {errors.dashboard}
+          </p>
+          <Button variant="secondary" onClick={() => loadSection("dashboard")}>
+            Retry totals
+          </Button>
+        </div>
+      )}
+      {!dashboard && !errors.dashboard && (
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Card key={i} padding="sm">
+              <Skeleton rows={2} />
+            </Card>
+          ))}
+        </div>
+      )}
+      {dashboard && (
+        <>
+          {dashboard.warnings.length > 0 && (
+            <section
+              aria-label="Report exceptions"
+              className="mb-5 grid gap-3 border-l-2 border-[var(--pf-warning)] pl-3"
+            >
+              {dashboard.warnings.map((warning) => (
+                <div
+                  key={warning.code}
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
+                  <p className="pf-copy min-w-0 flex-1">{warning.message}</p>
+                  <Button as="a" href={warning.action} variant="ghost">
+                    Review
+                  </Button>
+                </div>
+              ))}
+            </section>
+          )}
+          <div
+            className="mb-5 grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4"
+            aria-busy={!!pending.dashboard}
+          >
+            <Summary
+              label="Contracted work"
+              value={moneyText(dashboard.contractedSubtotal)}
+              help="Approved scope, before tax"
+              icon="briefcase"
+            />
+            <Summary
+              label="Recorded costs"
+              value={moneyText(dashboard.recordedActualCost)}
+              help={
+                dashboard.approvedActualCost === null
+                  ? "Labor review pending"
+                  : "Captured so far; not final"
+              }
+              icon="receipt"
+            />
+            <Summary
+              label="Net cash received"
+              value={moneyText(dashboard.netCollectedGross)}
+              help="Receipts less refunds; includes tax"
+              icon="credit-card"
+            />
+            <Summary
+              label="Lead win rate"
+              value={percentText(dashboard.winRate)}
+              help={`${numberText(dashboard.wonLeads)} of ${numberText(dashboard.totalLeads)} customers won`}
+              icon="bar-chart"
+            />
           </div>
-        </Card>
+          <details
+            aria-label="Current cost and collection position"
+            className="mb-6 border-y border-[var(--pf-border)] py-4"
+          >
+            <summary className="pf-emphasis min-h-12 cursor-pointer">
+              Cost and cash details
+            </summary>
+            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <dt className="pf-meta">Current cost position</dt>
+                <dd className="pf-emphasis mt-1">
+                  {moneyText(dashboard.currentCostPosition)}
+                </dd>
+              </div>
+              <div>
+                <dt className="pf-meta">Recorded cost margin</dt>
+                <dd
+                  className={`pf-emphasis mt-1 ${marginTone(dashboard.margin)}`}
+                >
+                  {percentText(dashboard.margin)}
+                </dd>
+              </div>
+              <div>
+                <dt className="pf-meta">Cash receipts</dt>
+                <dd className="pf-emphasis mt-1">
+                  {moneyText(dashboard.collectedGross)}
+                </dd>
+              </div>
+              <div>
+                <dt className="pf-meta">Refunds</dt>
+                <dd className="pf-emphasis mt-1">
+                  {moneyText(dashboard.refundedGross)}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge variant="warning">
+                {dashboard.costCompleteness === "unknown"
+                  ? "Costs not captured"
+                  : "Cost capture incomplete"}
+              </Badge>
+              <p className="pf-helper">
+                This is not a final margin or accounting profit.
+              </p>
+            </div>
+          </details>
+        </>
       )}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryCard label="Win Rate" value={formatPercent(state.dashboard.winRate)} help={`${formatNumber(state.dashboard.approvedEstimates)} of ${formatNumber(state.dashboard.totalEstimates)} estimates accepted`} icon="bar-chart" />
-        <SummaryCard label="Revenue" value={formatMoney(state.dashboard.totalRevenue)} help="Accepted estimate value" icon="credit-card" />
-        <SummaryCard label="Profit" value={formatMoney(state.dashboard.profit)} help="Revenue less tracked job costs" icon="briefcase" />
-        <SummaryCard label="Margin" value={formatPercent(state.dashboard.margin)} help="Gross margin on tracked jobs" icon="paint-bucket" />
-      </div>
-
-      <div className="mb-5 grid gap-3 lg:grid-cols-3">
-        <Card padding="sm">
-          <p className="pf-meta">Best current source</p>
-          <p className="pf-section-title mt-1">{topSource?.source || 'No source data'}</p>
-          <p className="pf-copy mt-1">{topSource ? `${formatPercent(topSource.winRate)} win rate from ${formatNumber(topSource.total)} leads` : 'Create and source leads to compare channels.'}</p>
-        </Card>
-        <Card padding="sm">
-          <p className="pf-meta">Crew labor logged</p>
-          <p className="pf-section-title mt-1">{formatNumber(Math.round(totalCrewHours))} hrs</p>
-          <p className="pf-copy mt-1">Use crew hours against job budgets to catch production overruns early.</p>
-        </Card>
-        <Card padding="sm">
-          <p className="pf-meta">Best margin job</p>
-          <p className="pf-section-title mt-1">{bestMargin?.title || 'No margin data'}</p>
-          <p className="pf-copy mt-1">{bestMargin ? `${formatPercent(bestMargin.margin)} margin on ${formatMoney(bestMargin.revenue)} revenue` : 'Track jobs and costs to see winners.'}</p>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Link to="/reviews" className="rounded-lg border border-blue-100 bg-blue-50/70 p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="pf-meta text-blue-700">Reputation</p>
-              <h2 className="pf-section-title mt-1">Review analytics</h2>
-              <p className="pf-copy mt-1">Track review requests, response rate, ratings, and closeout feedback that can feed future marketing campaigns.</p>
-            </div>
-            <span className="btn-text btn-sm pointer-events-none">Open</span>
-          </div>
-        </Link>
-
+      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-2">
         <Card padding="none">
-          <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3" title="Win Rate by Source" description="Marketing channels ranked by accepted estimates." />
+          <CardHeader
+            className="mb-0 border-b border-[var(--pf-border)] px-4 py-3"
+            title="Lead sources"
+            description="Distinct customers won, not proposal revisions."
+          />
           <CardContent className="p-4">
-            {state.winRate.length ? (
-              <div className="grid gap-3">
-                {state.winRate.map((row) => (
-                  <div key={row.source || 'Unknown'} className="grid gap-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="pf-emphasis truncate">{row.source || 'Unknown'}</p>
-                      <p className="text-sm font-semibold text-gray-950">{formatPercent(row.winRate)} <span className="font-normal text-gray-500">({formatNumber(row.won)}/{formatNumber(row.total)})</span></p>
+            <SectionState
+              pending={!state.winRate && !errors.winRate}
+              error={errors.winRate}
+              empty={
+                state.winRate?.length === 0
+                  ? "Add customer sources to compare channels."
+                  : undefined
+              }
+              retry={() => loadSection("winRate")}
+            >
+              <div className="grid gap-4">
+                {sourceRows.map((row) => (
+                  <div key={row.source}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="pf-emphasis min-w-0 truncate">
+                        {row.source}
+                      </p>
+                      <p className="pf-emphasis shrink-0">
+                        {percentText(row.winRate)}{" "}
+                        <span className="pf-helper">
+                          ({numberText(row.won)}/{numberText(row.total)})
+                        </span>
+                      </p>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                      <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, Math.max(0, row.winRate))}%` }} />
+                    <div
+                      aria-hidden="true"
+                      className="mt-2 h-2 rounded-full bg-[var(--pf-surface-muted)]"
+                    >
+                      <div
+                        className="h-full rounded-full bg-[var(--pf-primary)]"
+                        style={{ width: barWidth(row.winRate, 100) }}
+                      />
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <EmptyReport title="No source data yet" body="Create estimates from sourced leads to see win rates." />
-            )}
+            </SectionState>
           </CardContent>
         </Card>
 
         <Card padding="none">
-          <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3" title="Crew Performance" description="Hours and cost by crew member." />
+          <CardHeader
+            className="mb-0 border-b border-[var(--pf-border)] px-4 py-3"
+            title="Crew labor"
+            description="Approved time only; already included in recorded job costs."
+          />
           <CardContent className="p-4">
-            {state.crew.length ? (
-              <div className="grid gap-3">
-                {state.crew.slice(0, 8).map((row) => (
-                  <div key={row.memberId || row.name || 'unknown'} className="grid gap-1">
-                    <div className="flex items-center justify-between gap-3">
+            <SectionState
+              pending={!state.crew && !errors.crew}
+              error={errors.crew}
+              empty={
+                state.crew?.length === 0
+                  ? "Add crew and record time to compare labor."
+                  : undefined
+              }
+              retry={() => loadSection("crew")}
+            >
+              <div className="grid gap-4">
+                {crewRows.slice(0, 8).map((row) => (
+                  <div key={row.memberId}>
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="pf-emphasis truncate">{row.name || 'Unknown'}</p>
-                        <p className="pf-helper">{formatNumber(row.jobsWorked)} jobs worked</p>
+                        <p className="pf-emphasis truncate">{row.name}</p>
+                        <p className="pf-helper">
+                          {numberText(row.jobsWorked)} jobs
+                        </p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-950">{formatNumber(Math.round(numberValue(row.totalHours)))} hrs</p>
-                        <p className="pf-helper">{formatMoney(row.totalCost)}</p>
+                      <div className="shrink-0 text-right">
+                        <p className="pf-emphasis">
+                          {numberText(row.totalHours)} hrs
+                        </p>
+                        <p className="pf-helper">{moneyText(row.totalCost)}</p>
                       </div>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                      <div className="h-full rounded-full bg-emerald-600" style={{ width: reportBarWidth(numberValue(row.totalHours), maxCrewHours) }} />
+                    <div
+                      aria-hidden="true"
+                      className="mt-2 h-2 rounded-full bg-[var(--pf-surface-muted)]"
+                    >
+                      <div
+                        className="h-full rounded-full bg-[var(--pf-success)]"
+                        style={{
+                          width: barWidth(
+                            numeric(row.totalHours),
+                            maxCrewHours,
+                          ),
+                        }}
+                      />
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <EmptyReport title="No crew data" body="Log time to see crew performance." />
-            )}
+              <Button as="a" href="/time" variant="ghost" className="mt-3">
+                View time tracking
+              </Button>
+            </SectionState>
           </CardContent>
         </Card>
 
         <Card padding="none">
-          <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3" title="Revenue by City" description="Where booked work is concentrated." />
+          <CardHeader
+            className="mb-0 border-b border-[var(--pf-border)] px-4 py-3"
+            title="Contracted work by city"
+            description="Jobsite location and accepted scope, before tax."
+          />
           <CardContent className="p-4">
-            {revenueByCity.length ? (
-              <div className="grid gap-3">
-                {revenueByCity.map((row) => (
-                  <div key={row.label} className="grid gap-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="pf-emphasis truncate">{row.label}</p>
-                      <p className="text-sm font-semibold text-gray-950">{formatMoney(row.revenue)} <span className="font-normal text-gray-500">({row.jobs} jobs)</span></p>
+            <SectionState
+              pending={!state.mix && !errors.mix}
+              error={errors.mix}
+              empty={
+                state.mix && !cities.length
+                  ? "Add jobsite cities to compare booked work."
+                  : undefined
+              }
+              retry={() => loadSection("mix")}
+            >
+              <div className="grid gap-4">
+                {cities.map((row) => (
+                  <div key={row.label}>
+                    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                      <p className="pf-emphasis min-w-0 truncate">
+                        {row.label}
+                      </p>
+                      <p className="pf-emphasis">
+                        {moneyText(row.contractedSubtotal)}{" "}
+                        <span className="pf-helper">
+                          ({numberText(row.jobs)} jobs)
+                        </span>
+                      </p>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                      <div className="h-full rounded-full bg-purple-600" style={{ width: reportBarWidth(row.revenue, maxCityRevenue) }} />
-                    </div>
+                    {row.unresolvedJobs ? (
+                      <p className="pf-helper mt-1">
+                        {row.unresolvedJobs} job(s) need contract review
+                      </p>
+                    ) : (
+                      <div
+                        aria-hidden="true"
+                        className="mt-2 h-2 rounded-full bg-[var(--pf-surface-muted)]"
+                      >
+                        <div
+                          className="h-full rounded-full bg-[var(--pf-primary)]"
+                          style={{
+                            width: barWidth(
+                              row.knownContractedSubtotal,
+                              maxCityValue,
+                            ),
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-            ) : (
-              <EmptyReport title="No city data yet" body="Add jobs with jobsite addresses to see market mix." />
-            )}
+            </SectionState>
           </CardContent>
         </Card>
 
         <Card padding="none">
-          <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3" title="Job Status Mix" description="Production pipeline health." />
+          <CardHeader
+            className="mb-0 border-b border-[var(--pf-border)] px-4 py-3"
+            title="Job status"
+          />
           <CardContent className="p-4">
-            {jobsByStatus.length ? (
+            <SectionState
+              pending={!state.mix && !errors.mix}
+              error={errors.mix}
+              empty={
+                state.mix && !state.mix.statuses.length
+                  ? "Accepted proposals create jobs to track here."
+                  : undefined
+              }
+              retry={() => loadSection("mix")}
+            >
               <div className="flex flex-wrap gap-2">
-                {jobsByStatus.map((row) => (
-                  <Badge key={row.status} variant={row.status === 'completed' ? 'success' : row.status === 'in_progress' ? 'warning' : 'info'}>
-                    {labelize(row.status)}: {row.count}
+                {state.mix?.statuses.map((row) => (
+                  <Badge
+                    key={row.status}
+                    variant={
+                      row.status === "completed"
+                        ? "success"
+                        : row.status === "in_progress"
+                          ? "warning"
+                          : "info"
+                    }
+                  >
+                    {labelize(row.status)}: {numberText(row.count)}
                   </Badge>
                 ))}
               </div>
-            ) : (
-              <EmptyReport title="No jobs yet" body="Accepted estimates become jobs here." />
-            )}
+              <Button as="a" href="/jobs" variant="ghost" className="mt-3">
+                View jobs
+              </Button>
+            </SectionState>
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2" padding="none">
-          <CardHeader className="mb-0 border-b border-gray-200 px-4 py-3" title="Profit Margins" description="Recent jobs, tracked costs, and gross margin." />
+        <Card className="min-w-0 lg:col-span-2" padding="none">
+          <CardHeader
+            className="mb-0 border-b border-[var(--pf-border)] px-4 py-3"
+            title="Job cost position"
+            description="Recorded costs against accepted scope. Missing costs never imply a final 100% margin."
+          />
           <CardContent className="p-4">
-            {state.margins.length ? (
-              <div className="grid gap-2">
-                {state.margins.slice(0, 10).map((row) => (
-                  <Link key={row.jobId} to={`/jobs/${row.jobId}`} className="grid gap-2 rounded-lg border border-gray-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                    <div className="min-w-0">
-                      <p className="pf-emphasis truncate">{row.title || 'Untitled job'}</p>
-                      <p className="pf-helper">{formatMoney(row.revenue)} revenue · {formatMoney(row.costs)} tracked cost</p>
+            <SectionState
+              pending={!state.margins && !errors.margins}
+              error={errors.margins}
+              empty={
+                state.margins?.length === 0
+                  ? "Record job costs to see cost positions."
+                  : undefined
+              }
+              retry={() => loadSection("margins")}
+            >
+              <div className="divide-y divide-[var(--pf-border)]">
+                {margins.map((row) => (
+                  <Link
+                    key={row.jobId}
+                    to={`/jobs/${row.jobId}`}
+                    className="flex min-h-12 min-w-0 items-center gap-3 py-3 text-inherit focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--pf-primary)]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="pf-row-title truncate">
+                        {row.title || "Untitled job"}
+                      </p>
+                      <div className="mt-1 flex flex-wrap justify-between gap-x-3 gap-y-1">
+                        <p className="pf-helper">
+                          {moneyText(row.revenue)} contracted{" "}
+                          <span aria-hidden="true">/</span>{" "}
+                          {moneyText(row.costs)} costs
+                        </p>
+                        <p className={`pf-emphasis ${marginTone(row.margin)}`}>
+                          {row.margin === null
+                            ? "Not enough data"
+                            : `${percentText(row.margin)} recorded margin`}
+                        </p>
+                      </div>
+                      <p className="pf-helper mt-1">
+                        {row.contractNeedsReview
+                          ? "Contract needs review"
+                          : row.unreviewedTimeCount
+                            ? "Labor review pending"
+                            : row.costCompleteness === "unknown"
+                              ? "Costs not captured"
+                              : "Cost capture incomplete"}
+                      </p>
                     </div>
-                    <div className="text-left sm:text-right">
-                      <p className={`text-sm font-semibold ${marginTone(numberValue(row.margin))}`}>{formatPercent(row.margin)}</p>
-                      <p className="pf-helper">{formatMoney(row.profit)} profit</p>
-                    </div>
+                    <Icon
+                      name="chevron-right"
+                      className="h-5 w-5 shrink-0 text-[var(--pf-text-muted)]"
+                    />
                   </Link>
                 ))}
               </div>
-            ) : (
-              <EmptyReport title="No margin data yet" body="Complete jobs and track labor/material costs to see margins." />
-            )}
+              {moreError && (
+                <p
+                  role="alert"
+                  className="pf-copy mt-3 text-[var(--pf-danger)]"
+                >
+                  {moreError}
+                </p>
+              )}
+              {nextCursor && (
+                <Button
+                  variant="secondary"
+                  className="mt-4 w-full sm:w-auto"
+                  isLoading={loadingMore}
+                  disabled={!!pending.margins}
+                  onClick={loadMore}
+                >
+                  {moreError ? "Retry more jobs" : "Load more jobs"}
+                </Button>
+              )}
+            </SectionState>
           </CardContent>
         </Card>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button as="a" href="/invoices" variant="ghost">
+          View payments
+        </Button>
+        <Button as="a" href="/reviews" variant="ghost">
+          View review analytics
+        </Button>
       </div>
     </main>
   );

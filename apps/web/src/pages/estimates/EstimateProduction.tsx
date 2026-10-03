@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AddressFields } from '@/components/AddressFields';
 import { StatusBadge } from '@/components/Badge';
 import { Card, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { Modal, ModalFooter } from '@/components/Modal';
 import { apiJson, formatMoney, labelize } from '@/lib/api';
+import { EstimationInputError, formatEstimationMinor, resolveEstimationMeasurement, estimationUnit, type EstimationResult, type EstimationRequest } from '../../../../../packages/core/src/estimation';
+import { calculateProductionPreview, type ProductionPreviewRequest } from '../../../../../packages/core/src/estimation-production';
+import { estimationSaveAttempt, type EstimationSaveAttempt } from '../../../../../packages/core/src/estimation-save';
+import { decimal, minor } from '../../../../../packages/core/src/estimation-decimal';
+import { estimationSurfaceKind, resolveEstimationTemplateRate } from '../../../../../packages/core/src/estimation-template';
 
 type EstimateType = 'interior' | 'exterior' | 'cabinet' | 'custom';
 type PrepLevel = 'none' | 'light' | 'standard' | 'heavy';
@@ -30,6 +35,7 @@ interface ProductionRate {
   ratePerHour?: number | string | null;
   hourlyRate?: number | string | null;
   coats?: number | string | null;
+  prepMultiplier?: number | string | null;
 }
 
 interface Material {
@@ -41,6 +47,7 @@ interface Material {
   costPerUnit?: number | string | null;
   coverageSqFt?: number | string | null;
   markupPercent?: number | string | null;
+  sku?: string | null;
 }
 
 interface CatalogColor {
@@ -60,6 +67,7 @@ interface OrgSettings {
 
 interface Estimate {
   id: string;
+  updatedAt?: string;
   leadId?: string | null;
   streetAddress?: string | null;
   city?: string | null;
@@ -73,6 +81,10 @@ interface Estimate {
 }
 
 interface EstimatePackage {
+  calculationVersion?: string;
+  productionInput?: ProductionPreviewRequest;
+  calculationInput?: EstimationRequest;
+  calculationSnapshot?: EstimationResult;
   name?: string;
   estimateType?: EstimateType | string;
   subtotal?: number;
@@ -85,6 +97,8 @@ interface EstimatePackage {
 }
 
 interface EstimateLineItem {
+  calculationItemId?: string;
+  calculatedSubtotalMinor?: number;
   desc?: string;
   qty?: number;
   rate?: number;
@@ -95,7 +109,7 @@ interface EstimateLineItem {
   productionRateId?: string;
   roomName?: string;
   surfaceName?: string;
-  dimensions?: { width?: number; height?: number; quantity?: number; unit?: string };
+  dimensions?: { width?: number; height?: number; quantity?: number; unit?: string; coatingWidthInches?: number; coatingSqFtPerItem?: number };
   notes?: string;
   labor?: {
     hours?: number;
@@ -117,6 +131,9 @@ interface EstimateLineItem {
     costPerUnit?: number;
     markupPercent?: number;
     price?: number;
+    acquisitionCost?: number;
+    purchaseGroupId?: string;
+    theoreticalGallons?: string;
     colorName?: string;
     colorCode?: string;
     status?: string;
@@ -141,6 +158,13 @@ interface Room {
 }
 
 interface TemplateSurface {
+  productionRateId?: string | null;
+  materialId?: string | null;
+  unit?: string | null;
+  coatingWidthInches?: number | string | null;
+  coatingSqFtPerItem?: number | string | null;
+  colorName?: string | null;
+  colorCode?: string | null;
   category?: string | null;
   label?: string | null;
   quantity?: number | string | null;
@@ -172,6 +196,8 @@ interface Surface {
   width: string;
   height: string;
   quantity: string;
+  coatingWidthInches: string;
+  coatingSqFtPerItem: string;
   coats: number;
   prepLevel: PrepLevel;
   applicationMethod: ApplicationMethod;
@@ -226,6 +252,7 @@ interface EstimateTotals {
   hours: number;
   labor: number;
   materials: number;
+  materialCost: number;
   adjustments: number;
   optionalTotal: number;
   subtotal: number;
@@ -234,7 +261,6 @@ interface EstimateTotals {
   total: number;
 }
 
-const prepMultipliers: Record<PrepLevel, number> = { none: 0.8, light: 1, standard: 1.2, heavy: 1.5 };
 const applicationMethods: Record<ApplicationMethod, { label: string; productivity: number }> = {
   brush_roll: { label: 'Brush & roll', productivity: 1 },
   spray_backroll: { label: 'Spray & back-roll', productivity: 1.35 },
@@ -255,24 +281,13 @@ function rateText(rate?: ProductionRate | null) {
 }
 
 function rateKind(rate?: ProductionRate | null) {
-  const text = rateText(rate);
-  const unit = String(rate?.unit || 'sqft').toLowerCase();
-  if (/soffit|eave/.test(text)) return 'soffit';
-  if (/fascia/.test(text)) return 'fascia';
-  if (/corner board|cornerboard|corner/.test(text)) return 'corner_boards';
-  if (/window.*trim|door.*trim|trim|baseboard|casing|crown/.test(text) && unit === 'linear_ft') return 'trim';
-  if (/door/.test(text) || unit === 'each') return 'doors';
-  if (/ceiling/.test(text)) return 'ceilings';
-  if (/siding|exterior|body/.test(text)) return 'exterior_body';
-  if (/wall/.test(text)) return 'walls';
-  if (unit === 'linear_ft') return 'linear';
-  return 'area';
+  return estimationSurfaceKind(rate);
 }
 
 function measurementConfig(rate?: ProductionRate | null) {
   const kind = rateKind(rate);
   const unit = String(rate?.unit || 'sqft').toLowerCase();
-  if (unit === 'linear_ft' || ['trim', 'soffit', 'fascia', 'corner_boards', 'linear'].includes(kind)) {
+  if (unit === 'linear_ft') {
     return { width: 'Linear feet', height: '', quantity: 'Lin ft override', helper: 'Linear substrates price from length. Use override when you have a better field measurement.', showHeight: false };
   }
   if (unit === 'each' || kind === 'doors') {
@@ -300,6 +315,17 @@ function materialLabel(material?: Material | null) {
   return `${[material.brand, material.name].filter(Boolean).join(' - ')} (${formatMoney(material.costPerUnit || 0)}/${material.unit || 'unit'})`;
 }
 
+function coatingDefaults(rate?: ProductionRate | null) {
+  return {
+    coatingWidthInches: rate?.unit === 'linear_ft' ? '6' : '',
+    coatingSqFtPerItem: rate?.unit === 'each' ? rateKind(rate) === 'doors' ? '42' : '4' : '',
+  };
+}
+
+function dollars(minor: number) {
+  return Number(formatEstimationMinor(minor));
+}
+
 function packageItems(pkg?: EstimatePackage | null) {
   return Array.isArray(pkg?.items) ? pkg.items : Array.isArray(pkg?.lineItems) ? pkg.lineItems : [];
 }
@@ -314,6 +340,7 @@ function normalizeApplicationMethod(value: unknown, rate?: ProductionRate | null
 
 export function EstimateProduction() {
   const [params] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const estimateId = params.get('estimateId') || params.get('draft') || '';
   const initialLeadId = params.get('leadId') || '';
@@ -338,7 +365,13 @@ export function EstimateProduction() {
   const [isLoading, setIsLoading] = useState(true);
   const [setupError, setSetupError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [serverPreview, setServerPreview] = useState<{ key: string; calculation: EstimationResult; resolvedInput: EstimationRequest } | null>(null);
   const [saveStatus, setSaveStatus] = useState('');
+  const saveAttemptRef = useRef<EstimationSaveAttempt | null>(null);
+  const emailAttemptRef = useRef<EstimationSaveAttempt | null>(null);
+  const saveLockRef = useRef(false);
+  const pendingSaveRef = useRef<{ identity: string; estimate: Estimate; calculation: EstimationResult; reason: 'sent' | 'updated' } | null>(null);
   const [interiorAssumptions, setInteriorAssumptions] = useState<InteriorAssumptions>({
     bedrooms: '2',
     bathrooms: '1',
@@ -368,6 +401,10 @@ export function EstimateProduction() {
   }, [estimateId]);
 
   async function loadSetup() {
+    pendingSaveRef.current = null;
+    saveAttemptRef.current = null;
+    emailAttemptRef.current = null;
+    setServerPreview(null);
     setIsLoading(true);
     setSetupError('');
     try {
@@ -396,6 +433,7 @@ export function EstimateProduction() {
   function hydrateEstimate(estimate: Estimate, loadedRates: ProductionRate[]) {
     const canEdit = estimate.status === 'draft' || (estimate.status === 'sent' && !estimate.signedAt);
     if (!canEdit) {
+      setSetupError('Signed or closed estimates are read-only. View the original agreement or create a change order.');
       window.showToast?.('Only draft or unsigned sent estimates can be edited here.', 'error');
       return;
     }
@@ -414,11 +452,12 @@ export function EstimateProduction() {
     const nextAdjustments: Adjustment[] = [];
     for (const item of packageItems(pkg)) {
       if (item.kind === 'line_item') {
+        const original = pkg?.productionInput?.adjustments?.find((row) => row.id === item.calculationItemId);
         nextAdjustments.push({
-          id: uid('adj'),
+          id: item.calculationItemId || uid('adj'),
           desc: item.desc || '',
-          qty: String(item.qty || 1),
-          rate: String(item.rate || 0),
+          qty: String(original?.quantity ?? item.qty ?? 1),
+          rate: String(original?.unitPrice ?? item.rate ?? 0),
           category: item.category || 'other',
           customerVisible: item.customerVisible !== false,
           optional: Boolean(item.optional),
@@ -429,7 +468,15 @@ export function EstimateProduction() {
       if (!roomMap.has(roomName)) {
         roomMap.set(roomName, { id: uid('room'), name: roomName, kind: 'interior', surfaces: [] });
       }
-      roomMap.get(roomName)!.surfaces.push(surfaceFromEstimateItem(item, loadedRates));
+      const surface = surfaceFromEstimateItem(item, loadedRates);
+      const original = pkg?.productionInput?.items?.find((row) => row.id === item.calculationItemId);
+      roomMap.get(roomName)!.surfaces.push(original ? {
+        ...surface,
+        width: String(original.width ?? surface.width), height: String(original.height ?? surface.height), quantity: String(original.quantity ?? surface.quantity),
+        coats: original.coats ?? surface.coats, prepLevel: original.prepLevel ?? surface.prepLevel, applicationMethod: original.applicationMethod ?? surface.applicationMethod,
+        coatingWidthInches: String(original.coatingWidthInches ?? surface.coatingWidthInches), coatingSqFtPerItem: String(original.coatingSqFtPerItem ?? surface.coatingSqFtPerItem),
+        prepAdjustmentHours: String(original.prepAdjustmentHours ?? surface.prepAdjustmentHours), paintAdjustmentHours: String(original.paintAdjustmentHours ?? surface.paintAdjustmentHours),
+      } : surface);
     }
     setRooms(Array.from(roomMap.values()));
     setAdjustments(nextAdjustments);
@@ -437,18 +484,16 @@ export function EstimateProduction() {
   }
 
   function hydrateTemplateRooms(loadedRates: ProductionRate[]) {
-    const raw = sessionStorage.getItem('templateRooms');
-    if (!raw) return false;
+    const templateRooms = (location.state as { estimateTemplate?: { rooms?: TemplateRoom[] } } | null)?.estimateTemplate?.rooms;
+    if (!templateRooms) return false;
 
     try {
-      const templateRooms = JSON.parse(raw) as TemplateRoom[];
-      sessionStorage.removeItem('templateRooms');
       if (!Array.isArray(templateRooms) || !templateRooms.length) return false;
 
       const nextRooms = templateRooms.map((room, roomIndex): Room => {
         const kind = room.kind === 'exterior' || room.roomType === 'exterior' ? 'exterior' : room.kind === 'custom' ? 'custom' : 'interior';
         const surfaces = (Array.isArray(room.surfaces) && room.surfaces.length ? room.surfaces : room.items || [])
-          .map((surface) => templateSurfaceToProduction(surface, loadedRates))
+          .map((surface) => templateSurfaceToProduction(surface, loadedRates, kind))
           .filter((surface): surface is Surface => Boolean(surface));
         const length = num(room.length);
         const width = num(room.width);
@@ -469,18 +514,18 @@ export function EstimateProduction() {
       setStarterCollapsed(true);
       setStarterSkipped(false);
       setTemplateApplied(true);
+      navigate(location.pathname + location.search, { replace: true, state: null });
       window.showToast?.(`Loaded ${nextRooms.length} room${nextRooms.length === 1 ? '' : 's'} from template.`, 'success');
       return true;
     } catch (err) {
-      sessionStorage.removeItem('templateRooms');
       window.showToast?.(err instanceof Error ? err.message : 'Could not load estimate template', 'error');
       return false;
     }
   }
 
-  function templateSurfaceToProduction(template: TemplateSurface, loadedRates: ProductionRate[]): Surface | null {
+  function templateSurfaceToProduction(template: TemplateSurface, loadedRates: ProductionRate[], kind: string): Surface | null {
     const category = String(template.category || template.label || '').trim();
-    const rate = findTemplateRate(loadedRates, category);
+    const rate = resolveEstimationTemplateRate(template, loadedRates, kind);
     const label = template.label || labelize(category || rate?.surfaceType || rate?.category || 'Substrate');
     return {
       id: uid('surface'),
@@ -489,14 +534,17 @@ export function EstimateProduction() {
       width: template.width == null ? '' : String(template.width),
       height: template.height == null ? '' : String(template.height),
       quantity: template.quantity == null ? '' : String(template.quantity),
+      ...coatingDefaults(rate),
+      ...(template.coatingWidthInches != null ? { coatingWidthInches: String(template.coatingWidthInches) } : {}),
+      ...(template.coatingSqFtPerItem != null ? { coatingSqFtPerItem: String(template.coatingSqFtPerItem) } : {}),
       coats: num(template.coats, num(rate?.coats, 2)),
       prepLevel: normalizePrepLevel(template.prepLevel),
       applicationMethod: normalizeApplicationMethod(template.applicationMethod, rate),
       prepAdjustmentHours: '',
       paintAdjustmentHours: '',
-      materialId: '',
-      colorName: '',
-      colorCode: '',
+      materialId: template.materialId || '',
+      colorName: template.colorName || '',
+      colorCode: template.colorCode || '',
       colorStatus: 'TBD',
       crewNote: template.notes || '',
       customerVisible: template.customerVisible !== false,
@@ -504,34 +552,18 @@ export function EstimateProduction() {
     };
   }
 
-  function findTemplateRate(loadedRates: ProductionRate[], category: string) {
-    const normalized = category.toLowerCase();
-    const aliases: Record<string, string> = {
-      ceiling: 'ceilings',
-      ceilings: 'ceilings',
-      siding: 'exterior_body',
-      exterior_siding: 'exterior_body',
-      exterior_body: 'exterior_body',
-      corner: 'corner_boards',
-      corner_board: 'corner_boards',
-      corner_boards: 'corner_boards',
-    };
-    const desired = aliases[normalized] || normalized;
-    return loadedRates.find((rate) => rateKind(rate) === desired)
-      || loadedRates.find((rate) => rateText(rate).includes(desired.replace(/_/g, ' ')) || rateText(rate).includes(normalized.replace(/_/g, ' ')))
-      || loadedRates[0];
-  }
-
   function surfaceFromEstimateItem(item: EstimateLineItem, loadedRates: ProductionRate[]): Surface {
     const rateId = item.productionRateId && loadedRates.some((rate) => rate.id === item.productionRateId) ? item.productionRateId : '';
     const label = item.surfaceName || String(item.desc || '').split(':').pop()?.trim() || 'Substrate';
     return {
-      id: uid('surface'),
+      id: item.calculationItemId || uid('surface'),
       rateId,
       label,
       width: String(item.dimensions?.width || ''),
       height: String(item.dimensions?.height || ''),
       quantity: String(item.dimensions?.quantity || ''),
+      coatingWidthInches: String(item.dimensions?.coatingWidthInches ?? coatingDefaults(loadedRates.find((rate) => rate.id === rateId)).coatingWidthInches),
+      coatingSqFtPerItem: String(item.dimensions?.coatingSqFtPerItem ?? coatingDefaults(loadedRates.find((rate) => rate.id === rateId)).coatingSqFtPerItem),
       coats: num(item.labor?.coats, 2),
       prepLevel: normalizePrepLevel(item.labor?.prepLevel),
       applicationMethod: normalizeApplicationMethod(item.labor?.applicationMethod, loadedRates.find((rate) => rate.id === rateId)),
@@ -560,6 +592,9 @@ export function EstimateProduction() {
     return Array.from(groups.entries());
   }, [rates]);
   const selectedLead = leads.find((lead) => lead.id === leadId);
+  const formIdentity = JSON.stringify({ leadId, jobsite, estimateType, rooms, adjustments, paintMaterialId, primerMaterialId, discount });
+  const currentFormIdentity = useRef(formIdentity);
+  currentFormIdentity.current = formIdentity;
 
   useEffect(() => {
     if (!selectedLead || editingEstimate) return;
@@ -584,7 +619,21 @@ export function EstimateProduction() {
     }
   }
 
-  const totals = useMemo(() => calculateTotals(), [rooms, adjustments, rates, materials, settings, paintMaterialId, primerMaterialId, discount, estimateType]);
+  const previewState = useMemo(() => {
+    const request = previewRequest();
+    const key = JSON.stringify(request);
+    try {
+      const unpriced = rooms.flatMap((room) => room.surfaces).find((surface) => !surface.rateId);
+      if (unpriced) throw new EstimationInputError(unpriced.id + '.productionRateId', 'Select an active substrate for this template item before pricing.');
+      const preview = serverPreview?.key === key ? serverPreview : calculateProductionPreview(request, { rates, materials, settings });
+      return { key, request, ...preview, error: '', errorField: '' };
+    } catch (error) {
+      return { key, request, calculation: null, resolvedInput: null, error: error instanceof Error ? error.message : 'Check the scope measurements and product settings.', errorField: error instanceof EstimationInputError ? error.field : '' };
+    }
+  }, [rooms, adjustments, rates, materials, settings, paintMaterialId, primerMaterialId, discount, serverPreview]);
+  const currentPreviewKey = useRef(previewState.key);
+  currentPreviewKey.current = previewState.key;
+  const totals = useMemo(() => calculateTotals(previewState.calculation), [previewState, estimateType]);
   const surfaceItems = totals.items.filter((item) => item.kind === 'surface' && item.customerVisible !== false);
   const editingSent = editingEstimate?.status === 'sent';
 
@@ -639,6 +688,8 @@ export function EstimateProduction() {
       width: template.width || '',
       height: template.height || '',
       quantity: template.quantity || '',
+      coatingWidthInches: template.coatingWidthInches ?? coatingDefaults(rates.find((rate) => rate.id === (template.rateId || firstRate?.id))).coatingWidthInches,
+      coatingSqFtPerItem: template.coatingSqFtPerItem ?? coatingDefaults(rates.find((rate) => rate.id === (template.rateId || firstRate?.id))).coatingSqFtPerItem,
       coats: template.coats || num(firstRate?.coats, 2),
       prepLevel: template.prepLevel || 'standard',
       applicationMethod: template.applicationMethod || defaultMethod(firstRate),
@@ -668,6 +719,7 @@ export function EstimateProduction() {
       width: '',
       height: '',
       quantity: quantity ? String(Number(quantity.toFixed(1))) : '',
+      ...coatingDefaults(rate),
       coats: num(rate?.coats, 2),
       prepLevel: 'standard',
       applicationMethod: defaultMethod(rate),
@@ -795,62 +847,54 @@ export function EstimateProduction() {
   }
 
   function measuredQuantity(surface: Surface, rate?: ProductionRate | null) {
-    const manual = num(surface.quantity);
-    if (manual > 0) return { width: num(surface.width), height: num(surface.height), quantity: manual };
-    const unit = String(rate?.unit || 'sqft').toLowerCase();
-    if (unit === 'linear_ft') return { width: num(surface.width), height: 0, quantity: num(surface.width) };
-    if (unit === 'each') return { width: 0, height: 0, quantity: manual };
-    const width = num(surface.width);
-    const height = num(surface.height);
-    return { width, height, quantity: width && height ? width * height : 0 };
+    const measurement = resolveEstimationMeasurement({
+      unit: estimationUnit(String(rate?.unit || 'sqft')), width: surface.width, height: surface.height, quantity: surface.quantity,
+    });
+    return { width: Number(measurement.width), height: Number(measurement.height), quantity: Number(measurement.quantity) };
   }
 
-  function materialCost(quantity: number, coats: number, material?: Material | null, unit?: string | null) {
-    if (material && num(material.coverageSqFt) > 0) {
-      const units = Math.max(1, Math.ceil((quantity * coats) / num(material.coverageSqFt)));
-      const markup = num(material.markupPercent, num(settings.materialMarkupPercent)) / 100;
-      return {
-        units,
-        price: units * num(material.costPerUnit) * (1 + markup),
-      };
-    }
-    const fallback = unit === 'linear_ft' ? 0.18 : unit === 'each' ? 8 : 0.35;
-    return { units: undefined, price: quantity * fallback * Math.max(1, coats) * (1 + num(settings.materialMarkupPercent) / 100) };
+  function surfaceMaterialId(surface: Surface) {
+    return surface.materialId || (surface.prepLevel === 'heavy' ? primerMaterialId : paintMaterialId);
   }
 
-  function calculateTotals(): EstimateTotals {
+  function previewRequest(): ProductionPreviewRequest {
+    return {
+      items: rooms.flatMap((room) => room.surfaces.filter((surface) => surface.rateId).map((surface) => ({
+        id: surface.id, productionRateId: surface.rateId,
+        width: surface.width, height: surface.height, quantity: surface.quantity,
+        coats: surface.coats, prepLevel: surface.prepLevel, applicationMethod: surface.applicationMethod,
+        prepAdjustmentHours: surface.prepAdjustmentHours, paintAdjustmentHours: surface.paintAdjustmentHours,
+        coatingWidthInches: surface.coatingWidthInches, coatingSqFtPerItem: surface.coatingSqFtPerItem,
+        materialId: surfaceMaterialId(surface), colorName: surface.colorName, colorCode: surface.colorCode,
+        optional: surface.optional,
+      }))),
+      adjustments: adjustments.filter((row) => row.desc.trim()).map((row) => ({
+        id: row.id, quantity: row.qty || '0', unitPrice: row.rate || '0', optional: row.optional,
+      })),
+      discount: discount || '0',
+    };
+  }
+
+  function calculateTotals(calculation: EstimationResult | null): EstimateTotals {
     const items: EstimateLineItem[] = [];
-    let hours = 0;
-    let labor = 0;
-    let materialTotal = 0;
-    let adjustmentTotal = 0;
-    let optionalTotal = 0;
-    const paint = materials.find((material) => material.id === paintMaterialId);
-    const primer = materials.find((material) => material.id === primerMaterialId);
+    if (!calculation) return { items, hours: 0, labor: 0, materials: 0, materialCost: 0, adjustments: 0, optionalTotal: 0, subtotal: 0, discount: 0, tax: 0, total: 0 };
+    const calculated = new Map(calculation.items.map((item) => [item.id, item]));
     rooms.forEach((room) => {
       room.surfaces.forEach((surface) => {
         const rate = rates.find((item) => item.id === surface.rateId);
-        if (!rate) return;
+        const line = calculated.get(surface.id);
+        if (!rate || !line || Number(line.quantity) <= 0) return;
         const quantity = measuredQuantity(surface, rate);
-        if (quantity.quantity <= 0) return;
         const method = applicationMethods[surface.applicationMethod] || applicationMethods.brush_roll;
-        const coats = Math.max(1, Math.min(3, num(surface.coats, 2)));
-        const adjustedRate = Math.max(1, num(rate.ratePerHour, 1) * method.productivity);
-        const itemHours = Math.max(0, (quantity.quantity / adjustedRate) * coats * prepMultipliers[surface.prepLevel] + num(surface.prepAdjustmentHours) + num(surface.paintAdjustmentHours));
-        const itemLabor = itemHours * num(rate.hourlyRate, num(settings.defaultLaborRate, 65));
-        const selectedMaterial = materials.find((material) => material.id === surface.materialId) || (surface.prepLevel === 'heavy' ? primer : paint);
-        const itemMaterial = materialCost(quantity.quantity, coats, selectedMaterial, rate.unit);
-        const total = itemLabor + itemMaterial.price;
-        if (surface.optional) optionalTotal += total;
-        else {
-          hours += itemHours;
-          labor += itemLabor;
-          materialTotal += itemMaterial.price;
-        }
+        const coats = surface.coats;
+        const itemHours = Number(line.hours);
+        const selectedMaterial = materials.find((material) => material.id === surfaceMaterialId(surface));
         items.push({
+          calculationItemId: surface.id,
+          calculatedSubtotalMinor: line.subtotalMinor,
           desc: `${room.name}: ${surface.label || labelize(rate.surfaceType || rate.category)}`,
           qty: 1,
-          rate: Number(total.toFixed(2)),
+          rate: dollars(line.subtotalMinor),
           category: String(rate.unit || 'sqft'),
           kind: 'surface',
           customerVisible: surface.customerVisible,
@@ -858,16 +902,20 @@ export function EstimateProduction() {
           productionRateId: rate.id,
           roomName: room.name,
           surfaceName: surface.label,
-          dimensions: { ...quantity, unit: String(rate.unit || 'sqft') },
+          dimensions: {
+            ...quantity, unit: String(rate.unit || 'sqft'),
+            coatingWidthInches: surface.coatingWidthInches ? num(surface.coatingWidthInches) : undefined,
+            coatingSqFtPerItem: surface.coatingSqFtPerItem ? num(surface.coatingSqFtPerItem) : undefined,
+          },
           notes: `${quantity.quantity.toFixed(1)} ${rate.unit || 'sqft'}, ${coats} coat${coats === 1 ? '' : 's'}, ${method.label}, ${surface.prepLevel} prep, ${itemHours.toFixed(1)} labor hours`,
           labor: {
-            hours: Number(itemHours.toFixed(2)),
+            hours: itemHours,
             rate: num(rate.hourlyRate, num(settings.defaultLaborRate, 65)),
-            cost: Number(itemLabor.toFixed(2)),
+            cost: dollars(line.laborMinor),
             coats,
             prepLevel: surface.prepLevel,
             applicationMethod: surface.applicationMethod,
-            productionRatePerHour: Number(adjustedRate.toFixed(2)),
+            productionRatePerHour: num(rate.ratePerHour) * method.productivity,
             prepAdjustmentHours: num(surface.prepAdjustmentHours),
             paintAdjustmentHours: num(surface.paintAdjustmentHours),
           },
@@ -876,10 +924,13 @@ export function EstimateProduction() {
             name: selectedMaterial.name || '',
             brand: selectedMaterial.brand || '',
             unit: selectedMaterial.unit || '',
-            quantity: itemMaterial.units,
+            quantity: Number(line.allocatedPacks || '0'),
             costPerUnit: num(selectedMaterial.costPerUnit),
             markupPercent: num(selectedMaterial.markupPercent, num(settings.materialMarkupPercent)),
-            price: Number(itemMaterial.price.toFixed(2)),
+            price: dollars(line.materialMinor),
+            acquisitionCost: dollars(line.materialCostMinor),
+            purchaseGroupId: line.materialGroupId,
+            theoreticalGallons: line.theoreticalGallons,
             colorName: surface.colorName,
             colorCode: surface.colorCode,
             status: surface.colorStatus,
@@ -889,83 +940,148 @@ export function EstimateProduction() {
       });
     });
     adjustments.forEach((row) => {
+      const line = calculated.get(row.id);
       const qty = num(row.qty);
       const rate = num(row.rate);
-      if (!row.desc.trim() || qty <= 0 || rate <= 0) return;
-      const total = qty * rate;
-      if (row.optional) optionalTotal += total;
-      else adjustmentTotal += total;
-      items.push({ desc: row.desc, qty, rate, category: row.category, kind: 'line_item', customerVisible: row.customerVisible, optional: row.optional, notes: 'Estimate-specific line item' });
+      if (!line || qty <= 0) return;
+      items.push({ calculationItemId: row.id, calculatedSubtotalMinor: line.subtotalMinor, desc: row.desc, qty, rate, category: row.category, kind: 'line_item', customerVisible: row.customerVisible, optional: row.optional, notes: 'Estimate-specific line item' });
     });
-    const subtotal = labor + materialTotal + adjustmentTotal;
-    const taxableSubtotal = Math.max(0, subtotal - num(discount));
-    const tax = taxableSubtotal * num(settings.salesTaxRate);
+    const summary = calculation.totals;
     return {
       items,
-      hours,
-      labor,
-      materials: materialTotal,
-      adjustments: adjustmentTotal,
-      optionalTotal,
-      subtotal,
-      discount: num(discount),
-      tax,
-      total: taxableSubtotal + tax,
+      hours: Number(summary.hours), labor: dollars(summary.laborMinor),
+      materials: dollars(summary.materialMinor), materialCost: dollars(summary.materialCostMinor),
+      adjustments: dollars(summary.adjustmentMinor), optionalTotal: dollars(summary.optionalSubtotalMinor),
+      subtotal: dollars(summary.subtotalMinor), discount: dollars(summary.discountMinor),
+      tax: dollars(summary.taxMinor), total: dollars(summary.totalMinor),
     };
   }
 
-  function buildPackages() {
-    if (!totals.items.length) return [];
+  function buildPackages(calculation = previewState.calculation, resolvedInput = previewState.resolvedInput) {
+    const calculatedTotals = calculateTotals(calculation);
+    if (!calculatedTotals.items.length || !calculation) return [];
     return [{
+      calculationVersion: calculation.calculationVersion,
+      productionInput: previewState.request,
+      calculationInput: resolvedInput,
       name: 'proposal',
       estimateType,
-      subtotal: Number(totals.subtotal.toFixed(2)),
-      discount: Number(totals.discount.toFixed(2)),
-      tax: Number(totals.tax.toFixed(2)),
-      total: Number(totals.total.toFixed(2)),
-      optionalTotal: Number(totals.optionalTotal.toFixed(2)),
-      items: totals.items,
-      lineItems: totals.items,
+      subtotal: calculatedTotals.subtotal, discount: calculatedTotals.discount,
+      tax: calculatedTotals.tax, total: calculatedTotals.total, optionalTotal: calculatedTotals.optionalTotal,
+      items: calculatedTotals.items, lineItems: calculatedTotals.items,
     }];
   }
 
+  async function authoritativePreview() {
+    const response = await apiJson<{ data: { calculation: EstimationResult; resolvedInput: EstimationRequest } }>('/v1/production-rates/calculate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify(previewState.request),
+    });
+    if (currentPreviewKey.current !== previewState.key) throw new Error('Scope changed while pricing was checked. Review the current scope again.');
+    setServerPreview({ key: previewState.key, ...response.data });
+    return response.data;
+  }
+
+  async function reviewProposal() {
+    if (!leadId) return window.showToast?.('Select a customer first', 'error');
+    if (previewState.error) return window.showToast?.(previewState.error, 'error');
+    if (!buildPackages().length) return window.showToast?.('Add at least one measured substrate.', 'error');
+    setIsReviewing(true);
+    try {
+      await authoritativePreview();
+      setShowPreview(true);
+    } catch (error) {
+      window.showToast?.(error instanceof Error ? error.message : 'Could not verify current pricing. Try again.', 'error');
+    } finally {
+      setIsReviewing(false);
+    }
+  }
+
   async function persistEstimate(statusValue: 'draft' | 'sent') {
+    if (saveLockRef.current) return;
+    if (previewState.error) {
+      window.showToast?.(previewState.error, 'error');
+      return;
+    }
     if (!leadId) {
       window.showToast?.('Select a customer first', 'error');
       return;
     }
     const effectiveStatus = editingSent ? 'sent' : statusValue;
-    const packages = buildPackages();
+    let packages = buildPackages();
     if (effectiveStatus !== 'draft' && !packages.length) {
       window.showToast?.('Add at least one measured substrate.', 'error');
       return;
     }
+    saveLockRef.current = true;
     setIsSaving(true);
     setSaveStatus(effectiveStatus === 'draft' ? 'Saving draft estimate...' : editingSent ? 'Sending update email...' : 'Creating and emailing estimate...');
     try {
+      let verified = { calculation: previewState.calculation, resolvedInput: previewState.resolvedInput };
+      if (packages.length) {
+        verified = await authoritativePreview();
+        if (effectiveStatus === 'sent' && JSON.stringify(verified.calculation) !== JSON.stringify(previewState.calculation)) {
+          setShowPreview(true);
+          setSaveStatus('Pricing changed. Review the updated proposal before sending.');
+          window.showToast?.('Pricing changed. Review the updated total.', 'error');
+          return;
+        }
+        packages = buildPackages(verified.calculation, verified.resolvedInput);
+      }
+      if (currentFormIdentity.current !== formIdentity) throw new Error('The scope changed while saving. Review it before continuing.');
       const isEditing = Boolean(editingEstimate?.id || estimateId);
       const targetId = editingEstimate?.id || estimateId;
-      const response = await apiJson<{ data: Estimate }>(isEditing ? `/v1/estimates/${targetId}` : '/v1/estimates', {
-        method: isEditing ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-        body: JSON.stringify({ leadId, ...jobsite, packages, status: effectiveStatus }),
-      });
+      const saveIdentity = formIdentity + ':' + effectiveStatus;
+      const pending = pendingSaveRef.current;
+      let response: { data: Estimate };
+      const reason = pending && pending.estimate.id === targetId ? pending.reason : editingSent ? 'updated' : 'sent';
+      if (pending?.identity === saveIdentity && JSON.stringify(pending.calculation) === JSON.stringify(verified.calculation)) {
+        response = { data: pending.estimate };
+      } else {
+        if (isEditing && !editingEstimate?.updatedAt) throw new Error('Reload this estimate before saving so its current version can be checked.');
+        const path = isEditing ? `/v1/estimates/${targetId}` : '/v1/estimates';
+        const body = JSON.stringify({ leadId, ...jobsite, packages, status: effectiveStatus, ...(isEditing ? { expectedUpdatedAt: editingEstimate!.updatedAt } : {}) });
+        saveAttemptRef.current = estimationSaveAttempt(saveAttemptRef.current, path + ':' + body, () => crypto.randomUUID());
+        response = await apiJson<{ data: Estimate }>(path, {
+          method: isEditing ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': saveAttemptRef.current.key }, body,
+        });
+        saveAttemptRef.current = null;
+        setEditingEstimate(response.data);
+      }
+      const persistedPackage = response.data.packages?.[0];
+      const persistedCalculation = persistedPackage?.calculationSnapshot || verified.calculation;
+      if (persistedCalculation) pendingSaveRef.current = { identity: saveIdentity, estimate: response.data, calculation: persistedCalculation, reason };
+      if (persistedPackage?.calculationSnapshot && persistedPackage.calculationInput) {
+        setServerPreview({ key: previewState.key, calculation: persistedPackage.calculationSnapshot, resolvedInput: persistedPackage.calculationInput });
+      }
+      const savedPriceChanged = verified.calculation && (
+        JSON.stringify(persistedCalculation) !== JSON.stringify(verified.calculation)
+        || (persistedPackage?.total != null && minor(decimal(persistedPackage.total, 'total', { scale: 2 }), 'total') !== verified.calculation.totals.totalMinor)
+      );
+      if (currentFormIdentity.current !== formIdentity || (effectiveStatus === 'sent' && savedPriceChanged)) {
+        setShowPreview(true);
+        setSaveStatus('Estimate saved. Review the updated scope and pricing before sending.');
+        window.showToast?.('Estimate saved. Review the updated price before sending.', 'error');
+        return;
+      }
       let sendResult: { previewUrl?: string } | null = null;
       if (effectiveStatus === 'sent') {
+        const body = JSON.stringify({ reason });
+        emailAttemptRef.current = estimationSaveAttempt(emailAttemptRef.current, response.data.id + ':' + response.data.updatedAt + ':' + body, () => crypto.randomUUID());
         const sent = await apiJson<{ data?: { previewUrl?: string } }>(`/v1/estimates/${response.data.id}/send-email`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Idempotency-Key': crypto.randomUUID(),
+            'Idempotency-Key': emailAttemptRef.current.key,
           },
-          body: JSON.stringify({ reason: editingSent ? 'updated' : 'sent' }),
+          body,
         });
+        emailAttemptRef.current = null;
         sendResult = sent.data || null;
       }
-      window.showToast?.(effectiveStatus === 'draft' ? 'Draft saved' : editingSent ? 'Estimate update emailed' : 'Estimate emailed', 'success');
+      pendingSaveRef.current = null;
+      window.showToast?.(effectiveStatus === 'draft' ? 'Draft saved' : reason === 'updated' ? 'Estimate update emailed' : 'Estimate emailed', 'success');
       setShowPreview(false);
       if (effectiveStatus === 'draft') navigate('/estimates?status=draft');
       else {
@@ -982,6 +1098,7 @@ export function EstimateProduction() {
       setSaveStatus(message);
       window.showToast?.(message, 'error');
     } finally {
+      saveLockRef.current = false;
       setIsSaving(false);
     }
   }
@@ -994,7 +1111,11 @@ export function EstimateProduction() {
     const missingCustomer = leadId ? 0 : 1;
     const zeroQuantity = rooms.flatMap((room) => room.surfaces).filter((surface) => {
       const rate = rates.find((item) => item.id === surface.rateId);
-      return !rate || measuredQuantity(surface, rate).quantity <= 0;
+      try {
+        return !rate || measuredQuantity(surface, rate).quantity <= 0;
+      } catch {
+        return true;
+      }
     }).length;
     const missingProduct = surfaceItems.filter((item) => !item.material?.id).length;
     const missingColor = surfaceItems.filter((item) => !item.material?.colorName || !item.material?.colorCode || item.material?.status === 'TBD').length;
@@ -1167,9 +1288,10 @@ export function EstimateProduction() {
                   removeSurface={(roomId, surfaceId) => setRooms((current) => current.map((item) => item.id === roomId ? { ...item, surfaces: item.surfaces.filter((surface) => surface.id !== surfaceId) } : item))}
                   useRoomMetrics={useRoomMetrics}
                   surfaceTotal={(surface) => {
-                    const line = totals.items.find((item) => item.productionRateId === surface.rateId && item.roomName === room.name && item.surfaceName === surface.label);
-                    return line ? formatMoney(line.rate || 0) : '$0.00';
+                    const line = totals.items.find((item) => item.calculationItemId === surface.id);
+                    return previewState.error ? '--' : line ? formatMoney(line.rate || 0) : '$0.00';
                   }}
+                  calculationError={{ field: previewState.errorField, message: previewState.error }}
                 />
               ))}
             </div>
@@ -1181,6 +1303,24 @@ export function EstimateProduction() {
               <span className="pf-row-title">{surfaceItems.length} substrate{surfaceItems.length === 1 ? '' : 's'}</span>
             </div>
             <div className="space-y-2 p-4">
+              {previewState.calculation && previewState.calculation.purchaseGroups.some((group) => group.packCount > 0) && (
+                <div className="mb-4 space-y-2 border-b pb-4">
+                  <h3 className="pf-row-title">Paint order</h3>
+                  {previewState.calculation.purchaseGroups.filter((group) => group.packCount > 0).map((group) => {
+                    const product = materials.find((material) => material.id === group.productId);
+                    return (
+                      <div key={group.id} className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="pf-supporting break-words">{[product?.brand, product?.name].filter(Boolean).join(' ')}{!group.included ? ' (option)' : ''}</p>
+                          <p className="pf-meta break-words">{[group.colorName, group.colorCode].filter(Boolean).join(' ') || 'Color TBD'}</p>
+                        </div>
+                        <span className="pf-value shrink-0">{group.packCount} {product?.unit || 'pack'}{group.packCount === 1 ? '' : 's'} · {group.purchasedGallons} gal</span>
+                      </div>
+                    );
+                  })}
+                  {previewState.calculation.warnings.some((warning) => warning.code === 'UNKNOWN_COLOR') && <p className="pf-helper">Unspecified colors are budgeted separately.</p>}
+                </div>
+              )}
               {surfaceItems.length === 0 ? (
                 <p className="pf-supporting rounded-lg border border-dashed p-3">Add scope lines to build the paint schedule.</p>
               ) : surfaceItems.map((item) => (
@@ -1241,18 +1381,20 @@ export function EstimateProduction() {
         <aside className="min-w-0 space-y-4 lg:sticky lg:top-20 self-start">
           <Card>
             <CardHeader title="Estimate Summary" />
-            <div className="space-y-2">
+            {previewState.error && !rooms.some((room) => room.surfaces.some((surface) => previewState.errorField.startsWith(`${surface.id}.`))) && <p id="estimate-calculation-error" className="pf-field-error mb-3" role="alert">{previewState.error}</p>}
+            <div className="space-y-2" aria-label="Proposal pricing" aria-invalid={Boolean(previewState.error)}>
               <SummaryRow label="Labor hours" value={totals.hours.toFixed(1)} />
-              <SummaryRow label="Labor" value={formatMoney(totals.labor)} />
-              <SummaryRow label="Materials" value={formatMoney(totals.materials)} />
+              <SummaryRow label="Labor price" value={previewState.error ? '--' : formatMoney(totals.labor)} />
+              <SummaryRow label="Materials price" value={previewState.error ? '--' : formatMoney(totals.materials)} />
+              <SummaryRow label="Materials cost budget" value={previewState.error ? '--' : formatMoney(totals.materialCost)} />
               <SummaryRow label="Adjustments" value={formatMoney(totals.adjustments)} />
               <SummaryRow label="Customer options" value={formatMoney(totals.optionalTotal)} />
               <label className="flex items-center justify-between gap-3 border-t pt-2">
                 <span className="pf-meta">Discount</span>
-                <input className="input w-28 text-right" type="number" min="0" step="0.01" inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value)} onFocus={(event) => event.currentTarget.select()} />
+                <input className={`input w-28 text-right ${previewState.errorField === 'discount' ? 'pf-field-invalid' : ''}`} aria-invalid={previewState.errorField === 'discount'} aria-describedby={previewState.errorField === 'discount' ? 'estimate-calculation-error' : undefined} type="number" min="0" step="0.01" inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value)} onFocus={(event) => event.currentTarget.select()} />
               </label>
               <SummaryRow label="Tax" value={formatMoney(totals.tax)} />
-              <div className="flex justify-between border-t pt-2"><span className="pf-section-title">Base proposal total</span><span className="pf-section-title text-blue-700">{formatMoney(totals.total)}</span></div>
+              <div className="flex justify-between border-t pt-2"><span className="pf-section-title">Base proposal total</span><span className="pf-section-title text-blue-700">{previewState.error ? '--' : formatMoney(totals.total)}</span></div>
             </div>
           </Card>
 
@@ -1287,14 +1429,10 @@ export function EstimateProduction() {
             </div>
             <div className="mt-4 grid gap-2">
               {!editingSent && (
-                <button className="btn-secondary justify-center" disabled={isSaving} onClick={() => persistEstimate('draft')}>{isSaving ? 'Saving...' : 'Save draft'}</button>
+                <button className="btn-secondary justify-center" disabled={isSaving || isReviewing || Boolean(previewState.error)} onClick={() => persistEstimate('draft')}>{isSaving ? 'Saving...' : 'Save draft'}</button>
               )}
-              <button className="btn-primary justify-center" disabled={isSaving} onClick={() => {
-                if (!leadId) window.showToast?.('Select a customer first', 'error');
-                else if (!buildPackages().length) window.showToast?.('Add at least one measured substrate.', 'error');
-                else setShowPreview(true);
-              }}>
-                {editingSent ? 'Send update' : 'Send estimate'}
+              <button className="btn-primary justify-center" disabled={isSaving || isReviewing || Boolean(previewState.error)} aria-busy={isReviewing} onClick={reviewProposal}>
+                {isReviewing ? 'Checking pricing...' : editingSent ? 'Review update' : 'Review proposal'}
               </button>
             </div>
             {saveStatus && <p className="pf-copy mt-3" aria-live="polite">{saveStatus}</p>}
@@ -1306,7 +1444,7 @@ export function EstimateProduction() {
         <SendPreview
           leadName={selectedLead?.name || 'Selected customer'}
           estimateType={estimateType}
-          editingSent={Boolean(editingSent)}
+          editingSent={Boolean(editingSent) && pendingSaveRef.current?.reason !== 'sent'}
           totals={totals}
           onCancel={() => setShowPreview(false)}
           onSend={() => persistEstimate('sent')}
@@ -1425,6 +1563,7 @@ function RoomCard({
   removeSurface,
   useRoomMetrics,
   surfaceTotal,
+  calculationError,
 }: {
   room: Room;
   ratesByCategory: [string, ProductionRate[]][];
@@ -1439,13 +1578,14 @@ function RoomCard({
   removeSurface: (roomId: string, surfaceId: string) => void;
   useRoomMetrics: (roomId: string, surfaceId: string) => void;
   surfaceTotal: (surface: Surface) => string;
+  calculationError: { field: string; message: string };
 }) {
   return (
     <div className="rounded-lg border bg-white p-3 sm:p-4">
       <div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <label className="min-w-0">
           <span className="form-label">Room / Space</span>
-          <input className="input pf-value mt-1" value={room.name} onChange={(event) => updateRoom(room.id, { name: event.target.value })} placeholder="Bedroom 1, front elevation, kitchen cabinets" />
+          <input className="input pf-value mt-1" maxLength={200} value={room.name} onChange={(event) => updateRoom(room.id, { name: event.target.value })} placeholder="Bedroom 1, front elevation, kitchen cabinets" />
         </label>
         <div className="flex gap-2">
           <button className="btn-text btn-sm text-red-700" onClick={() => removeRoom(room.id)}>Remove</button>
@@ -1458,18 +1598,25 @@ function RoomCard({
           const rate = rates.find((item) => item.id === surface.rateId);
           const config = measurementConfig(rate);
           const canUseRoomMetrics = Boolean(room.metrics && ['walls', 'ceilings', 'trim'].includes(rateKind(rate)));
+          const errorId = `${surface.id}-calculation-error`;
+          const errorFor = (field: string) => calculationError.field === `${surface.id}.${field}` ? errorId : undefined;
           return (
             <div key={surface.id} className="rounded-lg border bg-gray-50 p-3">
+              {calculationError.field.startsWith(`${surface.id}.`) && <p id={errorId} className="pf-field-error mb-3" role="alert">{calculationError.message}</p>}
               <div className="mb-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <label>
                   <span className="form-label">Substrate</span>
                   <select
                     className="input mt-1"
+                    aria-invalid={Boolean(errorFor('productionRateId'))}
+                    aria-describedby={errorFor('productionRateId')}
                     value={surface.rateId}
                     onChange={(event) => {
                       const nextRate = rates.find((item) => item.id === event.target.value);
                       updateSurface(room.id, surface.id, {
                         rateId: event.target.value,
+                        ...(nextRate?.unit !== rate?.unit ? { width: '', height: '', quantity: '' } : {}),
+                        ...coatingDefaults(nextRate),
                         label: labelize(nextRate?.surfaceType || nextRate?.category || surface.label),
                         applicationMethod: defaultMethod(nextRate),
                       });
@@ -1485,13 +1632,13 @@ function RoomCard({
                 </label>
                 <label>
                   <span className="form-label">Proposal label</span>
-                  <input className="input mt-1" value={surface.label} onChange={(event) => updateSurface(room.id, surface.id, { label: event.target.value })} />
+                  <input className="input mt-1" maxLength={200} value={surface.label} onChange={(event) => updateSurface(room.id, surface.id, { label: event.target.value })} />
                 </label>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {config.showWidth !== false && <NumberField label={config.width} value={surface.width} onChange={(value) => updateSurface(room.id, surface.id, { width: value })} />}
-                {config.showHeight !== false && <NumberField label={config.height} value={surface.height} onChange={(value) => updateSurface(room.id, surface.id, { height: value })} />}
-                <NumberField label={config.quantity} value={surface.quantity} onChange={(value) => updateSurface(room.id, surface.id, { quantity: value })} />
+                {config.showWidth !== false && <NumberField label={config.width} errorId={errorFor('width')} value={surface.width} onChange={(value) => updateSurface(room.id, surface.id, { width: value })} />}
+                {config.showHeight !== false && <NumberField label={config.height} errorId={errorFor('height')} value={surface.height} onChange={(value) => updateSurface(room.id, surface.id, { height: value })} />}
+                <NumberField label={config.quantity} errorId={errorFor('quantity')} value={surface.quantity} onChange={(value) => updateSurface(room.id, surface.id, { quantity: value })} />
                 <label>
                   <span className="form-label">Coats</span>
                   <select className="input mt-1" value={surface.coats} onChange={(event) => updateSurface(room.id, surface.id, { coats: Number(event.target.value) })}>
@@ -1506,6 +1653,8 @@ function RoomCard({
                 {canUseRoomMetrics && <button className="btn-text btn-sm shrink-0" onClick={() => useRoomMetrics(room.id, surface.id)}>Use room metrics</button>}
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {rate?.unit === 'linear_ft' && <NumberField label="Painted width (in)" errorId={errorFor('coatingWidthInches')} value={surface.coatingWidthInches} onChange={(value) => updateSurface(room.id, surface.id, { coatingWidthInches: value })} />}
+                {rate?.unit === 'each' && <NumberField label="Painted sq ft/item" errorId={errorFor('coatingSqFtPerItem')} value={surface.coatingSqFtPerItem} onChange={(value) => updateSurface(room.id, surface.id, { coatingSqFtPerItem: value })} />}
                 <label>
                   <span className="form-label">Prep</span>
                   <select className="input mt-1" value={surface.prepLevel} onChange={(event) => updateSurface(room.id, surface.id, { prepLevel: event.target.value as PrepLevel })}>
@@ -1530,18 +1679,18 @@ function RoomCard({
                 </label>
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                <NumberField label="Prep hours +/-" value={surface.prepAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { prepAdjustmentHours: value })} />
-                <NumberField label="Paint hours +/-" value={surface.paintAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { paintAdjustmentHours: value })} />
+                <NumberField label="Prep hours +/-" allowNegative errorId={errorFor('prepAdjustmentHours')} value={surface.prepAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { prepAdjustmentHours: value })} />
+                <NumberField label="Paint hours +/-" allowNegative errorId={errorFor('paintAdjustmentHours')} value={surface.paintAdjustmentHours} onChange={(value) => updateSurface(room.id, surface.id, { paintAdjustmentHours: value })} />
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_0.7fr_0.8fr]">
-                <input className="input" list="crewmodo-catalog-colors" value={surface.colorName} onChange={(event) => updateSurfaceColor(room.id, surface.id, event.target.value)} placeholder={catalogColors.length ? 'Search color library' : 'Color name'} />
-                <input className="input" value={surface.colorCode} onChange={(event) => updateSurface(room.id, surface.id, { colorCode: event.target.value })} placeholder="Color code" />
+                <input className="input" maxLength={120} aria-label="Color name" list="crewmodo-catalog-colors" value={surface.colorName} onChange={(event) => updateSurfaceColor(room.id, surface.id, event.target.value)} placeholder={catalogColors.length ? 'Search color library' : 'Color name'} />
+                <input className="input" maxLength={80} aria-label="Color code" value={surface.colorCode} onChange={(event) => updateSurface(room.id, surface.id, { colorCode: event.target.value })} placeholder="Color code" />
                 <select className="input" value={surface.colorStatus} onChange={(event) => updateSurface(room.id, surface.id, { colorStatus: event.target.value })}>
                   {['TBD', 'Selected', 'Approved', 'Ordered', 'Delivered', 'Changed'].map((status) => <option key={status} value={status}>{status}</option>)}
                 </select>
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
-                <input className="input" value={surface.crewNote} onChange={(event) => updateSurface(room.id, surface.id, { crewNote: event.target.value })} placeholder="Crew note / production handoff" />
+                <input className="input" maxLength={500} aria-label="Crew note" value={surface.crewNote} onChange={(event) => updateSurface(room.id, surface.id, { crewNote: event.target.value })} placeholder="Crew note / production handoff" />
                 <div className="flex items-center justify-between gap-3">
                   <label className="pf-inline-option"><input type="checkbox" checked={surface.customerVisible} onChange={(event) => updateSurface(room.id, surface.id, { customerVisible: event.target.checked })} />Show</label>
                   <label className="pf-inline-option"><input type="checkbox" checked={surface.optional} onChange={(event) => updateSurface(room.id, surface.id, { optional: event.target.checked })} />Option</label>
@@ -1558,11 +1707,11 @@ function RoomCard({
   );
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function NumberField({ label, value, onChange, allowNegative = false, errorId }: { label: string; value: string; onChange: (value: string) => void; allowNegative?: boolean; errorId?: string }) {
   return (
     <label>
       <span className="form-label">{label}</span>
-      <input className="input mt-1" type="number" min="0" step="0.1" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} onFocus={(event) => event.currentTarget.select()} />
+      <input className={`input mt-1 ${errorId ? 'pf-field-invalid' : ''}`} aria-invalid={Boolean(errorId)} aria-describedby={errorId} type="number" min={allowNegative ? undefined : '0'} step="any" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} onFocus={(event) => event.currentTarget.select()} />
     </label>
   );
 }

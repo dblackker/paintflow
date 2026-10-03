@@ -57,7 +57,7 @@ function describedBy(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaE
 
 function removeGeneratedErrors(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
   let next = field.nextElementSibling;
-  while (next?.classList.contains(ERROR_CLASS)) {
+  while (next?.classList.contains(ERROR_CLASS) && next instanceof HTMLElement && next.dataset.pfFieldErrorFor === fieldKey(field)) {
     const toRemove = next;
     next = next.nextElementSibling;
     toRemove.remove();
@@ -66,17 +66,26 @@ function removeGeneratedErrors(field: HTMLInputElement | HTMLSelectElement | HTM
 
 function clearFieldError(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
   const id = `${fieldKey(field)}-error`;
-  field.classList.remove(INVALID_CLASS);
-  field.removeAttribute('aria-invalid');
+  const managedId = field.dataset.pfManagedErrorId;
+  if (!managedId) {
+    field.classList.remove(INVALID_CLASS);
+    field.removeAttribute('aria-invalid');
+  }
   const current = field.getAttribute('aria-describedby') || '';
   const next = Array.from(new Set(current.split(/\s+/).filter((item) => item && item !== id))).join(' ');
   if (next) field.setAttribute('aria-describedby', next);
   else field.removeAttribute('aria-describedby');
-  field.parentElement?.querySelectorAll(`#${CSS.escape(id)}`).forEach((item) => item.remove());
+  field.parentElement?.querySelectorAll(`#${CSS.escape(id)}`).forEach((item) => {
+    if (item instanceof HTMLElement && item.dataset.pfFieldErrorFor === fieldKey(field)) item.remove();
+  });
   removeGeneratedErrors(field);
 }
 
 function showFieldError(field: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement) {
+  if (field.dataset.pfManagedErrorId) {
+    field.setAttribute('aria-invalid', 'true');
+    return;
+  }
   const id = `${fieldKey(field)}-error`;
   const existing = Array.from(field.parentElement?.querySelectorAll<HTMLParagraphElement>(`#${CSS.escape(id)}`) || []);
   const error = existing[0] || document.createElement('p');

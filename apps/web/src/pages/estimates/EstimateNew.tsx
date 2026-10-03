@@ -1,27 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Icon } from '@/components/Icon';
 import { Input, Select, Textarea } from '@/components/Input';
 import { apiJson, formatMoney, formatPhone } from '@/lib/api';
+import { EstimationInputError, formatEstimationMinor, type EstimationResult, type EstimationRequest } from '../../../../../packages/core/src/estimation';
+import { calculateQuickEstimate } from '../../../../../packages/core/src/estimation-quick';
+import { estimationSaveAttempt, type EstimationSaveAttempt } from '../../../../../packages/core/src/estimation-save';
+import { decimal, minor } from '../../../../../packages/core/src/estimation-decimal';
 
 interface Lead {
   id: string;
   name: string;
   phone?: string;
-  email?: string;
-  streetAddress?: string;
-  city?: string;
-  state?: string;
 }
 
 interface ScopeItem {
   id: string;
   desc: string;
-  qty: number;
+  qty: string;
   unit: string;
-  laborHours: number;
-  materialCost: number;
+  laborHours: string;
+  materialCost: string;
 }
 
 interface OrgSettings {
@@ -31,430 +31,220 @@ interface OrgSettings {
   depositPercent?: number | string | null;
 }
 
-interface LeadsResponse {
-  data?: Lead[];
+type Preview = { calculation: EstimationResult; resolvedInput: EstimationRequest };
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : 'Could not save the estimate. Try again.';
 }
 
-interface SettingsResponse {
-  data?: OrgSettings;
+function money(minor: number) {
+  return formatMoney(formatEstimationMinor(minor));
 }
 
-interface EstimateResponse {
-  data?: {
-    id: string;
-  };
-}
-
-function apiErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return 'Request failed';
-}
-
-function numeric(value: unknown, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+function initialItems(): ScopeItem[] {
+  return [
+    { id: crypto.randomUUID(), desc: 'Prep, patching, masking, and setup', qty: '1', unit: 'project', laborHours: '4', materialCost: '1' },
+    { id: crypto.randomUUID(), desc: 'Paint walls and ceilings', qty: '1', unit: 'area', laborHours: '8', materialCost: '1' },
+  ];
 }
 
 export function EstimateNew() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const initialLeadId = searchParams.get('leadId') || '';
-
+  const [params] = useSearchParams();
+  const initialLeadId = params.get('leadId') || '';
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLeadId, setSelectedLeadId] = useState(initialLeadId);
-  const [items, setItems] = useState<ScopeItem[]>([
-    { id: '1', desc: 'Prep, patching, masking, and setup', qty: 1, unit: 'project', laborHours: 4, materialCost: 1 },
-    { id: '2', desc: 'Paint walls and ceilings', qty: 1, unit: 'area', laborHours: 8, materialCost: 1 },
-  ]);
-  const [settings, setSettings] = useState<OrgSettings>({
-    defaultLaborRate: 65,
-    materialMarkupPercent: 30,
-    salesTaxRate: 0.092,
-    depositPercent: 50,
-  });
+  const [items, setItems] = useState<ScopeItem[]>(initialItems);
+  const [settings, setSettings] = useState<OrgSettings>({});
+  const [laborRate, setLaborRate] = useState('65');
+  const [markup, setMarkup] = useState('0');
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  const [reload, setReload] = useState(0);
+  const [serverPreview, setServerPreview] = useState<{ identity: string; preview: Preview } | null>(null);
+  const [savedEstimate, setSavedEstimate] = useState<{ id: string; updatedAt: string } | null>(null);
+  const attemptRef = useRef<EstimationSaveAttempt | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-    async function loadSetup() {
-      setIsLoading(true);
-      setLoadError('');
-      try {
-        const [leadsPayload, settingsPayload] = await Promise.all([
-          apiJson<LeadsResponse>('/v1/leads?status=all&limit=200'),
-          apiJson<SettingsResponse>('/v1/settings/org'),
-        ]);
-        if (cancelled) return;
-        const loadedLeads = leadsPayload.data || [];
-        setLeads(loadedLeads);
-        if (initialLeadId && loadedLeads.some((lead) => lead.id === initialLeadId)) {
-          setSelectedLeadId(initialLeadId);
-        }
-        setSettings({
-          defaultLaborRate: numeric(settingsPayload.data?.defaultLaborRate, 65),
-          materialMarkupPercent: numeric(settingsPayload.data?.materialMarkupPercent, 30),
-          salesTaxRate: numeric(settingsPayload.data?.salesTaxRate, 0.092),
-          depositPercent: numeric(settingsPayload.data?.depositPercent, 50),
-        });
-      } catch (err) {
-        if (!cancelled) {
-          setLoadError(apiErrorMessage(err));
-          window.showToast?.('Failed to load estimate setup', 'error');
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-    void loadSetup();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setIsLoading(true);
+    setLoadError('');
+    Promise.all([
+      apiJson<{ data?: Lead[] }>('/v1/leads?status=all&limit=200'),
+      apiJson<{ data?: OrgSettings }>('/v1/settings/org'),
+    ]).then(([customers, defaults]) => {
+      if (cancelled) return;
+      setLeads(customers.data || []);
+      setSettings(defaults.data || {});
+      setLaborRate(String(defaults.data?.defaultLaborRate ?? '65'));
+      setMarkup(String(defaults.data?.materialMarkupPercent ?? '0'));
+    }).catch((error) => {
+      if (!cancelled) setLoadError(message(error));
+    }).finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [reload]);
 
-  const addItem = () => {
-    const newItem: ScopeItem = {
-      id: Date.now().toString(),
-      desc: '',
-      qty: 1,
-      unit: 'item',
-      laborHours: 0,
-      materialCost: 0,
-    };
-    setItems([...items, newItem]);
-  };
-
-  const updateItem = (id: string, field: keyof ScopeItem, value: any) => {
-    setItems(items.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    ));
-  };
-
-  const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
-  };
-
-  const calculateItemTotal = (item: ScopeItem) => {
-    const laborCost = item.laborHours * numeric(settings.defaultLaborRate, 65);
-    const materialCost = item.materialCost * (1 + numeric(settings.materialMarkupPercent, 30) / 100);
-    const itemTotal = laborCost + materialCost;
-    return item.qty * itemTotal;
-  };
-
-  const totals = items.reduce((acc, item) => {
-    const laborHours = item.qty * item.laborHours;
-    const laborCost = laborHours * numeric(settings.defaultLaborRate, 65);
-    const materialCost = item.materialCost * (1 + numeric(settings.materialMarkupPercent, 30) / 100) * item.qty;
-    const subtotal = laborCost + materialCost;
-    
-    return {
-      laborHours: acc.laborHours + laborHours,
-      laborCost: acc.laborCost + laborCost,
-      materialCost: acc.materialCost + materialCost,
-      subtotal: acc.subtotal + subtotal,
-    };
-  }, { laborHours: 0, laborCost: 0, materialCost: 0, subtotal: 0 });
-
-  const tax = totals.subtotal * numeric(settings.salesTaxRate, 0.092);
-  const total = totals.subtotal + tax;
-  const deposit = total * (numeric(settings.depositPercent, 50) / 100);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    if (!selectedLeadId) {
-      window.showToast?.('Select a customer first', 'error');
-      return;
-    }
-    if (!items.some((item) => item.desc.trim() && item.qty > 0 && calculateItemTotal(item) > 0)) {
-      window.showToast?.('Add at least one priced scope item', 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
-
+  const pricing = useMemo(() => {
     try {
-      const payload = await apiJson<EstimateResponse>('/v1/estimates', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-        body: JSON.stringify({
-          leadId: selectedLeadId,
-          packages: [{
-            name: 'proposal',
-            subtotal: totals.subtotal,
-            tax,
-            total,
-            items: items
-              .filter((item) => item.desc.trim() && item.qty > 0 && calculateItemTotal(item) > 0)
-              .map((item) => ({
-                desc: item.desc.trim(),
-                qty: item.qty,
-                rate: Number(((item.laborHours * numeric(settings.defaultLaborRate, 65)) + (item.materialCost * (1 + numeric(settings.materialMarkupPercent, 30) / 100))).toFixed(2)),
-                category: item.unit || 'item',
-                notes: [
-                  `${item.qty} ${item.unit || 'item'}`,
-                  `${item.laborHours} labor hours`,
-                  `${formatMoney(item.materialCost)} materials before markup`,
-                  notes.trim(),
-                ].filter(Boolean).join('; '),
-              })),
-          }],
-        }),
+      return { value: calculateQuickEstimate(items.map((item) => ({
+        id: item.id, quantity: item.qty, laborHoursPerUnit: item.laborHours, materialCostPerUnit: item.materialCost,
+      })), {
+        laborRate, materialMarkupPercent: markup, salesTaxRate: settings.salesTaxRate ?? '0',
+        depositPercent: settings.depositPercent ?? '50',
+      }), error: null as EstimationInputError | null };
+    } catch (error) {
+      return { value: null, error: error instanceof EstimationInputError ? error : new EstimationInputError('items', message(error)) };
+    }
+  }, [items, laborRate, markup, settings]);
+
+  const identity = JSON.stringify({ leadId: selectedLeadId, items, laborRate, markup, notes });
+  const verified = serverPreview?.identity === identity ? serverPreview.preview : null;
+  const calculation = verified?.calculation || pricing.value?.calculation;
+  const activeIdentity = useRef(identity);
+  activeIdentity.current = identity;
+  const missingDescriptions = new Set(pricing.value?.items.filter((item) => item.subtotalMinor > 0 && !items.find((row) => row.id === item.id)?.desc.trim()).map((item) => item.id));
+  const fieldError = (field: string) => pricing.error?.field === field ? pricing.error.message : undefined;
+  const taxPercent = pricing.value?.taxPercent || '0';
+
+  function updateItem(id: string, patch: Partial<ScopeItem>) {
+    setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+    setSubmitError('');
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submittingRef.current || !pricing.value || pricing.error) return;
+    if (!selectedLeadId) { setSubmitError('Select a customer.'); return; }
+    if (missingDescriptions.size) { setSubmitError('Describe each priced scope item.'); return; }
+    if (!pricing.value.productionInput.adjustments?.length) { setSubmitError('Add at least one priced scope item.'); return; }
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    setSubmitError('');
+    try {
+      const checked = await apiJson<{ data: Preview }>('/v1/production-rates/calculate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify(pricing.value.productionInput),
       });
-      const estimateId = payload.data?.id;
-      window.showToast?.('Estimate created. Opening it now.', 'success');
-      navigate(estimateId ? `/estimates/${estimateId}` : '/estimates');
-    } catch (err) {
-      window.showToast?.(apiErrorMessage(err), 'error');
+      if (activeIdentity.current !== identity) throw new Error('The scope changed. Review it before saving.');
+      setServerPreview({ identity, preview: checked.data });
+      if (checked.data.resolvedInput.taxRate?.kind === 'fraction') setSettings((current) => ({ ...current, salesTaxRate: checked.data.resolvedInput.taxRate!.value }));
+      if (checked.data.calculation.totals.totalMinor !== calculation?.totals.totalMinor) {
+        setSubmitError('Pricing changed. Review the updated total, then save again.');
+        return;
+      }
+      const pricedRows = new Map(pricing.value.items.map((item) => [item.id, item]));
+      const lines = checked.data.calculation.items.map((line) => {
+        const row = items.find((item) => item.id === line.id)!;
+        const priced = pricedRows.get(line.id)!;
+        return {
+          calculationItemId: row.id, calculatedSubtotalMinor: line.subtotalMinor,
+          desc: row.desc.trim(), kind: 'line_item', qty: Number(row.qty), rate: Number(priced.unitPrice), category: row.unit || 'item',
+          notes: [row.qty + ' ' + (row.unit || 'item'), row.laborHours + ' labor hours per item', formatMoney(row.materialCost) + ' materials per item before markup', notes.trim()].filter(Boolean).join('; '),
+        };
+      });
+      const totals = checked.data.calculation.totals;
+      const body = JSON.stringify({
+        leadId: selectedLeadId, status: 'draft', ...(savedEstimate ? { expectedUpdatedAt: savedEstimate.updatedAt } : {}),
+        packages: [{
+          name: 'proposal', calculationVersion: checked.data.calculation.calculationVersion,
+          productionInput: pricing.value.productionInput, calculationInput: checked.data.resolvedInput,
+          subtotal: Number(formatEstimationMinor(totals.subtotalMinor)), discount: 0,
+          tax: Number(formatEstimationMinor(totals.taxMinor)), total: Number(formatEstimationMinor(totals.totalMinor)),
+          items: lines, lineItems: lines,
+        }],
+      });
+      const path = savedEstimate ? '/v1/estimates/' + savedEstimate.id : '/v1/estimates';
+      if (savedEstimate && !savedEstimate.updatedAt) throw new Error('Reload the saved draft before editing so its version can be checked.');
+      attemptRef.current = estimationSaveAttempt(attemptRef.current, path + ':' + body, () => crypto.randomUUID());
+      const response = await apiJson<{ data: { id: string; updatedAt: string; packages?: Array<{ calculationSnapshot?: EstimationResult; calculationInput?: EstimationRequest; total?: number }> } }>(path, {
+        method: savedEstimate ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': attemptRef.current.key }, body,
+      });
+      attemptRef.current = null;
+      setSavedEstimate({ id: response.data.id, updatedAt: response.data.updatedAt });
+      const persisted = response.data.packages?.[0];
+      if (persisted?.calculationSnapshot && persisted.calculationInput) setServerPreview({ identity, preview: { calculation: persisted.calculationSnapshot, resolvedInput: persisted.calculationInput } });
+      if (persisted?.calculationInput?.taxRate?.kind === 'fraction') setSettings((current) => ({ ...current, salesTaxRate: persisted.calculationInput!.taxRate!.value }));
+      if (persisted?.total != null && minor(decimal(persisted.total, 'total', { scale: 2 }), 'total') !== totals.totalMinor) {
+        setSubmitError('Draft saved with updated pricing. Review the new total before continuing.');
+        return;
+      }
+      window.showToast?.('Draft saved', 'success');
+      navigate('/estimates/' + response.data.id + '/details');
+    } catch (error) {
+      setSubmitError(message(error));
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    );
   }
 
-  if (loadError) {
-    return (
-      <div className="mx-auto max-w-3xl px-1 pb-24 sm:px-0">
-        <Card>
-          <CardContent className="p-8 text-center">
-            <p className="pf-section-title">Estimate setup could not be loaded</p>
-            <p className="pf-copy mt-2">{loadError}</p>
-            <Button type="button" className="mt-5" onClick={() => window.location.reload()}>Try again</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="mx-auto max-w-6xl space-y-4" aria-label="Loading estimate setup" aria-busy="true"><div className="h-16 animate-pulse rounded bg-gray-100" /><div className="h-64 animate-pulse rounded bg-gray-100" /></div>;
+  if (loadError) return <section className="mx-auto max-w-3xl space-y-3"><p className="pf-section-title">Estimate setup could not be loaded</p><p className="pf-copy" role="alert">{loadError}</p><Button type="button" onClick={() => setReload((current) => current + 1)}>Try again</Button></section>;
 
   return (
-    <div className="max-w-6xl mx-auto px-1 pb-24 sm:px-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <div>
-          <p className="text-gray-600 mt-1">Build one simple proposal from a few priced scope rows.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link to="/estimates/production">
-            <Button variant="secondary" size="sm">Use production estimator</Button>
-          </Link>
-        </div>
+    <main className="mx-auto max-w-6xl space-y-5 pb-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="pf-page-copy">Build a proposal from a few priced scope items.</p>
+        <Link to={'/estimates/production' + (selectedLeadId ? '?leadId=' + encodeURIComponent(selectedLeadId) : '')} className="btn btn-text">Production estimator</Link>
       </div>
-
-      <form onSubmit={handleSubmit} className="grid lg:grid-cols-[1fr_340px] gap-5">
-        <section className="space-y-4">
-          <Card>
-            <CardContent className="p-4 sm:p-5">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-              <Select
-                value={selectedLeadId}
-                onChange={(e) => setSelectedLeadId(e.target.value)}
-                required
-              >
-                <option value="">Select customer...</option>
-                {leads.map(lead => (
-                  <option key={lead.id} value={lead.id}>
-                    {lead.name} {lead.phone ? `(${formatPhone(lead.phone)})` : ''}
-                  </option>
-                ))}
-              </Select>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Scope Items</h3>
-                  <p className="text-sm text-gray-600">Each row calculates: Qty x ((labor hours x labor rate) + materials with markup).</p>
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <section className="min-w-0 space-y-5">
+          <Select label="Customer" value={selectedLeadId} onChange={(event) => { setSelectedLeadId(event.target.value); setSubmitError(''); }} required disabled={isSubmitting}>
+            <option value="">Select customer</option>
+            {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name}{lead.phone ? ' (' + formatPhone(lead.phone) + ')' : ''}</option>)}
+          </Select>
+          <div className="flex items-center justify-between gap-3"><h2 className="pf-section-title">Scope items</h2><Button type="button" variant="secondary" leftIcon={<Icon name="plus" />} disabled={isSubmitting} onClick={() => setItems((current) => [...current, { id: crypto.randomUUID(), desc: '', qty: '1', unit: 'item', laborHours: '0', materialCost: '0' }])}>Add item</Button></div>
+          <div className="space-y-4">
+            {items.map((item, index) => {
+              const priced = pricing.value?.items.find((row) => row.id === item.id);
+              return <section key={item.id} className="rounded-lg border border-gray-200 bg-white p-4" aria-label={'Scope item ' + (index + 1)}>
+                <div className="flex items-start gap-2">
+                  <Input label="Description" value={item.desc} maxLength={500} disabled={isSubmitting} onChange={(event) => updateItem(item.id, { desc: event.target.value })} error={missingDescriptions.has(item.id) ? 'Describe this scope item.' : undefined} />
+                  <button type="button" className="btn-icon btn-icon-standard btn-icon-danger shrink-0 self-end" aria-label={'Remove scope item ' + (index + 1)} disabled={isSubmitting} onClick={() => setItems((current) => current.filter((row) => row.id !== item.id))}><Icon name="trash" /></button>
                 </div>
-                <Button type="button" size="sm" onClick={addItem}>Add Item</Button>
-              </div>
-
-              <div className="space-y-3">
-                {items.map((item) => (
-                  <div key={item.id} className="grid gap-2 sm:grid-cols-[1fr_90px_110px_120px_120px_auto] items-end border rounded-lg p-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-                      <Input
-                        value={item.desc}
-                        onChange={(e) => updateItem(item.id, 'desc', e.target.value)}
-                        placeholder="Scope item"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Qty</label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.25"
-                        value={item.qty}
-                        onChange={(e) => updateItem(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Scope type</label>
-                      <Input
-                        value={item.unit}
-                        onChange={(e) => updateItem(item.id, 'unit', e.target.value)}
-                        placeholder="room, wall, door"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Labor hours</label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.laborHours}
-                        onChange={(e) => updateItem(item.id, 'laborHours', parseFloat(e.target.value) || 0)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Material $</label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.materialCost}
-                        onChange={(e) => updateItem(item.id, 'materialCost', parseFloat(e.target.value) || 0)}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeItem(item.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
-                Qty is the multiplier for the row. Scope type is descriptive only and helps the customer understand the scope.
-              </div>
-
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <Textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Additional notes for this estimate..."
-                  rows={3}
-                />
-              </div>
-            </CardContent>
-          </Card>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Input label="Quantity" type="number" min="0" step="0.25" inputMode="decimal" value={item.qty} disabled={isSubmitting} onFocus={(event) => event.target.select()} onChange={(event) => updateItem(item.id, { qty: event.target.value })} error={fieldError(item.id + '.quantity')} />
+                  <Input label="Scope type" value={item.unit} maxLength={120} disabled={isSubmitting} onChange={(event) => updateItem(item.id, { unit: event.target.value })} placeholder="Room, wall, door" />
+                  <Input label="Hours per item" type="number" min="0" step="any" inputMode="decimal" value={item.laborHours} disabled={isSubmitting} onFocus={(event) => event.target.select()} onChange={(event) => updateItem(item.id, { laborHours: event.target.value })} error={fieldError(item.id + '.laborHoursPerUnit')} />
+                  <Input label="Materials per item ($)" type="number" min="0" step="0.01" inputMode="decimal" value={item.materialCost} disabled={isSubmitting} onFocus={(event) => event.target.select()} onChange={(event) => updateItem(item.id, { materialCost: event.target.value })} error={fieldError(item.id + '.materialCostPerUnit')} />
+                </div>
+                {priced && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="pf-meta">{formatMoney(priced.unitPrice)} per item</span><span className="pf-row-value" aria-label={'Scope item ' + (index + 1) + ' total'}>{money(priced.subtotalMinor)}</span></div>}
+              </section>;
+            })}
+          </div>
+          <Textarea label="Notes" value={notes} maxLength={1500} disabled={isSubmitting} onChange={(event) => setNotes(event.target.value)} rows={3} />
         </section>
-
-        <aside className="space-y-4 lg:sticky lg:top-20 self-start">
-          <Card>
-            <CardHeader title="Owner Defaults" />
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Labor rate</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={numeric(settings.defaultLaborRate, 65)}
-                    onChange={(e) => setSettings({ ...settings, defaultLaborRate: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Material markup %</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={numeric(settings.materialMarkupPercent, 30)}
-                    onChange={(e) => setSettings({ ...settings, materialMarkupPercent: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Sales tax %</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={(numeric(settings.salesTaxRate, 0.092) * 100).toFixed(2)}
-                    onChange={(e) => setSettings({ ...settings, salesTaxRate: (parseFloat(e.target.value) || 0) / 100 })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Deposit %</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={numeric(settings.depositPercent, 50)}
-                    onChange={(e) => setSettings({ ...settings, depositPercent: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader title="Proposal Preview" />
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Labor ({totals.laborHours.toFixed(1)} hrs)</span>
-                    <span className="font-medium">{formatMoney(totals.laborCost)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Materials</span>
-                  <span className="font-medium">{formatMoney(totals.materialCost)}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t">
-                  <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">{formatMoney(totals.subtotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Tax ({(numeric(settings.salesTaxRate, 0.092) * 100).toFixed(1)}%)</span>
-                  <span className="font-medium">{formatMoney(tax)}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t text-base font-semibold">
-                  <span>Total</span>
-                  <span>{formatMoney(total)}</span>
-                </div>
-                <div className="flex justify-between text-blue-600">
-                  <span>Deposit ({numeric(settings.depositPercent, 50)}%)</span>
-                  <span className="font-medium">{formatMoney(deposit)}</span>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                fullWidth
-                isLoading={isSubmitting}
-                className="mt-4"
-              >
-                {isSubmitting ? 'Creating...' : 'Create Estimate'}
-              </Button>
-            </CardContent>
-          </Card>
+        <aside className="min-w-0 space-y-5 self-start lg:sticky lg:top-20">
+          <details className="border-b border-gray-200 pb-4">
+            <summary className="pf-row-title min-h-12 cursor-pointer py-3">Pricing</summary>
+            <div className="space-y-3 pt-3">
+              <Input label="Labor rate ($/hr)" type="number" min="0" step="0.01" inputMode="decimal" value={laborRate} disabled={isSubmitting} onChange={(event) => setLaborRate(event.target.value)} error={fieldError('laborRate')} />
+              <Input label="Material markup (%)" type="number" min="0" max="200" step="any" inputMode="decimal" value={markup} disabled={isSubmitting} onChange={(event) => setMarkup(event.target.value)} error={fieldError('materialMarkupPercent')} />
+              <p className="pf-helper">Changes apply to this estimate only.</p>
+            </div>
+          </details>
+          <section aria-label="Estimate summary" className="space-y-3">
+            <h2 className="pf-section-title">Estimate summary</h2>
+            {pricing.value && calculation ? <>
+              <div className="flex justify-between gap-3"><span className="pf-copy">Labor ({Number(pricing.value.totals.hours).toFixed(1)} hrs)</span><span className="pf-row-value">{money(pricing.value.totals.laborMinor)}</span></div>
+              <div className="flex justify-between gap-3"><span className="pf-copy">Materials</span><span className="pf-row-value">{money(pricing.value.totals.materialMinor)}</span></div>
+              <div className="flex justify-between gap-3 border-t border-gray-200 pt-3"><span className="pf-copy">Subtotal</span><span className="pf-row-value">{money(calculation.totals.subtotalMinor)}</span></div>
+              <div className="flex justify-between gap-3"><span className="pf-copy">Tax ({taxPercent}%)</span><span className="pf-row-value">{money(calculation.totals.taxMinor)}</span></div>
+              <div className="flex justify-between gap-3 border-t border-gray-200 pt-3"><span className="pf-row-title">Total</span><strong className="pf-value">{money(calculation.totals.totalMinor)}</strong></div>
+              <div className="flex justify-between gap-3"><span className="pf-meta">Deposit ({settings.depositPercent ?? '50'}%)</span><span className="pf-row-value">{money(pricing.value.totals.depositMinor)}</span></div>
+              <Link to="/settings#payment-schedule-settings" className="btn btn-text">Payment settings</Link>
+            </> : <p className="pf-field-error" role="alert">{pricing.error?.message || 'Complete the scope to calculate pricing.'}</p>}
+            {submitError && <p className="pf-field-error" role="alert">{submitError}</p>}
+            <Button type="submit" fullWidth isLoading={isSubmitting} disabled={Boolean(pricing.error) || !pricing.value?.productionInput.adjustments?.length || missingDescriptions.size > 0}>{isSubmitting ? 'Saving draft...' : 'Save draft'}</Button>
+          </section>
         </aside>
       </form>
-    </div>
+    </main>
   );
 }

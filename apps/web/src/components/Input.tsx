@@ -1,5 +1,7 @@
-import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, forwardRef, useId, useState } from 'react';
+import { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes, forwardRef, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import '../styles/mobile.css';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -16,38 +18,102 @@ function useStableFieldId(prefix: string, explicitId?: string) {
 function FieldLabel({ htmlFor, label, help }: { htmlFor: string; label: string; help?: ReactNode }) {
   const tooltipId = useStableFieldId('field-help');
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 288, maxHeight: 320 });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const trigger = buttonRef.current;
+      const popover = popoverRef.current;
+      if (!trigger || !popover) return;
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft || 0;
+      const viewportTop = viewport?.offsetTop || 0;
+      const viewportWidth = viewport?.width || window.innerWidth;
+      const viewportHeight = viewport?.height || window.innerHeight;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(288, viewportWidth - 32);
+      const maxHeight = Math.max(48, viewportHeight - 32);
+      const height = Math.min(popover.scrollHeight, maxHeight);
+      const below = rect.bottom + 8;
+      const top = below + height <= viewportTop + viewportHeight - 16
+        ? below
+        : Math.max(viewportTop + 16, rect.top - height - 8);
+      const left = Math.max(viewportLeft + 16, Math.min(rect.left, viewportLeft + viewportWidth - width - 16));
+      setPosition({ top, left, width, maxHeight });
+    };
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !buttonRef.current?.contains(event.target) && !popoverRef.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    update();
+    document.addEventListener('pointerdown', dismiss, true);
+    document.addEventListener('keydown', escape, true);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    window.visualViewport?.addEventListener('resize', update);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss, true);
+      document.removeEventListener('keydown', escape, true);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+      window.visualViewport?.removeEventListener('resize', update);
+    };
+  }, [open]);
 
   return (
-    <div className="mb-1 flex items-center gap-1.5">
-      <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700">
+    <div className="pf-field-label-row">
+      <label htmlFor={htmlFor} className="pf-field-label">
         {label}
       </label>
       {help && (
-        <span
-          className="group relative inline-flex"
-          onBlur={() => {
-            window.setTimeout(() => setOpen(false), 120);
-          }}
-        >
+        <>
           <button
+            ref={buttonRef}
             type="button"
-            className="btn-icon h-5 w-5 text-gray-500"
+            className="btn-icon pf-field-help-button"
             aria-label={`Explain ${label}`}
             aria-expanded={open}
-            aria-describedby={tooltipId}
+            aria-controls={open ? tooltipId : undefined}
+            aria-describedby={open ? tooltipId : undefined}
             onClick={() => setOpen((current) => !current)}
           >
-            <Icon name="info" className="h-3.5 w-3.5" />
+            <Icon name="info" />
           </button>
-          <span
+          {open && createPortal(<div
+            ref={popoverRef}
             id={tooltipId}
             role="tooltip"
-            className={`pointer-events-none absolute left-1/2 top-full z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-3 text-xs font-normal leading-5 text-gray-700 shadow-lg group-hover:block group-focus-within:block sm:left-0 sm:translate-x-0 ${open ? 'block' : 'hidden'}`}
+            className="pf-field-help-popover"
+            style={position}
           >
             {help}
-          </span>
-        </span>
+          </div>, buttonRef.current?.closest('[role="dialog"]') || document.body)}
+        </>
       )}
+    </div>
+  );
+}
+
+function fieldDescriptions(current: string | undefined, helperId?: string, errorId?: string) {
+  const ids = [...(current?.split(/\s+/) || []), helperId, errorId].filter((id): id is string => Boolean(id));
+  return Array.from(new Set(ids)).join(' ') || undefined;
+}
+
+function FieldMessages({ inputId, error, helperText }: { inputId: string; error?: string; helperText?: string }) {
+  return (
+    <div className="pf-field-messages">
+      {error && <p id={`${inputId}-field-error`} className="pf-field-error" role="alert">{error}</p>}
+      {helperText && !error && <p id={`${inputId}-helper`} className="form-helper mt-1">{helperText}</p>}
     </div>
   );
 }
@@ -62,19 +128,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
-          className={`block min-h-12 w-full rounded-lg border px-3.5 py-3 text-base shadow-sm focus:ring-2 focus:ring-offset-0 sm:min-h-11 sm:text-sm ${
-            error
-              ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-red-500'
-              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-          } ${className}`}
           {...props}
+          className={`pf-input-control ${error ? 'pf-field-invalid' : ''} ${className}`}
+          aria-invalid={error ? true : props['aria-invalid']}
+          data-pf-managed-error-id={error ? `${inputId}-field-error` : undefined}
+          aria-describedby={fieldDescriptions(props['aria-describedby'], helperText && !error ? `${inputId}-helper` : undefined, error ? `${inputId}-field-error` : undefined)}
         />
-        {error && (
-          <p className="pf-field-error">{error}</p>
-        )}
-        {helperText && !error && (
-          <p className="form-helper mt-1">{helperText}</p>
-        )}
+        <FieldMessages inputId={inputId} error={error} helperText={helperText} />
       </div>
     );
   }
@@ -99,19 +159,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         <textarea
           ref={ref}
           id={inputId}
-          className={`block min-h-24 w-full rounded-lg border px-3.5 py-3 text-base shadow-sm focus:ring-2 focus:ring-offset-0 sm:text-sm ${
-            error
-              ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-red-500'
-              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-          } ${className}`}
           {...props}
+          className={`pf-input-control pf-input-control--multiline ${error ? 'pf-field-invalid' : ''} ${className}`}
+          aria-invalid={error ? true : props['aria-invalid']}
+          data-pf-managed-error-id={error ? `${inputId}-field-error` : undefined}
+          aria-describedby={fieldDescriptions(props['aria-describedby'], helperText && !error ? `${inputId}-helper` : undefined, error ? `${inputId}-field-error` : undefined)}
         />
-        {error && (
-          <p className="pf-field-error">{error}</p>
-        )}
-        {helperText && !error && (
-          <p className="form-helper mt-1">{helperText}</p>
-        )}
+        <FieldMessages inputId={inputId} error={error} helperText={helperText} />
       </div>
     );
   }
@@ -137,12 +191,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={inputId}
-          className={`block min-h-12 w-full rounded-lg border px-3.5 py-3 text-base shadow-sm focus:ring-2 focus:ring-offset-0 sm:min-h-11 sm:text-sm ${
-            error
-              ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-red-500'
-              : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-          } ${className}`}
           {...props}
+          className={`pf-input-control ${error ? 'pf-field-invalid' : ''} ${className}`}
+          aria-invalid={error ? true : props['aria-invalid']}
+          data-pf-managed-error-id={error ? `${inputId}-field-error` : undefined}
+          aria-describedby={fieldDescriptions(props['aria-describedby'], helperText && !error ? `${inputId}-helper` : undefined, error ? `${inputId}-field-error` : undefined)}
         >
           {options?.map((option) => (
             <option key={option.value} value={option.value}>
@@ -151,12 +204,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ))}
           {props.children}
         </select>
-        {error && (
-          <p className="pf-field-error">{error}</p>
-        )}
-        {helperText && !error && (
-          <p className="form-helper mt-1">{helperText}</p>
-        )}
+        <FieldMessages inputId={inputId} error={error} helperText={helperText} />
       </div>
     );
   }
