@@ -16,3 +16,4 @@ test-results/
 .pnpm-store/
 .neon_local/
 .codex-remote-attachments/
+.codex-artifacts/

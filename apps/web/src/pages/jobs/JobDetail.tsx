@@ -5,8 +5,14 @@ import { StatusBadge } from '@/components/Badge';
 import { Card, CardHeader } from '@/components/Card';
 import { CrewTimecardModal, CrewTimecardPayload } from '@/components/CrewTimecardModal';
 import { Icon } from '@/components/Icon';
+import { Button } from "@/components/Button";
 import { Modal, ModalFooter } from '@/components/Modal';
 import { API_URL, apiJson, formatAddress, formatMoney, labelize } from '@/lib/api';
+import {
+  JobActionMenu,
+  JobFinancialSummary,
+  type JobFinancialPosition,
+} from "./JobFinancialSummary";
 
 interface JobCost {
   id: string;
@@ -144,11 +150,24 @@ interface JobCostingResponse {
       leadPostalCode?: string | null;
       completedAt?: string | null;
     };
-    revenue: { contract: number; approvedChangeOrders: number; total: number };
+    financialSummary: JobFinancialPosition;
+    revenue: {
+      contract: number | null;
+      approvedChangeOrders: number;
+      total: number | null;
+    };
     costs: { labor: number; materials: number; supplies: number; expenses: number; total: number };
-    production: { laborHours: number; averageLaborRate: number };
-    budget: { estimatedMaterials?: number | null; materialVariance?: number | null; remainingGrossProfit: number };
-    profitability: { grossProfit: number; grossMargin: number; costToRevenue: number };
+    production: { laborHours: number; averageLaborRate: number | null };
+    budget: {
+      estimatedMaterials?: number | null;
+      materialVariance?: number | null;
+      remainingGrossProfit: number | null;
+    };
+    profitability: {
+      grossProfit: number | null;
+      grossMargin: number | null;
+      costToRevenue: number | null;
+    };
     lists: {
       costs: JobCost[];
       changeOrders: ChangeOrder[];
@@ -189,8 +208,8 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
 
-function formatPercent(value: number) {
-  return `${Number(value || 0).toFixed(1)}%`;
+function formatPercent(value: number | null) {
+  return value == null ? 'Not available' : `${value.toFixed(1)}%`;
 }
 
 function numberValue(value: unknown) {
@@ -202,12 +221,13 @@ function photoSrc(photo: JobPhoto) {
 }
 
 function streetAddress(job: JobCostingResponse['data']['job']) {
-  return String(job.streetAddress || job.leadStreetAddress || '').trim();
+  return String(job.streetAddress || '').trim();
 }
 
 function jobScope(job: JobCostingResponse['data']['job']) {
   const haystack = String(job.name || '').toLowerCase();
-  if (/(exterior|siding|fascia|soffit|roofline|repaint)/.test(haystack)) return 'Exterior';
+  if (/(exterior|siding|fascia|soffit|roofline)/.test(haystack))
+    return 'Exterior';
   if (/(cabinet|vanity|built-in)/.test(haystack)) return 'Cabinets';
   if (/(commercial|office|workspace|tenant)/.test(haystack)) return 'Commercial';
   if (/(interior|bedroom|bathroom|kitchen|living|walls|ceilings|trim|doors)/.test(haystack)) return 'Interior';
@@ -229,13 +249,9 @@ function displayJobName(job: JobCostingResponse['data']['job']) {
     return [leadName, scope, street].filter(Boolean).join(' - ');
   }
   if (leadName && scope && street && !name.includes(' - ')) return [leadName, scope, street].join(' - ');
-  return name || [leadName || 'Customer', street].filter(Boolean).join(' - ') || 'Job detail';
-}
-
-function marginTone(margin: number) {
-  if (margin > 30) return 'text-green-700 bg-green-50 border-green-100';
-  if (margin > 15) return 'text-amber-700 bg-amber-50 border-amber-100';
-  return 'text-red-700 bg-red-50 border-red-100';
+  return (
+    name || [leadName || 'Customer', street].filter(Boolean).join(' - ') || 'Job detail'
+  );
 }
 
 function scheduleLabel(job: JobCostingResponse['data']['job']) {
@@ -304,10 +320,15 @@ export function JobDetail() {
   }, [id]);
 
   const job = detail?.job;
-  const address = job ? formatAddress(job) : '';
+  const address = job
+    ? formatAddress({
+        streetAddress: job.streetAddress,
+        city: job.city,
+        state: job.state,
+      })
+    : '';
   const canCreateChangeOrder = Boolean(job?.estimateId);
   const totalTimeHours = timeEntries.reduce((sum, entry) => sum + numberValue(entry.hours), 0);
-  const totalTimeCost = timeEntries.reduce((sum, entry) => sum + numberValue(entry.totalCost), 0);
 
   function openChangeOrderEditor(order?: ChangeOrder) {
     if (!canCreateChangeOrder) {
@@ -316,15 +337,20 @@ export function JobDetail() {
     }
     setEditingChangeOrderId(order?.id || null);
     const hasDetailedScope = Boolean(order?.scopeDetails?.items?.length);
-    setChangeOrderForm(order ? {
-      mode: hasDetailedScope ? 'detailed' : 'simple',
-      description: order.description || '',
-      amount: String(order.amount || ''),
-      createdBy: (order.createdBy === 'customer' ? 'customer' : 'contractor'),
-      paymentRequired: Boolean(order.paymentRequired),
-      depositPercent: String(order.paymentDueAmount && order.amount ? Math.round((Number(order.paymentDueAmount) / Math.max(Number(order.amount), 1)) * 100) : 100),
-      scopeItems: hasDetailedScope ? order.scopeDetails?.items || [blankChangeOrderScopeItem()] : [blankChangeOrderScopeItem()],
-    } : initialChangeOrderForm());
+    setChangeOrderForm(
+      order
+        ? {
+            mode: hasDetailedScope ? 'detailed' : 'simple',
+            description: order.description || '',
+            amount: String(order.amount || ''),
+            createdBy:
+              order.createdBy === 'customer' ? 'customer' : 'contractor',
+            paymentRequired: Boolean(order.paymentRequired),
+            depositPercent: String(order.paymentDueAmount && order.amount ? Math.round((Number(order.paymentDueAmount) / Math.max(Number(order.amount), 1)) * 100) : 100),
+            scopeItems: hasDetailedScope ? order.scopeDetails?.items || [blankChangeOrderScopeItem()] : [blankChangeOrderScopeItem()],
+          }
+        : initialChangeOrderForm(),
+    );
     setChangeOrderOpen(true);
   }
 
@@ -647,13 +673,15 @@ export function JobDetail() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading && !detail) {
     return (
       <div className="mx-auto max-w-7xl py-5 sm:py-8">
         <div className="animate-pulse space-y-4">
           <div className="h-28 rounded-xl bg-gray-200" />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {[1, 2, 3, 4, 5].map((item) => <div key={item} className="h-24 rounded-xl bg-gray-200" />)}
+            {[1, 2, 3, 4, 5].map((item) => (
+              <div key={item} className="h-24 rounded-xl bg-gray-200" />
+            ))}
           </div>
         </div>
       </div>
@@ -668,13 +696,6 @@ export function JobDetail() {
     );
   }
 
-  const kpis = [
-    ['Revenue', formatMoney(detail.revenue.total), 'Contract plus approved change orders'],
-    ['Actual Cost', formatMoney(detail.costs.total), 'All tracked costs'],
-    ['Gross Profit', formatMoney(detail.profitability.grossProfit), 'Revenue less actual costs'],
-    ['Gross Margin', formatPercent(detail.profitability.grossMargin), 'Gross profit divided by revenue'],
-    ['Labor Hours', Number(detail.production.laborHours || 0).toFixed(2), `${formatMoney(detail.production.averageLaborRate)}/hr avg`],
-  ];
   const breakdownRows = [
     ['Labor', detail.costs.labor],
     ['Materials', detail.costs.materials],
@@ -701,7 +722,10 @@ export function JobDetail() {
     : detail.lists.costs.filter((cost) => String(cost.category || 'other').toLowerCase() === activeCostFilter);
 
   return (
-    <div className="mx-auto max-w-7xl py-5 sm:py-8">
+    <div
+      className="mx-auto max-w-7xl min-w-0 py-5 sm:py-8"
+      aria-busy={isLoading}
+    >
       <section className="mb-6 rounded-lg border bg-white shadow-sm">
         <div className="grid lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="min-w-0 p-4 sm:p-5">
@@ -714,16 +738,18 @@ export function JobDetail() {
                       {job.leadName}
                     </Link>
                   )}
-                  {job.jobNumber && <span className="pf-status pf-status-neutral pf-status-sm">{job.jobNumber}</span>}
+                  {job.jobNumber && (
+                    <span className="pf-status pf-status-neutral pf-status-sm">{job.jobNumber}</span>
+                  )}
                 </div>
-              </div>
-              <div className={`inline-flex w-fit items-baseline gap-1 rounded-lg border px-3 py-2 ${marginTone(detail.profitability.grossMargin)}`}>
-                <span className="pf-section-title">{formatPercent(detail.profitability.grossMargin)}</span>
-                <span className="pf-meta">margin</span>
               </div>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-              <AddressInline address={address} className="pf-copy" />
+              {address ? (
+                <AddressInline address={address} className="pf-copy" />
+              ) : (
+                <p className="pf-helper">Jobsite not recorded</p>
+              )}
               <Link to="/calendar" className="btn-text btn-sm justify-start sm:justify-end" title="Open calendar">
                 <Icon name="calendar" className="h-4 w-4" />
                 {scheduleLabel(job)}
@@ -735,38 +761,96 @@ export function JobDetail() {
               <Link to="/calendar" className="inline-flex" title="Open calendar">
                 <StatusBadge status={String(job.status || 'scheduled')} />
               </Link>
-              <span className="pf-meta">{Number(detail.production.laborHours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} labor hrs</span>
+              <span className="pf-meta">
+                {Number(detail.production.laborHours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}{" "}
+                labor hrs</span>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-1">
-              <button type="button" className="btn-tonal btn-sm" onClick={() => setBulkOpen(true)}>
-                <Icon name="clock" className="h-4 w-4" />
+            <div className="flex flex-wrap items-center justify-start gap-1">
+              <Button
+                variant="secondary"
+                onClick={() => setBulkOpen(true)}
+                leftIcon={<Icon name="clock" />}
+              >
                 Add time
-              </button>
-              <details className="relative">
-                <summary className="btn-icon btn-icon-tonal list-none" aria-label="More job actions" title="More actions">
-                  <Icon name="more-horizontal" className="h-4 w-4" />
-                </summary>
-                <div className="absolute right-0 z-30 mt-2 w-52 rounded-lg border bg-white p-1 shadow-lg">
-                  {job.estimateId && <Link to={`/estimates/${job.estimateId}`} className="btn-text btn-sm w-full justify-start">View estimate</Link>}
-                  <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => openCostModal()}>Add cost</button>
-                  <button type="button" className="btn-text btn-sm w-full justify-start" onClick={() => openChangeOrderEditor()} disabled={!canCreateChangeOrder}>Add change order</button>
-                  {isCompleted ? (
-                    <button type="button" className="btn-text btn-sm w-full justify-start" onClick={requestReview} disabled={requestingReview}>
-                      {requestingReview ? 'Sending request...' : 'Request review'}
-                    </button>
-                  ) : (
-                    <button type="button" className="btn-text btn-sm w-full justify-start text-green-700" onClick={markComplete} disabled={completingJob}>
-                      {completingJob ? 'Marking complete...' : 'Mark job complete'}
-                    </button>
-                  )}
-                </div>
-              </details>
+              </Button>
+              <JobActionMenu label="More job actions">
+                {(close) => (
+                  <>
+                    {job.estimateId && (
+                      <Button
+                        as="a"
+                        href={`/estimates/${job.estimateId}/details`}
+                        variant="ghost"
+                        className="justify-start"
+                        onClick={close}
+                      >
+                        View estimate</Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={() => {
+                        close();
+                        openCostModal();
+                      }}
+                    >
+                      Add cost</Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={() => {
+                        close();
+                        openChangeOrderEditor();
+                      }}
+                      disabled={!canCreateChangeOrder}
+                    >
+                      Add change order</Button>
+                    <Button
+                      as="a"
+                      href="/calendar"
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={close}
+                    >
+                      Open calendar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      disabled={isCompleted ? requestingReview : completingJob}
+                      onClick={() => {
+                        close();
+                        void (isCompleted ? requestReview() : markComplete());
+                      }}
+                    >
+                      {isCompleted ? 'Request review' : 'Mark complete'}
+                    </Button>
+                  </>
+                )}
+              </JobActionMenu>
             </div>
           </div>
         </div>
       </section>
 
-      <nav className="mb-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0" aria-label="Job sections">
+      <section
+        className="mb-5 border-y border-[var(--pf-border)] py-4"
+        aria-label="Job cost position"
+      >
+        <JobFinancialSummary
+          summary={detail.financialSummary}
+          jobId={job.id}
+          estimateId={job.estimateId}
+          onAddCost={() => openCostModal()}
+        />
+        {isCompleted && (
+          <p className="pf-helper mt-2">
+            Work is complete. Cost capture has not been signed off.
+          </p>
+        )}
+      </section>
+
+      <nav className="mb-4 flex flex-wrap gap-2" aria-label="Job sections">
         {[
           ['Costs', '#job-costs'],
           ['Time', '#job-time'],
@@ -780,16 +864,6 @@ export function JobDetail() {
         ))}
       </nav>
 
-      <section className="mb-6 -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-5">
-        {kpis.map(([label, value, help]) => (
-          <Card key={label} padding="sm" className="min-w-[10.5rem] snap-start sm:min-w-0">
-            <p className="pf-metric-label">{label}</p>
-            <p className="pf-row-title mt-1">{value}</p>
-            <p className="pf-meta mt-1">{help}</p>
-          </Card>
-        ))}
-      </section>
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card padding="none" id="job-costs" className="scroll-mt-24">
@@ -802,7 +876,10 @@ export function JobDetail() {
             </div>
             {costCategoryFilters.length > 1 && (
               <div className="border-b bg-gray-50 px-4 py-3">
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Filter actual costs">
+                <div
+                  className="flex flex-wrap gap-2"
+                  aria-label="Filter actual costs"
+                >
                   <button
                     type="button"
                     className={`btn-sm shrink-0 rounded-full ${activeCostFilter === 'all' ? 'btn-tonal' : 'btn-text bg-white'}`}
@@ -830,18 +907,21 @@ export function JobDetail() {
                 <div className="p-6 text-sm text-gray-500">No actual job costs have been logged.</div>
               ) : visibleCosts.length === 0 ? (
                 <div className="p-6 text-sm text-gray-500">No costs match this filter.</div>
-              ) : visibleCosts.map((cost) => (
-                <div key={cost.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+              ) : (
+                visibleCosts.map((cost) => (
+                  <div key={cost.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-gray-950">{cost.description || labelize(cost.category)}</p>
                       <StatusBadge status={String(cost.category || 'other')} />
                     </div>
-                    <p className="mt-1 text-sm text-gray-600">
-                      {numberValue(cost.quantity).toFixed(2)} x {formatMoney(cost.unitCost || 0)} - {formatDate(cost.costDate || cost.createdAt)}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 sm:justify-end sm:text-right">
+                      <p className="mt-1 text-sm text-gray-600">
+                        {numberValue(cost.quantity).toFixed(2)} x {" "}
+                        {formatMoney(cost.unitCost || 0)} - {" "}
+                        {formatDate(cost.costDate || cost.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 sm:justify-end sm:text-right">
                     <p className="font-semibold text-gray-950">{formatMoney(cost.totalCost || 0)}</p>
                     <div className="flex items-center gap-1.5">
                       <button type="button" className="btn-icon btn-icon-tonal" aria-label={iconButtonLabel('Edit', cost.description)} onClick={() => openCostModal(cost)}>
@@ -852,8 +932,9 @@ export function JobDetail() {
                       </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                  </div>
+                ))
+              )}
             </div>
           </Card>
 
@@ -868,7 +949,9 @@ export function JobDetail() {
             <div className="p-4">
               {teamMembers.length === 0 ? (
                 <p className="text-sm text-gray-600">
-                  Add active crew members on the <Link to="/team" className="font-medium text-blue-700">Team page</Link> before logging job timecards.
+                  Add active crew members on the {" "}
+                  <Link to="/team" className="font-medium text-blue-700">Team page</Link>{" "}
+                  before logging job timecards.
                 </p>
               ) : (
                 <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
@@ -891,14 +974,17 @@ export function JobDetail() {
                 <>
                   <div className="flex flex-col gap-2 bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-gray-600">{totalTimeHours.toFixed(2)} logged hours</p>
-                    <p className="font-semibold text-gray-950">{formatMoney(totalTimeCost)} labor cost</p>
+                    <p className="pf-helper">
+                      Timecard costs are already in recorded job costs.
+                    </p>
                   </div>
                   {timeEntries.map((entry) => (
                     <div key={entry.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[1fr_auto]">
                       <div>
                         <p className="font-medium text-gray-950">{entry.teamMemberName || 'Crew member'}</p>
                         <p className="text-sm text-gray-600">
-                          {numberValue(entry.hours).toFixed(2)} hrs on {formatDate(entry.date)}
+                          {numberValue(entry.hours).toFixed(2)} hrs on {" "}
+                          {formatDate(entry.date)}
                           {entry.description ? ` - ${entry.description}` : ''}
                         </p>
                       </div>
@@ -925,19 +1011,22 @@ export function JobDetail() {
                   <p className="pf-copy mt-1">This job was created without an estimate, so there is no signed agreement to amend. Use a quick invoice for one-off billing, or create an estimate first if you need a formal customer approval flow.</p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Link to="/invoices" className="btn-secondary btn-sm">Create quick invoice</Link>
-                    {job?.leadId && <Link to={`/estimates/production?leadId=${job.leadId}`} className="btn-text btn-sm">Create estimate</Link>}
+                    {job?.leadId && (
+                      <Link to={`/estimates/production?leadId=${job.leadId}`} className="btn-text btn-sm">Create estimate</Link>
+                    )}
                   </div>
                 </div>
               ) : detail.lists.changeOrders.length === 0 ? (
                 <div className="p-6 text-sm text-gray-500">No change orders yet.</div>
-              ) : detail.lists.changeOrders.map((order) => (
-                <div key={order.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-950">{order.description || order.title || 'Change order'}</p>
-                    <p className="text-sm text-gray-600">
+              ) : (
+                detail.lists.changeOrders.map((order) => (
+                  <div key={order.id} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-950">{order.description || order.title || 'Change order'}</p>
+                      <p className="text-sm text-gray-600">
                       {[job.jobNumber, labelize(order.createdBy || 'contractor'), formatDate(order.createdAt)].filter(Boolean).join(' - ')}
                     </p>
-                    {order.scopeDetails?.items?.length ? (
+                      {order.scopeDetails?.items?.length ? (
                       <div className="mt-2 space-y-1">
                         {order.scopeDetails.items.slice(0, 3).map((item, index) => (
                           <p key={`${order.id}-scope-${index}`} className="pf-meta">
@@ -946,13 +1035,17 @@ export function JobDetail() {
                         ))}
                       </div>
                     ) : null}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <StatusBadge status={String(order.status || 'pending')} />
-                      {order.paymentRequired && <StatusBadge status={String(order.paymentStatus || 'pending')} />}
-                      {order.sentAt && <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">Sent</span>}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <StatusBadge status={String(order.status || 'pending')} />
+                        {order.paymentRequired && (
+                          <StatusBadge status={String(order.paymentStatus || 'pending')} />
+                        )}
+                        {order.sentAt && (
+                          <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">Sent</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="sm:text-right">
+                    <div className="sm:text-right">
                     <p className="font-semibold text-gray-950">{formatMoney(order.amount || 0)}</p>
                     <p className="text-xs text-gray-500">
                       {order.paymentRequired ? `${formatMoney(order.paymentDueAmount || order.amount || 0)} due on approval` : 'No payment required'}
@@ -990,8 +1083,9 @@ export function JobDetail() {
                       )}
                     </div>
                   </div>
-                </div>
-              ))}
+                  </div>
+                ))
+              )}
             </div>
           </Card>
 
@@ -1002,15 +1096,20 @@ export function JobDetail() {
             <div className="divide-y">
               {detail.lists.materialPurchases.length === 0 ? (
                 <div className="p-6 text-sm text-gray-500">No material invoices imported for this job.</div>
-              ) : detail.lists.materialPurchases.map((purchase) => (
-                <div key={purchase.id} className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-950">{purchase.supplier || purchase.vendor || 'Material purchase'}</p>
-                    <p className="text-sm text-gray-600">Invoice {purchase.invoiceNumber || 'not set'} - {formatDate(purchase.invoiceDate || purchase.purchasedAt || purchase.createdAt)}</p>
+              ) : (
+                detail.lists.materialPurchases.map((purchase) => (
+                  <div key={purchase.id} className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-950">{purchase.supplier || purchase.vendor || 'Material purchase'}</p>
+                      <p className="text-sm text-gray-600">
+                        Invoice {purchase.invoiceNumber || 'not set'} - {" "}
+                        {formatDate(purchase.invoiceDate || purchase.purchasedAt || purchase.createdAt)}
+                      </p>
+                    </div>
+                    <p className="font-semibold text-gray-950 sm:text-right">{formatMoney(purchase.totalAmount || purchase.totalCost || 0)}</p>
                   </div>
-                  <p className="font-semibold text-gray-950 sm:text-right">{formatMoney(purchase.totalAmount || purchase.totalCost || 0)}</p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </Card>
 
@@ -1063,7 +1162,9 @@ export function JobDetail() {
                           <span className="text-xs font-semibold uppercase text-gray-600">{photo.type || 'progress'}</span>
                           <span className="text-xs text-gray-500">{formatDate(photo.createdAt)}</span>
                         </div>
-                        {photo.caption && <p className="mt-1 truncate text-xs text-gray-700">{photo.caption}</p>}
+                        {photo.caption && (
+                          <p className="mt-1 truncate text-xs text-gray-700">{photo.caption}</p>
+                        )}
                       </div>
                     </a>
                   ))}
@@ -1096,11 +1197,20 @@ export function JobDetail() {
             <div className="space-y-3 text-sm">
               <Signal label="Estimated materials" value={detail.budget.estimatedMaterials == null ? 'Not estimated' : formatMoney(detail.budget.estimatedMaterials)} />
               <Signal
-                label="Material variance"
+                label="Recorded material variance"
                 value={detail.budget.materialVariance == null ? 'Not available' : formatMoney(detail.budget.materialVariance)}
-                valueClassName={detail.budget.materialVariance == null || detail.budget.materialVariance <= 0 ? 'text-green-600' : 'text-red-600'}
+                valueClassName={
+                  detail.budget.materialVariance == null
+                    ? "text-[var(--pf-text-muted)]"
+                    : detail.budget.materialVariance <= 0
+                      ? "text-[var(--pf-success)]"
+                      : "text-[var(--pf-danger)]"
+                }
               />
-              <Signal label="Cost to revenue" value={formatPercent(detail.profitability.costToRevenue)} />
+              <Signal
+                label="Recorded cost ratio"
+                value={formatPercent(detail.profitability.costToRevenue)}
+              />
             </div>
           </Card>
         </aside>
@@ -1111,7 +1221,9 @@ export function JobDetail() {
           <label>
             <span className="form-label">Category</span>
             <select name="category" required className="input" defaultValue={editingCost?.category || 'materials'}>
-              {costCategories.map((category) => <option key={category} value={category}>{labelize(category)}</option>)}
+              {costCategories.map((category) => (
+                <option key={category} value={category}>{labelize(category)}</option>
+              ))}
             </select>
           </label>
           <label>

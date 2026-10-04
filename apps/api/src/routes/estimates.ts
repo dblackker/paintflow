@@ -3,15 +3,20 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
 import { auditLogs, customerPayments, emailSends, emailTemplates, estimatePhotos, estimates, jobs, leads, orgBranding, orgSettings, portalTokens, users } from '@crewmodo/db/schema';
-import { and, eq, desc, inArray } from 'drizzle-orm';
+import { and, eq, desc, inArray, isNull, sql } from 'drizzle-orm';
+import { ESTIMATION_CALCULATION_VERSION, EstimationInputError, calculateProductionEstimate, formatEstimationMinor } from '../../../../packages/core/src/estimation';
+import { resolveProductionEstimation, productionEstimationFieldErrors } from '../lib/production-estimation';
+import { camelRecord, supplierCall, SupplierOperationError } from '../lib/supplier-operations';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { requireOrgPermission } from '../middleware/financial-access';
 import { sendEmail, renderEstimateEmail } from '../lib/email';
 import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule } from '../lib/payment-schedule';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 import { createDepositInvoiceForEstimate } from '../lib/customer-invoices';
 import { sendInvoiceEmail } from '../lib/invoice-emails';
+import { queueActionEvent } from '../lib/action-telemetry';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
@@ -33,6 +38,8 @@ const signSchema = z.object({
 });
 
 const estimateLineItemSchema = z.object({
+  calculationItemId: z.string().trim().min(1).max(150).optional(),
+  calculatedSubtotalMinor: z.number().int().nonnegative().safe().optional(),
   desc: z.string().trim().min(1).max(500),
   qty: z.coerce.number().positive(),
   rate: z.coerce.number().nonnegative(),
@@ -82,6 +89,10 @@ const estimateLineItemSchema = z.object({
 });
 
 const estimatePackageSchema = z.object({
+  calculationVersion: z.literal(ESTIMATION_CALCULATION_VERSION).optional(),
+  productionInput: z.unknown().optional(),
+  calculationInput: z.unknown().optional(),
+  estimateType: z.enum(['interior', 'exterior', 'mixed']).optional(),
   name: z.string().min(1).max(100),
   subtotal: z.coerce.number().nonnegative().optional(),
   discount: z.coerce.number().nonnegative().optional(),
@@ -96,6 +107,10 @@ const estimatePackageSchema = z.object({
   const computedTotal = Math.max(subtotal - discount, 0);
 
   return {
+    calculationVersion: pkg.calculationVersion,
+    productionInput: pkg.productionInput,
+    calculationInput: pkg.calculationInput,
+    estimateType: pkg.estimateType,
     name: pkg.name,
     subtotal: Number(pkg.subtotal ?? subtotal),
     discount,
@@ -109,7 +124,63 @@ const estimatePackageSchema = z.object({
   path: ['items'],
 });
 
+export async function priceEstimatePackages(db: ReturnType<typeof createDb>, orgId: string, packages: z.infer<typeof estimatePackageSchema>[]) {
+  const settings = packages.some((pkg) => !pkg.calculationVersion)
+    ? await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }) : null;
+  return Promise.all(packages.map(async (pkg) => {
+    if (!pkg.calculationVersion) {
+      if (pkg.productionInput || pkg.calculationInput) throw new EstimationInputError('calculationVersion', 'Reload the production estimator before saving.');
+      const calculation = calculateProductionEstimate({
+        currency: 'USD', surfaces: [], discount: pkg.discount,
+        taxRate: { kind: 'fraction', value: settings?.salesTaxRate ?? '0' },
+        adjustments: pkg.items.map((item, index) => ({ id: `legacy-${index}`, quantity: item.qty, unitPrice: item.rate, optional: item.optional })),
+      });
+      return { ...pkg, subtotal: Number(formatEstimationMinor(calculation.totals.subtotalMinor)),
+        discount: Number(formatEstimationMinor(calculation.totals.discountMinor)), tax: Number(formatEstimationMinor(calculation.totals.taxMinor)),
+        total: Number(formatEstimationMinor(calculation.totals.totalMinor)), pricingSnapshot: { version: ESTIMATION_CALCULATION_VERSION, calculation } };
+    }
+    const { productionInput, resolvedInput, calculation, rates, materials } = await resolveProductionEstimation(db, orgId, pkg.productionInput);
+    const lines = new Map(calculation.items.map((line) => [line.id, line]));
+    const submittedIds = new Set<string>();
+    const items = pkg.items.map((item) => {
+      const id = item.calculationItemId;
+      const line = id ? lines.get(id) : undefined;
+      if (!id || !line || submittedIds.has(id)) throw new EstimationInputError('items', 'Each scope item must match one calculated substrate or adjustment.');
+      submittedIds.add(id);
+      const source = productionInput.items.find((surface) => surface.id === id);
+      const adjustment = productionInput.adjustments?.find((row) => row.id === id);
+      const rate = source ? rates.find((row) => row.id === source.productionRateId)! : null;
+      const product = source?.materialId ? materials.find((row) => row.id === source.materialId) : null;
+      return {
+        ...item, calculationItemId: id, calculatedSubtotalMinor: line.subtotalMinor,
+        optional: source?.optional ?? adjustment?.optional ?? false,
+        // Selling lines carry allocated cents; measured quantities remain separate scope metadata.
+        qty: 1, rate: Number(formatEstimationMinor(line.subtotalMinor)),
+        productionRateId: rate?.id, category: rate?.unit || item.category,
+        dimensions: source ? { ...item.dimensions, quantity: Number(line.quantity), unit: line.unit } : item.dimensions,
+        labor: source ? { ...item.labor, hours: Number(line.hours), cost: Number(formatEstimationMinor(line.laborMinor)),
+          rate: Number(rate?.hourlyRate || '0'), coats: source.coats ?? rate?.coats,
+          productionRatePerHour: Number(rate?.ratePerHour || '0') } : undefined,
+        material: product ? { ...item.material, id: product.id, name: product.name, brand: product.brand, supplier: product.supplier,
+          unit: product.unit, costPerUnit: Number(product.costPerUnit), quantity: Number(line.allocatedPacks || '0'),
+          price: Number(formatEstimationMinor(line.materialMinor)), acquisitionCost: Number(formatEstimationMinor(line.materialCostMinor)),
+          colorName: source?.colorName, colorCode: source?.colorCode, sheen: product.sheen, purchaseGroupId: line.materialGroupId,
+          theoreticalGallons: line.theoreticalGallons } : undefined,
+      };
+    });
+    if (calculation.items.some((line) => Number(line.quantity) > 0 && !submittedIds.has(line.id))) {
+      throw new EstimationInputError('items', 'The proposal is missing a calculated scope item. Review the current scope again.');
+    }
+    return { ...pkg, items, lineItems: items, productionInput, calculationVersion: calculation.calculationVersion,
+      calculationInput: resolvedInput, calculationSnapshot: calculation,
+      subtotal: Number(formatEstimationMinor(calculation.totals.subtotalMinor)), discount: Number(formatEstimationMinor(calculation.totals.discountMinor)),
+      tax: Number(formatEstimationMinor(calculation.totals.taxMinor)), total: Number(formatEstimationMinor(calculation.totals.totalMinor)),
+      optionalTotal: Number(formatEstimationMinor(calculation.totals.optionalSubtotalMinor)) };
+  }));
+}
+
 const createEstimateSchema = z.object({
+  expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
   leadId: z.string().uuid(),
   streetAddress: z.string().trim().max(255).optional(),
   city: z.string().trim().max(100).optional(),
@@ -126,6 +197,32 @@ const createEstimateSchema = z.object({
     });
   }
 });
+
+async function savedOperation(db: ReturnType<typeof createDb>, orgId: string, actor: string, key: string, request: string) {
+  const result = await db.execute(sql`select request = ${request}::jsonb as matches, result
+    from operation_results where org_id=${orgId}::uuid and action='estimate.save'
+      and actor=${actor} and operation_key=${key}`);
+  const row = result.rows[0] as { matches: boolean; result: { estimate: Record<string, unknown>; replayed: boolean } } | undefined;
+  if (row && !row.matches) throw new SupplierOperationError('This save key was already used for different details.', 409, 'IDEMPOTENCY_CONFLICT');
+  return row ? { ...row.result, replayed: true } : null;
+}
+
+function saveOperationKey(c: Context<{ Bindings: Env; Variables: Variables }>) {
+  const key = c.req.header('Idempotency-Key')?.trim();
+  if (!key || key.length > 200) throw new SupplierOperationError('A valid save key is required. Reload this page and try again.', 400, 'INVALID_OPERATION_KEY');
+  return key;
+}
+
+function estimateSaveResponse(c: Context<{ Bindings: Env; Variables: Variables }>, result: { estimate: Record<string, unknown>; replayed: boolean }, created = false) {
+  const estimate = camelRecord<typeof estimates.$inferSelect>(result.estimate);
+  for (const key of ['createdAt', 'updatedAt', 'sentAt', 'signedAt'] as const) {
+    const value = estimate[key];
+    if (typeof value === 'string') estimate[key] = new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(value) ? value : `${value}Z`);
+  }
+  const publicUrl = publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id);
+  queueActionEvent(c, { action: 'estimate.saved', orgId: estimate.orgId, actorId: c.get('userId')!, entityId: estimate.id, occurredAt: estimate.updatedAt.toISOString() });
+  return c.json({ data: { ...estimate, recommendedTotal: estimateContractValue(estimate), publicUrl, customerPreviewUrl: publicUrl }, replayed: result.replayed }, created && !result.replayed ? 201 : 200);
+}
 
 const cancelEstimateSchema = z.object({
   reason: z.string().trim().max(500).optional(),
@@ -169,6 +266,16 @@ async function estimateContractorSignature(db: ReturnType<typeof createDb>, esti
     ),
     orderBy: (auditLogs, { desc }) => [desc(auditLogs.createdAt)],
   });
+  if (!estimate.signedAt && latest) {
+    const metadata = latest.metadata as { agreementUpdatedAt?: string } | null;
+    if (metadata?.agreementUpdatedAt && metadata.agreementUpdatedAt !== estimate.updatedAt.toISOString()) return null;
+    const lastChange = await db.query.auditLogs.findFirst({
+      where: and(eq(auditLogs.orgId, estimate.orgId), eq(auditLogs.entityType, 'estimate'),
+        eq(auditLogs.entityId, estimate.id), inArray(auditLogs.action, ['estimate.updated', 'estimate.draft.updated'])),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+    });
+    if (lastChange && lastChange.createdAt.getTime() > latest.createdAt.getTime()) return null;
+  }
   return contractorSignatureFromMetadata(latest?.metadata);
 }
 
@@ -377,6 +484,7 @@ estimatesApp.post('/:id/sign', async (c) => {
   if (existing.status === 'accepted') {
     return c.json({ error: 'This estimate has already been accepted' }, 409);
   }
+  if (existing.status !== 'sent') return c.json({ error: 'This proposal is not available for signing.' }, 409);
   if (existing.signedAt) {
     return c.json({ error: 'This estimate has already been signed' }, 409);
   }
@@ -394,6 +502,7 @@ estimatesApp.post('/:id/sign', async (c) => {
     return c.json({ error: 'Please acknowledge the required disclosure before signing.' }, 400);
   }
   
+  const cleanOptions = selectedOptionsForPackage(existing, packageName, selectedOptions);
   const [estimate] = await db.update(estimates)
     .set({
       status: 'accepted',
@@ -404,10 +513,10 @@ estimatesApp.post('/:id/sign', async (c) => {
       signedUserAgent: userAgent,
       updatedAt: new Date(),
     })
-    .where(eq(estimates.id, id))
+    .where(and(eq(estimates.id, id), eq(estimates.status, 'sent'), isNull(estimates.signedAt),
+      sql`date_trunc('milliseconds', ${estimates.updatedAt}) = ${existing.updatedAt.toISOString()}::timestamptz at time zone 'UTC'`))
     .returning();
-
-  const cleanOptions = selectedOptionsForPackage(estimate, packageName, selectedOptions);
+  if (!estimate) return c.json({ error: 'This proposal changed while you were reviewing it. Reload it before signing.', code: 'ESTIMATE_VERSION_CONFLICT' }, 409);
   const job = await createJobFromAcceptedEstimate(db, estimate, {
     packageName,
     signedBy: name,
@@ -475,6 +584,7 @@ estimatesApp.post('/:id/sign', async (c) => {
 });
 
 estimatesApp.use('*', authMiddleware);
+estimatesApp.use('*', requireOrgPermission(['manage_estimates'], 'Ask an owner for permission to manage proposals.'));
 
 estimatesApp.get('/', async (c) => {
   const orgId = c.get('orgId');
@@ -532,6 +642,10 @@ estimatesApp.get('/', async (c) => {
 
 estimatesApp.post('/', async (c) => {
   const orgId = c.get('orgId');
+  const actor = c.get('userId')!;
+  let key: string;
+  try { key = saveOperationKey(c); }
+  catch (error) { if (error instanceof SupplierOperationError) return c.json({ error: error.message, code: error.code }, error.status); throw error; }
   const body = await c.req.json();
   const parsed = createEstimateSchema.safeParse(body);
 
@@ -540,6 +654,11 @@ estimatesApp.post('/', async (c) => {
   }
 
   const db = createDb(c.env.DATABASE_URL);
+  const request = JSON.stringify({ estimateId: null, data: parsed.data });
+  try {
+    const replay = await savedOperation(db, orgId, actor, key, request);
+    if (replay) return estimateSaveResponse(c, replay, true);
+  } catch (error) { if (error instanceof SupplierOperationError) return c.json({ error: error.message, code: error.code }, error.status); throw error; }
   const lead = await db.query.leads.findFirst({
     where: and(eq(leads.id, parsed.data.leadId), eq(leads.orgId, orgId)),
   });
@@ -548,87 +667,29 @@ estimatesApp.post('/', async (c) => {
     return c.json({ error: 'Lead not found' }, 404);
   }
 
+  let packages: Awaited<ReturnType<typeof priceEstimatePackages>>;
+  try { packages = await priceEstimatePackages(db, orgId, parsed.data.packages); }
+  catch (error) {
+    if (error instanceof EstimationInputError) return c.json({ error: error.message, code: error.code, fields: productionEstimationFieldErrors(error) }, 400);
+    throw error;
+  }
+
   const isDraft = parsed.data.status === 'draft';
-  const recommendedPackage = parsed.data.packages.find((pkg) => /better|recommended/i.test(pkg.name))
-    ?? parsed.data.packages[0];
+  const recommendedPackage = packages.find((pkg) => /better|recommended/i.test(pkg.name)) ?? packages[0];
   const estimateTotal = recommendedPackage ? Number(recommendedPackage.total).toFixed(2) : '0.00';
 
-  const [estimate] = await db.insert(estimates)
-    .values({
-      orgId,
-      leadId: lead.id,
-      streetAddress: parsed.data.streetAddress || lead.streetAddress,
-      city: parsed.data.city || lead.city,
-      state: parsed.data.state || lead.state,
-      postalCode: parsed.data.postalCode || lead.postalCode,
-      packages: parsed.data.packages,
-      total: estimateTotal,
-      status: isDraft ? 'draft' : 'sent',
-      sentAt: isDraft ? null : new Date(),
-    })
-    .returning();
-
-  if (!isDraft) {
-    await db.update(leads)
-      .set({ status: 'estimate_sent', updatedAt: new Date() })
-      .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
+  try {
+    const result = await supplierCall<{ estimate: Record<string, unknown>; replayed: boolean }>(db, sql`select save_unsigned_estimate(
+      ${orgId}::uuid, ${actor}::uuid, ${key}, ${request}::jsonb, null::uuid, null::timestamp,
+      ${JSON.stringify({ ...parsed.data, streetAddress: parsed.data.streetAddress || lead.streetAddress,
+        city: parsed.data.city || lead.city, state: parsed.data.state || lead.state,
+        postalCode: parsed.data.postalCode || lead.postalCode, packages, total: estimateTotal })}::jsonb
+    ) as result`);
+    return estimateSaveResponse(c, result, true);
+  } catch (error) {
+    if (error instanceof SupplierOperationError) return c.json({ error: error.message, code: error.code }, error.status);
+    throw error;
   }
-
-  const auditEntries: Array<typeof auditLogs.$inferInsert> = [
-    {
-      orgId,
-      userId: c.get('userId'),
-      action: 'estimate.created',
-      entityType: 'estimate',
-      entityId: estimate.id,
-      metadata: {
-        leadId: lead.id,
-        packageCount: parsed.data.packages.length,
-        total: estimate.total,
-      },
-    },
-  ];
-
-  if (isDraft) {
-    auditEntries.push({
-      orgId,
-      userId: c.get('userId'),
-      action: 'estimate.draft.saved',
-      entityType: 'estimate',
-      entityId: estimate.id,
-      metadata: {
-        leadId: lead.id,
-        packageCount: parsed.data.packages.length,
-        total: estimate.total,
-      },
-    });
-  } else {
-    auditEntries.push(
-    {
-      orgId,
-      userId: c.get('userId'),
-      action: 'estimate.sent',
-      entityType: 'estimate',
-      entityId: estimate.id,
-      metadata: {
-        leadId: lead.id,
-        channel: 'in_app',
-        total: estimate.total,
-      },
-    },
-    );
-  }
-
-  await db.insert(auditLogs).values(auditEntries);
-
-  return c.json({
-    data: {
-      ...estimate,
-      recommendedTotal: estimateContractValue(estimate),
-      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
-      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
-    },
-  }, 201);
 });
 
 estimatesApp.get('/:id', async (c) => {
@@ -827,6 +888,10 @@ estimatesApp.post('/:id/revise', async (c) => {
 estimatesApp.patch('/:id', async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
+  const actor = c.get('userId')!;
+  let key: string;
+  try { key = saveOperationKey(c); }
+  catch (error) { if (error instanceof SupplierOperationError) return c.json({ error: error.message, code: error.code }, error.status); throw error; }
   const body = await c.req.json();
   const parsed = createEstimateSchema.safeParse(body);
 
@@ -834,7 +899,14 @@ estimatesApp.patch('/:id', async (c) => {
     return c.json({ error: 'Invalid input', details: parsed.error.flatten(), issues: parsed.error.issues }, 400);
   }
 
+  if (!parsed.data.expectedUpdatedAt) return c.json({ error: 'Reload this estimate before saving changes.', code: 'ESTIMATE_VERSION_REQUIRED' }, 409);
+
   const db = createDb(c.env.DATABASE_URL);
+  const request = JSON.stringify({ estimateId: id, data: parsed.data });
+  try {
+    const replay = await savedOperation(db, orgId, actor, key, request);
+    if (replay) return estimateSaveResponse(c, replay);
+  } catch (error) { if (error instanceof SupplierOperationError) return c.json({ error: error.message, code: error.code }, error.status); throw error; }
   const existing = await db.query.estimates.findFirst({
     where: and(eq(estimates.id, id), eq(estimates.orgId, orgId)),
   });
@@ -855,59 +927,29 @@ estimatesApp.patch('/:id', async (c) => {
     return c.json({ error: 'Lead not found' }, 404);
   }
 
-  const isDraft = existing.status === 'draft' && parsed.data.status === 'draft';
-  const isUpdatingSent = existing.status === 'sent';
-  const recommendedPackage = parsed.data.packages.find((pkg) => /better|recommended/i.test(pkg.name))
-    ?? parsed.data.packages[0];
-  const estimateTotal = recommendedPackage ? Number(recommendedPackage.total).toFixed(2) : '0.00';
-  const now = new Date();
-
-  const [estimate] = await db.update(estimates)
-    .set({
-      leadId: lead.id,
-      streetAddress: parsed.data.streetAddress || lead.streetAddress,
-      city: parsed.data.city || lead.city,
-      state: parsed.data.state || lead.state,
-      postalCode: parsed.data.postalCode || lead.postalCode,
-      packages: parsed.data.packages,
-      total: estimateTotal,
-      status: isDraft ? 'draft' : 'sent',
-      sentAt: isDraft ? existing.sentAt : (existing.sentAt || now),
-      updatedAt: now,
-    })
-    .where(and(eq(estimates.id, id), eq(estimates.orgId, orgId)))
-    .returning();
-
-  if (!isDraft) {
-    await db.update(leads)
-      .set({ status: 'estimate_sent', updatedAt: now })
-      .where(and(eq(leads.id, lead.id), eq(leads.orgId, orgId)));
+  let packages: Awaited<ReturnType<typeof priceEstimatePackages>>;
+  try { packages = await priceEstimatePackages(db, orgId, parsed.data.packages); }
+  catch (error) {
+    if (error instanceof EstimationInputError) return c.json({ error: error.message, code: error.code, fields: productionEstimationFieldErrors(error) }, 400);
+    throw error;
   }
 
-  await db.insert(auditLogs).values({
-    orgId,
-    userId: c.get('userId'),
-    action: isDraft ? 'estimate.draft.updated' : isUpdatingSent ? 'estimate.updated' : 'estimate.sent',
-    entityType: 'estimate',
-    entityId: estimate.id,
-    metadata: {
-      leadId: lead.id,
-      packageCount: parsed.data.packages.length,
-      total: estimate.total,
-      previousTotal: existing.total,
-      previousStatus: existing.status,
-      source: isUpdatingSent ? 'sent_estimate_edit' : 'draft_edit',
-    },
-  });
-
-  return c.json({
-    data: {
-      ...estimate,
-      recommendedTotal: estimateContractValue(estimate),
-      publicUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
-      customerPreviewUrl: publicEstimateUrl(c.env.PUBLIC_URL || 'https://app.crewmodo.com', estimate.id),
-    },
-  });
+  const isDraft = existing.status === 'draft' && parsed.data.status === 'draft';
+  const recommendedPackage = packages.find((pkg) => /better|recommended/i.test(pkg.name)) ?? packages[0];
+  const estimateTotal = recommendedPackage ? Number(recommendedPackage.total).toFixed(2) : '0.00';
+  try {
+    const result = await supplierCall<{ estimate: Record<string, unknown>; replayed: boolean }>(db, sql`select save_unsigned_estimate(
+      ${orgId}::uuid, ${actor}::uuid, ${key}, ${request}::jsonb, ${id}::uuid,
+      ${parsed.data.expectedUpdatedAt}::timestamptz at time zone 'UTC',
+      ${JSON.stringify({ ...parsed.data, status: isDraft ? 'draft' : 'sent', streetAddress: parsed.data.streetAddress || lead.streetAddress,
+        city: parsed.data.city || lead.city, state: parsed.data.state || lead.state,
+        postalCode: parsed.data.postalCode || lead.postalCode, packages, total: estimateTotal })}::jsonb
+    ) as result`);
+    return estimateSaveResponse(c, result);
+  } catch (error) {
+    if (error instanceof SupplierOperationError) return c.json({ error: error.message, code: error.status === 409 ? 'ESTIMATE_VERSION_CONFLICT' : error.code }, error.status);
+    throw error;
+  }
 });
 
 estimatesApp.get('/:id/activity', async (c) => {
@@ -1071,6 +1113,7 @@ estimatesApp.post('/:id/countersign', async (c) => {
       leadId: estimate.leadId,
       status: estimate.status,
       contractorSignature,
+      agreementUpdatedAt: estimate.updatedAt.toISOString(),
     },
   });
 
@@ -1169,6 +1212,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
       link: previewUrl,
       reason: parsed.data.reason || 'sent',
       contractorSignature,
+      agreementUpdatedAt: estimate.updatedAt.toISOString(),
     },
   });
   await db.insert(auditLogs).values({
@@ -1186,6 +1230,7 @@ estimatesApp.post('/:id/send-email', async (c) => {
       link: previewUrl,
       reason: parsed.data.reason || 'sent',
       contractorSignature,
+      agreementUpdatedAt: estimate.updatedAt.toISOString(),
     },
   });
 

@@ -1,5 +1,5 @@
-import { pgTable, uuid, varchar, text, timestamp, decimal, jsonb, pgEnum, boolean, integer } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { pgTable, uuid, varchar, text, timestamp, decimal, jsonb, pgEnum, boolean, integer, primaryKey, uniqueIndex, unique, index, check } from 'drizzle-orm/pg-core';
+import { relations, sql } from 'drizzle-orm';
 
 export const roleEnum = pgEnum('role', ['owner', 'member']);
 export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'estimate_sent', 'won', 'lost']);
@@ -744,6 +744,83 @@ export const aiUsageEvents = pgTable('ai_usage_events', {
   metadata: jsonb('metadata').notNull().default({}),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const operationResults = pgTable('operation_results', {
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  action: varchar('action', { length: 100 }).notNull(),
+  actor: varchar('actor', { length: 120 }).notNull(),
+  operationKey: varchar('operation_key', { length: 200 }).notNull(),
+  request: jsonb('request').notNull(),
+  result: jsonb('result').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({ key: primaryKey({ name: 'operation_results_pkey', columns: [table.orgId, table.action, table.actor, table.operationKey] }) }));
+
+export const supplierDocumentClaims = pgTable('supplier_document_claims', {
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  documentHash: varchar('document_hash', { length: 64 }).notNull(),
+  token: uuid('token').notNull(),
+  status: varchar('status', { length: 30 }).notNull().default('processing'),
+  reservedUsd: decimal('reserved_usd', { precision: 10, scale: 6 }).notNull().default('0'),
+  actualUsd: decimal('actual_usd', { precision: 10, scale: 6 }),
+  parsed: jsonb('parsed'),
+  importId: uuid('import_id').references(() => supplierInvoiceImports.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  key: primaryKey({ name: 'supplier_document_claims_pkey', columns: [table.orgId, table.documentHash] }),
+  usage: index('supplier_document_claims_usage_idx').on(table.orgId, table.createdAt),
+  reserved: check('supplier_document_claims_reserved_usd_check', sql`${table.reservedUsd} >= 0`),
+  state: check('supplier_document_claims_status_check', sql`${table.status} in ('processing','extracted','staged','unknown')`),
+}));
+
+export const materialPriceHistory = pgTable('material_price_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  materialId: uuid('material_id').references(() => materials.id).notNull(),
+  importId: uuid('import_id').references(() => supplierInvoiceImports.id).notNull(),
+  lineIndex: integer('line_index').notNull(),
+  unit: varchar('unit', { length: 20 }).notNull(),
+  costPerUnit: decimal('cost_per_unit', { precision: 10, scale: 2 }).notNull(),
+  transactionDate: timestamp('transaction_date').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  source: unique('material_price_history_org_id_import_id_line_index_key').on(table.orgId, table.importId, table.lineIndex),
+  history: index('material_price_history_material_idx').on(table.orgId, table.materialId, table.transactionDate.desc()),
+}));
+
+export const paymentRefundOperations = pgTable('payment_refund_operations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').references(() => organizations.id).notNull(),
+  paymentId: uuid('payment_id').references(() => customerPayments.id).notNull(),
+  actorId: uuid('actor_id').references(() => users.id).notNull(),
+  operationKey: varchar('operation_key', { length: 200 }).notNull(),
+  request: jsonb('request').notNull(),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  source: varchar('source', { length: 50 }).notNull(),
+  disposition: varchar('disposition', { length: 20 }).notNull().default('credit'),
+  reason: text('reason').notNull(),
+  method: varchar('method', { length: 50 }).notNull(),
+  reference: varchar('reference', { length: 120 }),
+  effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
+  state: varchar('state', { length: 20 }).notNull(),
+  providerKey: varchar('provider_key', { length: 120 }).notNull().unique('payment_refund_operations_provider_key_key'),
+  providerRefundId: varchar('provider_refund_id', { length: 255 }),
+  providerAccountId: varchar('provider_account_id', { length: 100 }),
+  providerLivemode: boolean('provider_livemode'),
+  providerPaymentIntentId: varchar('provider_payment_intent_id', { length: 255 }),
+  providerChargeId: varchar('provider_charge_id', { length: 255 }),
+  settlementEvidence: jsonb('settlement_evidence'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  operation: unique('payment_refund_operations_org_id_actor_id_operation_key_key').on(table.orgId, table.actorId, table.operationKey),
+  provider: uniqueIndex('payment_refund_provider_id_idx').on(table.providerRefundId).where(sql`${table.providerRefundId} is not null`),
+  active: uniqueIndex('payment_refund_active_idx').on(table.orgId, table.paymentId).where(sql`${table.state} in ('reserved','pending','unknown')`),
+  history: index('payment_refund_history_idx').on(table.orgId, table.paymentId, table.createdAt),
+  positiveAmount: check('payment_refund_operations_amount_check', sql`${table.amount} > 0`),
+  creditDisposition: check('payment_refund_operations_disposition_check', sql`${table.disposition} = 'credit'`),
+  validState: check('payment_refund_operations_state_check', sql`${table.state} in ('reserved','pending','unknown','succeeded','failed','canceled')`),
+}));
 
 export const jobCosts = pgTable('job_costs', {
   id: uuid('id').defaultRandom().primaryKey(),

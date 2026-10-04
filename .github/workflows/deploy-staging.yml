@@ -7,7 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  quality:
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_ref: ${{ github.sha }}
   deploy:
+    needs: quality
     runs-on: ubuntu-latest
     concurrency:
       group: crewmodo-staging

@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AddressInline } from '@/components/AddressInline';
 import { Badge, StatusBadge } from '@/components/Badge';
 import { CrewTimecardModal, CrewTimecardPayload } from '@/components/CrewTimecardModal';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
+import { Button } from "@/components/Button";
 import { Input } from '@/components/Input';
 import { ServiceErrorState } from '@/components/ServiceErrorState';
-import { apiJson, formatMoney, labelize } from '@/lib/api';
+import { apiJson } from '@/lib/api';
+import {
+  JobActionMenu,
+  JobFinancialSummary,
+  type JobFinancialPosition,
+} from "./JobFinancialSummary";
 
 interface TeamMember {
   id: string;
@@ -19,6 +25,7 @@ interface TeamMember {
 
 interface Job {
   id: string;
+  estimateId?: string | null;
   jobNumber?: string | null;
   name?: string | null;
   status?: string | null;
@@ -39,9 +46,12 @@ interface Job {
   leadPostalCode?: string | null;
   estimatedLaborHours?: number | string | null;
   costing?: JobCosting | null;
+  financialSummary?: JobFinancialPosition | null;
 }
 
 interface JobCosting {
+  job?: Job;
+  financialSummary?: JobFinancialPosition;
   revenue?: { total?: number | string | null };
   costs?: { total?: number | string | null };
   profitability?: { grossProfit?: number | string | null; grossMargin?: number | string | null };
@@ -50,6 +60,7 @@ interface JobCosting {
 
 interface JobsResponse {
   data: Job[];
+  nextCursor?: string | null;
 }
 
 function formatDate(value?: string | null) {
@@ -60,19 +71,20 @@ function formatDate(value?: string | null) {
 }
 
 function jobAddress(job: Job) {
-  const city = job.city || job.leadCity;
-  const state = job.state || job.leadState;
+  const city = job.city;
+  const state = job.state;
   const locality = [city, state].filter(Boolean).join(', ');
-  return [job.streetAddress || job.leadStreetAddress, locality].filter(Boolean).join(' ');
+  return [job.streetAddress, locality].filter(Boolean).join(' ');
 }
 
 function streetAddress(job: Job) {
-  return String(job.streetAddress || job.leadStreetAddress || '').trim();
+  return String(job.streetAddress || '').trim();
 }
 
 function jobScope(job: Job) {
   const haystack = String(job.name || '').toLowerCase();
-  if (/(exterior|siding|fascia|soffit|roofline|repaint)/.test(haystack)) return 'Exterior';
+  if (/(exterior|siding|fascia|soffit|roofline)/.test(haystack))
+    return 'Exterior';
   if (/(cabinet|vanity|built-in)/.test(haystack)) return 'Cabinets';
   if (/(commercial|office|workspace|tenant)/.test(haystack)) return 'Commercial';
   if (/(interior|bedroom|bathroom|kitchen|living|walls|ceilings|trim|doors)/.test(haystack)) return 'Interior';
@@ -92,17 +104,13 @@ function displayJobName(job: Job) {
   ].map((item) => item.toLowerCase());
   if (leadName && genericNames.includes(name.toLowerCase())) return [leadName, scope, street].filter(Boolean).join(' - ');
   if (leadName && scope && street && !name.includes(' - ')) return [leadName, scope, street].join(' - ');
-  return name || [leadName || 'Customer', street].filter(Boolean).join(' - ') || 'Untitled job';
+  return (
+    name || [leadName || 'Customer', street].filter(Boolean).join(' - ') || 'Untitled job'
+  );
 }
 
 function numberValue(value: unknown) {
   return Number(value || 0);
-}
-
-function marginTone(margin: number) {
-  if (margin > 30) return 'text-green-700 bg-green-50 border-green-100';
-  if (margin > 15) return 'text-amber-700 bg-amber-50 border-amber-100';
-  return 'text-red-700 bg-red-50 border-red-100';
 }
 
 function scheduleLabel(job: Job) {
@@ -128,6 +136,10 @@ export function JobsList() {
   const [savingBulk, setSavingBulk] = useState(false);
   const [updatingJobId, setUpdatingJobId] = useState<string | null>(null);
   const [requestingReviewId, setRequestingReviewId] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState('');
+  const loadMoreBusy = useRef(false);
 
   async function loadJobs() {
     setIsLoading(true);
@@ -136,16 +148,9 @@ export function JobsList() {
         apiJson<JobsResponse>('/v1/jobs'),
         apiJson<{ data: TeamMember[] }>('/v1/team/members').catch(() => ({ data: [] })),
       ]);
-      const jobsData = jobsResponse.data || [];
-      const jobsWithCosts = await Promise.all(jobsData.map(async (job) => {
-        try {
-          const response = await apiJson<{ data: JobCosting }>(`/v1/jobs/${job.id}/costing`);
-          return { ...job, costing: response.data };
-        } catch {
-          return { ...job, costing: null };
-        }
-      }));
-      setJobs(jobsWithCosts);
+      setJobs(jobsResponse.data || []);
+      setNextCursor(jobsResponse.nextCursor ?? null);
+      setMoreError('');
       setTeamMembers(membersResponse.data || []);
       setError('');
     } catch (err) {
@@ -159,6 +164,34 @@ export function JobsList() {
     loadJobs();
   }, []);
 
+  async function loadMore() {
+    if (!nextCursor || loadMoreBusy.current || isLoading) return;
+    loadMoreBusy.current = true;
+    setLoadingMore(true);
+    setMoreError('');
+    try {
+      const response = await apiJson<JobsResponse>(
+        `/v1/jobs?cursor=${encodeURIComponent(nextCursor)}`,
+      );
+      setJobs((previous) => [
+        ...previous,
+        ...response.data.filter(
+          (job) => !previous.some((existing) => existing.id === job.id),
+        ),
+      ]);
+      setNextCursor(response.nextCursor ?? null);
+    } catch (err) {
+      setMoreError(
+        err instanceof Error
+          ? err.message
+          : "More jobs could not be loaded. Retry.",
+      );
+    } finally {
+      loadMoreBusy.current = false;
+      setLoadingMore(false);
+    }
+  }
+
   const filteredJobs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return jobs.filter((job) => {
@@ -170,11 +203,16 @@ export function JobsList() {
     });
   }, [jobs, searchQuery]);
 
+  async function refreshJob(jobId: string) {
+    const response = await apiJson<{ data: JobCosting }>(`/v1/jobs/${jobId}/costing`);
+    setJobs(previous => previous.map(job => job.id === jobId ? { ...job, ...response.data.job, financialSummary: response.data.financialSummary, costing: response.data } : job));
+  }
+
   async function markComplete(job: Job) {
     if (!confirm('Mark this job as completed?')) return;
     setUpdatingJobId(job.id);
     try {
-      await apiJson(`/v1/jobs/${job.id}`, {
+      const response = await apiJson<{ data: Job }>(`/v1/jobs/${job.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -182,7 +220,7 @@ export function JobsList() {
         },
         body: JSON.stringify({ status: 'completed', completedAt: new Date().toISOString() }),
       });
-      await loadJobs();
+      setJobs(previous => previous.map(current => current.id === job.id ? { ...current, ...response.data } : current));
       window.showToast?.('Job marked complete', 'success');
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to update job', 'error');
@@ -223,8 +261,13 @@ export function JobsList() {
         body: JSON.stringify(payload),
       });
       setSelectedJobId(null);
-      await loadJobs();
       window.showToast?.('Crew timecard submitted', 'success');
+      try {
+        await refreshJob(payload.jobId);
+      } catch {
+        setJobs(previous => previous.map(job => job.id === payload.jobId ? { ...job, financialSummary: null, costing: null } : job));
+        window.showToast?.('Time saved. Reopen the job to refresh totals.', 'error');
+      }
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to submit timecard', 'error');
     } finally {
@@ -232,7 +275,7 @@ export function JobsList() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading && !jobs.length) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
         <div className="animate-pulse space-y-4">
@@ -245,7 +288,10 @@ export function JobsList() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+    <div
+      className="mx-auto max-w-6xl min-w-0 px-4 py-5 sm:px-6 sm:py-8 lg:px-8"
+      aria-busy={isLoading}
+    >
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="pf-page-copy max-w-2xl">Manage active projects, crews, photos, time, and job costs.</p>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -275,18 +321,17 @@ export function JobsList() {
           <ServiceErrorState error={error} pageName="Jobs" title="Jobs are unavailable" onRetry={loadJobs} compact />
         </div>
       )}
-
-      {filteredJobs.length === 0 ? (
+      {error && !jobs.length ? null : filteredJobs.length === 0 ? (
         jobs.length === 0 ? (
           <EmptyState
             title="No jobs yet"
             description="A signed estimate becomes production work here. From there you can schedule, log crew time, add photos, and track margin."
-            action={(
+            action={
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Link to="/estimates/production" className="btn-primary justify-center">Start estimate</Link>
                 <Link to="/pipeline" className="btn-secondary justify-center">View pipeline</Link>
               </div>
-            )}
+            }
           />
         ) : (
           <EmptyState title="No jobs found" description="Try a different customer, jobsite, status, or job number." />
@@ -306,6 +351,12 @@ export function JobsList() {
           ))}
         </div>
       )}
+
+      {moreError && <p role="alert" className="pf-copy mt-4 text-[var(--pf-danger)]">{moreError}</p>}
+      {nextCursor && <div className="mt-4 grid gap-2 justify-items-start">
+        <p className="pf-helper">Search covers {jobs.length} loaded jobs.</p>
+        <Button variant="secondary" onClick={loadMore} isLoading={loadingMore} disabled={isLoading}>{moreError ? 'Retry more jobs' : 'Load more jobs'}</Button>
+      </div>}
 
       <CrewTimecardModal
         isOpen={Boolean(selectedJobId)}
@@ -337,15 +388,11 @@ function JobCard({
   isRequestingReview: boolean;
 }) {
   const address = jobAddress(job);
-  const margin = numberValue(job.costing?.profitability?.grossMargin);
-  const revenue = job.costing?.revenue?.total ?? job.budget ?? 0;
-  const actualCost = job.costing?.costs?.total ?? 0;
-  const profit = job.costing?.profitability?.grossProfit ?? numberValue(revenue) - numberValue(actualCost);
-  const laborHours = job.costing?.production?.laborHours ?? job.estimatedLaborHours ?? 0;
+  const laborHours = job.costing?.production?.laborHours;
   const completed = String(job.status || '').toLowerCase() === 'completed';
 
   return (
-    <article className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md">
+    <article className="min-w-0 rounded-lg border border-[var(--pf-border)] bg-[var(--pf-surface)] shadow-sm">
       <div className="p-4 sm:p-5">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
           <div className="min-w-0">
@@ -353,7 +400,9 @@ function JobCard({
               <Link to={`/jobs/${job.id}`} className="pf-row-title min-w-0 truncate hover:text-blue-700">
                 {displayJobName(job)}
               </Link>
-              {job.jobNumber && <Badge size="sm" variant="default">{job.jobNumber}</Badge>}
+              {job.jobNumber && (
+                <Badge size="sm" variant="default">{job.jobNumber}</Badge>
+              )}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
               {job.leadName && (
@@ -361,20 +410,24 @@ function JobCard({
                   {job.leadName}
                 </Link>
               )}
-              <span className="pf-meta">{laborHoursLabel(laborHours)}</span>
+              {numberValue(laborHours) > 0 && (
+                <span className="pf-meta">
+                  {laborHoursLabel(laborHours)} recorded
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <StatusBadge status={String(job.status || 'scheduled')} />
-            <div className={`inline-flex w-fit items-baseline gap-1 rounded-lg border px-2.5 py-1.5 ${marginTone(margin)}`}>
-              <span className="pf-row-title">{margin.toFixed(1)}%</span>
-              <span className="pf-meta">margin</span>
-            </div>
           </div>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-          <AddressInline address={address} className="pf-copy" />
+          {address ? (
+            <AddressInline address={address} className="pf-copy" />
+          ) : (
+            <p className="pf-helper">Jobsite not recorded</p>
+          )}
           <Link to="/calendar" className="btn-text btn-sm justify-start sm:justify-end" title="Open schedule">
             <Icon name="calendar" className="h-4 w-4" />
             {scheduleLabel(job)}
@@ -382,52 +435,80 @@ function JobCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 border-y bg-gray-50/60 p-3 sm:gap-3 sm:px-5">
-        <MiniMetric label="Revenue" value={formatMoney(revenue)} />
-        <MiniMetric label="Actual Cost" value={formatMoney(actualCost)} />
-        <MiniMetric label="Profit" value={formatMoney(profit)} />
+      <div className="border-y border-[var(--pf-border)] p-4 sm:px-5">
+        <JobFinancialSummary
+          compact
+          summary={job.financialSummary}
+          jobId={job.id}
+          estimateId={job.estimateId}
+        />
       </div>
 
-      <div className="flex items-center justify-between gap-3 p-3 sm:px-5">
-        <div className="pf-meta">
-          {completed ? 'Completed work' : 'Active production work'}
-        </div>
+      <div className="flex items-center justify-end gap-3 p-3 sm:px-5">
         <div className="flex shrink-0 items-center gap-1.5">
-          <Link to={`/jobs/${job.id}`} className="btn-primary btn-sm whitespace-nowrap">
+          <Link to={`/jobs/${job.id}`} className="btn-text whitespace-nowrap">
             View job
             <Icon name="arrow-right" className="h-4 w-4" />
           </Link>
-          <details className="relative">
-            <summary className="btn-icon btn-icon-outlined list-none" aria-label={`More actions for ${displayJobName(job)}`}>
-              <Icon name="more-horizontal" className="h-5 w-5" />
-            </summary>
-            <div className="absolute right-0 z-20 mt-2 min-w-44 overflow-hidden rounded-lg border bg-white p-1 shadow-lg">
-              <button type="button" className="btn-text btn-sm w-full justify-start" onClick={onLogTime}>
-                <Icon name="clock" className="h-4 w-4" />
-                Add time
-              </button>
-              {completed ? (
-                <button type="button" className="btn-text btn-sm w-full justify-start" onClick={onRequestReview} disabled={isRequestingReview}>
-                  {isRequestingReview ? 'Sending...' : 'Request review'}
-                </button>
-              ) : (
-                <button type="button" className="btn-text btn-sm w-full justify-start text-green-700" onClick={onMarkComplete} disabled={isUpdating}>
-                  {isUpdating ? 'Updating...' : 'Mark complete'}
-                </button>
-              )}
-            </div>
-          </details>
+          <JobActionMenu label={`More actions for ${displayJobName(job)}`}>
+            {(close) => (
+              <>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    close();
+                    onLogTime();
+                  }}
+                  className="justify-start"
+                  leftIcon={<Icon name="clock" />}
+                >
+                  Add time
+              </Button>
+                <Button
+                  as="a"
+                  href={`/jobs/${job.id}#job-costs`}
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={close}
+                >
+                  Add cost
+                </Button>
+                <Button
+                  as="a"
+                  href="/calendar"
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={close}
+                >
+                  Open calendar
+          </Button>
+                {job.estimateId && (
+                  <Button
+                    as="a"
+                    href={`/estimates/${job.estimateId}/details`}
+                    variant="ghost"
+                    className="justify-start"
+                    onClick={close}
+                  >
+                    View estimate
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  disabled={completed ? isRequestingReview : isUpdating}
+                  onClick={() => {
+                    close();
+                    completed ? onRequestReview() : onMarkComplete();
+                  }}
+                >
+                  {completed ? 'Request review' : 'Mark complete'}
+                </Button>
+              </>
+            )}
+          </JobActionMenu>
         </div>
       </div>
     </article>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-gray-200 bg-white p-2 sm:p-3">
-      <p className="pf-metric-label truncate">{labelize(label)}</p>
-      <p className="pf-row-title mt-1 truncate">{value}</p>
-    </div>
   );
 }

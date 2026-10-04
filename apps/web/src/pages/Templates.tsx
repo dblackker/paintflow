@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { Modal, ModalFooter } from '@/components/Modal';
 import { apiJson } from '@/lib/api';
+import { estimationTemplateUnit } from '../../../../packages/core/src/estimation-template';
 
 interface TemplateRoom {
   id?: string;
@@ -19,6 +20,11 @@ interface TemplateRoom {
 }
 
 interface TemplateItem {
+  productionRateId?: string | null;
+  materialId?: string | null;
+  unit?: string | null;
+  coatingWidthInches?: number | string | null;
+  coatingSqFtPerItem?: number | string | null;
   id?: string;
   category?: string | null;
   label?: string | null;
@@ -214,9 +220,9 @@ export function Templates() {
         method: 'POST',
         headers: { 'Idempotency-Key': crypto.randomUUID() },
       });
-      sessionStorage.setItem('templateRooms', JSON.stringify(payload.data?.rooms || []));
+      if (!payload.data?.rooms?.length) throw new Error('This template has no rooms or substrates.');
       window.showToast?.('Template loaded. Opening production estimator.', 'success');
-      navigate('/estimates/production');
+      navigate('/estimates/production', { state: { estimateTemplate: { rooms: payload.data.rooms } } });
     } catch (err) {
       window.showToast?.(err instanceof Error ? err.message : 'Failed to use template', 'error');
     } finally {
@@ -262,6 +268,7 @@ export function Templates() {
     const surfaces = form.items
       .map((item) => ({
         category: item.category.trim(),
+        unit: estimationTemplateUnit(item.category),
         label: item.category.trim().replace(/_/g, ' '),
         quantity: numberValue(item.quantity),
         prepLevel: item.prepLevel,
@@ -440,8 +447,8 @@ export function Templates() {
                     </select>
                   </label>
                   <label>
-                    <span className="form-label">Qty</span>
-                    <input className="input mt-1" type="number" min="0" step="0.25" inputMode="decimal" value={item.quantity} onChange={(event) => updateItem(item.id, { quantity: event.target.value })} required />
+                    <span className="form-label">{estimationTemplateUnit(item.category) === 'linear_ft' ? 'Length (ft)' : estimationTemplateUnit(item.category) === 'each' ? 'Count' : 'Area (sq ft)'}</span>
+                    <input className="input mt-1" type="number" min="0" step={estimationTemplateUnit(item.category) === 'each' ? '1' : '0.25'} inputMode="decimal" value={item.quantity} onChange={(event) => updateItem(item.id, { quantity: event.target.value })} required />
                   </label>
                   <label>
                     <span className="form-label">Prep</span>

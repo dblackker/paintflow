@@ -1,138 +1,300 @@
-import { createBrowserRouter } from 'react-router-dom';
-import { BaseLayout } from '@/layouts/BaseLayout';
-import { Dashboard } from '@/pages/Dashboard';
-import { EstimatesList } from '@/pages/estimates/EstimatesList';
-import { EstimateNew } from '@/pages/estimates/EstimateNew';
-import { EstimateDetail } from '@/pages/estimates/EstimateDetail';
-import { EstimateDetails } from '@/pages/estimates/EstimateDetails';
-import { EstimatePhotos } from '@/pages/estimates/EstimatePhotos';
-import { EstimateProduction } from '@/pages/estimates/EstimateProduction';
-import { JobsList } from '@/pages/jobs/JobsList';
-import { JobDetail } from '@/pages/jobs/JobDetail';
-import { Leads } from '@/pages/Leads';
-import { LeadDetail } from '@/pages/leads/LeadDetail';
-import { Calendar } from '@/pages/Calendar';
-import { Billing } from '@/pages/Billing';
-import { Reporting } from '@/pages/Reporting';
-import { LeadSources } from '@/pages/reporting/LeadSources';
-import { SMS } from '@/pages/SMS';
-import { Portal } from '@/pages/Portal';
-import { Help } from '@/pages/Help';
-import { Login } from '@/pages/auth/Login';
-import { Signup } from '@/pages/auth/Signup';
-import { Onboarding } from '@/pages/Onboarding';
-import { Activity } from '@/pages/Activity';
-import { Invoices } from '@/pages/Invoices';
-import { InvoiceDetail } from '@/pages/invoices/InvoiceDetail';
-import { Materials } from '@/pages/Materials';
-import { Notifications } from '@/pages/Notifications';
-import { Payroll } from '@/pages/Payroll';
-import { Pipeline } from '@/pages/Pipeline';
-import { ProductionRates } from '@/pages/ProductionRates';
-import { Reports } from '@/pages/Reports';
-import { Reviews } from '@/pages/Reviews';
-import { Roles } from '@/pages/Roles';
-import { Settings } from '@/pages/Settings';
-import { SupplierCatalog } from '@/pages/SupplierCatalog';
-import { Team } from '@/pages/Team';
-import { Templates } from '@/pages/Templates';
-import { Time } from '@/pages/Time';
-import { Review } from '@/pages/Review';
-import { EmailTemplates } from '@/pages/EmailTemplates';
-import { StripePayments } from '@/pages/payments/StripePayments';
-import { DesignSystem } from '@/pages/dev/DesignSystem';
-import { LeadIntakeDocs } from '@/pages/developers/LeadIntakeDocs';
-import { Landing } from '@/pages/landing/Landing';
-import { PrivacyPolicy, TermsOfService } from '@/pages/legal/LegalPages';
-import { ErrorPage } from '@/pages/ErrorPage';
+import { createBrowserRouter } from "react-router-dom";
+import { BaseLayout } from "@/layouts/BaseLayout";
+import { ErrorPage } from "@/pages/ErrorPage";
 
+// Keep matching and error boundaries synchronous; download only the selected
+// screen. Customer documents remain outside the authenticated application shell.
 export const router = createBrowserRouter([
   {
-    path: '/',
-    element: <Landing />,
+    path: "/",
+    lazy: async () => ({
+      Component: (await import("@/pages/landing/Landing")).Landing,
+    }),
     errorElement: <ErrorPage />,
   },
   {
-    path: '/estimates/:id',
-    element: <EstimateDetail />,
+    path: "/estimates/:id",
+    lazy: async () => ({
+      Component: (await import("@/pages/estimates/EstimateDetail"))
+        .EstimateDetail,
+    }),
     errorElement: <ErrorPage />,
   },
   {
-    path: '/estimates/:id/success',
-    element: <EstimateDetail />,
+    path: "/estimates/:id/success",
+    lazy: async () => ({
+      Component: (await import("@/pages/estimates/EstimateDetail"))
+        .EstimateDetail,
+    }),
     errorElement: <ErrorPage />,
   },
   {
-    path: '/portal/:token',
-    element: <Portal />,
+    path: "/portal/:token",
+    lazy: async () => ({ Component: (await import("@/pages/Portal")).Portal }),
     errorElement: <ErrorPage />,
   },
   {
-    path: '/privacy',
-    element: <PrivacyPolicy />,
+    path: "/privacy",
+    lazy: async () => ({
+      Component: (await import("@/pages/legal/LegalPages")).PrivacyPolicy,
+    }),
     errorElement: <ErrorPage />,
   },
   {
-    path: '/terms',
-    element: <TermsOfService />,
+    path: "/terms",
+    lazy: async () => ({
+      Component: (await import("@/pages/legal/LegalPages")).TermsOfService,
+    }),
     errorElement: <ErrorPage />,
   },
   {
     element: <BaseLayout />,
     errorElement: <ErrorPage />,
     children: [
-      { path: '/dashboard', element: <Dashboard /> },
-      { path: '/estimates', element: <EstimatesList /> },
-      { path: '/estimates/new', element: <EstimateNew /> },
-      { path: '/estimates/production', element: <EstimateProduction /> },
-      { path: '/estimates/:id/details', element: <EstimateDetails /> },
-      { path: '/estimates/:id/photos', element: <EstimatePhotos /> },
-      { path: '/jobs', element: <JobsList /> },
-      { path: '/jobs/:id', element: <JobDetail /> },
-      { path: '/leads', element: <Leads /> },
-      { path: '/leads/:id', element: <LeadDetail /> },
-      { path: '/calendar', element: <Calendar /> },
-      { path: '/billing', element: <Billing /> },
-      { path: '/reporting', element: <Reporting /> },
-      { path: '/reporting/lead-sources', element: <LeadSources /> },
-      { path: '/sms', element: <SMS /> },
-      { path: '/help', element: <Help /> },
-      { path: '/activity', element: <Activity /> },
-      { path: '/invoices', element: <Invoices /> },
-      { path: '/invoices/:id', element: <InvoiceDetail /> },
-      { path: '/materials', element: <Materials /> },
-      { path: '/notifications', element: <Notifications /> },
-      { path: '/onboarding', element: <Onboarding /> },
-      { path: '/payroll', element: <Payroll /> },
-      { path: '/pipeline', element: <Pipeline /> },
-      { path: '/production-rates', element: <ProductionRates /> },
-      { path: '/reports', element: <Reports /> },
-      { path: '/reviews', element: <Reviews /> },
-      { path: '/roles', element: <Roles /> },
-      { path: '/settings', element: <Settings /> },
-      { path: '/supplier-catalog', element: <SupplierCatalog /> },
-      { path: '/team', element: <Team /> },
-      { path: '/templates', element: <Templates /> },
-      { path: '/time', element: <Time /> },
-      { path: '/review/:id', element: <Review /> },
-      { path: '/email-templates', element: <EmailTemplates /> },
-      { path: '/payments/stripe', element: <StripePayments /> },
-      { path: '/dev/design-system', element: <DesignSystem /> },
-      { path: '/developers/lead-intake', element: <LeadIntakeDocs /> },
+      {
+        path: "/dashboard",
+        lazy: async () => ({
+          Component: (await import("@/pages/Dashboard")).Dashboard,
+        }),
+      },
+      {
+        path: "/estimates",
+        lazy: async () => ({
+          Component: (await import("@/pages/estimates/EstimatesList"))
+            .EstimatesList,
+        }),
+      },
+      {
+        path: "/estimates/new",
+        lazy: async () => ({
+          Component: (await import("@/pages/estimates/EstimateNew"))
+            .EstimateNew,
+        }),
+      },
+      {
+        path: "/estimates/production",
+        lazy: async () => ({
+          Component: (await import("@/pages/estimates/EstimateProduction"))
+            .EstimateProduction,
+        }),
+      },
+      {
+        path: "/estimates/:id/details",
+        lazy: async () => ({
+          Component: (await import("@/pages/estimates/EstimateDetails"))
+            .EstimateDetails,
+        }),
+      },
+      {
+        path: "/estimates/:id/photos",
+        lazy: async () => ({
+          Component: (await import("@/pages/estimates/EstimatePhotos"))
+            .EstimatePhotos,
+        }),
+      },
+      {
+        path: "/jobs",
+        lazy: async () => ({
+          Component: (await import("@/pages/jobs/JobsList")).JobsList,
+        }),
+      },
+      {
+        path: "/jobs/:id",
+        lazy: async () => ({
+          Component: (await import("@/pages/jobs/JobDetail")).JobDetail,
+        }),
+      },
+      {
+        path: "/leads",
+        lazy: async () => ({
+          Component: (await import("@/pages/Leads")).Leads,
+        }),
+      },
+      {
+        path: "/leads/:id",
+        lazy: async () => ({
+          Component: (await import("@/pages/leads/LeadDetail")).LeadDetail,
+        }),
+      },
+      {
+        path: "/calendar",
+        lazy: async () => ({
+          Component: (await import("@/pages/Calendar")).Calendar,
+        }),
+      },
+      {
+        path: "/billing",
+        lazy: async () => ({
+          Component: (await import("@/pages/Billing")).Billing,
+        }),
+      },
+      {
+        path: "/reporting",
+        lazy: async () => ({
+          Component: (await import("@/pages/Reporting")).Reporting,
+        }),
+      },
+      {
+        path: "/reporting/lead-sources",
+        lazy: async () => ({
+          Component: (await import("@/pages/reporting/LeadSources"))
+            .LeadSources,
+        }),
+      },
+      {
+        path: "/sms",
+        lazy: async () => ({ Component: (await import("@/pages/SMS")).SMS }),
+      },
+      {
+        path: "/help",
+        lazy: async () => ({ Component: (await import("@/pages/Help")).Help }),
+      },
+      {
+        path: "/activity",
+        lazy: async () => ({
+          Component: (await import("@/pages/Activity")).Activity,
+        }),
+      },
+      {
+        path: "/invoices",
+        lazy: async () => ({
+          Component: (await import("@/pages/Invoices")).Invoices,
+        }),
+      },
+      {
+        path: "/invoices/:id",
+        lazy: async () => ({
+          Component: (await import("@/pages/invoices/InvoiceDetail"))
+            .InvoiceDetail,
+        }),
+      },
+      {
+        path: "/materials",
+        lazy: async () => ({
+          Component: (await import("@/pages/Materials")).Materials,
+        }),
+      },
+      {
+        path: "/notifications",
+        lazy: async () => ({
+          Component: (await import("@/pages/Notifications")).Notifications,
+        }),
+      },
+      {
+        path: "/onboarding",
+        lazy: async () => ({
+          Component: (await import("@/pages/Onboarding")).Onboarding,
+        }),
+      },
+      {
+        path: "/payroll",
+        lazy: async () => ({
+          Component: (await import("@/pages/Payroll")).Payroll,
+        }),
+      },
+      {
+        path: "/pipeline",
+        lazy: async () => ({
+          Component: (await import("@/pages/Pipeline")).Pipeline,
+        }),
+      },
+      {
+        path: "/production-rates",
+        lazy: async () => ({
+          Component: (await import("@/pages/ProductionRates")).ProductionRates,
+        }),
+      },
+      {
+        path: "/reports",
+        lazy: async () => ({
+          Component: (await import("@/pages/Reports")).Reports,
+        }),
+      },
+      {
+        path: "/reviews",
+        lazy: async () => ({
+          Component: (await import("@/pages/Reviews")).Reviews,
+        }),
+      },
+      {
+        path: "/roles",
+        lazy: async () => ({
+          Component: (await import("@/pages/Roles")).Roles,
+        }),
+      },
+      {
+        path: "/settings",
+        lazy: async () => ({
+          Component: (await import("@/pages/Settings")).Settings,
+        }),
+      },
+      {
+        path: "/supplier-catalog",
+        lazy: async () => ({
+          Component: (await import("@/pages/SupplierCatalog")).SupplierCatalog,
+        }),
+      },
+      {
+        path: "/team",
+        lazy: async () => ({ Component: (await import("@/pages/Team")).Team }),
+      },
+      {
+        path: "/templates",
+        lazy: async () => ({
+          Component: (await import("@/pages/Templates")).Templates,
+        }),
+      },
+      {
+        path: "/time",
+        lazy: async () => ({ Component: (await import("@/pages/Time")).Time }),
+      },
+      {
+        path: "/review/:id",
+        lazy: async () => ({
+          Component: (await import("@/pages/Review")).Review,
+        }),
+      },
+      {
+        path: "/email-templates",
+        lazy: async () => ({
+          Component: (await import("@/pages/EmailTemplates")).EmailTemplates,
+        }),
+      },
+      {
+        path: "/payments/stripe",
+        lazy: async () => ({
+          Component: (await import("@/pages/payments/StripePayments"))
+            .StripePayments,
+        }),
+      },
+      {
+        path: "/dev/design-system",
+        lazy: async () => ({
+          Component: (await import("@/pages/dev/DesignSystem")).DesignSystem,
+        }),
+      },
+      {
+        path: "/developers/lead-intake",
+        lazy: async () => ({
+          Component: (await import("@/pages/developers/LeadIntakeDocs"))
+            .LeadIntakeDocs,
+        }),
+      },
     ],
   },
   {
-    path: '/login',
-    element: <Login />,
+    path: "/login",
+    lazy: async () => ({
+      Component: (await import("@/pages/auth/Login")).Login,
+    }),
     errorElement: <ErrorPage />,
   },
   {
-    path: '/signup',
-    element: <Signup />,
+    path: "/signup",
+    lazy: async () => ({
+      Component: (await import("@/pages/auth/Signup")).Signup,
+    }),
     errorElement: <ErrorPage />,
   },
-  {
-    path: '*',
-    element: <ErrorPage notFound />,
-  },
+  { path: "*", element: <ErrorPage notFound /> },
 ]);

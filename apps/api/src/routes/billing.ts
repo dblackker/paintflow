@@ -2,33 +2,42 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
 import { auditLogs, changeOrders, customerInvoices, customerPayments, estimates, jobs, leads, orgSettings, quickbooksConnections, stripeConnections } from '@crewmodo/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
-import { createCheckoutSession, createRefund, verifyWebhookSignature } from '../lib/stripe';
+import { financialAccess } from '../middleware/financial-access';
+import { createCheckoutSession, createRefund, readCheckoutForManualPayment, verifyWebhookSignature } from '../lib/stripe';
 import { createQBInvoice, createQBPayment } from '../lib/quickbooks';
 import { createJobFromAcceptedEstimate, estimateContractValue } from '../lib/estimate-handoff';
 import { estimatePaymentSchedule, nextPayableMilestone } from '../lib/payment-schedule';
 import { sendInvoiceEmail } from '../lib/invoice-emails';
+import { exactUsd, usdMinor, paymentCall, paymentRecord, PaymentOperationError, readPaymentBalance, type RefundResult } from '../lib/payment-operations';
 
 const billing = new Hono<{ Bindings: Env; Variables: Variables }>();
 
+const usdAmount = z.union([z.string(), z.number()]).transform((value, ctx) => {
+  try { return exactUsd(value); }
+  catch { ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a positive amount with at most two decimal places.' }); return z.NEVER; }
+});
+
 const refundSchema = z.object({
-  amount: z.coerce.number().positive(),
-  reason: z.string().trim().max(500).optional(),
-  method: z.enum(['cash', 'check', 'ach', 'credit', 'other']).optional(),
+  amount: usdAmount,
+  reason: z.string().trim().min(1).max(500),
+  method: z.enum(['cash', 'check', 'ach', 'other']).optional(),
   reference: z.string().trim().max(120).optional().nullable(),
   confirmManualRefund: z.boolean().optional(),
+  refundedAt: z.string().datetime({ offset: true }).optional(),
+  disposition: z.literal('credit').default('credit'),
 });
 
 const manualPaymentSchema = z.object({
   estimateId: z.string().uuid().optional(),
   invoiceId: z.string().uuid().optional(),
-  amount: z.coerce.number().positive(),
+  amount: usdAmount,
   source: z.enum(['cash', 'check', 'ach', 'other']).default('check'),
   reference: z.string().trim().max(120).optional().nullable(),
   description: z.string().trim().max(255).optional().nullable(),
-  receivedAt: z.string().datetime().optional().nullable(),
+  receivedAt: z.string().datetime({ offset: true }).optional().nullable(),
   confirmAdditionalPayment: z.boolean().optional(),
   sendReceipt: z.boolean().optional(),
 }).refine((data) => Boolean(data.estimateId) !== Boolean(data.invoiceId), {
@@ -49,55 +58,13 @@ function netPaymentAmount(payment: typeof customerPayments.$inferSelect) {
   return Number(payment.amount || 0) - Number(payment.refundedAmount || 0);
 }
 
-function paymentMetadata(value: unknown) {
-  const metadata = metadataObject(value);
-  const refundHistory = Array.isArray(metadata.refundHistory)
-    ? metadata.refundHistory.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
-    : [];
-  return { metadata, refundHistory };
-}
-
-async function reconcileInvoiceAfterRefund(db: ReturnType<typeof createDb>, orgId: string, invoiceId?: string | null) {
-  if (!invoiceId) return;
-  const invoice = await db.query.customerInvoices.findFirst({
-    where: and(eq(customerInvoices.id, invoiceId), eq(customerInvoices.orgId, orgId)),
-  });
-  if (!invoice) return;
-
-  const payments = await db.select().from(customerPayments)
-    .where(and(eq(customerPayments.invoiceId, invoice.id), eq(customerPayments.orgId, orgId)));
-  const payablePayments = payments.filter((row) => ['succeeded', 'paid', 'partially_refunded', 'refunded'].includes(row.status));
-  const grossPaidAmount = roundMoney(payablePayments.reduce((sum, row) => sum + Number(row.amount || 0), 0));
-  const refundedAmount = roundMoney(payablePayments.reduce((sum, row) => sum + Number(row.refundedAmount || 0), 0));
-  const paidAmount = roundMoney(payablePayments.reduce((sum, row) => sum + netPaymentAmount(row), 0));
-  const invoiceTotal = roundMoney(Number(invoice.total || 0));
-  let nextStatus = 'sent';
-  if (grossPaidAmount > 0.005 && refundedAmount >= grossPaidAmount - 0.005) {
-    nextStatus = 'refunded';
-  } else if (refundedAmount > 0.005) {
-    nextStatus = 'partially_refunded';
-  } else if (paidAmount >= invoiceTotal - 0.005) {
-    nextStatus = 'paid';
-  } else if (paidAmount > 0.005) {
-    nextStatus = 'partially_paid';
+function operationFailure(c: Parameters<typeof financialAccess>[0], error: unknown) {
+  const correlationId = crypto.randomUUID();
+  if (error instanceof PaymentOperationError) {
+    return c.json({ error: error.message, message: error.message, code: error.code, retryable: false, correlationId }, error.status);
   }
-
-  await db.update(customerInvoices)
-    .set({
-      status: nextStatus,
-      paidAt: ['paid', 'partially_refunded', 'refunded'].includes(nextStatus) ? (invoice.paidAt || new Date()) : null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)));
-
-  if (invoice.changeOrderId) {
-    await db.update(changeOrders)
-      .set({
-        paymentStatus: nextStatus === 'paid' ? 'paid' : 'pending',
-        paidAt: nextStatus === 'paid' ? (invoice.paidAt || new Date()) : null,
-      })
-      .where(and(eq(changeOrders.id, invoice.changeOrderId), eq(changeOrders.orgId, orgId)));
-  }
+  console.error('Payment operation requires review', { correlationId });
+  return c.json({ error: 'Payment could not be confirmed. Refresh before retrying.', code: 'PAYMENT_CONFIRMATION_UNAVAILABLE', retryable: false, correlationId }, 503);
 }
 
 async function paymentAlreadyRecorded(db: ReturnType<typeof createDb>, stripeCheckoutSessionId?: string) {
@@ -136,197 +103,76 @@ function selectedOptionsForPackage(pkg: { items?: unknown[]; lineItems?: unknown
     }));
 }
 
-billing.use('/manual', authMiddleware);
+billing.use('/manual', authMiddleware, financialAccess);
 
 billing.post('/manual', async (c) => {
   const orgId = c.get('orgId');
-  if (!orgId) return c.json({ error: 'Unauthorized' }, 401);
+  const actor = c.get('userId');
+  if (!orgId || !actor) return c.json({ error: 'Unauthorized' }, 401);
   const idempotencyKey = c.req.header('Idempotency-Key')?.trim();
-  if (!idempotencyKey) {
-    return c.json({ error: 'Idempotency-Key is required when recording payments.' }, 400);
+  if (!idempotencyKey || idempotencyKey.length > 200) {
+    return c.json({ error: 'A valid Idempotency-Key is required.', code: 'INVALID_OPERATION_KEY' }, 400);
   }
-
   const parsed = manualPaymentSchema.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) {
-    return c.json({ error: 'Invalid payment request', details: parsed.error.flatten() }, 400);
-  }
-
+  if (!parsed.success) return c.json({ error: 'Invalid manual payment', code: 'INVALID_PAYMENT', details: parsed.error.flatten() }, 400);
+  const request = {
+    invoiceId: parsed.data.invoiceId || null, estimateId: parsed.data.estimateId || null,
+    amount: parsed.data.amount, source: parsed.data.source,
+    reference: parsed.data.reference || null, description: parsed.data.description || null,
+    receivedAt: parsed.data.receivedAt ? new Date(parsed.data.receivedAt).toISOString() : null,
+    confirmAdditionalPayment: parsed.data.confirmAdditionalPayment || false, sendReceipt: parsed.data.sendReceipt !== false,
+  };
   const db = createDb(c.env.DATABASE_URL);
-  if (parsed.data.invoiceId) {
-    const invoice = await db.query.customerInvoices.findFirst({
-      where: and(eq(customerInvoices.id, parsed.data.invoiceId), eq(customerInvoices.orgId, orgId)),
-    });
-    if (!invoice) return c.json({ error: 'Invoice not found' }, 404);
-    if (['canceled', 'voided'].includes(invoice.status)) return c.json({ error: 'Cannot record payment on an inactive invoice.' }, 409);
-
-    const existingPayments = await db.select().from(customerPayments)
-      .where(and(eq(customerPayments.invoiceId, invoice.id), eq(customerPayments.orgId, orgId)));
-    const duplicate = existingPayments.find((payment) => metadataObject(payment.metadata).idempotencyKey === idempotencyKey);
-    if (duplicate) return c.json({ data: duplicate, duplicate: true });
-
-    const invoiceTotal = roundMoney(Number(invoice.total || 0));
-    const paidAmount = roundMoney(existingPayments.reduce((sum, payment) => sum + netPaymentAmount(payment), 0));
-    const remaining = roundMoney(Math.max(invoiceTotal - paidAmount, 0));
-    const amount = roundMoney(parsed.data.amount);
-    if (paidAmount > 0.005 && !parsed.data.confirmAdditionalPayment) {
-      return c.json({ error: `This invoice already has ${paidAmount.toFixed(2)} recorded. Confirm this is an additional payment before saving.` }, 409);
+  try {
+    // One SQL call owns the balance lock, payment, status, audit and replay result.
+    type ManualResult = { payment: Record<string, unknown>; remaining: string; replayed: boolean };
+    const commit = (checkout: Record<string, unknown> | null) => paymentCall<ManualResult>(db,
+      sql`select record_manual_payment(${orgId}::uuid,${actor}::uuid,${idempotencyKey},${JSON.stringify(request)}::jsonb,
+        ${checkout ? JSON.stringify(checkout) : null}::jsonb) as result`);
+    let result: ManualResult;
+    try { result = await commit(null); }
+    catch (error) {
+      if (!(error instanceof PaymentOperationError) || error.code !== 'CHECKOUT_REVIEW_REQUIRED' || !request.invoiceId) throw error;
+      const invoice = await db.query.customerInvoices.findFirst({
+        where: and(eq(customerInvoices.id, request.invoiceId), eq(customerInvoices.orgId, orgId)),
+      });
+      const connection = await db.query.stripeConnections.findFirst({ where: eq(stripeConnections.orgId, orgId) });
+      const mode = /^(?:sk|rk)_(test|live)_/.exec(c.env.STRIPE_SECRET_KEY || '')?.[1];
+      if (!invoice?.stripeCheckoutSessionId || !connection || !mode) throw error;
+      let session: Awaited<ReturnType<typeof readCheckoutForManualPayment>>;
+      try { session = await readCheckoutForManualPayment(c.env, invoice.stripeCheckoutSessionId, connection.stripeAccountId); }
+      catch { throw new PaymentOperationError('Online checkout status is unavailable. No manual payment was recorded. Try again after reconciliation.', 409, 'CHECKOUT_REVIEW_REQUIRED'); }
+      if (session.id !== invoice.stripeCheckoutSessionId || session.livemode !== (mode === 'live')
+        || session.metadata?.orgId !== orgId || session.metadata?.invoiceId !== invoice.id
+        || !Number.isSafeInteger(session.amount_total) || session.amount_total < 0) {
+        throw new PaymentOperationError('The online checkout identity or environment needs review.', 409, 'CHECKOUT_REVIEW_REQUIRED');
+      }
+      result = await commit({ id: session.id, status: session.status, paymentStatus: session.payment_status,
+        amountMinor: session.amount_total, currency: session.currency, livemode: session.livemode,
+        orgId, invoiceId: invoice.id, accountId: connection.stripeAccountId, paymentIntentId: session.payment_intent || null,
+        verifiedAt: new Date().toISOString() });
     }
-    if (remaining <= 0) {
-      return c.json({ error: 'This invoice is already paid in full.' }, 409);
-    }
-    if (amount > remaining + 0.005) {
-      return c.json({ error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(2)}.` }, 409);
-    }
-
-    const receivedAt = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
-    const description = parsed.data.description || `${parsed.data.source.toUpperCase()} payment`;
-    const sendReceipt = parsed.data.sendReceipt !== false;
-    const [payment] = await db.insert(customerPayments).values({
-      orgId,
-      leadId: invoice.leadId,
-      invoiceId: invoice.id,
-      jobId: invoice.jobId || null,
-      source: parsed.data.source,
-      status: 'succeeded',
-      amount: amount.toFixed(2),
-      currency: 'usd',
-      description,
-      receivedAt,
-      metadata: {
-        idempotencyKey,
-        reference: parsed.data.reference || null,
-        confirmedAdditionalPayment: paidAmount > 0.005,
-        recordedByUserId: c.get('userId') || null,
-        receiptRequested: sendReceipt,
-        note: 'Manual payment recorded by contractor. No Stripe charge was created.',
-      },
-    }).returning();
-
-    const remainingAfterPayment = roundMoney(remaining - amount);
-    await db.update(customerInvoices)
-      .set({
-        status: remainingAfterPayment <= 0.005 ? 'paid' : 'partially_paid',
-        paidAt: remainingAfterPayment <= 0.005 ? receivedAt : null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(customerInvoices.id, invoice.id), eq(customerInvoices.orgId, orgId)));
-
-    if (remainingAfterPayment <= 0.005 && invoice.changeOrderId) {
-      await db.update(changeOrders)
-        .set({ paymentStatus: 'paid', paidAt: receivedAt })
-        .where(and(eq(changeOrders.id, invoice.changeOrderId), eq(changeOrders.orgId, orgId)));
-    }
-    if (remainingAfterPayment <= 0.005 && invoice.jobId && invoice.estimateId) {
-      await db.update(jobs)
-        .set({ status: 'scheduled', updatedAt: new Date() })
-        .where(and(eq(jobs.id, invoice.jobId), eq(jobs.orgId, orgId), eq(jobs.status, 'deposit_pending')));
-    }
-
-    await db.insert(auditLogs).values({
-      orgId,
-      userId: c.get('userId'),
-      action: 'payment.manual_recorded',
-      entityType: 'payment',
-      entityId: payment.id,
-      metadata: {
-        leadId: invoice.leadId,
-        invoiceId: invoice.id,
-        jobId: invoice.jobId || null,
-        amount,
-        source: parsed.data.source,
-        reference: parsed.data.reference || null,
-        remainingAfterPayment,
-        receiptRequested: sendReceipt,
-      },
-    });
-
-    if (sendReceipt) {
+    const payment = paymentRecord<typeof customerPayments.$inferSelect>(result.payment);
+    let receiptStatus: 'not_requested' | 'sent' | 'failed' | 'not_retried' = request.sendReceipt
+      ? result.replayed ? 'not_retried' : 'failed' : 'not_requested';
+    if (!result.replayed && payment.invoiceId && request.sendReceipt) {
       try {
-        await sendInvoiceEmail(c.env, db, {
-          orgId,
-          invoice,
-          templateKey: 'invoice.payment.receipt',
-          payment,
-          balanceDue: remainingAfterPayment,
-          sentBy: c.get('userId') || null,
+        const invoice = await db.query.customerInvoices.findFirst({
+          where: and(eq(customerInvoices.id, payment.invoiceId), eq(customerInvoices.orgId, orgId)),
         });
-      } catch (error) {
-        console.error('Failed to send manual invoice payment receipt:', error);
+        if (invoice) {
+          const receipt = await sendInvoiceEmail(c.env, db, { orgId, invoice, templateKey: 'invoice.payment.receipt',
+            payment, balanceDue: Number(result.remaining), sentBy: actor });
+          // Provider acceptance only; there is no durable email queue or delivery confirmation.
+          if (receipt.sent) receiptStatus = 'sent';
+        }
+      } catch {
+        // Receipt failures cannot undo a committed payment or invite a second money operation.
+        console.error('Manual payment receipt delivery failed', { paymentId: payment.id });
       }
     }
-
-    return c.json({ data: payment }, 201);
-  }
-
-  if (!parsed.data.estimateId) return c.json({ error: 'Estimate is required.' }, 400);
-  const estimate = await db.query.estimates.findFirst({
-    where: and(eq(estimates.id, parsed.data.estimateId), eq(estimates.orgId, orgId)),
-  });
-  if (!estimate) return c.json({ error: 'Estimate not found' }, 404);
-  if (['canceled', 'voided', 'superseded'].includes(estimate.status)) return c.json({ error: 'Cannot record payment on an inactive estimate.' }, 409);
-
-  const existingPayments = await db.select().from(customerPayments)
-    .where(and(eq(customerPayments.estimateId, estimate.id), eq(customerPayments.orgId, orgId)));
-  const duplicate = existingPayments.find((payment) => metadataObject(payment.metadata).idempotencyKey === idempotencyKey);
-  if (duplicate) return c.json({ data: duplicate, duplicate: true });
-
-  const contractTotal = roundMoney(estimateContractValue(estimate));
-  const paidAmount = roundMoney(existingPayments.reduce((sum, payment) => sum + netPaymentAmount(payment), 0));
-  const remaining = roundMoney(Math.max(contractTotal - paidAmount, 0));
-  const amount = roundMoney(parsed.data.amount);
-  if (paidAmount > 0.005 && !parsed.data.confirmAdditionalPayment) {
-    return c.json({ error: `This estimate already has ${paidAmount.toFixed(2)} recorded. Confirm this is an additional payment before saving.` }, 409);
-  }
-  if (remaining <= 0) {
-    return c.json({ error: 'This estimate is already paid in full.' }, 409);
-  }
-  if (amount > remaining + 0.005) {
-    return c.json({ error: `Payment cannot exceed the remaining balance of ${remaining.toFixed(2)}.` }, 409);
-  }
-
-  const job = await db.query.jobs.findFirst({
-    where: and(eq(jobs.orgId, orgId), eq(jobs.estimateId, estimate.id)),
-  }).catch(() => null);
-  const receivedAt = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
-  const description = parsed.data.description || `${parsed.data.source.toUpperCase()} payment`;
-  const [payment] = await db.insert(customerPayments).values({
-    orgId,
-    leadId: estimate.leadId,
-    estimateId: estimate.id,
-    jobId: job?.id || null,
-    source: parsed.data.source,
-    status: 'succeeded',
-    amount: amount.toFixed(2),
-    currency: 'usd',
-    description,
-    receivedAt,
-    metadata: {
-      idempotencyKey,
-      reference: parsed.data.reference || null,
-      confirmedAdditionalPayment: paidAmount > 0.005,
-      recordedByUserId: c.get('userId') || null,
-      note: 'Manual payment recorded by contractor. No Stripe charge was created.',
-    },
-  }).returning();
-
-  await db.insert(auditLogs).values({
-    orgId,
-    userId: c.get('userId'),
-    action: 'payment.manual_recorded',
-    entityType: 'payment',
-    entityId: payment.id,
-    metadata: {
-      leadId: estimate.leadId,
-      estimateId: estimate.id,
-      jobId: job?.id || null,
-      amount,
-      source: parsed.data.source,
-      reference: parsed.data.reference || null,
-      remainingAfterPayment: roundMoney(remaining - amount),
-    },
-  });
-
-  return c.json({ data: payment }, 201);
+    return c.json({ data: payment, duplicate: result.replayed, balanceDue: result.remaining, receiptStatus }, result.replayed ? 200 : 201);
+  } catch (error) { return operationFailure(c, error); }
 });
 
 billing.post('/checkout', async (c) => {
@@ -359,6 +205,14 @@ billing.post('/checkout', async (c) => {
   }
   
   try {
+    const balance = await readPaymentBalance(db, estimate.orgId, null, estimate.id);
+    if (balance.closed || balance.needsReview || balance.pendingRefunds > 0) {
+      return c.json({ error: 'This balance is closed or needs payment review.', code: 'PAYMENT_OPERATION_CONFLICT' }, 409);
+    }
+    const issuedInvoice = await db.query.customerInvoices.findFirst({
+      where: and(eq(customerInvoices.orgId, estimate.orgId), eq(customerInvoices.estimateId, estimate.id)),
+    });
+    if (issuedInvoice) return c.json({ error: 'Pay the related invoice from your client portal.', code: 'USE_INVOICE_PAYMENT' }, 409);
     const cleanOptions = Array.isArray(selectedOptions) ? selectedOptionsForPackage(pkg, selectedOptions) : [];
     const optionTotal = cleanOptions.reduce((sum, option) => sum + option.qty * option.rate, 0);
     const selectedOptionsMetadata = JSON.stringify(cleanOptions);
@@ -376,21 +230,16 @@ billing.post('/checkout', async (c) => {
     if (!Number.isFinite(packageTotal) || packageTotal <= 0) {
       return c.json({ error: 'Invalid package total' }, 400);
     }
-    const [settings, existingPayments] = await Promise.all([
-      db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, estimate.orgId) }),
-      db.select().from(customerPayments)
-        .where(and(eq(customerPayments.estimateId, estimate.id), eq(customerPayments.orgId, estimate.orgId))),
-    ]);
-    const paidAmount = existingPayments
-      .filter((payment) => ['succeeded', 'paid'].includes(payment.status))
-      .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
+    const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, estimate.orgId) });
+    // A confirmed credited refund does not reopen the original obligation.
+    const paidAmount = Number(balance.allocated);
     const schedule = estimatePaymentSchedule(settings || {}, packageTotal, paidAmount);
     const milestone = nextPayableMilestone(schedule, milestoneKey);
     if (!milestone) {
       return c.json({ error: 'No online payment is due for this estimate right now' }, 409);
     }
     const amountDue = Math.round((milestone.amount - milestone.paidAmount) * 100) / 100;
-    if (!Number.isFinite(amountDue) || amountDue <= 0) {
+    if (!Number.isFinite(amountDue) || amountDue <= 0 || amountDue > Number(balance.remaining)) {
       return c.json({ error: 'No online payment is due for this estimate right now' }, 409);
     }
 
@@ -428,12 +277,14 @@ billing.post('/webhook', async (c) => {
   if (!sig) {
     return c.json({ error: 'Missing signature' }, 400);
   }
+  const webhookSecret = c.env.STRIPE_CONNECT_WEBHOOK_SECRET || c.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) return c.json({ error: 'Webhook verification is not configured' }, 503);
   
   try {
     const isValid = await verifyWebhookSignature(
       body,
       sig,
-      c.env.STRIPE_CONNECT_WEBHOOK_SECRET || c.env.STRIPE_WEBHOOK_SECRET
+      webhookSecret
     );
     
     if (!isValid) {
@@ -442,6 +293,8 @@ billing.post('/webhook', async (c) => {
     
     const event = JSON.parse(body) as {
       type?: string;
+      account?: string;
+      livemode?: boolean;
       data?: { object?: {
         id?: string;
         metadata?: Record<string, string>;
@@ -450,8 +303,34 @@ billing.post('/webhook', async (c) => {
         payment_intent?: string;
         payment_status?: string;
         customer_details?: { email?: string };
+        amount?: number;
+        status?: string;
+        charge?: string;
       } };
     };
+
+    if (['refund.created', 'refund.updated', 'refund.failed'].includes(event.type || '')) {
+      const refund = event.data?.object;
+      const orgId = refund?.metadata?.orgId;
+      const operationId = refund?.metadata?.crewmodo_refund_operation;
+      if (!operationId) return c.json({ received: true, ignored: true });
+      if (!z.string().uuid().safeParse(orgId).success || !z.string().uuid().safeParse(operationId).success) {
+        return c.json({ error: 'Invalid refund operation identity' }, 400);
+      }
+      const mode = /^(?:sk|rk)_(test|live)_/.exec(c.env.STRIPE_SECRET_KEY || '')?.[1];
+      if (!mode || event.livemode !== (mode === 'live') || !event.account) return c.json({ error: 'Refund environment mismatch' }, 400);
+      const state = refund?.status === 'requires_action' ? 'pending'
+        : ['succeeded', 'pending', 'failed', 'canceled'].includes(refund?.status || '') ? refund!.status! : 'unknown';
+      if (state === 'unknown') return c.json({ error: 'Unsupported refund status requires reconciliation' }, 409);
+      const evidence = { status: refund?.status, amountMinor: refund?.amount, currency: refund?.currency,
+        livemode: event.livemode, accountId: event.account, paymentIntentId: refund?.payment_intent || null, chargeId: refund?.charge || null };
+      const db = createDb(c.env.DATABASE_URL);
+      try {
+        await paymentCall<RefundResult>(db, sql`select settle_payment_refund(
+          ${orgId!}::uuid,${operationId}::uuid,${state},${refund?.id},${JSON.stringify(evidence)}::jsonb) as result`);
+        return c.json({ received: true });
+      } catch (error) { return operationFailure(c, error); }
+    }
     
     if (event.type === 'checkout.session.completed') {
       const metadata = event.data?.object?.metadata;
@@ -695,8 +574,8 @@ billing.post('/webhook', async (c) => {
   }
 });
 
-billing.use('/history', authMiddleware);
-billing.use('/:id/refund', authMiddleware);
+billing.use('/history', authMiddleware, financialAccess);
+billing.use('/:id/refund', authMiddleware, financialAccess);
 
 billing.get('/history', async (c) => {
   const orgId = c.get('orgId');
@@ -729,128 +608,74 @@ billing.get('/history', async (c) => {
 
 billing.post('/:id/refund', async (c) => {
   const orgId = c.get('orgId');
-  if (!orgId) return c.json({ error: 'Unauthorized' }, 401);
+  const actor = c.get('userId');
+  if (!orgId || !actor) return c.json({ error: 'Unauthorized' }, 401);
   const paymentId = c.req.param('id');
+  if (!z.string().uuid().safeParse(paymentId).success) return c.json({ error: 'Invalid payment ID' }, 400);
   const idempotencyKey = c.req.header('Idempotency-Key')?.trim();
-  if (!idempotencyKey) {
-    return c.json({ error: 'Idempotency-Key is required when issuing refunds.' }, 400);
-  }
+  if (!idempotencyKey || idempotencyKey.length > 200) return c.json({ error: 'A valid Idempotency-Key is required.', code: 'INVALID_OPERATION_KEY' }, 400);
   const parsed = refundSchema.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) {
-    return c.json({ error: 'Invalid refund request', details: parsed.error.flatten() }, 400);
-  }
-
+  if (!parsed.success) return c.json({ error: 'Invalid refund request', code: 'INVALID_REFUND', details: parsed.error.flatten() }, 400);
+  const request = {
+    amount: parsed.data.amount, reason: parsed.data.reason, disposition: parsed.data.disposition,
+    method: parsed.data.method || null, reference: parsed.data.reference || null,
+    confirmManualRefund: parsed.data.confirmManualRefund || false,
+    refundedAt: parsed.data.refundedAt ? new Date(parsed.data.refundedAt).toISOString() : null,
+  };
   const db = createDb(c.env.DATABASE_URL);
-  const payment = await db.query.customerPayments.findFirst({
-    where: and(eq(customerPayments.id, paymentId), eq(customerPayments.orgId, orgId)),
-  });
-  if (!payment) {
-    return c.json({ error: 'Payment not found' }, 404);
-  }
-
-  const paidAmount = Number(payment.amount || 0);
-  const refundedAmount = Number(payment.refundedAmount || 0);
-  const refundableAmount = Math.max(paidAmount - refundedAmount, 0);
-  const { metadata, refundHistory } = paymentMetadata(payment.metadata);
-  if (refundHistory.some((item) => item.idempotencyKey === idempotencyKey)) {
-    return c.json({ data: payment, duplicate: true });
-  }
-  if (refundableAmount <= 0) {
-    return c.json({ error: 'Payment is already fully refunded' }, 409);
-  }
-  if (parsed.data.amount > refundableAmount) {
-    return c.json({ error: `Refund cannot exceed ${refundableAmount.toFixed(2)}` }, 400);
-  }
-
-  const hasStripeReference = Boolean(payment.stripePaymentIntentId || payment.stripeChargeId);
-  if (!hasStripeReference) {
-    if (!parsed.data.confirmManualRefund) {
-      return c.json({ error: 'Confirm that this refund or credit was handled outside Stripe before recording it.' }, 409);
+  try {
+    const payment = await db.query.customerPayments.findFirst({
+      where: and(eq(customerPayments.id, paymentId), eq(customerPayments.orgId, orgId)),
+    });
+    if (!payment) return c.json({ error: 'Payment not found', code: 'PAYMENT_NOT_FOUND' }, 404);
+    const stripe = payment.source === 'stripe';
+    const connection = stripe ? await db.query.stripeConnections.findFirst({ where: eq(stripeConnections.orgId, orgId) }) : null;
+    const original = metadataObject(payment.metadata);
+    const accountId = typeof original.stripeAccountId === 'string' ? original.stripeAccountId : connection?.stripeAccountId || null;
+    const keyMode = /^(?:sk|rk)_(test|live)_/.exec(c.env.STRIPE_SECRET_KEY || '')?.[1];
+    const livemode = keyMode ? keyMode === 'live' : null;
+    let result = await paymentCall<RefundResult>(db, sql`select reserve_payment_refund(
+      ${orgId}::uuid,${actor}::uuid,${idempotencyKey},${paymentId}::uuid,${JSON.stringify(request)}::jsonb,
+      ${accountId},${livemode}::boolean) as result`);
+    if (result.dispatch) {
+      const operation = result.operation;
+      let observed: Record<string, unknown> = { status: 'unknown' };
+      try {
+        const refund = await createRefund(c.env, {
+          paymentIntentId: operation.provider_payment_intent_id, chargeId: operation.provider_charge_id,
+          amountMinor: usdMinor(operation.amount), reason: request.reason,
+          connectedAccountId: operation.provider_account_id!, idempotencyKey: operation.provider_key,
+          operationId: operation.id, orgId,
+        });
+        const state = refund.status === 'requires_action' ? 'pending'
+          : ['succeeded', 'pending', 'failed', 'canceled'].includes(refund.status) ? refund.status : 'unknown';
+        const evidence = { status: refund.status, amountMinor: refund.amount, currency: refund.currency,
+          livemode: operation.provider_livemode, accountId: operation.provider_account_id,
+          paymentIntentId: refund.payment_intent || null, chargeId: refund.charge || null, providerRefundId: refund.id };
+        observed = evidence;
+        result = await paymentCall<RefundResult>(db, sql`select settle_payment_refund(
+          ${orgId}::uuid,${operation.id}::uuid,${state},${state === 'unknown' ? null : refund.id},
+          ${JSON.stringify(evidence)}::jsonb) as result`);
+      } catch {
+        // Preserve the intent on every ambiguous external/commit failure. A second
+        // client key cannot bypass it, and replay never dispatches another refund.
+        result = await paymentCall<RefundResult>(db, sql`select settle_payment_refund(
+          ${orgId}::uuid,${operation.id}::uuid,'unknown',null,
+          ${JSON.stringify({ ...observed, providerStatus: observed.status, status: 'unknown' })}::jsonb) as result`);
+      }
     }
-    if (!parsed.data.method) {
-      return c.json({ error: 'Select how the manual refund or credit was handled.' }, 400);
+    const unresolved = ['reserved', 'pending', 'unknown'].includes(result.operation.state);
+    if (['failed', 'canceled'].includes(result.operation.state)) {
+      return c.json({ error: 'Stripe did not complete this refund. No refund has been recorded.', code: 'REFUND_NOT_COMPLETED',
+        data: paymentRecord<typeof customerPayments.$inferSelect>(result.payment),
+        refundOperation: { id: result.operation.id, status: result.operation.state } }, 409);
     }
-    if (!parsed.data.reason?.trim()) {
-      return c.json({ error: 'Add a reason for the manual refund or credit.' }, 400);
-    }
-  }
-  const refund = hasStripeReference
-    ? await createRefund(c.env, {
-      paymentIntentId: payment.stripePaymentIntentId,
-      chargeId: payment.stripeChargeId,
-      amount: parsed.data.amount,
-      reason: parsed.data.reason,
-      connectedAccountId: (await db.query.stripeConnections.findFirst({ where: eq(stripeConnections.orgId, orgId) }))?.stripeAccountId,
-    })
-    : {
-      id: null,
-      status: 'manual_credit_recorded',
-    };
-
-  const nextRefundedAmount = refundedAmount + parsed.data.amount;
-  const nextStatus = nextRefundedAmount >= paidAmount - 0.005 ? 'refunded' : 'partially_refunded';
-  const [updated] = await db.update(customerPayments)
-    .set({
-      refundedAmount: nextRefundedAmount.toFixed(2),
-      status: nextStatus,
-      stripeRefundId: refund.id,
-      refundedAt: new Date(),
-      updatedAt: new Date(),
-      metadata: {
-        ...metadata,
-        lastRefundReason: parsed.data.reason || null,
-        lastRefundStatus: refund.status || null,
-        lastRefundMode: hasStripeReference ? 'stripe' : 'manual',
-        lastRefundMethod: hasStripeReference ? 'stripe' : parsed.data.method,
-        lastRefundReference: parsed.data.reference || null,
-        refundHistory: [
-          ...refundHistory,
-          {
-            idempotencyKey,
-            amount: parsed.data.amount,
-            reason: parsed.data.reason || null,
-            status: refund.status || null,
-            mode: hasStripeReference ? 'stripe' : 'manual',
-            method: hasStripeReference ? 'stripe' : parsed.data.method,
-            reference: parsed.data.reference || null,
-            stripeRefundId: refund.id,
-            recordedByUserId: c.get('userId') || null,
-            recordedAt: new Date().toISOString(),
-            note: hasStripeReference
-              ? 'Refund requested through Stripe.'
-              : 'Manual refund or credit recorded by contractor. No Stripe refund was created.',
-          },
-        ],
-      },
-    })
-    .where(and(eq(customerPayments.id, paymentId), eq(customerPayments.orgId, orgId)))
-    .returning();
-
-  await reconcileInvoiceAfterRefund(db, orgId, payment.invoiceId);
-
-  await db.insert(auditLogs).values({
-    orgId,
-    userId: c.get('userId'),
-    action: 'payment.refunded',
-    entityType: 'payment',
-    entityId: payment.id,
-    metadata: {
-      leadId: payment.leadId,
-      estimateId: payment.estimateId,
-      jobId: payment.jobId,
-      amount: parsed.data.amount,
-      refundedAmount: nextRefundedAmount,
-      status: nextStatus,
-      reason: parsed.data.reason,
-      stripeRefundId: refund.id,
-      refundMode: hasStripeReference ? 'stripe' : 'manual',
-      refundMethod: hasStripeReference ? 'stripe' : parsed.data.method,
-      refundReference: parsed.data.reference || null,
-      invoiceId: payment.invoiceId,
-    },
-  });
-
-  return c.json({ data: updated });
+    return c.json({ data: paymentRecord<typeof customerPayments.$inferSelect>(result.payment),
+      refundOperation: { id: result.operation.id, status: result.operation.state, disposition: 'credit' },
+      duplicate: result.replayed,
+      ...(unresolved ? { message: 'Refund awaiting confirmation. Do not submit another refund.', code: 'REFUND_AWAITING_CONFIRMATION' } : {}),
+    }, unresolved ? 202 : 200);
+  } catch (error) { return operationFailure(c, error); }
 });
 
 export default billing;

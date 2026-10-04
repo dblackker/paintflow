@@ -1,5 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { invoiceCollectionPosition } from '@crewmodo/core';
+import { useOperationKey } from '@/lib/useOperationKey';
+import { manualPaymentFeedback, type ManualPaymentReceiptResult } from '@/lib/paymentReceipt';
 import { StatusBadge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
@@ -102,6 +105,7 @@ interface Payment {
 }
 
 interface CustomerInvoice {
+  balance?: import('@crewmodo/core').InvoiceBalance;
   id: string;
   leadId: string;
   estimateId?: string | null;
@@ -159,9 +163,10 @@ interface RefundForm {
   payment: Payment;
   amount: string;
   reason: string;
-  method: 'cash' | 'check' | 'ach' | 'credit' | 'other';
+  method: 'cash' | 'check' | 'ach' | 'other';
   reference: string;
   confirmManualRefund: boolean;
+  refundedAt: string;
 }
 
 const activityTypeOptions = [
@@ -207,7 +212,7 @@ function invoicePaid(invoice: CustomerInvoice) {
 }
 
 function invoiceBalance(invoice: CustomerInvoice) {
-  return Math.max(Number(invoice.total || 0) - invoicePaid(invoice), 0);
+  return invoiceCollectionPosition(invoice, invoice.payments || []).remaining;
 }
 
 function invoiceDisplayStatus(invoice: CustomerInvoice) {
@@ -257,6 +262,7 @@ function followUps(data: LeadDetailResponse['data']) {
 }
 
 export function LeadDetail() {
+  const operations = useOperationKey();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [detail, setDetail] = useState<LeadDetailResponse['data'] | null>(null);
@@ -460,22 +466,18 @@ export function LeadDetail() {
     }
     setIsSavingPayment(true);
     try {
-      await apiJson('/v1/payments/manual', {
+      const body = JSON.stringify({ estimateId: paymentForm.estimate?.id, invoiceId: paymentForm.invoice?.id,
+        amount: paymentForm.amount, source: paymentForm.source, reference: paymentForm.reference || null,
+        description: paymentForm.description || null, receivedAt: paymentForm.receivedAt ? new Date(paymentForm.receivedAt).toISOString() : null,
+        confirmAdditionalPayment: paymentForm.confirmAdditionalPayment, sendReceipt: Boolean(paymentForm.invoice?.id && paymentForm.sendReceipt) });
+      const result = await apiJson<ManualPaymentReceiptResult>('/v1/payments/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({
-          estimateId: paymentForm.estimate?.id,
-          invoiceId: paymentForm.invoice?.id,
-          amount: Number(paymentForm.amount),
-          source: paymentForm.source,
-          reference: paymentForm.reference || null,
-          description: paymentForm.description || null,
-          receivedAt: paymentForm.receivedAt ? new Date(paymentForm.receivedAt).toISOString() : null,
-          confirmAdditionalPayment: paymentForm.confirmAdditionalPayment,
-          sendReceipt: Boolean(paymentForm.invoice?.id && paymentForm.sendReceipt),
-        }),
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operations.keyFor('manual', body) },
+        body,
       });
-      window.showToast?.(paymentForm.invoice?.id && paymentForm.sendReceipt ? 'Payment recorded and receipt queued' : 'Payment recorded', 'success');
+      operations.complete('manual');
+      const feedback = manualPaymentFeedback(result);
+      window.showToast?.(feedback.message, feedback.type);
       setPaymentForm(null);
       await loadDetail();
     } catch (err) {
@@ -490,17 +492,17 @@ export function LeadDetail() {
     if (!refundForm || isSavingRefund) return;
     setIsSavingRefund(true);
     try {
+      const body = JSON.stringify({ amount: refundForm.amount, reason: refundForm.reason || undefined,
+        method: isStripePayment(refundForm.payment) ? undefined : refundForm.method,
+        reference: isStripePayment(refundForm.payment) ? undefined : refundForm.reference || undefined,
+        refundedAt: isStripePayment(refundForm.payment) ? undefined : new Date(refundForm.refundedAt).toISOString(),
+        confirmManualRefund: isStripePayment(refundForm.payment) ? undefined : refundForm.confirmManualRefund });
       await apiJson(`/v1/payments/${refundForm.payment.id}/refund`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
-        body: JSON.stringify({
-          amount: Number(refundForm.amount),
-          reason: refundForm.reason || undefined,
-          method: isStripePayment(refundForm.payment) ? undefined : refundForm.method,
-          reference: isStripePayment(refundForm.payment) ? undefined : refundForm.reference || undefined,
-          confirmManualRefund: isStripePayment(refundForm.payment) ? undefined : refundForm.confirmManualRefund,
-        }),
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operations.keyFor(`refund:${refundForm.payment.id}`, body) },
+        body,
       });
+      operations.complete(`refund:${refundForm.payment.id}`);
       window.showToast?.(isStripePayment(refundForm.payment) ? 'Stripe refund submitted' : 'Manual refund recorded', 'success');
       setRefundForm(null);
       await loadDetail();
@@ -659,7 +661,7 @@ export function LeadDetail() {
           </SectionCard>
 
           <SectionCard id="customer-payments" title="Payments" eyebrow={`${detail.payments.length} recorded`}>
-            <PaymentList payments={detail.payments} onRefund={(payment) => setRefundForm({ payment, amount: paymentNet(payment).toFixed(2), reason: '', method: 'check', reference: '', confirmManualRefund: false })} />
+            <PaymentList payments={detail.payments} onRefund={(payment) => setRefundForm({ payment, amount: paymentNet(payment).toFixed(2), reason: '', method: 'check', reference: '', confirmManualRefund: false, refundedAt: dateTimeLocalValue() })} />
           </SectionCard>
 
           <SectionCard id="customer-messages" title="Messages" action={lead.phone ? <Link to={`/sms?leadId=${lead.id}`} className="btn-secondary btn-sm">Open thread</Link> : undefined}>
@@ -723,8 +725,8 @@ export function LeadDetail() {
               <p className="pf-copy">This payment has a Stripe reference. Crewmodo will request the refund through Stripe and record the result in payment history.</p>
             ) : (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p className="pf-row-title text-amber-950">Manual refund or credit</p>
-                <p className="pf-copy mt-1 text-amber-900">Crewmodo records the ledger adjustment only. Issue the cash, check, ACH, or credit outside Crewmodo, then record how it was handled here.</p>
+                <p className="pf-row-title text-amber-950">Record returned money</p>
+                <p className="pf-copy mt-1 text-amber-900">Return the money outside Crewmodo, then record it here. This record will not send money or reopen the refunded amount for payment.</p>
               </div>
             )}
             <Input label="Amount" type="number" min="0.01" max={paymentNet(refundForm.payment).toFixed(2)} step="0.01" inputMode="decimal" value={refundForm.amount} onChange={(event) => setRefundForm({ ...refundForm, amount: event.target.value })} />
@@ -734,22 +736,22 @@ export function LeadDetail() {
                   <option value="check">Check</option>
                   <option value="cash">Cash</option>
                   <option value="ach">ACH</option>
-                  <option value="credit">Account credit</option>
                   <option value="other">Other</option>
                 </Select>
-                <Input label="Reference" value={refundForm.reference} onChange={(event) => setRefundForm({ ...refundForm, reference: event.target.value })} placeholder="Check #, ACH memo, or credit note" />
+                <Input label="Reference" value={refundForm.reference} onChange={(event) => setRefundForm({ ...refundForm, reference: event.target.value })} placeholder="Check # or ACH memo" />
+                <Input label="Returned at" type="datetime-local" value={refundForm.refundedAt} onChange={(event) => setRefundForm({ ...refundForm, refundedAt: event.target.value })} required />
               </div>
             )}
-            <Textarea label="Reason" rows={3} value={refundForm.reason} onChange={(event) => setRefundForm({ ...refundForm, reason: event.target.value })} placeholder="Reason, credit, or damage note" required={!isStripePayment(refundForm.payment)} />
+            <Textarea label="Reason" rows={3} value={refundForm.reason} onChange={(event) => setRefundForm({ ...refundForm, reason: event.target.value })} placeholder="Reason or damage note" required />
             {!isStripePayment(refundForm.payment) && (
               <label className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
                 <input type="checkbox" className="mt-1" checked={refundForm.confirmManualRefund} onChange={(event) => setRefundForm({ ...refundForm, confirmManualRefund: event.target.checked })} />
-                <span>I confirm this money or credit was handled outside Stripe and should reduce this customer&apos;s recorded balance.</span>
+                <span>I confirm this money was returned outside Stripe and should be recorded as a refund.</span>
               </label>
             )}
             <div className="mobile-sticky-actions flex gap-3 pt-4 sm:static sm:m-0 sm:border-0 sm:bg-transparent sm:p-0">
               <Button type="button" variant="secondary" fullWidth onClick={() => setRefundForm(null)}>Cancel</Button>
-              <Button type="submit" variant="danger" fullWidth isLoading={isSavingRefund} disabled={!refundForm.amount || (!isStripePayment(refundForm.payment) && (!refundForm.reason.trim() || !refundForm.confirmManualRefund))}>{isStripePayment(refundForm.payment) ? 'Issue refund' : 'Record refund'}</Button>
+              <Button type="submit" variant="danger" fullWidth isLoading={isSavingRefund} disabled={!refundForm.amount || !refundForm.reason.trim() || (!isStripePayment(refundForm.payment) && (!refundForm.refundedAt || !refundForm.confirmManualRefund))}>{isStripePayment(refundForm.payment) ? 'Issue refund' : 'Record refund'}</Button>
             </div>
           </form>
         </Modal>

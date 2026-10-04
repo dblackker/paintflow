@@ -10,12 +10,28 @@ on:
   workflow_dispatch:
     inputs:
       release_ref:
-        description: Git ref to deploy, for example main or v1.0.0
+        description: Approved production branch or immutable release tag
         required: false
-        default: main
+        default: production
 
 jobs:
+  revision:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_ref || github.ref }}
+      - id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  quality:
+    needs: revision
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_ref: ${{ needs.revision.outputs.sha }}
   deploy:
+    needs: [revision, quality]
     runs-on: ubuntu-latest
     concurrency:
       group: crewmodo-production
@@ -31,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.release_ref || github.ref }}
+          ref: ${{ needs.revision.outputs.sha }}
 
       - name: Enable Corepack
         run: corepack enable

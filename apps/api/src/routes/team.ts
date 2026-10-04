@@ -5,9 +5,12 @@ import { teamMembers, timeEntries, jobCosts, userRoles, memberships, jobs, users
 import { eq, and, desc, gte, inArray, lte, lt } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
+import { requireFeatureAccess } from '../middleware/feature-access';
 
 const teamApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 teamApp.use('*', authMiddleware);
+teamApp.use('*', requireFeatureAccess('teamTimeBasic'));
+teamApp.use('/time/map', requireFeatureAccess('gpsTimeTracking'));
 
 async function hasPermission(c: Context<{ Bindings: Env; Variables: Variables }>, permission: string) {
   const userId = c.get('userId');

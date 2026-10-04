@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
 import { productionRates } from '@crewmodo/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { EstimationInputError, formatEstimationMinor } from '../../../../packages/core/src/estimation';
+import { resolveProductionEstimation, productionEstimationFieldErrors } from '../lib/production-estimation';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
@@ -16,7 +18,7 @@ const rateSchema = z.object({
   ratePerHour: z.number().positive(),
   hourlyRate: z.number().positive().default(50),
   prepMultiplier: z.number().positive().default(1),
-  coats: z.number().int().positive().default(2),
+  coats: z.number().int().min(1).max(3).default(2),
   description: z.string().optional(),
 });
 
@@ -138,45 +140,35 @@ ratesApp.delete('/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// Calculate estimate from room items
+// Read-only preview: price/rate/tax inputs are resolved from this tenant's active pricebook.
 ratesApp.post('/calculate', async (c) => {
   const orgId = c.get('orgId');
-  const { items } = await c.req.json();
   const db = createDb(c.env.DATABASE_URL);
-  
-  const rateIds = [...new Set(items.map((i: any) => i.productionRateId).filter(Boolean))];
-  const rates = await db.query.productionRates.findMany({
-    where: and(
-      eq(productionRates.orgId, orgId),
-    ),
-  });
-  const rateMap = Object.fromEntries(rates.map(r => [r.id, r]));
-  
-  const prepMultipliers = { none: 0.8, light: 1.0, standard: 1.2, heavy: 1.5 };
-  
-  let total = 0;
-  const calculatedItems = items.map((item: any) => {
-    const rate = rateMap[item.productionRateId];
-    if (!rate) return item;
-    
-    const quantity = parseFloat(item.quantity || '0');
-    const coats = item.coats || rate.coats || 2;
-    const prepMult = prepMultipliers[item.prepLevel as keyof typeof prepMultipliers] || 1.2;
-    
-    const hours = (quantity / parseFloat(rate.ratePerHour)) * coats * prepMult;
-    const laborCost = hours * parseFloat(rate.hourlyRate);
-    
-    total += laborCost;
-    
-    return {
-      ...item,
-      hours: hours.toFixed(2),
-      laborCost: laborCost.toFixed(2),
-      rateName: `${rate.category} (${rate.surfaceType})`,
-    };
-  });
-  
-  return c.json({ data: { items: calculatedItems, total: total.toFixed(2) } });
+  try {
+    const preview = await resolveProductionEstimation(db, orgId, await c.req.json().catch(() => null));
+    const resultMap = new Map(preview.calculation.items.map((item) => [item.id, item]));
+    const rateMap = new Map(preview.rates.map((rate) => [rate.id, rate]));
+    const items = preview.productionInput.items.map((item) => {
+      const line = resultMap.get(item.id)!;
+      const rate = rateMap.get(item.productionRateId)!;
+      return {
+        ...item, hours: Number(line.hours).toFixed(2), laborCost: formatEstimationMinor(line.laborMinor),
+        materialCost: formatEstimationMinor(line.materialCostMinor), materialPrice: formatEstimationMinor(line.materialMinor),
+        rateName: `${rate.category} (${rate.surfaceType})`,
+      };
+    });
+    return c.json({ data: {
+      resolvedInput: preview.resolvedInput, calculation: preview.calculation, items,
+      // Keep the legacy labor-only total while exposing the complete versioned calculation.
+      total: formatEstimationMinor(preview.calculation.totals.laborMinor),
+      subtotal: formatEstimationMinor(preview.calculation.totals.subtotalMinor),
+      tax: formatEstimationMinor(preview.calculation.totals.taxMinor),
+      grandTotal: formatEstimationMinor(preview.calculation.totals.totalMinor),
+    } });
+  } catch (error) {
+    if (!(error instanceof EstimationInputError)) throw error;
+    return c.json({ error: error.message, code: error.code, fieldErrors: productionEstimationFieldErrors(error) }, 400);
+  }
 });
 
 export default ratesApp;

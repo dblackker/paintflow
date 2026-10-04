@@ -1,10 +1,293 @@
-/* Mobile touch targets - minimum 44px */
-.btn,
-button,
-a.btn,
-[role="button"] {
-  min-height: 44px;
-  min-width: 44px;
+/* Runtime shared-control styles. Primitives import this file in the React app. */
+.pf-button {
+  min-width: 2.5rem;
+}
+
+.pf-button-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+  justify-content: center;
+  min-width: 0;
+}
+
+.pf-button-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pf-button-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 1.25rem;
+  height: 1.25rem;
+  justify-content: center;
+  width: 1.25rem;
+}
+
+.pf-button-icon svg {
+  max-height: 1.25rem;
+  max-width: 1.25rem;
+}
+
+.pf-button-content--loading {
+  opacity: 0;
+}
+
+.pf-button .pf-button-loading-icon {
+  height: 1.25rem;
+  left: calc(50% - 0.625rem);
+  position: absolute;
+  top: calc(50% - 0.625rem);
+  width: 1.25rem;
+}
+
+.pf-button[aria-disabled="true"],
+.pf-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
+.pf-button.pf-button-danger {
+  background: var(--pf-danger);
+  border-color: var(--pf-danger);
+  color: var(--md-sys-color-on-error);
+}
+
+.pf-button.pf-button-danger:hover {
+  background: var(--md-sys-color-on-error-container);
+  border-color: var(--md-sys-color-on-error-container);
+}
+
+.pf-button.pf-button-success {
+  background: var(--pf-success);
+  border-color: var(--pf-success);
+  color: var(--md-sys-color-on-primary);
+}
+
+.pf-button.pf-button-success:hover {
+  background: color-mix(in srgb, var(--pf-success) 85%, black);
+}
+
+.pf-button.pf-button-danger-subtle {
+  color: var(--pf-danger);
+}
+
+.pf-button.pf-button-danger-subtle:hover {
+  background: var(--md-sys-color-error-container);
+}
+
+.pf-button:focus-visible,
+button.btn-icon:focus-visible,
+.pf-dialog-panel:focus-visible {
+  outline: 2px solid var(--pf-primary);
+  outline-offset: 3px;
+}
+
+.pf-field-label-row {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+  min-height: 2.5rem;
+}
+
+.pf-field-label {
+  color: var(--pf-text);
+  font: var(--pf-type-label);
+}
+
+.pf-field-label-row .pf-field-help-button {
+  color: var(--pf-text-muted);
+  flex: 0 0 auto;
+}
+
+.pf-field-help-button svg {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.pf-field-help-popover {
+  background: var(--pf-card-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  box-shadow: var(--pf-elevation-3);
+  color: var(--pf-text);
+  font: var(--pf-type-body);
+  overflow-y: auto;
+  padding: 0.75rem;
+  position: fixed;
+  z-index: 1100;
+}
+
+.pf-input-control {
+  border: 1px solid var(--pf-border-strong);
+  border-radius: var(--pf-radius);
+  display: block;
+  font: var(--pf-type-body);
+  min-height: 3rem;
+  padding: 0.75rem 0.875rem;
+  width: 100%;
+}
+
+.pf-input-control--multiline {
+  min-height: 6rem;
+}
+
+.pf-input-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.pf-input-control[aria-invalid="true"] {
+  border-color: var(--pf-danger) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pf-danger) 16%, transparent) !important;
+}
+
+.pf-field-messages:empty {
+  display: none;
+}
+
+.pf-dialog-root {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 1000;
+}
+
+.pf-dialog-layer {
+  align-items: flex-end;
+  display: flex;
+  height: var(--pf-dialog-viewport-height, 100dvh);
+  justify-content: center;
+  left: var(--pf-dialog-viewport-left, 0);
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  pointer-events: auto;
+  position: fixed;
+  top: var(--pf-dialog-viewport-top, 0);
+  width: var(--pf-dialog-viewport-width, 100%);
+}
+
+.pf-dialog-layer[inert] {
+  pointer-events: none;
+}
+
+.pf-dialog-backdrop {
+  background: rgb(0 0 0 / 0.48);
+  inset: 0;
+  position: absolute;
+}
+
+.pf-dialog-panel {
+  --pf-dialog-gutter: 1rem;
+  background: var(--pf-card-surface);
+  border-radius: 1rem 1rem 0 0;
+  box-shadow: var(--pf-elevation-3);
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  text-align: left;
+  width: 100%;
+}
+
+.pf-dialog-header {
+  align-items: center;
+  border-bottom: 1px solid var(--pf-border);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 0.5rem var(--pf-dialog-gutter);
+}
+
+.pf-dialog-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pf-dialog-header .pf-dialog-close {
+  flex: 0 0 auto;
+  min-width: 48px;
+  min-height: 48px;
+}
+
+.pf-dialog-content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--pf-dialog-gutter);
+  padding-bottom: calc(var(--pf-dialog-gutter) + env(safe-area-inset-bottom));
+  scroll-padding-block: 1rem;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pf-dialog-content :is(input, select, textarea, button) {
+  scroll-margin-block: 1rem;
+}
+
+.pf-dialog-panel .pf-dialog-footer {
+  align-items: stretch;
+  background: var(--pf-card-surface);
+  border-top: 1px solid var(--pf-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-inline: calc(-1 * var(--pf-dialog-gutter)) !important;
+  margin-top: 1rem;
+  padding: 0.75rem var(--pf-dialog-gutter);
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  position: static;
+}
+
+@media (min-width: 640px) {
+  .pf-dialog-layer {
+    align-items: center;
+    padding: max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+  }
+
+  .pf-dialog-panel {
+    --pf-dialog-gutter: 1.5rem;
+    border-radius: var(--pf-radius);
+    max-width: 32rem;
+  }
+
+  .pf-dialog-panel--sm { max-width: 28rem; }
+  .pf-dialog-panel--lg { max-width: 42rem; }
+  .pf-dialog-panel--xl { max-width: 56rem; }
+
+  .pf-dialog-panel .pf-dialog-footer {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 768px), (any-pointer: coarse) {
+  .pf-field-label-row {
+    min-height: 3rem;
+  }
+
+  :is(.pf-button, .btn-filled, .btn-tonal, .btn-outlined, .btn-text, .btn-elevated, .btn-primary, .btn-secondary, .btn-compact, button.btn-icon, a.btn-icon) {
+    min-height: 3rem !important;
+    min-width: 3rem !important;
+  }
+
+  :is(button.btn-icon, a.btn-icon) {
+    flex-shrink: 0;
+    height: 3rem !important;
+    width: 3rem !important;
+  }
+
+  .pf-estimate-menu-button.btn-icon {
+    flex-basis: 3rem;
+  }
 }
 
 /* Responsive tables */
@@ -68,11 +351,26 @@ a.btn,
 }
 
 /* Prevent zoom on input focus */
-input, select, textarea {
-  font-size: 16px !important;
+@media (max-width: 768px), (any-pointer: coarse) {
+  input, select, textarea {
+    font-size: max(1rem, 16px) !important;
+  }
 }
 
 /* Safe area insets */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-button,
+  .pf-dialog-panel,
+  .touch-feedback {
+    transition: none;
+  }
+
+  .skeleton,
+  .pf-button .animate-spin {
+    animation: none;
+  }
 }

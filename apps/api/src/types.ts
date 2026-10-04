@@ -43,6 +43,9 @@ export interface Env {
   OCR_MONTHLY_ESTIMATED_COST_LIMIT_USD?: string;
   INBOUND_INVOICE_EMAIL_SECRET?: string;
   INBOUND_INVOICE_EMAIL_DOMAIN?: string;
+  POSTHOG_ENABLED?: string;
+  POSTHOG_PROJECT_TOKEN?: string;
+  POSTHOG_HOST?: string;
 }
 
 export type Variables = {
