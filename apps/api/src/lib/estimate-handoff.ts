@@ -1,6 +1,7 @@
 import { auditLogs, estimates, jobs, leads } from '@crewmodo/db/schema';
 import type { DbClient } from '@crewmodo/db/client';
 import { and, eq } from 'drizzle-orm';
+import { acceptedOptionPricing, type AcceptedBudgetPackage } from '../../../../packages/core/src/estimation-budget';
 
 type EstimatePackage = {
   name: string;
@@ -62,7 +63,12 @@ function generateJobNumber() {
 
 export function buildJobName(lead: typeof leads.$inferSelect, selectedPackage: EstimatePackage | null): string {
   const street = lead.streetAddress?.trim();
-  return [lead.name, jobScopeLabel(selectedPackage), street].filter(Boolean).join(' - ');
+  return boundedJobName([lead.name, jobScopeLabel(selectedPackage), street].filter(Boolean).join(' - '));
+}
+
+function boundedJobName(value: string) {
+  const characters = Array.from(value);
+  return characters.length > 255 ? `${characters.slice(0, 252).join('').trimEnd()}...` : value;
 }
 
 function estimateStreet(estimate: AcceptedEstimate, lead: typeof leads.$inferSelect) {
@@ -79,7 +85,7 @@ function estimateJobsite(estimate: AcceptedEstimate, lead: typeof leads.$inferSe
 }
 
 function buildJobNameFromEstimate(estimate: AcceptedEstimate, lead: typeof leads.$inferSelect, selectedPackage: EstimatePackage | null) {
-  return [lead.name, jobScopeLabel(selectedPackage), estimateStreet(estimate, lead)].filter(Boolean).join(' - ');
+  return boundedJobName([lead.name, jobScopeLabel(selectedPackage), estimateStreet(estimate, lead)].filter(Boolean).join(' - '));
 }
 
 export function selectEstimatePackage(
@@ -100,11 +106,10 @@ export function estimateContractValue(
   packageName?: string | null,
   selectedOptions: SelectedOption[] = []
 ): number {
+  const acceptance = estimate.acceptanceSnapshot as { contractTotalMinor?: number } | null;
+  if (estimate.signedAt && !packageName && selectedOptions.length === 0 && Number.isSafeInteger(acceptance?.contractTotalMinor)) return acceptance!.contractTotalMinor! / 100;
   const selected = selectEstimatePackage(estimate, packageName);
-  const optionTotal = selectedOptions.reduce((sum, option) => {
-    return sum + money(option.qty || 1) * money(option.rate);
-  }, 0);
-  return money(selected?.total ?? estimate.total) + optionTotal;
+  return selected ? acceptedOptionPricing(selected as AcceptedBudgetPackage, selectedOptions).totalMinor / 100 : money(estimate.total);
 }
 
 export async function createJobFromAcceptedEstimate(

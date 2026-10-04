@@ -1,3 +1,5 @@
+import { add, allocateMinor, decimal, minor, moneyText, ZERO } from '../../../../packages/core/src/estimation-decimal';
+
 type PaymentSettings = {
   depositPercent?: string | number | null;
   paymentTerms?: string | null;
@@ -101,8 +103,8 @@ export function paymentScheduleSettingsFromPreferences(settings: PaymentSettings
       };
     })
     .filter((item) => item.label && item.percent > 0);
-  const percentTotal = roundMoney(milestones.reduce((sum, item) => sum + item.percent, 0));
-  const enabled = Boolean(raw.enabled) && milestones.length > 0 && Math.abs(percentTotal - 100) <= 0.01;
+  const percentTotal = minor(milestones.reduce((sum, item) => add(sum, decimal(item.percent, 'percent', { scale: 20 })), ZERO), 'percent');
+  const enabled = Boolean(raw.enabled) && milestones.length > 0 && Math.abs(percentTotal - 10000) <= 1;
 
   return {
     enabled,
@@ -116,18 +118,23 @@ function baseMilestones(settings: PaymentSettings) {
 }
 
 export function estimatePaymentSchedule(settings: PaymentSettings, total: number, paidAmount = 0): EstimatePaymentMilestone[] {
-  let remainingPaid = Math.max(Number(paidAmount) || 0, 0);
-  return baseMilestones(settings).map((milestone, index) => {
-    const amount = roundMoney(total * (milestone.percent / 100));
-    const applied = Math.min(remainingPaid, amount);
-    remainingPaid = roundMoney(remainingPaid - applied);
-    const paid = applied >= amount - 0.01;
-    const previousPaid = index === 0 || remainingPaid >= 0;
+  const totalMinor = minor(decimal(total, 'total', { scale: 20 }), 'total');
+  let remainingPaidMinor = Math.max(minor(decimal(paidAmount, 'paidAmount', { signed: true, scale: 20 }), 'paidAmount'), 0);
+  const milestones = baseMilestones(settings);
+  // Schedule positions break remainder ties and keep duplicate display keys distinct.
+  const amounts = allocateMinor(totalMinor, milestones.map((milestone, index) => ({
+    id: String(index), weight: decimal(milestone.percent, 'percent', { scale: 20 }),
+  })));
+  return milestones.map((milestone, index) => {
+    const amountMinor = amounts.get(String(index))!;
+    const appliedMinor = Math.min(remainingPaidMinor, amountMinor);
+    remainingPaidMinor -= appliedMinor;
+    const paid = appliedMinor === amountMinor;
     return {
       ...milestone,
-      amount,
-      paidAmount: applied,
-      status: paid ? 'paid' : previousPaid && milestone.payable ? 'due' : 'upcoming',
+      amount: Number(moneyText(amountMinor)),
+      paidAmount: Number(moneyText(appliedMinor)),
+      status: paid ? 'paid' : milestone.payable ? 'due' : 'upcoming',
     };
   });
 }

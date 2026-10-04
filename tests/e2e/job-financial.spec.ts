@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
-import { test } from "@playwright/test";
-import { jobFinancialPosition } from "../../packages/core/src/job-financial-position.ts";
+import { expect, test } from "@playwright/test";
+import { buildAcceptedEstimationBudget } from "../../packages/core/src/estimation-budget.ts";
+import { calculateProductionEstimate } from "../../packages/core/src/estimation.ts";
+import {
+  compareJobEstimationBudget,
+  jobFinancialPosition,
+  type JobEstimationEvidence,
+} from "../../packages/core/src/job-financial-position.ts";
 
 const jobId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11";
 const legacyId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa12";
+const scopeItemId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb11";
 const summary = jobFinancialPosition({
   estimate: {
     status: "accepted",
@@ -83,6 +90,50 @@ const detail = {
   },
 };
 
+function budgetDetail(id: string, withScope = false, operationDescription?: string) {
+  const evidence: JobEstimationEvidence = {
+    jobId: id,
+    status: "completed",
+    budget: null,
+    changes: [],
+    time: id === legacyId ? [] : [{
+      id: "t1", hours: "2", totalCost: "100", date: "2026-10-03",
+      reviewStatus: "approved", operationId: null,
+    }],
+    costs: id === legacyId ? [] : detail.lists.costs.map((cost) => ({
+      id: cost.id, category: cost.category, totalCost: String(cost.totalCost),
+      costDate: "2026-10-03", materialPurchaseId: null,
+    })),
+    purchases: [],
+    pendingSupplierCount: 0,
+    revision: "a".repeat(32),
+  };
+  if (withScope) {
+    const calculation = calculateProductionEstimate({
+      calculationVersion: "repaint-v2",
+      surfaces: [{
+        id: scopeItemId, quantity: "160", unit: "sqft", coats: 2,
+        labor: {
+          productionRatePerHour: "80", sellingRate: "50", burdenedRate: "30",
+          rateBasis: "complete_system", applicationMethod: "brush_roll",
+        },
+      }],
+    });
+    calculation.items[0].operations![0].description = operationDescription;
+    evidence.budget = buildAcceptedEstimationBudget("e1", {
+      name: "proposal", total: "1000", calculationVersion: "repaint-v2",
+      calculationSnapshot: calculation,
+      items: [{ calculationItemId: scopeItemId, desc: "Bedroom walls", roomName: "Bedroom", surfaceName: "Walls", qty: "160", rate: "1" }],
+    }, [], "2026-10-01T12:00:00Z") as NonNullable<JobEstimationEvidence["budget"]>;
+  }
+  return {
+    comparison: compareJobEstimationBudget(evidence, summary.asOf),
+    observations: [],
+    canReview: true,
+    rates: [],
+  };
+}
+
 test(
   "jobs mobile/desktop: one list request, consistent money, unknown costs, menu/time/CO/photo flows preserved",
   async ({ browser, baseURL }, testInfo) => {
@@ -95,6 +146,8 @@ test(
       let onList = true;
       let listHasMore = false;
       let cursorRequests = 0;
+      let scopedBudget = false;
+      let operationDescription: string | undefined;
       page.on("pageerror", (error) => errors.push(error.message));
       await page.route("https://**/*", (route) => route.abort());
       await page.route("**/v1/**", async (route) => {
@@ -114,6 +167,12 @@ test(
             },
           ];
         if (path.endsWith("/costing")) data = detail;
+        if (path === `/v1/estimation-observations/jobs/${jobId}`)
+          data = budgetDetail(jobId, scopedBudget, operationDescription);
+        if (path === `/v1/estimation-observations/jobs/${legacyId}`)
+          data = budgetDetail(legacyId);
+        if (path === "/v1/change-orders" && route.request().method() === "POST")
+          data = { id: "co-draft", ...route.request().postDataJSON() };
         if (path === `/v1/jobs/${legacyId}/costing`)
           data = {
             ...detail,
@@ -202,6 +261,8 @@ test(
         });
       });
       for (const width of [360, 390, 430, 768, 1280, 1440]) {
+        scopedBudget = false;
+        operationDescription = width >= 768 ? " Protect adjacent colors " : width === 360 ? undefined : " ";
         await page.setViewportSize({ width, height: 900 });
         onList = true;
         await page.goto(`${baseUrl}/jobs`, { waitUntil: "domcontentloaded" });
@@ -267,17 +328,50 @@ test(
           .getByRole("link", { name: "View job", exact: true })
           .first()
           .click();
-        await page
-          .getByText(
-            "Work is complete. Cost capture has not been signed off.",
-            { exact: true },
-          )
-          .waitFor();
+        const costPosition = page.getByRole("region", { name: "Job cost position" });
+        await expect(costPosition.getByText(
+          "Work is complete. Final margin remains unverified.", { exact: true },
+        )).toBeVisible();
+        await expect(costPosition.getByText("80% recorded margin", { exact: true })).toBeVisible();
+        await expect(costPosition.getByText("Cost capture incomplete", { exact: true })).toBeVisible();
+        await expect(costPosition.getByText(
+          "Before customer tax. Recorded costs are not final costs.", { exact: true },
+        )).toBeVisible();
+        const budget = page.getByRole("region", { name: "Budget To Actual" });
+        await expect(budget.getByText("Accepted operating budget is unavailable.", { exact: true })).toBeVisible();
+        await expect(budget.locator("dl > div").filter({
+          has: page.getByText("Budget direct cost", { exact: true }),
+        }).locator("dd")).toHaveText("Unknown");
+        await expect(budget.locator("dl > div").filter({
+          has: page.getByText("Dated ledger costs", { exact: true }),
+        }).locator("dd")).toHaveText("$200.00");
+        await expect(budget.getByRole("button", { name: "Review closeout", exact: true })).toBeDisabled();
         const detailAmounts = await page
           .getByRole("region", { name: "Job financial summary" })
           .locator("dd")
           .allTextContents();
         assert.deepEqual(detailAmounts, listAmounts);
+        scopedBudget = true;
+        await budget.getByRole("button", { name: "Reload budget comparison", exact: true }).click();
+        const tasksSummary = budget.locator("summary").filter({ hasText: /^Operating Tasks$/ });
+        const attributionSummary = budget.locator("summary").filter({ hasText: /^Approved Time Attribution$/ });
+        const rateSummary = budget.locator("summary").filter({ hasText: /^Reviewed Rate Version$/ });
+        for (const sectionSummary of [tasksSummary, attributionSummary, rateSummary]) {
+          await expect(sectionSummary).toBeVisible();
+          await expect(sectionSummary.locator("..")).toHaveJSProperty("open", false);
+        }
+        await expect(budget.getByRole("button", { name: "Review closeout", exact: true })).toBeVisible();
+        await tasksSummary.click();
+        await expect(tasksSummary.locator("..").getByText(operationDescription?.trim() || "Bedroom walls \u00b7 Application", { exact: true })).toBeVisible();
+        await expect(tasksSummary.locator("..")).not.toContainText(scopeItemId);
+        await attributionSummary.click();
+        const taskSelect = budget.getByRole("combobox", { name: /^Task for 2 approved hours/ });
+        await expect(taskSelect.locator("option").filter({ hasText: operationDescription?.trim() || "Bedroom walls: Application" })).toHaveAttribute("value", `${scopeItemId}:application`);
+        await taskSelect.selectOption(`${scopeItemId}:application`);
+        await expect(taskSelect).toHaveValue(`${scopeItemId}:application`);
+        await rateSummary.click();
+        await expect(budget.getByRole("button", { name: "Preview rate", exact: true })).toBeVisible();
+        await rateSummary.click();
         assert.equal(await overflow(), false, `Detail overflow at ${width}`);
         const photo = page.locator('input[name="file"]');
         assert.equal(await photo.getAttribute("accept"), "image/*");
@@ -295,9 +389,23 @@ test(
           .click();
         await page.getByRole("dialog", { name: /change order/i }).waitFor();
         assert.equal(await page.getByRole("dialog").count(), 1);
-        await page
-          .getByRole("button", { name: "Close dialog", exact: true })
-          .click();
+        const changeDialog = page.getByRole("dialog", { name: "Add Change Order", exact: true });
+        await expect(changeDialog.getByLabel("Amount including tax", { exact: true })).toBeVisible();
+        if (width === 360) {
+          await changeDialog.getByLabel("Customer-facing summary", { exact: true }).fill("Add garage trim");
+          await changeDialog.getByLabel("Amount including tax", { exact: true }).fill("109.20");
+          const submitted = page.waitForRequest((request) =>
+            new URL(request.url()).pathname === "/v1/change-orders" && request.method() === "POST",
+          );
+          await changeDialog.getByRole("button", { name: "Save draft", exact: true }).click();
+          const request = await submitted;
+          assert.equal(request.postDataJSON().amount, 109.2, "Entered gross amount must not be repriced or taxed again");
+          assert.equal(request.postDataJSON().status, "draft");
+          assert.equal(request.postDataJSON().jobId, jobId);
+          await expect(changeDialog).not.toBeVisible();
+        } else {
+          await changeDialog.getByRole("button", { name: "Close dialog", exact: true }).click();
+        }
         await page
           .getByRole("button", { name: "More job actions", exact: true })
           .click();

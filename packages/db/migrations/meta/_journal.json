@@ -225,6 +225,18 @@
       "when": 1791072002000,
       "tag": "0032_unsigned_estimate_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 32, "version": "7", "when": 1791072003000,
+      "tag": "0033_estimation_pricebook_v2", "breakpoints": true
+    },
+    {
+      "idx": 33, "version": "7", "when": 1791072004000,
+      "tag": "0034_accepted_estimation_budget", "breakpoints": true
+    },
+    {
+      "idx": 34, "version": "7", "when": 1791072005000,
+      "tag": "0035_estimation_observations", "breakpoints": true
     }
   ]
 }

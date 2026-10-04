@@ -8,6 +8,7 @@ import { Icon } from '@/components/Icon';
 import { Button } from "@/components/Button";
 import { Modal, ModalFooter } from '@/components/Modal';
 import { API_URL, apiJson, formatAddress, formatMoney, labelize } from '@/lib/api';
+import { JobBudgetActual } from './JobBudgetActual';
 import {
   JobActionMenu,
   JobFinancialSummary,
@@ -845,10 +846,12 @@ export function JobDetail() {
         />
         {isCompleted && (
           <p className="pf-helper mt-2">
-            Work is complete. Cost capture has not been signed off.
+            Work is complete. Final margin remains unverified.
           </p>
         )}
       </section>
+
+      <JobBudgetActual key={job.id} jobId={job.id} refreshKey={detail} />
 
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="Job sections">
         {[
@@ -1301,7 +1304,7 @@ export function JobDetail() {
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-1.5">
-              <span className="form-label">Change order total</span>
+              <span className="pf-label">Amount including tax</span>
               <input
                 value={changeOrderForm.amount}
                 onChange={(event) => setChangeOrderForm({ ...changeOrderForm, amount: event.target.value })}

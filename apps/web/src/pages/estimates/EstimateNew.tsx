@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/Button';
 import { Icon } from '@/components/Icon';
 import { Input, Select, Textarea } from '@/components/Input';
@@ -8,6 +8,7 @@ import { EstimationInputError, formatEstimationMinor, type EstimationResult, typ
 import { calculateQuickEstimate } from '../../../../../packages/core/src/estimation-quick';
 import { estimationSaveAttempt, type EstimationSaveAttempt } from '../../../../../packages/core/src/estimation-save';
 import { decimal, minor } from '../../../../../packages/core/src/estimation-decimal';
+import { assertEstimationTemplateCompatible, type EstimationTemplateScope } from '../../../../../packages/core/src/estimation-template';
 
 interface Lead {
   id: string;
@@ -50,6 +51,7 @@ function initialItems(): ScopeItem[] {
 
 export function EstimateNew() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
   const initialLeadId = params.get('leadId') || '';
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -111,6 +113,14 @@ export function EstimateNew() {
   const missingDescriptions = new Set(pricing.value?.items.filter((item) => item.subtotalMinor > 0 && !items.find((row) => row.id === item.id)?.desc.trim()).map((item) => item.id));
   const fieldError = (field: string) => pricing.error?.field === field ? pricing.error.message : undefined;
   const taxPercent = pricing.value?.taxPercent || '0';
+  const interchangeError = useMemo(() => {
+    const state = location.state as { estimateTemplate?: EstimationTemplateScope; productionInput?: unknown } | null;
+    try {
+      if (state?.estimateTemplate) assertEstimationTemplateCompatible(state.estimateTemplate, 'quick');
+      if (state?.productionInput || params.get('estimateId')) throw new Error('This estimate cannot be flattened into quick scope without losing production details and cost budgets. Keep it in the production estimator.');
+      return '';
+    } catch (error) { return message(error); }
+  }, [location.state, params]);
 
   function updateItem(id: string, patch: Partial<ScopeItem>) {
     setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
@@ -119,7 +129,7 @@ export function EstimateNew() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submittingRef.current || !pricing.value || pricing.error) return;
+    if (submittingRef.current || !pricing.value || pricing.error || interchangeError) return;
     if (!selectedLeadId) { setSubmitError('Select a customer.'); return; }
     if (missingDescriptions.size) { setSubmitError('Describe each priced scope item.'); return; }
     if (!pricing.value.productionInput.adjustments?.length) { setSubmitError('Add at least one priced scope item.'); return; }
@@ -186,12 +196,18 @@ export function EstimateNew() {
 
   if (isLoading) return <div className="mx-auto max-w-6xl space-y-4" aria-label="Loading estimate setup" aria-busy="true"><div className="h-16 animate-pulse rounded bg-gray-100" /><div className="h-64 animate-pulse rounded bg-gray-100" /></div>;
   if (loadError) return <section className="mx-auto max-w-3xl space-y-3"><p className="pf-section-title">Estimate setup could not be loaded</p><p className="pf-copy" role="alert">{loadError}</p><Button type="button" onClick={() => setReload((current) => current + 1)}>Try again</Button></section>;
+  if (interchangeError) return <section className="mx-auto max-w-3xl space-y-3"><p className="pf-section-title">Keep the production scope</p><p className="pf-copy" role="alert">{interchangeError}</p><Link to={'/estimates/production' + (params.get('estimateId') ? '?estimateId=' + encodeURIComponent(params.get('estimateId')!) : '')} state={location.state} className="btn btn-text">Open production estimate</Link></section>;
 
   return (
     <main className="mx-auto max-w-6xl space-y-5 pb-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="pf-page-copy">Build a proposal from a few priced scope items.</p>
-        <Link to={'/estimates/production' + (selectedLeadId ? '?leadId=' + encodeURIComponent(selectedLeadId) : '')} className="btn btn-text">Production estimator</Link>
+        <Link to={'/estimates/production' + (selectedLeadId ? '?leadId=' + encodeURIComponent(selectedLeadId) : '')} className="btn btn-text" onClick={(event) => {
+          if (items.length || notes.trim() || savedEstimate) {
+            event.preventDefault();
+            setSubmitError('Quick scope cannot be converted to production substrates without losing its entered hours, material allowances and prices. Save this draft before starting a separate production estimate.');
+          }
+        }}>Open production estimator</Link>
       </div>
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0 space-y-5">

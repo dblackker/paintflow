@@ -1,5 +1,6 @@
 import { useLayoutEffect } from 'react';
 import { API_URL } from '@/lib/api';
+import { clearEstimatorDrafts, setEstimatorDraftAccount } from '@/pages/estimates/estimator-draft';
 
 export function AuthBridge() {
   useLayoutEffect(() => {
@@ -41,6 +42,8 @@ export function AuthBridge() {
     }
 
     function clearStoredToken() {
+      clearEstimatorDrafts();
+      setEstimatorDraftAccount(null);
       memorySessionToken = '';
       try {
         localStorage.removeItem(storageKey);

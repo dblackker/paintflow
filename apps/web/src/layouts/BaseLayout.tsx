@@ -5,6 +5,7 @@ import { Toast } from '@/components/Toast';
 import { AuthBridge } from '@/components/AuthBridge';
 import { Icon } from '@/components/Icon';
 import { API_URL, apiJson } from '@/lib/api';
+import { clearEstimatorDrafts, setEstimatorDraftAccount } from '@/pages/estimates/estimator-draft';
 
 interface NavLink {
   href: string;
@@ -248,6 +249,8 @@ export function BaseLayout() {
   }, []);
 
   async function logout() {
+    clearEstimatorDrafts();
+    setEstimatorDraftAccount(null);
     try {
       await apiJson('/v1/auth/logout', {
         method: 'POST',
@@ -256,6 +259,7 @@ export function BaseLayout() {
     } catch {
       // Local session cleanup still happens through the API redirect path if the server is unavailable.
     } finally {
+      window.CrewmodoAuth?.clearSessionFallback();
       navigate('/login');
     }
   }
@@ -300,7 +304,7 @@ export function BaseLayout() {
               <Icon name="menu" className="h-5 w-5" />
             </button>
             <div className="flex min-w-0 items-center gap-3">
-              <p className="pf-topbar-title shrink-0 truncate lg:max-w-[10rem] xl:max-w-[13rem]">{title}</p>
+              <p className="pf-topbar-title min-w-0 truncate lg:shrink-0 lg:max-w-[10rem] xl:max-w-[13rem]" title={title}>{title}</p>
               <div className="hidden min-w-0 items-center gap-1 lg:flex" data-owner-nav>
                 <Link
                   to="/dashboard"

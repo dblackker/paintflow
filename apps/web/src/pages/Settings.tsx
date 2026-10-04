@@ -4,6 +4,7 @@ import { Button } from '@/components/Button';
 import { Card, CardContent, CardHeader } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { UpsellCard } from '@/components/UpsellCard';
+import { EstimationPolicySettings } from '@/components/EstimationPolicySettings';
 import { API_URL, apiJson, formatPhone } from '@/lib/api';
 
 interface OrgSettings {
@@ -867,6 +868,7 @@ document.getElementById('crewmodo-lead-form').addEventListener('submit', async f
             <Button type="submit" isLoading={saving === 'pricing'} className="w-full sm:w-fit">Save</Button>
           </form>
 
+          <EstimationPolicySettings />
           <form id="payment-schedule-settings" className="mt-6 grid scroll-mt-24 gap-4 border-t border-gray-200 pt-5" onSubmit={savePaymentSchedule}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>

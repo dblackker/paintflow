@@ -108,3 +108,8 @@ export function jobFinancialPosition(input: JobFinancialPositionInput) {
 }
 
 export type JobFinancialPosition = ReturnType<typeof jobFinancialPosition>;
+
+// Additive operating-budget projection; the historical financial summary above
+// intentionally keeps its recorded-ledger and unknown-final-margin contracts.
+export { compareJobEstimationBudget } from './estimation-observations';
+export type { JobEstimationEvidence, AcceptedEstimationBudget } from './estimation-observations';

@@ -17,6 +17,12 @@ import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal
 import { createDepositInvoiceForEstimate } from '../lib/customer-invoices';
 import { sendInvoiceEmail } from '../lib/invoice-emails';
 import { queueActionEvent } from '../lib/action-telemetry';
+import { acceptedOptionPricing, buildAcceptedEstimationBudget, matchAcceptedOptions, type AcceptedBudgetPackage } from '../../../../packages/core/src/estimation-budget';
+import { publicEstimatePackages } from '../../../../packages/core/src/estimation-public';
+import { deliverAcceptedEstimate } from '../lib/accepted-estimate-delivery';
+import { buildJobName, selectEstimatePackage } from '../lib/estimate-handoff';
+import { nextPayableMilestone } from '../lib/payment-schedule';
+import { currentProposalTerms, proposalTerms, proposalTermsVersion, proposalPaymentSettings } from '../lib/proposal-terms';
 
 const estimatesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 const CLIENT_VIEW_THROTTLE_MS = 30 * 60 * 1000;
@@ -27,11 +33,15 @@ const selectedOptionSchema = z.object({
   qty: z.coerce.number().positive().default(1),
   rate: z.coerce.number().nonnegative(),
   category: z.string().trim().max(120).optional(),
+  calculationItemId: z.string().max(200).optional(),
+  optionIndex: z.number().int().min(0).max(500).optional(),
 });
 
 const signSchema = z.object({
+  expectedUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  expectedTermsVersion: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   name: z.string().min(1).max(255),
-  signatureData: z.string().min(1).max(100000),
+  signatureData: z.string().min(100).max(100000).regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, 'Draw your signature before approving.'),
   packageName: z.string().optional(),
   selectedOptions: z.array(selectedOptionSchema).max(20).optional(),
   acknowledgedDisclosure: z.boolean().optional(),
@@ -89,7 +99,7 @@ const estimateLineItemSchema = z.object({
 });
 
 const estimatePackageSchema = z.object({
-  calculationVersion: z.literal(ESTIMATION_CALCULATION_VERSION).optional(),
+  calculationVersion: z.enum(['repaint-v1', 'repaint-v2']).optional(),
   productionInput: z.unknown().optional(),
   calculationInput: z.unknown().optional(),
   estimateType: z.enum(['interior', 'exterior', 'mixed']).optional(),
@@ -124,7 +134,7 @@ const estimatePackageSchema = z.object({
   path: ['items'],
 });
 
-export async function priceEstimatePackages(db: ReturnType<typeof createDb>, orgId: string, packages: z.infer<typeof estimatePackageSchema>[]) {
+export async function priceEstimatePackages(db: ReturnType<typeof createDb>, orgId: string, packages: z.infer<typeof estimatePackageSchema>[], context: { postalCode?: string | null; actorId?: string | null } = {}) {
   const settings = packages.some((pkg) => !pkg.calculationVersion)
     ? await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) }) : null;
   return Promise.all(packages.map(async (pkg) => {
@@ -139,7 +149,8 @@ export async function priceEstimatePackages(db: ReturnType<typeof createDb>, org
         discount: Number(formatEstimationMinor(calculation.totals.discountMinor)), tax: Number(formatEstimationMinor(calculation.totals.taxMinor)),
         total: Number(formatEstimationMinor(calculation.totals.totalMinor)), pricingSnapshot: { version: ESTIMATION_CALCULATION_VERSION, calculation } };
     }
-    const { productionInput, resolvedInput, calculation, rates, materials } = await resolveProductionEstimation(db, orgId, pkg.productionInput);
+    const { productionInput, resolvedInput, calculation, rates, materials, taxSnapshot } = await resolveProductionEstimation(db, orgId, pkg.productionInput, context);
+    if (pkg.calculationVersion !== calculation.calculationVersion) throw new EstimationInputError('calculationVersion', 'The selected pricing version does not match this scope. Review the estimate again.');
     const lines = new Map(calculation.items.map((line) => [line.id, line]));
     const submittedIds = new Set<string>();
     const items = pkg.items.map((item) => {
@@ -150,17 +161,25 @@ export async function priceEstimatePackages(db: ReturnType<typeof createDb>, org
       const source = productionInput.items.find((surface) => surface.id === id);
       const adjustment = productionInput.adjustments?.find((row) => row.id === id);
       const rate = source ? rates.find((row) => row.id === source.productionRateId)! : null;
-      const product = source?.materialId ? materials.find((row) => row.id === source.materialId) : null;
+      const finishId = source?.materialId || source?.coatingLayers?.find((layer) => layer.phase === 'finish')?.materialId;
+      const product = finishId ? materials.find((row) => row.id === finishId) : null;
       return {
         ...item, calculationItemId: id, calculatedSubtotalMinor: line.subtotalMinor,
-        optional: source?.optional ?? adjustment?.optional ?? false,
+        optional: !line.included,
         // Selling lines carry allocated cents; measured quantities remain separate scope metadata.
         qty: 1, rate: Number(formatEstimationMinor(line.subtotalMinor)),
         productionRateId: rate?.id, category: rate?.unit || item.category,
         dimensions: source ? { ...item.dimensions, quantity: Number(line.quantity), unit: line.unit } : item.dimensions,
         labor: source ? { ...item.labor, hours: Number(line.hours), cost: Number(formatEstimationMinor(line.laborMinor)),
-          rate: Number(rate?.hourlyRate || '0'), coats: source.coats ?? rate?.coats,
+          rate: Number(resolvedInput.surfaces.find((surface) => surface.id === id)?.labor.sellingRate || '0'), coats: source.coats ?? rate?.coats,
+          ceilingColorSeparation: source.colorRelationship,
           productionRatePerHour: Number(rate?.ratePerHour || '0') } : undefined,
+        coatingLayers: source?.coatingLayers?.map((layer) => {
+          const coating = materials.find((row) => row.id === layer.materialId)!;
+          return { ...layer, name: coating.name, brand: coating.brand, sheen: coating.sheen };
+        }),
+        scopeCommitments: line.operations?.filter((operation) => ['masking', 'cut_in'].includes(operation.kind) && Number(operation.hours) > 0)
+          .map((operation) => operation.description || (operation.kind === 'masking' ? 'Masking for color separation' : 'Cut-in for color separation')),
         material: product ? { ...item.material, id: product.id, name: product.name, brand: product.brand, supplier: product.supplier,
           unit: product.unit, costPerUnit: Number(product.costPerUnit), quantity: Number(line.allocatedPacks || '0'),
           price: Number(formatEstimationMinor(line.materialMinor)), acquisitionCost: Number(formatEstimationMinor(line.materialCostMinor)),
@@ -168,11 +187,19 @@ export async function priceEstimatePackages(db: ReturnType<typeof createDb>, org
           theoreticalGallons: line.theoreticalGallons } : undefined,
       };
     });
+    for (const line of calculation.items) {
+      if (!submittedIds.has(line.id) && ['estimator:mobilization', 'estimator:minimum'].includes(line.id)) {
+        items.push({ calculationItemId: line.id, calculatedSubtotalMinor: line.subtotalMinor, desc: line.id === 'estimator:minimum' ? 'Project minimum' : 'Mobilization',
+          qty: 1, rate: Number(formatEstimationMinor(line.subtotalMinor)), optional: false, category: 'other', kind: 'line_item', customerVisible: true,
+          productionRateId: undefined, dimensions: undefined, labor: undefined, material: undefined, coatingLayers: undefined, scopeCommitments: undefined });
+        submittedIds.add(line.id);
+      }
+    }
     if (calculation.items.some((line) => Number(line.quantity) > 0 && !submittedIds.has(line.id))) {
       throw new EstimationInputError('items', 'The proposal is missing a calculated scope item. Review the current scope again.');
     }
     return { ...pkg, items, lineItems: items, productionInput, calculationVersion: calculation.calculationVersion,
-      calculationInput: resolvedInput, calculationSnapshot: calculation,
+      calculationInput: resolvedInput, calculationSnapshot: calculation, taxSnapshot, taxRate: taxSnapshot.value,
       subtotal: Number(formatEstimationMinor(calculation.totals.subtotalMinor)), discount: Number(formatEstimationMinor(calculation.totals.discountMinor)),
       tax: Number(formatEstimationMinor(calculation.totals.taxMinor)), total: Number(formatEstimationMinor(calculation.totals.totalMinor)),
       optionalTotal: Number(formatEstimationMinor(calculation.totals.optionalSubtotalMinor)) };
@@ -308,19 +335,17 @@ function selectedOptionsForPackage(estimate: typeof estimates.$inferSelect, pack
     optional?: boolean;
     customerVisible?: boolean;
   }>;
-  const allowed = new Map(optionalItems
-    .filter((item) => item.optional && item.customerVisible !== false)
-    .map((item) => [`${item.desc}|${Number(item.qty || 1)}|${Number(item.rate || 0)}`, item]));
+  return matchAcceptedOptions(optionalItems as NonNullable<AcceptedBudgetPackage['items']>, selectedOptions);
+}
 
-  return selectedOptions
-    .map((option) => allowed.get(`${option.desc}|${Number(option.qty || 1)}|${Number(option.rate || 0)}`))
-    .filter((option): option is NonNullable<typeof option> => Boolean(option))
-    .map((option) => ({
-      desc: String(option.desc),
-      qty: Number(option.qty || 1),
-      rate: Number(option.rate || 0),
-      category: option.category,
-    }));
+async function freezeProposalTerms(db: ReturnType<typeof createDb>, estimate: typeof estimates.$inferSelect) {
+  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, estimate.orgId) });
+  const terms = currentProposalTerms(settings || {});
+  const frozen = await db.execute(sql`update estimates set proposal_terms_snapshot=coalesce(proposal_terms_snapshot,${JSON.stringify(terms)}::jsonb)
+    where id=${estimate.id}::uuid and org_id=${estimate.orgId}::uuid and signed_at is null and status in ('draft','sent')
+      and date_trunc('milliseconds',updated_at)=date_trunc('milliseconds',${estimate.updatedAt.toISOString()}::timestamptz at time zone 'UTC')
+    returning proposal_terms_snapshot`);
+  return Boolean(frozen.rows[0]);
 }
 
 function createPortalToken() {
@@ -398,7 +423,8 @@ estimatesApp.get('/:id/public', async (c) => {
   const settings = await db.query.orgSettings.findFirst({
     where: eq(orgSettings.orgId, estimate.orgId),
   });
-  const legal = legalSettingsFromPreferences(readPreferenceObject(settings?.businessHours));
+  const terms = proposalTerms(estimate.proposalTermsSnapshot, settings || {});
+  const legal = terms.legal;
 
   const photos = await db.query.estimatePhotos.findMany({
     where: eq(estimatePhotos.estimateId, estimate.id),
@@ -410,7 +436,9 @@ estimatesApp.get('/:id/public', async (c) => {
     .filter((payment) => ['succeeded', 'paid'].includes(payment.status))
     .reduce((sum, payment) => sum + Number(payment.amount || 0) - Number(payment.refundedAmount || 0), 0);
   const total = estimateContractValue(estimate);
-  const paymentSchedule = estimatePaymentSchedule(settings || {}, total, paidAmount);
+  const acceptance = estimate.acceptanceSnapshot as { paymentSchedule?: unknown[]; paymentTerms?: string; legal?: typeof legal } | null;
+  const paymentSchedule = estimatePaymentSchedule(acceptance?.paymentSchedule
+    ? { businessHours: { paymentSchedule: { enabled: true, milestones: acceptance.paymentSchedule } } } : proposalPaymentSettings(terms), total, paidAmount);
   const contractorSignature = await estimateContractorSignature(db, estimate);
   const latestPortalToken = estimate.signedAt
     ? await db.query.portalTokens.findFirst({
@@ -424,11 +452,12 @@ estimatesApp.get('/:id/public', async (c) => {
     data: {
       id: estimate.id,
       ...estimateJobsite(estimate),
-      packages: estimate.packages,
-      total: estimate.total,
+      packages: publicEstimatePackages(estimate.packages, estimate.acceptanceSnapshot),
+      total: total.toFixed(2),
       status: estimate.status,
       createdAt: estimate.createdAt,
       updatedAt: estimate.updatedAt,
+      termsVersion: await proposalTermsVersion(terms),
       sentAt: estimate.sentAt,
       signedName: estimate.signedName,
       signedAt: estimate.signedAt,
@@ -442,8 +471,8 @@ estimatesApp.get('/:id/public', async (c) => {
         balanceDue: Math.max(total - paidAmount, 0),
       },
       paymentSchedule,
-      paymentTerms: settings?.paymentTerms || 'Due on completion',
-      legal,
+      paymentTerms: acceptance?.paymentTerms || terms.paymentTerms,
+      legal: acceptance?.legal || legal,
       photos,
       branding: branding ? {
         logoUrl: branding.logoUrl,
@@ -475,6 +504,17 @@ estimatesApp.post('/:id/sign', async (c) => {
   if (!existing) {
     return c.json({ error: 'Not found' }, 404);
   }
+  const request = JSON.stringify(parsed.data);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(request));
+  const approvalKey = c.req.header('Idempotency-Key')?.trim() || Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  if (approvalKey.length > 200) return c.json({ error: 'Reload the proposal and try signing again.' }, 400);
+  const priorApproval = await db.execute(sql`select request=${request}::jsonb as matches,result from operation_results
+    where org_id=${existing.orgId}::uuid and action='estimate.accept' and actor=${id} and operation_key=${approvalKey}`);
+  const prior = priorApproval.rows[0] as { matches: boolean; result: Record<string, unknown> } | undefined;
+  if (prior) {
+    if (!prior.matches) return c.json({ error: 'This approval key was used for different details.' }, 409);
+    return c.json({ data: { ...prior.result, replayed: true } });
+  }
   if (existing.status === 'canceled') {
     return c.json({ error: 'This estimate has been canceled' }, 409);
   }
@@ -497,90 +537,80 @@ estimatesApp.post('/:id/sign', async (c) => {
   const settings = await db.query.orgSettings.findFirst({
     where: eq(orgSettings.orgId, existing.orgId),
   });
-  const legal = legalSettingsFromPreferences(readPreferenceObject(settings?.businessHours));
+  const terms = proposalTerms(existing.proposalTermsSnapshot, settings || {});
+  const legal = terms.legal;
   if (legal.disclosureEnabled && legal.disclosureRequired && !acknowledgedDisclosure) {
     return c.json({ error: 'Please acknowledge the required disclosure before signing.' }, 400);
   }
   
-  const cleanOptions = selectedOptionsForPackage(existing, packageName, selectedOptions);
-  const [estimate] = await db.update(estimates)
-    .set({
-      status: 'accepted',
-      signedName: name,
-      signatureData,
-      signedAt: new Date(),
-      signedIp: ip,
-      signedUserAgent: userAgent,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(estimates.id, id), eq(estimates.status, 'sent'), isNull(estimates.signedAt),
-      sql`date_trunc('milliseconds', ${estimates.updatedAt}) = ${existing.updatedAt.toISOString()}::timestamptz at time zone 'UTC'`))
-    .returning();
-  if (!estimate) return c.json({ error: 'This proposal changed while you were reviewing it. Reload it before signing.', code: 'ESTIMATE_VERSION_CONFLICT' }, 409);
-  const job = await createJobFromAcceptedEstimate(db, estimate, {
-    packageName,
-    signedBy: name,
-    selectedOptions: cleanOptions,
-    ipAddress: ip,
-    userAgent,
-    initialStatus: 'deposit_pending',
-  });
-  const depositInvoice = await createDepositInvoiceForEstimate(db, estimate, {
-    packageName,
-    selectedOptions: cleanOptions,
-    jobId: job.id,
-  });
-  if (!depositInvoice) {
-    await db.update(jobs)
-      .set({ status: 'scheduled', updatedAt: new Date() })
-      .where(and(eq(jobs.id, job.id), eq(jobs.orgId, estimate.orgId)));
+  let cleanOptions: ReturnType<typeof selectedOptionsForPackage>;
+  try { cleanOptions = selectedOptionsForPackage(existing, packageName, selectedOptions); }
+  catch (error) {
+    if (error instanceof EstimationInputError) return c.json({ error: error.message, code: error.code }, 400);
+    throw error;
   }
-  const portalUrl = await createClientPortalLink(db, c.env, estimate.orgId, estimate.leadId);
-  if (depositInvoice) {
-    try {
-      await sendInvoiceEmail(c.env, db, {
-        orgId: estimate.orgId,
-        invoice: depositInvoice,
-        templateKey: 'invoice.deposit.created',
-        portalUrl,
-      });
-    } catch (error) {
-      console.error('Failed to send deposit invoice email:', error);
-    }
+  const selectedPackage = selectEstimatePackage(existing, packageName) as AcceptedBudgetPackage | null;
+  if (!selectedPackage) return c.json({ error: 'Select a proposal before signing.' }, 400);
+  const termsVersion = await proposalTermsVersion(terms);
+  if ((parsed.data.expectedTermsVersion && parsed.data.expectedTermsVersion !== termsVersion) ||
+    (selectedPackage.calculationVersion === 'repaint-v2' && !parsed.data.expectedTermsVersion)) {
+    return c.json({ error: 'The agreement terms changed. Reload the proposal before signing.', code: 'ESTIMATE_TERMS_CONFLICT' }, 409);
   }
-
-  await db.insert(auditLogs).values({
-    orgId: estimate.orgId,
-    action: 'estimate.signed',
-    entityType: 'estimate',
-    entityId: estimate.id,
-    metadata: {
+  if ((parsed.data.expectedUpdatedAt && parsed.data.expectedUpdatedAt !== existing.updatedAt.toISOString()) ||
+    (selectedPackage.calculationVersion === 'repaint-v2' && !parsed.data.expectedUpdatedAt)) {
+    return c.json({ error: 'This proposal changed while you were reviewing it. Reload it before signing.', code: 'ESTIMATE_VERSION_CONFLICT' }, 409);
+  }
+  const lead = await db.query.leads.findFirst({ where: and(eq(leads.id, existing.leadId), eq(leads.orgId, existing.orgId)) });
+  if (!lead) return c.json({ error: 'Customer not found.' }, 404);
+  let contractValue: number;
+  let budget: ReturnType<typeof buildAcceptedEstimationBudget>;
+  try {
+    contractValue = acceptedOptionPricing(selectedPackage, cleanOptions).totalMinor / 100;
+    budget = buildAcceptedEstimationBudget(id, selectedPackage, cleanOptions, new Date().toISOString());
+  } catch (error) {
+    if (error instanceof EstimationInputError) return c.json({ error: error.message, code: error.code }, 400);
+    throw error;
+  }
+  const milestone = nextPayableMilestone(estimatePaymentSchedule(proposalPaymentSettings(terms), contractValue));
+  const token = crypto.randomUUID().replace(/-/g, '');
+  const portalUrl = `${c.env.PUBLIC_URL || 'https://crewmodo.com'}/portal/${token}`;
+  const deposit = milestone && milestone.amount > 0 ? {
+    invoiceNumber: `DEP-${id.slice(0, 8).toUpperCase()}-${milestone.key.replace(/[^a-z0-9]/gi, '').slice(0, 16).toUpperCase()}`,
+    description: `${milestone.label} for signed proposal`, amount: milestone.amount.toFixed(2), dueLabel: milestone.due,
+    lineItems: [{ description: milestone.label, quantity: 1, unitPrice: milestone.amount, total: milestone.amount, category: 'deposit', milestoneKey: milestone.key, milestoneDue: milestone.due, estimateId: id }],
+  } : null;
+  const payload = {
+    signedName: name, signatureData, ip, userAgent, budget, reviewedTerms: terms, reviewedPackages: existing.packages,
+    reviewedJobsite: { leadId: existing.leadId, streetAddress: existing.streetAddress, city: existing.city, state: existing.state, postalCode: existing.postalCode },
+    contractValue: contractValue.toFixed(2),
+    jobNumber: `JOB-${new Date().getUTCFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+    jobName: buildJobName({ ...lead, streetAddress: existing.streetAddress || lead.streetAddress }, { ...selectedPackage, total: selectedPackage.total ?? existing.total }),
+    deposit, portalToken: token, portalUrl,
+    acceptance: { contractTotalMinor: budget.contractTotalMinor, packageName: selectedPackage.name, selectedOptions: cleanOptions,
+      paymentSchedule: estimatePaymentSchedule(proposalPaymentSettings(terms), contractValue), paymentTerms: terms.paymentTerms, legal, termsVersion },
+    audit: {
       packageName: packageName ?? null,
-      contractValue: estimateContractValue(estimate, packageName, cleanOptions),
+      contractValue,
       selectedOptions: cleanOptions,
-      awaitingPayment: true,
-      jobId: job.id,
-      depositInvoiceId: depositInvoice?.id || null,
-      portalUrl,
+      awaitingPayment: Boolean(deposit),
       contractorSignature,
       legalSnapshot: legal,
       acknowledgedDisclosure: Boolean(legal.disclosureEnabled && acknowledgedDisclosure),
     },
-    ipAddress: ip,
-    userAgent,
-  });
-  
-  return c.json({
-    data: {
-      id: estimate.id,
-      status: estimate.status,
-      signedAt: estimate.signedAt,
-      jobId: job.id,
-      depositInvoiceId: depositInvoice?.id || null,
-      portalUrl,
-      awaitingPayment: Boolean(depositInvoice),
-    },
-  });
+  };
+  try {
+    const result = await supplierCall<Record<string, unknown>>(db, sql`select accept_estimate_budget(${existing.orgId}::uuid,${id}::uuid,
+      ${approvalKey},${existing.updatedAt.toISOString()}::timestamp,${request}::jsonb,${JSON.stringify(payload)}::jsonb) as result`);
+    if (!result.replayed) queueActionEvent(c, { action: 'estimate.accepted', orgId: existing.orgId, actorId: id, entityId: id, occurredAt: String(budget.acceptedAt) });
+    if (typeof result.deliveryId === 'string' && c.env.RESEND_API_KEY) {
+      const delivery = deliverAcceptedEstimate(c.env, existing.orgId, result.deliveryId).catch(() => console.warn('accepted_estimate_delivery_deferred', { estimateId: id }));
+      try { c.executionCtx.waitUntil(delivery); } catch { await delivery; }
+    }
+    return c.json({ data: result });
+  } catch (error) {
+    if (error instanceof SupplierOperationError) return c.json({ error: error.message, code: error.code }, error.status);
+    throw error;
+  }
 });
 
 estimatesApp.use('*', authMiddleware);
@@ -668,7 +698,7 @@ estimatesApp.post('/', async (c) => {
   }
 
   let packages: Awaited<ReturnType<typeof priceEstimatePackages>>;
-  try { packages = await priceEstimatePackages(db, orgId, parsed.data.packages); }
+  try { packages = await priceEstimatePackages(db, orgId, parsed.data.packages, { postalCode: parsed.data.postalCode || lead.postalCode, actorId: actor }); }
   catch (error) {
     if (error instanceof EstimationInputError) return c.json({ error: error.message, code: error.code, fields: productionEstimationFieldErrors(error) }, 400);
     throw error;
@@ -710,7 +740,10 @@ estimatesApp.get('/:id', async (c) => {
     .where(and(eq(customerPayments.orgId, orgId), eq(customerPayments.estimateId, estimate.id)))
     .orderBy(desc(customerPayments.receivedAt)));
   const contractorSignature = await estimateContractorSignature(db, estimate);
-  return c.json({ data: { ...estimate, payments, contractorSignature, publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
+  const deliveryRows = estimate.signedAt ? await db.execute(sql`select status,attempts,last_error as "lastError",sent_at as "sentAt",invoice_id as "invoiceId"
+    from accepted_estimate_deliveries where org_id=${orgId}::uuid and estimate_id=${estimate.id}::uuid`) : { rows: [] };
+  return c.json({ data: { ...estimate, payments, contractorSignature, acceptanceDelivery: deliveryRows.rows[0] ?? null,
+    publicUrl: publicEstimateUrl(baseUrl, estimate.id), customerPreviewUrl: publicEstimateUrl(baseUrl, estimate.id) } });
 });
 
 estimatesApp.post('/:id/cancel', async (c) => {
@@ -928,7 +961,7 @@ estimatesApp.patch('/:id', async (c) => {
   }
 
   let packages: Awaited<ReturnType<typeof priceEstimatePackages>>;
-  try { packages = await priceEstimatePackages(db, orgId, parsed.data.packages); }
+  try { packages = await priceEstimatePackages(db, orgId, parsed.data.packages, { postalCode: parsed.data.postalCode || lead.postalCode, actorId: actor }); }
   catch (error) {
     if (error instanceof EstimationInputError) return c.json({ error: error.message, code: error.code, fields: productionEstimationFieldErrors(error) }, 400);
     throw error;
@@ -1103,6 +1136,9 @@ estimatesApp.post('/:id/countersign', async (c) => {
   }
 
   const contractorSignature = await buildContractorSignature(db, orgId, userId);
+  if (!estimate.signedAt && !await freezeProposalTerms(db, estimate)) {
+    return c.json({ error: 'This proposal changed. Reload it before countersigning.', code: 'ESTIMATE_VERSION_CONFLICT' }, 409);
+  }
   await db.insert(auditLogs).values({
     orgId,
     userId,
@@ -1151,6 +1187,13 @@ estimatesApp.post('/:id/send-email', async (c) => {
 
   if (!lead?.email) {
     return c.json({ error: 'Lead email is required before sending an estimate' }, 400);
+  }
+
+  if (estimate.status !== 'sent' || estimate.signedAt) {
+    return c.json({ error: 'Only unsigned sent proposals can be sent from this action.' }, 409);
+  }
+  if (!await freezeProposalTerms(db, estimate)) {
+    return c.json({ error: 'This proposal changed. Reload it before sending.', code: 'ESTIMATE_VERSION_CONFLICT' }, 409);
   }
 
   const branding = await db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, orgId) });

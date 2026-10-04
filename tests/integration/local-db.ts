@@ -11,7 +11,10 @@ export function disposableDatabase() {
     || process.env.CREWMODO_RESET_TEST_DB !== '1') {
     throw new Error('Tests refuse remote/non-test databases or missing reset permission.');
   }
-  return new pg.Pool({ connectionString, max: 12 });
+  // Neon treats timestamp-without-time-zone as UTC; node-postgres otherwise uses
+  // the developer's local timezone and can introduce false stale-version errors.
+  pg.types.setTypeParser(1114, (value) => new Date(`${value.replace(' ', 'T')}Z`));
+  return new pg.Pool({ connectionString, max: 12, options: '-c timezone=UTC' });
 }
 
 export async function migrateDisposableDatabase(pool: pg.Pool) {

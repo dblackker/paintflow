@@ -75,6 +75,7 @@ interface Estimate {
   updatedAt?: string;
   publicUrl?: string;
   customerPreviewUrl?: string;
+  acceptanceDelivery?: { status: 'pending' | 'sending' | 'sent' | 'needs_attention'; invoiceId: string; lastError?: string | null } | null;
   contractorSignature?: {
     name?: string;
     email?: string | null;
@@ -313,6 +314,13 @@ export function EstimateDetails() {
   return (
     <div className="mx-auto max-w-6xl px-1 pb-24 sm:px-0">
       <div className="grid gap-5">
+        {estimate.acceptanceDelivery && estimate.acceptanceDelivery.status !== 'sent' && (
+          <section className="rounded-lg border border-amber-200 bg-amber-50 p-4" aria-label="Deposit email delivery">
+            <p className="pf-row-title">{estimate.acceptanceDelivery.status === 'needs_attention' ? 'Deposit email needs review' : 'Deposit email queued'}</p>
+            <p className="pf-meta mt-1">The signed proposal and deposit invoice are saved. {estimate.acceptanceDelivery.status === 'needs_attention' ? 'Check the customer email and delivery history before sending a reminder.' : 'Delivery retries automatically when the email service is available.'}</p>
+            <Button as="a" href={`/invoices/${estimate.acceptanceDelivery.invoiceId}`} variant="ghost" size="sm" className="mt-2">View deposit invoice</Button>
+          </section>
+        )}
         {estimate.status === 'voided' && (
           <Card className="border-red-200 bg-red-50" padding="sm">
             <p className="font-semibold text-red-950">This signed agreement has been voided.</p>

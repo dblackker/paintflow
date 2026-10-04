@@ -12,6 +12,7 @@ import {
   materialPurchases,
   materials,
   organizations,
+  orgSettings,
   saasPlans,
   subscriptions,
   supplierInvoiceImportFeedback,
@@ -32,6 +33,8 @@ import { readInvoiceBalances } from '../lib/invoice-positions';
 import { readPaymentBalance } from '../lib/payment-operations';
 import { queueActionEvent } from '../lib/action-telemetry';
 import { camelRecord, markExtractionUnknown, reserveOcr, retainExtraction, supplierCall, SupplierOperationError } from '../lib/supplier-operations';
+import { readEstimationTaxPolicy, resolveEstimationTax, taxMinorForSubtotal } from '../../../../packages/core/src/estimation-tax';
+import { boundedMinor, decimal, decimalText, exact, minor, moneyText, multiply, EstimationInputError } from '../../../../packages/core/src/estimation-decimal';
 
 const invoicesApp = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -148,18 +151,35 @@ const senderRuleSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-const customerInvoiceCreateSchema = z.object({
+export const customerInvoiceCreateSchema = z.object({
   leadId: z.string().uuid(),
   jobId: z.string().uuid().optional().nullable(),
   description: z.string().trim().min(1).max(255),
-  amount: z.coerce.number().positive(),
-  tax: z.coerce.number().min(0).default(0),
+  amount: z.coerce.number().finite().positive().max(99_999_999.99).refine((value) => { try { decimal(value, 'amount', { scale: 2 }); return true; } catch { return false; } }, 'Use at most two decimal places.'),
+  tax: z.coerce.number().finite().min(0).max(99_999_999.99).default(0).refine((value) => { try { decimal(value, 'tax', { scale: 2 }); return true; } catch { return false; } }, 'Use at most two decimal places.'),
   dueDate: z.string().trim().optional().nullable(),
   dueLabel: z.string().trim().max(120).optional().nullable(),
   reminderCadence: z.string().trim().max(50).optional().nullable(),
-  taxRate: z.coerce.number().min(0).max(100).optional().nullable(),
+  taxRate: z.union([z.string(), z.number()]).transform((value, ctx) => {
+    try {
+      const rate = decimalText(decimal(value, 'taxRate', { scale: 4 }));
+      if (Number(rate) > 100) throw new Error('Sales tax must be between zero and 100%.');
+      return rate;
+    } catch (error) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : 'Enter a valid tax rate.' });
+      return z.NEVER;
+    }
+  }).optional().nullable(),
   taxOverride: z.boolean().default(false),
+  taxOverrideReason: z.string().trim().max(500).optional(),
   note: z.string().trim().max(1000).optional().nullable(),
+}).superRefine((input, ctx) => {
+  if ((input.taxRate != null || input.taxOverride) && (!input.taxOverrideReason || input.taxOverrideReason.length < 3)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['taxOverrideReason'], message: 'Explain why this invoice tax is overridden.' });
+  }
+  if (input.taxRate != null && input.taxOverride) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['taxRate'], message: 'Choose a rate override or an amount override, not both.' });
+  }
 });
 
 const customerInvoiceCancelSchema = z.object({
@@ -1321,7 +1341,9 @@ invoicesApp.post('/customer', async (c) => {
   const idempotencyKey = c.req.header('Idempotency-Key')!.trim();
   const orgId = c.get('orgId');
   const userId = c.get('userId') || null;
-  const input = customerInvoiceCreateSchema.parse(await c.req.json());
+  const parsed = customerInvoiceCreateSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'Check the invoice amount and tax override.', details: parsed.error.flatten() }, 400);
+  const input = parsed.data;
   const db = createDb(c.env.DATABASE_URL);
 
   const lead = await db.query.leads.findFirst({
@@ -1329,11 +1351,14 @@ invoicesApp.post('/customer', async (c) => {
   });
   if (!lead) return c.json({ error: 'Customer not found' }, 404);
 
+  let invoiceJob: typeof jobs.$inferSelect | undefined;
   if (input.jobId) {
     const job = await db.query.jobs.findFirst({
       where: and(eq(jobs.id, input.jobId), eq(jobs.orgId, orgId)),
     });
     if (!job) return c.json({ error: 'Job not found' }, 404);
+    if (job.leadId !== lead.id) return c.json({ error: 'Choose a job belonging to this customer.' }, 400);
+    invoiceJob = job;
   }
 
   const token = idempotencyKey.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || crypto.randomUUID().slice(0, 8).toUpperCase();
@@ -1343,9 +1368,21 @@ invoicesApp.post('/customer', async (c) => {
   });
   if (existing) return c.json({ data: existing, duplicate: true });
 
-  const subtotal = Math.round(Number(input.amount) * 100) / 100;
-  const tax = Math.round(Number(input.tax || 0) * 100) / 100;
-  const total = Math.round((subtotal + tax) * 100) / 100;
+  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) });
+  let taxPolicy: ReturnType<typeof resolveEstimationTax>;
+  let subtotalMinor: number, taxMinor: number, totalMinor: number;
+  try {
+    taxPolicy = resolveEstimationTax({ defaultRate: settings?.salesTaxRate, policy: readEstimationTaxPolicy(settings?.businessHours), postalCode: invoiceJob ? invoiceJob.postalCode : lead.postalCode,
+      override: input.taxRate != null ? { ratePercent: input.taxRate, reason: input.taxOverrideReason! } : null, actorId: userId });
+    subtotalMinor = minor(decimal(input.amount, 'amount', { scale: 2 }), 'subtotal');
+    taxMinor = input.taxOverride ? minor(decimal(input.tax, 'tax', { scale: 2 }), 'tax') : taxMinorForSubtotal(subtotalMinor, taxPolicy);
+    totalMinor = boundedMinor(BigInt(subtotalMinor) + BigInt(taxMinor), 'total');
+  } catch (error) {
+    if (error instanceof EstimationInputError) return c.json({ error: error.message, code: error.code, field: error.field }, 400);
+    throw error;
+  }
+  const subtotal = Number(moneyText(subtotalMinor));
+  const total = Number(moneyText(totalMinor));
   const lineItems = [{
     description: input.description,
     quantity: 1,
@@ -1361,14 +1398,14 @@ invoicesApp.post('/customer', async (c) => {
     invoiceNumber,
     description: input.description,
     lineItems,
-    subtotal: subtotal.toFixed(2),
-    tax: tax.toFixed(2),
-    total: total.toFixed(2),
+    subtotal: moneyText(subtotalMinor),
+    tax: moneyText(taxMinor),
+    total: moneyText(totalMinor),
     status: 'sent',
     dueDate: dateValue(input.dueDate),
     dueLabel: input.dueLabel || (input.dueDate ? `Due ${dateValue(input.dueDate)?.toLocaleDateString('en-US')}` : 'Due on receipt'),
     reminderCadence: input.reminderCadence || 'due_date',
-    taxRate: input.taxRate == null ? null : (Number(input.taxRate) > 1 ? Number(input.taxRate) / 100 : Number(input.taxRate)).toFixed(4),
+    taxRate: input.taxOverride ? null : taxPolicy.value,
     taxOverride: Boolean(input.taxOverride),
     note: input.note || null,
     createdBy: userId,
@@ -1386,6 +1423,9 @@ invoicesApp.post('/customer', async (c) => {
       invoiceNumber,
       total,
       idempotencyKey,
+      taxSnapshot: { ...taxPolicy, source: input.taxOverride ? 'manual_amount' : taxPolicy.source,
+        overrideReason: input.taxOverride ? input.taxOverrideReason : taxPolicy.overrideReason,
+        manualAmount: input.taxOverride ? moneyText(taxMinor) : null },
     },
   });
 

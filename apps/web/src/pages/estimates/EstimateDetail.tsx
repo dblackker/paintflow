@@ -5,6 +5,7 @@ import { Modal, ModalFooter } from '@/components/Modal';
 import { Toast } from '@/components/Toast';
 import { API_URL, formatMoney, labelize } from '@/lib/api';
 import { PAYMENT_UNAVAILABLE_TOAST, paymentErrorMessage } from '@/lib/paymentMessages';
+import { acceptedOptionPricing, publicEstimatePackages } from '@crewmodo/core';
 
 type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'canceled' | 'superseded' | 'voided' | string;
 
@@ -19,6 +20,7 @@ interface EstimateLineItem {
   roomName?: string;
   surfaceName?: string;
   notes?: string;
+  calculationItemId?: string;
   labor?: {
     coats?: number | string;
     prepLevel?: string;
@@ -30,9 +32,12 @@ interface EstimateLineItem {
     colorName?: string;
     colorCode?: string;
   };
+  coatingLayers?: Array<{ phase?: string; name?: string; brand?: string; sheen?: string; coats?: number | string; colorName?: string; colorCode?: string }>;
+  scopeCommitments?: string[];
 }
 
 interface EstimatePackage {
+  taxRate?: string | number;
   name?: string;
   subtotal?: number | string;
   discount?: number | string;
@@ -79,6 +84,7 @@ interface PublicEstimate {
   total?: number | string;
   createdAt?: string;
   updatedAt?: string;
+  termsVersion?: string;
   sentAt?: string;
   signedName?: string;
   signedAt?: string;
@@ -112,6 +118,8 @@ interface SelectedOption {
   qty: number;
   rate: number;
   category?: string;
+  calculationItemId?: string;
+  optionIndex?: number;
 }
 
 interface ScopeGroup {
@@ -199,6 +207,11 @@ function groupScopeBySpace(items: EstimateLineItem[]): ScopeGroup[] {
 }
 
 function itemMaterial(item: EstimateLineItem) {
+  if (item.coatingLayers?.length) return item.coatingLayers.map((layer) => {
+    const product = [layer.brand, layer.name, layer.sheen].filter(Boolean).join(' ') || 'Product TBD';
+    const color = [layer.colorName, layer.colorCode].filter(Boolean).join(' ');
+    return `${layer.phase === 'primer' ? 'Primer' : 'Finish'}: ${product}${layer.coats ? `, ${layer.coats} coat${num(layer.coats) === 1 ? '' : 's'}` : ''}${color ? `, ${color}` : ''}`;
+  }).join(' | ');
   if (!item.material?.name) return 'Paint: TBD';
   const product = [item.material.brand, item.material.name].filter(Boolean).join(' ');
   const color = [item.material.colorName, item.material.colorCode].filter(Boolean).join(' ');
@@ -211,6 +224,7 @@ function customerScopeDetail(item: EstimateLineItem) {
     item.labor?.coats ? `${num(item.labor.coats)} coat${num(item.labor.coats) === 1 ? '' : 's'}` : '',
     item.labor?.prepLevel ? `${labelize(item.labor.prepLevel)} prep` : '',
     item.labor?.applicationMethod ? applicationLabel(item.labor.applicationMethod) : '',
+    ...(item.scopeCommitments || []),
   ].filter(Boolean);
   return parts.join(' | ') || 'Included in project scope';
 }
@@ -240,9 +254,10 @@ function pricingBreakdown(pkg: EstimatePackage, selectedOptions: SelectedOption[
     ? rawSubtotal
     : Math.max(baseTotal - baseTax + discount, 0);
   const taxableBase = Math.max(baseSubtotal - discount, 0);
-  const taxRate = taxableBase > 0 ? baseTax / taxableBase : 0;
-  const options = selectedOptions.reduce((sum, item) => sum + item.qty * item.rate, 0);
-  const optionTax = Math.round(options * taxRate * 100) / 100;
+  const taxRate = pkg.taxRate != null ? num(pkg.taxRate) : taxableBase > 0 ? baseTax / taxableBase : 0;
+  const exactPricing = acceptedOptionPricing({ name: pkg.name || 'Proposal', total: pkg.total, subtotal: baseSubtotal, discount: pkg.discount, tax: pkg.tax, taxRate: pkg.taxRate }, selectedOptions);
+  const options = exactPricing.subtotalMinor / 100;
+  const optionTax = exactPricing.taxMinor / 100;
   const totalTax = baseTax + optionTax;
   return {
     baseSubtotal,
@@ -253,7 +268,7 @@ function pricingBreakdown(pkg: EstimatePackage, selectedOptions: SelectedOption[
     optionTax,
     totalTax,
     baseTotal,
-    total: baseTotal + options + optionTax,
+    total: exactPricing.totalMinor / 100,
   };
 }
 
@@ -281,13 +296,14 @@ function selectedOptionsFromIndexes(pkg: EstimatePackage | null, indexes: Set<nu
   if (!pkg) return [];
   return packageItems(pkg)
     .filter((item) => item.optional && item.customerVisible !== false)
-    .filter((_, index) => indexes.has(index))
-    .map((item) => ({
+    .map((item, optionIndex) => ({
       desc: item.desc,
       qty: num(item.qty, 1),
       rate: num(item.rate),
       category: item.category || 'option',
-    }));
+      calculationItemId: item.calculationItemId,
+      optionIndex,
+    })).filter((_, index) => indexes.has(index));
 }
 
 function useBodyTitle(title?: string | null) {
@@ -320,6 +336,8 @@ export function EstimateDetail() {
   );
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
+  const signingRef = useRef(false);
+  const approvalOperation = useRef<{ body: string; key: string } | null>(null);
 
   const primaryColor = estimate?.branding?.primaryColor || '#2563eb';
   const brandTitle = estimate?.branding?.companyName ? `${estimate.branding.companyName} - Estimate` : 'Estimate - Crewmodo';
@@ -495,7 +513,7 @@ export function EstimateDetail() {
   }
 
   async function submitSignature() {
-    if (!id || !selectedPackage) return;
+    if (!id || !selectedPackage || signingRef.current) return;
     const name = signerName.trim();
     if (!name) {
       setMessage({ tone: 'error', text: 'Please enter your full name.' });
@@ -505,25 +523,32 @@ export function EstimateDetail() {
       setMessage({ tone: 'error', text: 'Please add your signature.' });
       return;
     }
+    const body = JSON.stringify({
+      expectedUpdatedAt: estimate?.updatedAt,
+      expectedTermsVersion: estimate?.termsVersion,
+      name,
+      signatureData: canvasRef.current.toDataURL(),
+      packageName: selectedPackage.name || 'proposal',
+      selectedOptions,
+      acknowledgedDisclosure,
+    });
+    if (approvalOperation.current?.body !== body) approvalOperation.current = { body, key: crypto.randomUUID() };
+    signingRef.current = true;
     setIsSigning(true);
     setMessage(null);
     try {
+      const acceptedPackages = publicEstimatePackages(estimate?.packages, { packageName: selectedPackage.name, selectedOptions }) as EstimatePackage[];
       const response = await fetch(`${API_URL}/v1/estimates/${id}/sign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Idempotency-Key': crypto.randomUUID(),
+          'Idempotency-Key': approvalOperation.current.key,
         },
-        body: JSON.stringify({
-          name,
-          signatureData: canvasRef.current.toDataURL(),
-          packageName: selectedPackage.name || 'proposal',
-          selectedOptions,
-          acknowledgedDisclosure,
-        }),
+        body,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Failed to sign estimate');
+      approvalOperation.current = null;
       setShowSignature(false);
       setMessage({ tone: 'success', text: 'Proposal signed. Open the customer portal to pay any deposit invoice and see project next steps.' });
       setEstimate((current) => current ? {
@@ -532,10 +557,13 @@ export function EstimateDetail() {
         signedName: name,
         signedAt: payload.data?.signedAt || new Date().toISOString(),
         portalUrl: payload.data?.portalUrl || current.portalUrl || null,
+        packages: acceptedPackages,
       } : current);
+      setSelectedOptionIndexes(new Set());
     } catch (error) {
       setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Failed to process signature.' });
     } finally {
+      signingRef.current = false;
       setIsSigning(false);
     }
   }

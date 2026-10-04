@@ -1,16 +1,67 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createDb } from '@crewmodo/db';
-import { orgSettings, organizations, serviceAreas, teamMembers, orgBranding, stripeConnections } from '@crewmodo/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { orgSettings, organizations, serviceAreas, teamMembers, orgBranding, stripeConnections, auditLogs } from '@crewmodo/db/schema';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 import { legalSettingsFromPreferences, readPreferenceObject } from '../lib/legal-settings';
 import { paymentScheduleSettingsFromPreferences } from '../lib/payment-schedule';
+import { requireOrgPermission } from '../middleware/financial-access';
+import { readEstimationTaxPolicy } from '../../../../packages/core/src/estimation-tax';
+import { compare, decimal, decimalText, exact, minor, moneyText } from '../../../../packages/core/src/estimation-decimal';
 
 const settings = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 settings.use('*', authMiddleware);
+
+function policyDecimal(field: string, scale: number, maximum: number, cents = false) {
+  return z.union([z.string(), z.number()]).transform((value, ctx) => {
+    try {
+      const parsed = decimal(value, field, { scale });
+      if (compare(parsed, exact(BigInt(maximum))) > 0) throw new Error(`Enter ${maximum} or less.`);
+      return cents ? moneyText(minor(parsed, field)) : decimalText(parsed);
+    } catch (error) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : 'Enter a valid number.' });
+      return z.NEVER;
+    }
+  });
+}
+
+export const estimationPolicySchema = z.object({
+  rules: z.array(z.object({ postalCode: z.string().regex(/^\d{5}$/), label: z.string().trim().min(1).max(100), ratePercent: policyDecimal('ratePercent', 4, 100) }).strict()).max(100),
+  defaultBurdenedRate: policyDecimal('defaultBurdenedRate', 2, 1000, true).nullable().optional(),
+  priceStaleDays: z.number().int().min(1).max(730).default(90),
+  expectedUpdatedAt: z.string().datetime().nullable(),
+}).strict().refine((value) => new Set(value.rules.map((rule) => rule.postalCode)).size === value.rules.length, { message: 'Keep one reviewed tax rule per ZIP.' });
+
+settings.get('/estimation-policy', async (c) => {
+  const db = createDb(c.env.DATABASE_URL);
+  const current = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, c.get('orgId')) });
+  const preferences = readPreferenceObject(current?.businessHours);
+  const pricing = readPreferenceObject(preferences.estimationPricing);
+  return c.json({ data: { ...readEstimationTaxPolicy(preferences), defaultBurdenedRate: pricing.defaultBurdenedRate ?? null, priceStaleDays: pricing.priceStaleDays ?? 90, updatedAt: current?.updatedAt.toISOString() ?? null } });
+});
+
+settings.put('/estimation-policy', requireOrgPermission(['manage_settings'], 'Ask an owner to review tax and cost defaults.'), async (c) => {
+  const parsed = estimationPolicySchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: 'Check the ZIP, rate, and duplicate rules.', details: parsed.error.flatten() }, 400);
+  const orgId = c.get('orgId');
+  const db = createDb(c.env.DATABASE_URL);
+  const patch = { estimationTax: { rules: parsed.data.rules }, estimationPricing: { defaultBurdenedRate: parsed.data.defaultBurdenedRate ?? null, priceStaleDays: parsed.data.priceStaleDays } };
+  const saved = parsed.data.expectedUpdatedAt === null
+    ? await db.execute(sql`insert into org_settings (org_id,business_hours) values (${orgId}::uuid,${JSON.stringify(patch)}::jsonb)
+        on conflict (org_id) do nothing returning to_char(updated_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as updated_at`)
+    : await db.execute(sql`update org_settings set business_hours=coalesce(business_hours,'{}'::jsonb) || ${JSON.stringify(patch)}::jsonb,
+        updated_at=greatest(clock_timestamp(),date_trunc('milliseconds',updated_at)+interval '1 millisecond')
+        where org_id=${orgId}::uuid and date_trunc('milliseconds',updated_at)=${parsed.data.expectedUpdatedAt}::timestamp
+        returning to_char(updated_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as updated_at`);
+  const revision = saved.rows[0] as { updated_at: string } | undefined;
+  if (!revision) return c.json({ error: 'The estimation policy changed. Reload it before saving.', code: 'STALE_ESTIMATION_POLICY' }, 409);
+  await db.insert(auditLogs).values({ orgId, userId: c.get('userId'), action: 'estimation.policy.updated', entityType: 'organization', entityId: orgId,
+    metadata: { zipRuleCount: parsed.data.rules.length, burdenConfigured: parsed.data.defaultBurdenedRate != null } });
+  return c.json({ data: { ...patch.estimationTax, ...patch.estimationPricing, updatedAt: revision.updated_at } });
+});
 
 const optionalText = (max: number) => z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? undefined : value,

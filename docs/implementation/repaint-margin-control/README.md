@@ -15,6 +15,8 @@ Read in this order:
 
 The coordinator owns the checklist. Agents deliver code, tests, screenshots, migration notes, and handoff evidence against their assigned IDs. A checked box means verified acceptance, not "code was written."
 
+For the next estimating tranche, see the [painting estimator comparison and improvement plan](../../painting-estimator-comparison-and-plan-2026-10.md). It compares current PaintScout, DripJobs, and Estimate Rocket documentation against the merged calculation foundation, with additional PE task IDs. Its tasks are proposals, not newly completed checklist items.
+
 ### Product Outcome
 
 An owner can create an accurate repaint estimate, obtain the required signatures, schedule under the company's deposit policy, capture crew time and supplier purchases, collect or refund payments safely, and understand the job's cost position. A completed job produces a useful lesson for the next bid.

@@ -77,6 +77,7 @@ export async function apiJson<T>(path: string, options: RequestInit = {}): Promi
   }
 
   if (response.status === 401) {
+    window.dispatchEvent(new Event('crewmodo:estimator-drafts-clear'));
     window.location.href = '/login';
     throw new Error('Unauthorized');
   }
