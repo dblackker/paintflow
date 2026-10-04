@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { createDb } from '@crewmodo/db';
 import { emailSends, emailTemplates, jobs, leads, orgBranding, orgSettings, portalTokens } from '@crewmodo/db/schema';
 import type { Env } from '../types';
@@ -7,6 +7,7 @@ import { renderInvoiceEmail, sendEmail } from './email';
 type Db = ReturnType<typeof createDb>;
 
 type InvoiceEmailInput = {
+  idempotencyKey?: string;
   orgId: string;
   invoice: {
     id: string;
@@ -65,16 +66,25 @@ async function templateOverride(db: Db, orgId: string, templateKey: string) {
 }
 
 async function recordEmailSend(db: Db, values: typeof emailSends.$inferInsert) {
+  const deliveryKey = (values.metadata as { deliveryKey?: string } | null)?.deliveryKey;
+  async function existing() {
+    return deliveryKey ? db.query.emailSends.findFirst({ where: and(eq(emailSends.orgId, values.orgId), sql`${emailSends.metadata}->>'deliveryKey'=${deliveryKey}`) }) : null;
+  }
   try {
+    const prior = await existing();
+    if (prior) return prior;
     const [emailSend] = await db.insert(emailSends).values(values).returning();
     return emailSend;
   } catch (error) {
+    const prior = await existing().catch(() => null);
+    if (prior) return prior;
+    if (deliveryKey) throw error;
     console.warn('Invoice email send logging unavailable; run email communications migration.', error);
     return null;
   }
 }
 
-export async function sendInvoiceEmail(env: Env, db: Db, input: InvoiceEmailInput) {
+export async function prepareInvoiceEmail(env: Env, db: Db, input: InvoiceEmailInput) {
   const [lead, branding, settings, job, override] = await Promise.all([
     db.query.leads.findFirst({ where: and(eq(leads.id, input.invoice.leadId), eq(leads.orgId, input.orgId)) }),
     db.query.orgBranding.findFirst({ where: eq(orgBranding.orgId, input.orgId) }),
@@ -83,7 +93,7 @@ export async function sendInvoiceEmail(env: Env, db: Db, input: InvoiceEmailInpu
     templateOverride(db, input.orgId, input.templateKey),
   ]);
 
-  if (!lead?.email) return { sent: false, reason: 'missing_customer_email' as const };
+  if (!lead?.email) return null;
 
   const basePortalUrl = await latestPortalUrl(db, env, input.orgId, input.invoice.leadId);
   const portalUrl = input.portalUrl || `${basePortalUrl}${basePortalUrl.includes('?') ? '&' : '?'}invoiceId=${input.invoice.id}`;
@@ -107,12 +117,7 @@ export async function sendInvoiceEmail(env: Env, db: Db, input: InvoiceEmailInpu
     portalUrl,
   }, override);
 
-  const providerResult = await sendEmail(env, lead.email, rendered.subject, rendered.html, undefined, {
-    replyTo: settings?.email || undefined,
-    text: rendered.text,
-  }) as { id?: string; message_id?: string };
-
-  const emailSend = await recordEmailSend(db, {
+  const log: typeof emailSends.$inferInsert = {
     orgId: input.orgId,
     leadId: lead.id,
     estimateId: input.invoice.estimateId || null,
@@ -130,15 +135,30 @@ export async function sendInvoiceEmail(env: Env, db: Db, input: InvoiceEmailInpu
     renderedText: rendered.text,
     status: 'sent',
     provider: env.EMAIL_PROVIDER || (env.MAILCHANNELS_API_KEY ? 'mailchannels' : 'resend'),
-    providerMessageId: providerResult?.id || providerResult?.message_id || null,
+    providerMessageId: null,
     sentBy: input.sentBy || null,
     metadata: {
       invoiceId: input.invoice.id,
+      deliveryKey: input.idempotencyKey || null,
       paymentId: input.payment?.id || null,
       balanceDue: input.balanceDue ?? null,
       portalUrl,
     },
-  });
+  };
+  return { toEmail: lead.email, fromEmail: env.EMAIL_FROM || 'billing@crewmodo.com', fromName: env.EMAIL_FROM_NAME || '', replyTo: settings?.email || undefined, rendered, log };
+}
+
+export type PreparedInvoiceEmail = NonNullable<Awaited<ReturnType<typeof prepareInvoiceEmail>>>;
+
+export async function sendPreparedInvoiceEmail(env: Env, db: Db, prepared: PreparedInvoiceEmail, idempotencyKey?: string) {
+  const providerResult = await sendEmail({ ...env, EMAIL_FROM: prepared.fromEmail, EMAIL_FROM_NAME: prepared.fromName }, prepared.toEmail,
+    prepared.rendered.subject, prepared.rendered.html, undefined, { replyTo: prepared.replyTo, text: prepared.rendered.text, idempotencyKey }) as { id?: string; message_id?: string };
+  const emailSend = await recordEmailSend(db, { ...prepared.log, providerMessageId: providerResult?.id || providerResult?.message_id || null });
 
   return { sent: true, emailSendId: emailSend?.id ?? null };
+}
+
+export async function sendInvoiceEmail(env: Env, db: Db, input: InvoiceEmailInput) {
+  const prepared = await prepareInvoiceEmail(env, db, input);
+  return prepared ? sendPreparedInvoiceEmail(env, db, prepared, input.idempotencyKey) : { sent: false, emailSendId: null, reason: 'missing_customer_email' as const };
 }

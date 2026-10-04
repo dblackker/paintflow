@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import type { Env, Variables } from '../types';
 
-export type ActionMilestone = 'estimate.saved' | 'supplier.invoice.approved';
+export type ActionMilestone = 'estimate.saved' | 'estimate.accepted' | 'supplier.invoice.approved';
 type Outcome = { action: ActionMilestone; orgId: string; actorId: string; entityId: string; occurredAt: string };
 
 async function opaqueId(value: string) {

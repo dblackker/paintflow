@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { invoiceCollectionPosition, type InvoiceBalance } from '@crewmodo/core';
+import { invoiceCollectionPosition, readEstimationTaxPolicy, resolveEstimationTax, taxMinorForSubtotal, type InvoiceBalance } from '@crewmodo/core';
+import { decimal, decimalText, divide, exact, minor, moneyText, multiply } from '../../../../packages/core/src/estimation-decimal';
 import { useOperationKey } from '@/lib/useOperationKey';
 import { manualPaymentFeedback, type ManualPaymentReceiptResult } from '@/lib/paymentReceipt';
 import { Badge, StatusBadge } from '@/components/Badge';
@@ -158,6 +159,7 @@ interface AiUsageSummary {
 }
 
 interface OrgSettings {
+  businessHours?: unknown;
   salesTaxRate?: string | number | null;
 }
 
@@ -237,6 +239,7 @@ interface CustomerInvoice {
 }
 
 interface Job {
+  leadId?: string;
   id: string;
   estimateId?: string | null;
   jobNumber?: string | null;
@@ -295,6 +298,7 @@ interface UploadFormState {
 }
 
 interface QuickInvoiceFormState {
+  jobId: string;
   customerMode: 'existing' | 'new';
   leadId: string;
   customerName: string;
@@ -306,9 +310,10 @@ interface QuickInvoiceFormState {
   postalCode: string;
   description: string;
   amount: string;
-  taxMode: 'auto' | 'manual';
+  taxMode: 'auto' | 'rate' | 'manual';
   taxRate: string;
   tax: string;
+  taxOverrideReason: string;
   dueLabel: string;
   dueDate: string;
   reminderCadence: 'none' | 'due_date' | 'three_days_before' | 'weekly';
@@ -356,6 +361,7 @@ const emptyUploadForm: UploadFormState = {
 };
 
 const emptyQuickInvoiceForm: QuickInvoiceFormState = {
+  jobId: '',
   customerMode: 'existing',
   leadId: '',
   customerName: '',
@@ -370,6 +376,7 @@ const emptyQuickInvoiceForm: QuickInvoiceFormState = {
   taxMode: 'auto',
   taxRate: '0',
   tax: '0',
+  taxOverrideReason: '',
   dueLabel: 'Due on receipt',
   dueDate: '',
   reminderCadence: 'due_date',
@@ -468,9 +475,10 @@ function isoDateOffset(days: number) {
 }
 
 function taxRateDisplay(value: unknown) {
-  const numeric = numberValue(value);
-  if (numeric > 0 && numeric <= 1) return String(Number((numeric * 100).toFixed(4)));
-  return numeric ? String(numeric) : '0';
+  try {
+    const rate = decimal(typeof value === 'number' || typeof value === 'string' ? value : '0', 'taxRate', { scale: 8 });
+    return decimalText(Number(value) > 0 && Number(value) <= 1 ? multiply(rate, exact(100n)) : rate);
+  } catch { return '0'; }
 }
 
 function reminderLabel(value?: string | null) {
@@ -801,6 +809,16 @@ export function Invoices() {
   const [cancelInvoiceReason, setCancelInvoiceReason] = useState('');
   const [form, setForm] = useState<UploadFormState>(emptyUploadForm);
   const [quickInvoiceForm, setQuickInvoiceForm] = useState<QuickInvoiceFormState>(emptyQuickInvoiceForm);
+  useEffect(() => {
+    if (!quickInvoiceOpen || quickInvoiceForm.taxMode !== 'auto') return;
+    const job = jobs.find((entry) => entry.id === quickInvoiceForm.jobId);
+    const customer = leads.find((entry) => entry.id === quickInvoiceForm.leadId);
+    const zip = job ? job.postalCode : (quickInvoiceForm.customerMode === 'new' ? quickInvoiceForm.postalCode : customer?.postalCode);
+    try {
+      const tax = resolveEstimationTax({ defaultRate: settings.salesTaxRate, policy: readEstimationTaxPolicy(settings.businessHours), postalCode: zip });
+      setQuickInvoiceForm((current) => ({ ...current, taxRate: decimalText(multiply(decimal(tax.value, 'taxRate', { scale: 8 }), exact(100n))) }));
+    } catch { setQuickInvoiceForm((current) => ({ ...current, taxRate: '' })); }
+  }, [quickInvoiceOpen, quickInvoiceForm.taxMode, quickInvoiceForm.leadId, quickInvoiceForm.jobId, quickInvoiceForm.postalCode, quickInvoiceForm.customerMode, settings, jobs, leads]);
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(emptyPaymentForm);
   const [isUploading, setIsUploading] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
@@ -957,9 +975,16 @@ export function Invoices() {
   );
   const quickInvoiceAmount = numberValue(quickInvoiceForm.amount);
   const quickInvoiceTaxRate = numberValue(quickInvoiceForm.taxRate);
-  const quickInvoiceTax = quickInvoiceForm.taxMode === 'auto'
-    ? Math.round(quickInvoiceAmount * (quickInvoiceTaxRate / 100) * 100) / 100
-    : numberValue(quickInvoiceForm.tax);
+  const quickInvoiceTaxPreview = (() => {
+    try {
+      const subtotalMinor = minor(decimal(quickInvoiceForm.amount || '0', 'amount', { scale: 2 }), 'amount');
+      const taxMinor = quickInvoiceForm.taxMode === 'manual'
+        ? minor(decimal(quickInvoiceForm.tax || '0', 'tax', { scale: 2 }), 'tax')
+        : taxMinorForSubtotal(subtotalMinor, { value: decimalText(divide(decimal(quickInvoiceForm.taxRate, 'taxRate', { scale: 4 }), exact(100n))) });
+      return { tax: Number(moneyText(taxMinor)), error: '' };
+    } catch (error) { return { tax: 0, error: error instanceof Error ? error.message : 'Check the tax values.' }; }
+  })();
+  const quickInvoiceTax = quickInvoiceTaxPreview.tax;
   const quickInvoiceTotal = quickInvoiceAmount + quickInvoiceTax;
   useEffect(() => {
     loadInvoices();
@@ -1307,7 +1332,6 @@ export function Invoices() {
   async function createQuickInvoice(event: FormEvent) {
     event.preventDefault();
     const amount = numberValue(quickInvoiceForm.amount);
-    const tax = quickInvoiceTax;
     if (quickInvoiceForm.customerMode === 'existing' && !quickInvoiceForm.leadId) {
       window.showToast?.('Select a customer or create a new one.', 'error');
       return;
@@ -1328,8 +1352,12 @@ export function Invoices() {
       window.showToast?.('Enter a positive invoice amount.', 'error');
       return;
     }
-    if (quickInvoiceForm.taxMode === 'auto' && numberValue(quickInvoiceForm.taxRate) < 0) {
-      window.showToast?.('Tax rate cannot be negative.', 'error');
+    if (quickInvoiceTaxPreview.error || (quickInvoiceForm.taxMode !== 'manual' && quickInvoiceTaxRate > 100)) {
+      window.showToast?.(quickInvoiceTaxPreview.error || 'Tax rate must be between zero and 100%.', 'error');
+      return;
+    }
+    if (quickInvoiceForm.taxMode !== 'auto' && quickInvoiceForm.taxOverrideReason.trim().length < 3) {
+      window.showToast?.('Explain why the invoice tax is overridden.', 'error');
       return;
     }
     let lead = leads.find((item) => item.id === quickInvoiceForm.leadId);
@@ -1358,6 +1386,7 @@ export function Invoices() {
         if (!leadResponse.data?.id) throw new Error('Customer was not created.');
         lead = leadResponse.data;
         setLeads((current) => [leadResponse.data as Lead, ...current]);
+        setQuickInvoiceForm((current) => ({ ...current, customerMode: 'existing', leadId: leadResponse.data!.id, jobId: '' }));
       }
 
       if (!lead?.id) throw new Error('Customer is required to create an invoice.');
@@ -1370,14 +1399,15 @@ export function Invoices() {
         },
         body: JSON.stringify({
           leadId: lead.id,
+          jobId: quickInvoiceForm.customerMode === 'new' ? null : quickInvoiceForm.jobId || null,
           description: quickInvoiceForm.description || 'Services',
           amount,
-          tax,
+          ...(quickInvoiceForm.taxMode === 'manual' ? { tax: quickInvoiceForm.tax, taxOverride: true } : {}),
           dueDate: quickInvoiceForm.dueDate || null,
           dueLabel,
           reminderCadence: quickInvoiceForm.reminderCadence,
-          taxRate: quickInvoiceForm.taxMode === 'auto' ? numberValue(quickInvoiceForm.taxRate) : null,
-          taxOverride: quickInvoiceForm.taxMode === 'manual',
+          ...(quickInvoiceForm.taxMode === 'rate' ? { taxRate: quickInvoiceForm.taxRate } : {}),
+          ...(quickInvoiceForm.taxMode !== 'auto' ? { taxOverrideReason: quickInvoiceForm.taxOverrideReason.trim() } : {}),
           note: [reminderLabel(quickInvoiceForm.reminderCadence), quickInvoiceForm.note].filter(Boolean).join(' - ') || null,
         }),
       });
@@ -1644,12 +1674,12 @@ export function Invoices() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="pf-row-title">Customer</p>
                   <div className="pf-segmented-group" aria-label="Customer selection mode">
-                    <button type="button" aria-pressed={quickInvoiceForm.customerMode === 'existing'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, customerMode: 'existing' })}>Existing</button>
-                    <button type="button" aria-pressed={quickInvoiceForm.customerMode === 'new'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, customerMode: 'new', leadId: '' })}>New</button>
+                    <button type="button" aria-pressed={quickInvoiceForm.customerMode === 'existing'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, customerMode: 'existing', jobId: '' })}>Existing</button>
+                    <button type="button" aria-pressed={quickInvoiceForm.customerMode === 'new'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, customerMode: 'new', leadId: '', jobId: '' })}>New</button>
                   </div>
                 </div>
                 {quickInvoiceForm.customerMode === 'existing' ? (
-                  <Select label="Choose customer" required value={quickInvoiceForm.leadId} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, leadId: event.target.value })}>
+                  <Select label="Choose customer" required value={quickInvoiceForm.leadId} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, leadId: event.target.value, jobId: '' })}>
                     <option value="">Select customer...</option>
                     {leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.name || lead.email || 'Customer'}</option>)}
                   </Select>
@@ -1670,6 +1700,10 @@ export function Invoices() {
                 )}
               </div>
               <Input label="Description" required autoComplete="off" placeholder="Touch-up work, final balance, extra room" value={quickInvoiceForm.description} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, description: event.target.value })} />
+              {quickInvoiceForm.customerMode === 'existing' && jobs.some((job) => job.leadId === quickInvoiceForm.leadId) && <Select label="Job (optional)" value={quickInvoiceForm.jobId} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, jobId: event.target.value })}>
+                <option value="">No job assigned</option>
+                {jobs.filter((job) => job.leadId === quickInvoiceForm.leadId).map((job) => <option key={job.id} value={job.id}>{job.streetAddress || job.name || job.jobNumber}</option>)}
+              </Select>}
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input label="Amount" required type="number" min="0.01" step="0.01" inputMode="decimal" value={quickInvoiceForm.amount} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, amount: event.target.value })} />
                 <Input
@@ -1691,21 +1725,24 @@ export function Invoices() {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="pf-row-title">Sales tax</p>
                   <div className="pf-segmented-group" aria-label="Tax entry mode">
-                    <button type="button" aria-pressed={quickInvoiceForm.taxMode === 'auto'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, taxMode: 'auto' })}>Rate</button>
-                    <button type="button" aria-pressed={quickInvoiceForm.taxMode === 'manual'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, taxMode: 'manual', tax: String(quickInvoiceTax) })}>Override</button>
+                    <button type="button" aria-pressed={quickInvoiceForm.taxMode === 'auto'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, taxMode: 'auto' })}>Automatic</button>
+                    <button type="button" aria-pressed={quickInvoiceForm.taxMode === 'rate'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, taxMode: 'rate' })}>Rate override</button>
+                    <button type="button" aria-pressed={quickInvoiceForm.taxMode === 'manual'} onClick={() => setQuickInvoiceForm({ ...quickInvoiceForm, taxMode: 'manual', tax: String(quickInvoiceTax) })}>Amount override</button>
                   </div>
                 </div>
-                {quickInvoiceForm.taxMode === 'auto' ? (
-                  <Input label="Tax rate (%)" type="number" min="0" step="0.01" inputMode="decimal" value={quickInvoiceForm.taxRate} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, taxRate: event.target.value })} helperText="Defaults from Settings. Override here when the invoice needs a different local rate." />
+                {quickInvoiceForm.taxMode !== 'manual' ? (
+                  <Input label="Tax rate (%)" readOnly={quickInvoiceForm.taxMode === 'auto'} type="number" min="0" max="100" step="0.0001" inputMode="decimal" value={quickInvoiceForm.taxRate} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, taxRate: event.target.value })} />
                 ) : (
                   <Input label="Tax amount" type="number" min="0" step="0.01" inputMode="decimal" value={quickInvoiceForm.tax} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, tax: event.target.value })} helperText="Use for tax-exempt work, jurisdiction overrides, or accounting corrections." />
                 )}
+                {quickInvoiceForm.taxMode !== 'auto' && <Textarea label="Tax override reason" required minLength={3} maxLength={500} value={quickInvoiceForm.taxOverrideReason} onChange={(event) => setQuickInvoiceForm({ ...quickInvoiceForm, taxOverrideReason: event.target.value })} />}
+                {quickInvoiceTaxPreview.error && <p className="pf-copy mt-2 text-red-700" role="alert">{quickInvoiceTaxPreview.error}</p>}
               </div>
               <div className="border-y border-gray-200 py-4">
                 <p className="pf-row-title">Invoice total</p>
                 <div className="pf-copy mt-2 grid gap-1">
                   <div className="flex justify-between gap-3"><span>Subtotal</span><span>{formatMoney(quickInvoiceAmount)}</span></div>
-                  <div className="flex justify-between gap-3"><span>Tax{quickInvoiceForm.taxMode === 'auto' ? ` (${quickInvoiceTaxRate || 0}%)` : ' override'}</span><span>{formatMoney(quickInvoiceTax)}</span></div>
+                  <div className="flex justify-between gap-3"><span>Tax{quickInvoiceForm.taxMode !== 'manual' ? ` (${quickInvoiceForm.taxRate || '0'}%)` : ' override'}</span><span>{formatMoney(quickInvoiceTax)}</span></div>
                   <div className="pf-emphasis flex justify-between gap-3 border-t border-gray-200 pt-2"><span>Total</span><span>{formatMoney(quickInvoiceTotal)}</span></div>
                   <p className="pf-helper mt-2">
                     {quickInvoiceForm.dueDate ? `Due ${formatDateOnly(quickInvoiceForm.dueDate)}. ` : ''}

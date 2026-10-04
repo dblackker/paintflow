@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import PostalMime from 'postal-mime';
 import { securityHeaders } from './middleware/security';
-import { tenantMiddleware } from './middleware/tenant';
+import { tenantMiddleware, authMiddleware } from './middleware/tenant';
 import { requestLogging } from './middleware/request-logging';
 import { processDrips } from './cron/drips';
 import { processReviewRequests } from './cron/reviewRequests';
@@ -42,6 +42,8 @@ import pushRoutes from './routes/push';
 import activitiesRoutes from './routes/activities';
 import pipelineRoutes from './routes/pipeline';
 import leadCaptureRoute from './routes/lead-capture';
+import { retryAcceptedEstimateDeliveries } from './lib/accepted-estimate-delivery';
+import estimationObservationsRoutes from './routes/estimation-observations';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -118,6 +120,10 @@ app.use('*', tenantMiddleware);
 app.use('*', requestLogging);
 
 app.route('/v1/auth', authRoutes);
+app.get('/v1/auth/session', authMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ data: { orgId: c.get('orgId'), userId: c.get('userId') } });
+});
 app.route('/v1/sms', smsRoutes);
 app.route('/v1/portal', portalRoutes);
 app.route('/v1/lead-capture', leadCaptureRoute);
@@ -142,6 +148,7 @@ app.route('/v1/settings', settingsRoutes);
 app.route('/v1/quickbooks', quickbooksRoutes);
 app.route('/v1/stripe', stripeConnectRoutes);
 app.route('/v1/production-rates', productionRatesRoutes);
+app.route('/v1/estimation-observations', estimationObservationsRoutes);
 app.route('/v1/estimate-templates', estimateTemplatesRoutes);
 app.route('/v1/email-templates', emailTemplatesRoutes);
 app.route('/v1/estimate-photos', estimatePhotosRoutes);
@@ -191,16 +198,18 @@ app.get('/api/cron/missed-punches', async (c) => {
 });
 
 async function runScheduledJobs(env: Env) {
-  const [drips, reviews, missedPunches] = await Promise.allSettled([
+  const [drips, reviews, missedPunches, acceptedDeliveries] = await Promise.allSettled([
     processDrips(env),
     processReviewRequests(env),
     processMissedPunches(env),
+    retryAcceptedEstimateDeliveries(env),
   ]);
 
   return {
     drips: drips.status === 'fulfilled' ? drips.value : { error: drips.reason?.message || 'Drip processing failed' },
     reviews: reviews.status === 'fulfilled' ? reviews.value : { error: reviews.reason?.message || 'Review processing failed' },
     missedPunches: missedPunches.status === 'fulfilled' ? missedPunches.value : { error: missedPunches.reason?.message || 'Missed punch processing failed' },
+    acceptedDeliveries: { completed: acceptedDeliveries.status === 'fulfilled' },
   };
 }
 
@@ -286,8 +295,8 @@ export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
   },
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runScheduledJobs(env));
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(event.cron === '*/15 * * * *' ? retryAcceptedEstimateDeliveries(env) : runScheduledJobs(env));
   },
   async email(message: any, env: Env, ctx: ExecutionContext) {
     await handleInboundInvoiceEmail(message, env, ctx);

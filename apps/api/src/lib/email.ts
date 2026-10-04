@@ -7,6 +7,7 @@ type EmailAttachment = {
 };
 
 type SendEmailOptions = {
+  idempotencyKey?: string;
   fromEmail?: string;
   fromName?: string;
   replyTo?: string;
@@ -148,9 +149,11 @@ async function sendViaResend(
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
+    signal: AbortSignal.timeout(10000),
     headers: {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
+      ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
     },
     body: JSON.stringify(payload),
   });

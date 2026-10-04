@@ -9,6 +9,8 @@ import { createInvoiceForChangeOrder } from '../lib/customer-invoices';
 import { sendInvoiceEmail } from '../lib/invoice-emails';
 import { PaymentOperationError, readPaymentBalance, usdMinor, type ObligationBalance } from '../lib/payment-operations';
 import { decimal, minor, moneyText } from '../../../../packages/core/src/estimation-decimal';
+import { publicEstimatePackages } from '../../../../packages/core/src/estimation-public';
+import { estimateContractValue } from '../lib/estimate-handoff';
 
 type Db = ReturnType<typeof createDb>;
 type PortalContext = Context<{ Bindings: Env; Variables: Variables }>;
@@ -242,10 +244,15 @@ portalApp.get('/:token', async (c) => {
   
   return c.json({ 
     data: {
-      customer: lead,
-      estimate,
-      job,
-      changeOrders: orders,
+      customer: lead ? { name: lead.name, email: lead.email, phone: lead.phone, streetAddress: lead.streetAddress,
+        city: lead.city, state: lead.state, postalCode: lead.postalCode } : null,
+      estimate: estimate ? { id: estimate.id, status: estimate.status, total: estimateContractValue(estimate).toFixed(2),
+        signedAt: estimate.signedAt, packages: publicEstimatePackages(estimate.packages, estimate.acceptanceSnapshot) } : null,
+      job: job ? { id: job.id, jobNumber: job.jobNumber, name: job.name, status: job.status, streetAddress: job.streetAddress,
+        city: job.city, state: job.state, postalCode: job.postalCode, scheduledStartAt: job.scheduledStartAt, scheduledEndAt: job.scheduledEndAt } : null,
+      changeOrders: orders.map((order) => ({ id: order.id, description: order.description, amount: order.amount, status: order.status,
+        paymentRequired: order.paymentRequired, paymentStatus: order.paymentStatus, paymentDueAmount: order.paymentDueAmount,
+        contractorSignature: order.contractorSignature, customerSignatureName: order.customerSignatureName, customerSignedAt: order.customerSignedAt })),
       invoices,
     }
   });

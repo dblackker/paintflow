@@ -99,6 +99,21 @@ async function canViewJobFinancials(
   );
 }
 
+function jobForAccess<T extends Record<string, unknown>>(job: T, financial: boolean) {
+  if (financial) return job;
+  const keys = new Set(['id', 'orgId', 'leadId', 'estimateId', 'jobNumber', 'name', 'status', 'streetAddress', 'city', 'state', 'postalCode',
+    'scheduledStartAt', 'scheduledEndAt', 'completedAt', 'createdAt', 'updatedAt', 'leadName', 'leadEmail', 'leadPhone',
+    'leadStreetAddress', 'leadCity', 'leadState', 'leadPostalCode']);
+  return Object.fromEntries(Object.entries(job).filter(([key]) => keys.has(key)));
+}
+
+jobsApp.use('*', async (c, next) => {
+  if (/\/[^/]+\/(costs(?:\/[^/]+)?|time-entries)$/.test(c.req.path) && !await canViewJobFinancials(c)) {
+    return c.json({ error: 'You do not have permission to view or change job costs.', code: 'JOB_COSTS_FORBIDDEN' }, 403);
+  }
+  await next();
+});
+
 // Each lateral aggregate returns one row per job. Time entries indicate review only;
 // their labor is already in job_costs and must not be added a second time.
 export function buildJobFinancialQuery(
@@ -327,7 +342,7 @@ jobsApp.get('/', async (c) => {
     data: page.map((row) => {
       const costing = jobCostingFromRow(row, asOf);
       return {
-        ...costing.job,
+        ...jobForAccess(costing.job, canViewFinancials),
         ...(canViewFinancials
           ? { financialSummary: costing.financialSummary, costing: { revenue: costing.revenue, costs: costing.costs, production: costing.production, profitability: costing.profitability, budget: costing.budget } }
           : {}),
@@ -355,7 +370,7 @@ jobsApp.get('/:id', async (c) => {
   const job = await getJobForOrg(db, orgId, id);
   
   if (!job) return c.json({ error: 'Not found' }, 404);
-  return c.json({ data: job });
+  return c.json({ data: jobForAccess(job, await canViewJobFinancials(c)) });
 });
 
 const updateJobSchema = z.object({
@@ -382,6 +397,8 @@ jobsApp.patch('/:id', async (c) => {
   const db = createDb(c.env.DATABASE_URL);
   const existing = await getJobForOrg(db, orgId, id);
   if (!existing) return c.json({ error: 'Not found' }, 404);
+  const canViewFinancials = await canViewJobFinancials(c);
+  if ('budget' in parsed.data && !canViewFinancials) return c.json({ error: 'You do not have permission to change job budgets.', code: 'JOB_COSTS_FORBIDDEN' }, 403);
 
   const [job] = await db.update(jobs)
     .set({
@@ -400,7 +417,7 @@ jobsApp.patch('/:id', async (c) => {
     .where(and(eq(jobs.id, id), eq(jobs.orgId, orgId)))
     .returning();
 
-  return c.json({ data: job });
+  return c.json({ data: jobForAccess(job, canViewFinancials) });
 });
 
 jobsApp.get('/:id/costs', async (c) => {

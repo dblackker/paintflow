@@ -1,14 +1,78 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { createDb } from '@crewmodo/db';
-import { auditLogs, changeOrders, emailSends, emailTemplates, jobs, leads, orgBranding, orgSettings, portalTokens, users } from '@crewmodo/db/schema';
+import {
+  auditLogs,
+  changeOrders,
+  emailSends,
+  emailTemplates,
+  estimates,
+  jobs,
+  leads,
+  orgBranding,
+  orgSettings,
+  portalTokens,
+  users,
+} from '@crewmodo/db/schema';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { renderChangeOrderEmail, sendEmail } from '../lib/email';
+import { requireOrgPermission } from '../middleware/financial-access';
+import {
+  changeOrderCommercialBreakdown,
+  readChangeOrderCommercial,
+  type ChangeOrderTaxSnapshot,
+} from '../lib/customer-invoices';
+import { readEstimationTaxPolicy, resolveEstimationTax } from '../../../../packages/core/src/estimation-tax';
+import {
+  decimal,
+  minor,
+  moneyText,
+  multiply,
+  divide,
+  exact,
+  round,
+  boundedMinor,
+  EstimationInputError,
+} from '../../../../packages/core/src/estimation-decimal';
 
 const changeOrdersRoute = new Hono<{ Bindings: Env; Variables: Variables }>();
 changeOrdersRoute.use('*', authMiddleware);
+
+const changeOrderAccess = requireOrgPermission(
+  ['manage_estimates'],
+  'Ask an owner for permission to manage change orders.',
+);
+const moneyAmountSchema = z.union([z.string(), z.number()]).transform((value, ctx) => {
+  try {
+    return moneyText(minor(decimal(value, 'amount', { scale: 2 }), 'amount'));
+  } catch (error) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: error instanceof Error ? error.message : 'Enter a valid amount.',
+    });
+    return z.NEVER;
+  }
+});
+const taxOverrideSchema = z
+  .object({
+    ratePercent: z.union([z.string(), z.number()]),
+    reason: z.string().trim().min(3).max(500),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    try {
+      resolveEstimationTax({ override: { ratePercent: value.ratePercent!, reason: value.reason! } });
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : 'Enter a valid tax rate.',
+      });
+    }
+  })
+  .nullable()
+  .optional();
 
 const scopeItemSchema = z.object({
   area: z.string().trim().max(120).optional().nullable(),
@@ -23,59 +87,124 @@ const scopeItemSchema = z.object({
   notes: z.string().trim().max(500).optional().nullable(),
 });
 
-const scopeDetailsSchema = z.object({
-  items: z.array(scopeItemSchema).max(30).default([]),
-}).optional();
+const scopeDetailsSchema = z
+  .object({
+    items: z.array(scopeItemSchema).max(30).default([]),
+  })
+  .optional();
 
-const changeOrderSchema = z.object({
-  jobId: z.string().uuid(),
-  estimateId: z.string().uuid(),
-  description: z.string().trim().max(2000).optional(),
-  scopeDetails: scopeDetailsSchema,
-  amount: z.coerce.number().min(0).default(0),
-  status: z.enum(['draft', 'pending', 'approved', 'rejected', 'completed', 'canceled']).default('pending'),
-  createdBy: z.enum(['contractor', 'customer']).default('contractor'),
-  paymentRequired: z.coerce.boolean().default(false),
-  depositPercent: z.coerce.number().min(0).max(100).default(100),
-}).superRefine((data, ctx) => {
-  if (data.status === 'draft') return;
-  if (!data.description?.trim()) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'Description is required before sending a change order.' });
-  }
-  if (data.amount <= 0) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['amount'], message: 'Amount must be greater than zero before sending a change order.' });
-  }
-});
+export const changeOrderSchema = z
+  .object({
+    jobId: z.string().uuid(),
+    estimateId: z.string().uuid(),
+    description: z.string().trim().max(2000).optional(),
+    scopeDetails: scopeDetailsSchema,
+    amount: moneyAmountSchema.default('0'),
+    taxOverride: taxOverrideSchema,
+    status: z.enum(['draft', 'pending', 'approved', 'rejected', 'completed', 'canceled']).default('pending'),
+    createdBy: z.enum(['contractor', 'customer']).default('contractor'),
+    paymentRequired: z.coerce.boolean().default(false),
+    depositPercent: z.coerce.number().min(0).max(100).default(100),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === 'draft') return;
+    if (!data.description?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['description'],
+        message: 'Description is required before sending a change order.',
+      });
+    }
+    if (Number(data.amount) <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['amount'],
+        message: 'Amount must be greater than zero before sending a change order.',
+      });
+    }
+  });
 
-const updateChangeOrderSchema = z.object({
-  description: z.string().trim().max(2000).optional(),
-  scopeDetails: scopeDetailsSchema,
-  amount: z.coerce.number().min(0).optional(),
-  status: z.enum(['draft', 'pending', 'approved', 'rejected', 'completed', 'canceled']).optional(),
-  createdBy: z.enum(['contractor', 'customer']).optional(),
-  paymentRequired: z.coerce.boolean().optional(),
-  depositPercent: z.coerce.number().min(0).max(100).optional(),
-  paymentStatus: z.enum(['not_requested', 'pending', 'paid', 'waived']).optional(),
-  reason: z.string().trim().max(500).optional(),
-}).refine((value) => Object.keys(value).length > 0, {
-  message: 'At least one field is required',
-});
+export const updateChangeOrderSchema = z
+  .object({
+    description: z.string().trim().max(2000).optional(),
+    scopeDetails: scopeDetailsSchema,
+    amount: moneyAmountSchema.optional(),
+    taxOverride: taxOverrideSchema,
+    status: z.enum(['draft', 'pending', 'approved', 'rejected', 'completed', 'canceled']).optional(),
+    createdBy: z.enum(['contractor', 'customer']).optional(),
+    paymentRequired: z.coerce.boolean().optional(),
+    depositPercent: z.coerce.number().min(0).max(100).optional(),
+    paymentStatus: z.enum(['not_requested', 'pending', 'paid', 'waived']).optional(),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one field is required',
+  });
 
-function paymentDueAmount(amount: number, paymentRequired: boolean, depositPercent: number) {
-  return paymentRequired ? Math.round(amount * (depositPercent / 100) * 100) / 100 : null;
+function paymentDueAmount(amount: string | number, paymentRequired: boolean, depositPercent: number) {
+  if (!paymentRequired) return null;
+  const totalMinor = minor(decimal(amount, 'amount', { scale: 2 }), 'amount');
+  return moneyText(
+    boundedMinor(
+      round(
+        multiply(
+          exact(BigInt(totalMinor)),
+          divide(decimal(depositPercent, 'depositPercent', { scale: 2 }), exact(100n)),
+        ),
+      ),
+      'paymentDueAmount',
+    ),
+  );
+}
+
+async function changeOrderTaxSnapshot(
+  db: ReturnType<typeof createDb>,
+  orgId: string,
+  job: typeof jobs.$inferSelect,
+  actorId: string,
+  override: z.infer<typeof taxOverrideSchema>,
+): Promise<ChangeOrderTaxSnapshot> {
+  const settings = await db.query.orgSettings.findFirst({ where: eq(orgSettings.orgId, orgId) });
+  return {
+    ...resolveEstimationTax({
+      defaultRate: settings?.salesTaxRate,
+      policy: readEstimationTaxPolicy(settings?.businessHours),
+      postalCode: job.postalCode,
+      override: override ? { ratePercent: override.ratePercent!, reason: override.reason! } : null,
+      actorId,
+    }),
+    version: 'change-order-tax-v1',
+    capturedAt: new Date().toISOString(),
+    orgId,
+    jobsite: {
+      jobId: job.id,
+      streetAddress: job.streetAddress,
+      city: job.city,
+      state: job.state,
+      postalCode: job.postalCode,
+    },
+  };
+}
+
+function taxInputError(c: Context<{ Bindings: Env; Variables: Variables }>, error: unknown) {
+  if (error instanceof EstimationInputError)
+    return c.json({ error: error.message, code: error.code, field: error.field }, 400);
+  throw error;
 }
 
 function customerFacingValidation(description: unknown, amount: unknown) {
   const errors: string[] = [];
-  if (!String(description || '').trim()) errors.push('Description is required before sending a change order.');
-  if (Number(amount || 0) <= 0) errors.push('Amount must be greater than zero before sending a change order.');
+  if (!String(description || '').trim())
+    errors.push('Description is required before sending a change order.');
+  if (Number(amount || 0) <= 0)
+    errors.push('Amount must be greater than zero before sending a change order.');
   return errors;
 }
 
 function portalToken() {
   const tokenBytes = new Uint8Array(32);
   crypto.getRandomValues(tokenBytes);
-  return Array.from(tokenBytes, b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(tokenBytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function money(value: unknown) {
@@ -96,7 +225,9 @@ function jobAddress(job: typeof jobs.$inferSelect, lead: typeof leads.$inferSele
     job.city || lead.city,
     job.state || lead.state,
     job.postalCode || lead.postalCode,
-  ].filter(Boolean).join(', ');
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 
 function jobDisplayName(job: typeof jobs.$inferSelect) {
@@ -110,7 +241,12 @@ async function contractorSignature(db: ReturnType<typeof createDb>, orgId: strin
     userId ? db.query.users.findFirst({ where: eq(users.id, userId) }) : Promise.resolve(null),
   ]);
   const companyName = branding?.companyName || settings?.companyName || 'the painting company';
-  const name = signer?.name || signer?.email || settings?.companyName || branding?.companyName || 'Authorized representative';
+  const name =
+    signer?.name ||
+    signer?.email ||
+    settings?.companyName ||
+    branding?.companyName ||
+    'Authorized representative';
   return {
     name,
     email: signer?.email || settings?.email || null,
@@ -126,10 +262,18 @@ function isMissingRelation(error: unknown) {
   return err?.code === '42P01' || /relation .* does not exist/i.test(err?.message || '');
 }
 
-async function findEmailTemplateOverride(db: ReturnType<typeof createDb>, orgId: string, templateKey: string) {
+async function findEmailTemplateOverride(
+  db: ReturnType<typeof createDb>,
+  orgId: string,
+  templateKey: string,
+) {
   try {
     return await db.query.emailTemplates.findFirst({
-      where: and(eq(emailTemplates.orgId, orgId), eq(emailTemplates.key, templateKey), eq(emailTemplates.isActive, true)),
+      where: and(
+        eq(emailTemplates.orgId, orgId),
+        eq(emailTemplates.key, templateKey),
+        eq(emailTemplates.isActive, true),
+      ),
     });
   } catch (error) {
     if (isMissingRelation(error)) return null;
@@ -176,7 +320,7 @@ async function renderChangeOrderEmailPreview(
   env: Env,
   orgId: string,
   id: string,
-  userId?: string
+  userId?: string,
 ) {
   const portal = await createPortalLink(db, orgId, id);
   if (!portal) return null;
@@ -190,21 +334,26 @@ async function renderChangeOrderEmailPreview(
   const portalUrl = `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`;
   const templateKey = 'change_order.approval.sent';
   const templateOverride = await findEmailTemplateOverride(db, orgId, templateKey);
-  const renderedEmail = renderChangeOrderEmail({
-    leadName: portal.lead.name,
-    companyName: branding?.companyName || settings?.companyName || 'your painting contractor',
-    estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
-    estimatorEmail: settings?.email || estimator?.email || null,
-    estimatorPhone: settings?.phone || null,
-    jobName: jobDisplayName(portal.job),
-    jobAddress: jobAddress(portal.job, portal.lead),
-    description: portal.order.description,
-    amount: money(portal.order.amount),
-    paymentRequired: Boolean(portal.order.paymentRequired),
-    paymentDue: portal.order.paymentRequired ? money(portal.order.paymentDueAmount || portal.order.amount) : null,
-    paymentSchedule: paymentSchedule(portal.order),
-    portalUrl,
-  }, templateOverride);
+  const renderedEmail = renderChangeOrderEmail(
+    {
+      leadName: portal.lead.name,
+      companyName: branding?.companyName || settings?.companyName || 'your painting contractor',
+      estimatorName: estimator?.name || estimator?.email || settings?.companyName || branding?.companyName,
+      estimatorEmail: settings?.email || estimator?.email || null,
+      estimatorPhone: settings?.phone || null,
+      jobName: jobDisplayName(portal.job),
+      jobAddress: jobAddress(portal.job, portal.lead),
+      description: portal.order.description,
+      amount: money(portal.order.amount),
+      paymentRequired: Boolean(portal.order.paymentRequired),
+      paymentDue: portal.order.paymentRequired
+        ? money(portal.order.paymentDueAmount || portal.order.amount)
+        : null,
+      paymentSchedule: paymentSchedule(portal.order),
+      portalUrl,
+    },
+    templateOverride,
+  );
 
   return {
     ...portal,
@@ -220,17 +369,19 @@ changeOrdersRoute.get('/', async (c) => {
   const orgId = c.get('orgId');
   const jobId = c.req.query('jobId');
   const db = createDb(c.env.DATABASE_URL);
-  
+
   const where = jobId
     ? and(eq(changeOrders.orgId, orgId), eq(changeOrders.jobId, jobId))
     : eq(changeOrders.orgId, orgId);
-  
+
   const data = await db.select().from(changeOrders).where(where).orderBy(desc(changeOrders.createdAt));
   return c.json({ data });
 });
 
 // POST /v1/change-orders
-changeOrdersRoute.post('/', async (c) => {
+changeOrdersRoute.post('/', changeOrderAccess, async (c) => {
+  const key = c.req.header('Idempotency-Key');
+  if (!key?.trim() || key.length > 255) return c.json({ error: 'A valid Idempotency-Key is required.' }, 400);
   const orgId = c.get('orgId');
   const body = await c.req.json();
   const parsed = changeOrderSchema.safeParse(body);
@@ -246,27 +397,57 @@ changeOrdersRoute.post('/', async (c) => {
   if (!job || job.estimateId !== data.estimateId) {
     return c.json({ error: 'Job not found for estimate' }, 404);
   }
+  const estimate = await db.query.estimates.findFirst({
+    where: and(
+      eq(estimates.id, data.estimateId),
+      eq(estimates.orgId, orgId),
+      eq(estimates.leadId, job.leadId),
+    ),
+  });
+  if (!estimate) return c.json({ error: 'Job not found for estimate' }, 404);
 
-  const [order] = await db.insert(changeOrders).values({
-    jobId: data.jobId,
-    estimateId: data.estimateId,
-    description: data.description?.trim() || 'Draft change order',
-    scopeDetails: data.scopeDetails || null,
-    status: data.status,
-    createdBy: data.createdBy,
-    paymentRequired: data.paymentRequired,
-    orgId,
-    amount: data.amount.toFixed(2),
-    depositPercent: data.depositPercent.toFixed(2),
-    paymentDueAmount: paymentDueAmount(data.amount, data.paymentRequired, data.depositPercent)?.toFixed(2) ?? null,
-    paymentStatus: data.paymentRequired ? 'pending' : 'not_requested',
-    approvedAt: data.status === 'approved' ? new Date() : undefined,
-    contractorSignature: data.status === 'draft' ? null : await contractorSignature(db, orgId, c.get('userId')),
-  }).returning();
+  let taxSnapshot: ChangeOrderTaxSnapshot;
+  let dueAmount: string | null;
+  try {
+    taxSnapshot = await changeOrderTaxSnapshot(db, orgId, job, c.get('userId'), data.taxOverride);
+    dueAmount = paymentDueAmount(data.amount, data.paymentRequired, data.depositPercent);
+  } catch (error) {
+    return taxInputError(c, error);
+  }
+
+  const [order] = await db
+    .insert(changeOrders)
+    .values({
+      jobId: data.jobId,
+      estimateId: data.estimateId,
+      description: data.description?.trim() || 'Draft change order',
+      scopeDetails: {
+        ...data.scopeDetails,
+        taxSnapshot,
+        commercialBreakdown: changeOrderCommercialBreakdown(data.amount, taxSnapshot),
+      },
+      status: data.status,
+      createdBy: data.createdBy,
+      paymentRequired: data.paymentRequired,
+      orgId,
+      amount: data.amount,
+      depositPercent: data.depositPercent.toFixed(2),
+      paymentDueAmount: dueAmount,
+      paymentStatus: data.paymentRequired ? 'pending' : 'not_requested',
+      approvedAt: data.status === 'approved' ? new Date() : undefined,
+      contractorSignature:
+        data.status === 'draft' ? null : await contractorSignature(db, orgId, c.get('userId')),
+    })
+    .returning();
 
   const portal = order.status === 'draft' ? null : await createPortalLink(db, orgId, order.id);
   const baseUrl = c.env.PUBLIC_URL || 'https://crewmodo.com';
-  return c.json({ data: { ...order, approvalLink: portal ? `${baseUrl}/portal/${portal.token}?changeOrderId=${order.id}` : null } });
+  return c.json({
+    data: {
+      ...order,
+      approvalLink: portal ? `${baseUrl}/portal/${portal.token}?changeOrderId=${order.id}` : null,
+    },
+  });
 });
 
 changeOrdersRoute.post('/:id/portal-link', async (c) => {
@@ -277,7 +458,8 @@ changeOrdersRoute.post('/:id/portal-link', async (c) => {
   const portal = await createPortalLink(db, orgId, id);
   if (!portal) return c.json({ error: 'Change order is not ready for a customer approval link.' }, 409);
 
-  const [updated] = await db.update(changeOrders)
+  const [updated] = await db
+    .update(changeOrders)
     .set({
       sentAt: new Date(),
       contractorSignature: await contractorSignature(db, orgId, c.get('userId')),
@@ -300,7 +482,14 @@ changeOrdersRoute.post('/:id/portal-link', async (c) => {
   });
 
   const baseUrl = c.env.PUBLIC_URL || 'https://crewmodo.com';
-  return c.json({ data: { link: `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`, token: portal.token, expiresAt: portal.expiresAt, changeOrder: updated } });
+  return c.json({
+    data: {
+      link: `${baseUrl}/portal/${portal.token}?changeOrderId=${id}`,
+      token: portal.token,
+      expiresAt: portal.expiresAt,
+      changeOrder: updated,
+    },
+  });
 });
 
 changeOrdersRoute.post('/:id/email-preview', async (c) => {
@@ -308,7 +497,11 @@ changeOrdersRoute.post('/:id/email-preview', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.DATABASE_URL);
   const preview = await renderChangeOrderEmailPreview(db, c.env, orgId, id, c.get('userId'));
-  if (!preview) return c.json({ error: 'Change order is not ready to preview. Save it as ready for approval first.' }, 409);
+  if (!preview)
+    return c.json(
+      { error: 'Change order is not ready to preview. Save it as ready for approval first.' },
+      409,
+    );
 
   return c.json({
     data: {
@@ -334,16 +527,26 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
 
   const userId = c.get('userId');
   const preview = await renderChangeOrderEmailPreview(db, c.env, orgId, id, userId);
-  if (!preview) return c.json({ error: 'Change order is not ready to send. Save it as ready for approval first.' }, 409);
-  if (!preview.lead.email) return c.json({ error: 'Customer email is required before sending a change order' }, 400);
+  if (!preview)
+    return c.json({ error: 'Change order is not ready to send. Save it as ready for approval first.' }, 409);
+  if (!preview.lead.email)
+    return c.json({ error: 'Customer email is required before sending a change order' }, 400);
 
   const countersignature = await contractorSignature(db, orgId, userId);
   const replyTo = preview.settings?.email || preview.estimator?.email || undefined;
-  const providerResult = await sendEmail(c.env, preview.lead.email, preview.renderedEmail.subject, preview.renderedEmail.html, undefined, {
-    replyTo,
-    text: preview.renderedEmail.text,
-  }) as { id?: string; message_id?: string };
-  const [updatedOrder] = await db.update(changeOrders)
+  const providerResult = (await sendEmail(
+    c.env,
+    preview.lead.email,
+    preview.renderedEmail.subject,
+    preview.renderedEmail.html,
+    undefined,
+    {
+      replyTo,
+      text: preview.renderedEmail.text,
+    },
+  )) as { id?: string; message_id?: string };
+  const [updatedOrder] = await db
+    .update(changeOrders)
     .set({
       sentAt: new Date(),
       contractorSignature: countersignature,
@@ -401,11 +604,19 @@ changeOrdersRoute.post('/:id/send-email', async (c) => {
     },
   });
 
-  return c.json({ data: { sent: true, to: preview.lead.email, emailSendId: emailSend?.id ?? null, link: preview.portalUrl, changeOrder: updatedOrder } });
+  return c.json({
+    data: {
+      sent: true,
+      to: preview.lead.email,
+      emailSendId: emailSend?.id ?? null,
+      link: preview.portalUrl,
+      changeOrder: updatedOrder,
+    },
+  });
 });
 
 // PATCH /v1/change-orders/:id
-changeOrdersRoute.patch('/:id', async (c) => {
+changeOrdersRoute.patch('/:id', changeOrderAccess, async (c) => {
   const orgId = c.get('orgId');
   const id = c.req.param('id');
   const body = await c.req.json();
@@ -420,8 +631,35 @@ changeOrdersRoute.patch('/:id', async (c) => {
     where: and(eq(changeOrders.id, id), eq(changeOrders.orgId, orgId)),
   });
   if (!existing) return c.json({ error: 'Not found' }, 404);
-  
-  const nextAmount = data.amount ?? Number(existing.amount);
+
+  const agreementEdit = [
+    'description',
+    'scopeDetails',
+    'amount',
+    'taxOverride',
+    'paymentRequired',
+    'depositPercent',
+    'createdBy',
+  ].some((field) => Object.prototype.hasOwnProperty.call(data, field));
+  if (agreementEdit && (existing.customerSignedAt || ['approved', 'completed'].includes(existing.status))) {
+    return c.json(
+      {
+        error:
+          'Signed or approved change order scope and financial terms are frozen. Create a new change order instead.',
+      },
+      409,
+    );
+  }
+  if (existing.customerSignedAt && data.status && !['approved', 'completed'].includes(data.status)) {
+    return c.json(
+      {
+        error: 'A signed change order cannot be reopened or rejected. Use a credit/refund workflow instead.',
+      },
+      409,
+    );
+  }
+
+  const nextAmount = data.amount ?? existing.amount;
   const nextDescription = data.description ?? existing.description;
   const nextStatus = data.status ?? existing.status;
   if (nextStatus !== 'draft' && nextStatus !== 'canceled') {
@@ -436,13 +674,64 @@ changeOrdersRoute.patch('/:id', async (c) => {
   const update: Record<string, unknown> = {
     ...data,
     reason: undefined,
-    amount: data.amount == null ? undefined : data.amount.toFixed(2),
+    taxOverride: undefined,
+    amount: data.amount,
     depositPercent: data.depositPercent == null ? undefined : data.depositPercent.toFixed(2),
-    paymentDueAmount: paymentDueAmount(nextAmount, nextPaymentRequired, nextDepositPercent)?.toFixed(2) ?? null,
   };
 
+  try {
+    const recorded = readChangeOrderCommercial(existing);
+    if (data.taxOverride !== undefined && !recorded) {
+      return c.json(
+        {
+          error:
+            'Legacy change orders have no recorded tax assumption. Create a new change order to review tax.',
+        },
+        409,
+      );
+    }
+    if (data.scopeDetails || (recorded && data.amount !== undefined) || data.taxOverride !== undefined) {
+      const scope =
+        existing.scopeDetails && typeof existing.scopeDetails === 'object'
+          ? (existing.scopeDetails as Record<string, unknown>)
+          : {};
+      let snapshot = recorded?.snapshot;
+      if (data.taxOverride !== undefined) {
+        const job = await db.query.jobs.findFirst({
+          where: and(eq(jobs.id, existing.jobId), eq(jobs.orgId, orgId)),
+        });
+        if (!job || job.estimateId !== existing.estimateId)
+          return c.json({ error: 'Job not found for estimate' }, 404);
+        snapshot = await changeOrderTaxSnapshot(db, orgId, job, c.get('userId'), data.taxOverride);
+      }
+      update.scopeDetails = {
+        ...scope,
+        ...data.scopeDetails,
+        ...(snapshot
+          ? {
+              taxSnapshot: snapshot,
+              commercialBreakdown: changeOrderCommercialBreakdown(nextAmount, snapshot),
+            }
+          : {}),
+      };
+    }
+    if (
+      data.paymentRequired !== undefined ||
+      data.depositPercent !== undefined ||
+      data.amount !== undefined
+    ) {
+      update.paymentDueAmount = paymentDueAmount(nextAmount, nextPaymentRequired, nextDepositPercent);
+    }
+  } catch (error) {
+    return taxInputError(c, error);
+  }
+
   if (data.paymentRequired !== undefined || data.depositPercent !== undefined || data.amount !== undefined) {
-    update.paymentStatus = nextPaymentRequired ? (existing.paymentStatus === 'paid' ? 'paid' : 'pending') : 'not_requested';
+    update.paymentStatus = nextPaymentRequired
+      ? existing.paymentStatus === 'paid'
+        ? 'paid'
+        : 'pending'
+      : 'not_requested';
   }
 
   if (existing.status === 'draft' && nextStatus !== 'draft') {
@@ -451,7 +740,13 @@ changeOrdersRoute.patch('/:id', async (c) => {
 
   if (data.status === 'approved' && !existing.approvedAt) {
     if (!existing.customerSignedAt) {
-      return c.json({ error: 'Customer signature is required before marking a change order approved. Send the portal link or use the customer portal approval flow.' }, 409);
+      return c.json(
+        {
+          error:
+            'Customer signature is required before marking a change order approved. Send the portal link or use the customer portal approval flow.',
+        },
+        409,
+      );
     }
     update.approvedAt = new Date();
     update.approvedBy = 'contractor';
@@ -459,16 +754,47 @@ changeOrdersRoute.patch('/:id', async (c) => {
 
   if (data.status === 'canceled') {
     if (['approved', 'completed'].includes(existing.status) || existing.paymentStatus === 'paid') {
-      return c.json({ error: 'Approved, completed, or paid change orders cannot be canceled. Use a credit/refund workflow instead.' }, 409);
+      return c.json(
+        {
+          error:
+            'Approved, completed, or paid change orders cannot be canceled. Use a credit/refund workflow instead.',
+        },
+        409,
+      );
     }
     update.canceledAt = new Date();
     update.canceledReason = data.reason || 'Canceled from job detail';
   }
-  
-  const [order] = await db.update(changeOrders)
+
+  const [order] = await db
+    .update(changeOrders)
     .set(update)
-    .where(and(eq(changeOrders.id, id), eq(changeOrders.orgId, orgId)))
+    .where(
+      and(
+        eq(changeOrders.id, id),
+        eq(changeOrders.orgId, orgId),
+        ...(agreementEdit
+          ? [
+              isNull(changeOrders.customerSignedAt),
+              eq(changeOrders.status, existing.status),
+              eq(changeOrders.amount, existing.amount),
+              eq(changeOrders.depositPercent, existing.depositPercent),
+              eq(changeOrders.paymentRequired, existing.paymentRequired),
+              existing.scopeDetails === null
+                ? isNull(changeOrders.scopeDetails)
+                : sql`${changeOrders.scopeDetails} is not distinct from ${JSON.stringify(existing.scopeDetails)}::jsonb`,
+              eq(changeOrders.description, existing.description),
+            ]
+          : []),
+        ...(data.status ? [eq(changeOrders.status, existing.status)] : []),
+        ...(data.status && !['approved', 'completed'].includes(data.status)
+          ? [isNull(changeOrders.customerSignedAt)]
+          : []),
+      ),
+    )
     .returning();
+
+  if (!order) return c.json({ error: 'The change order changed or was signed. Reload before editing.' }, 409);
 
   if (data.status && data.status !== existing.status) {
     await db.insert(auditLogs).values({
@@ -485,7 +811,7 @@ changeOrdersRoute.patch('/:id', async (c) => {
       },
     });
   }
-  
+
   return c.json({ data: order });
 });
 
