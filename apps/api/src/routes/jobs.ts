@@ -121,6 +121,7 @@ export function buildJobFinancialQuery(
   options: {
     jobId?: string;
     limit?: number;
+    status?: string;
     cursor?: { timestamp: string; id: string };
   } = {},
 ) {
@@ -128,6 +129,7 @@ export function buildJobFinancialQuery(
   const cursor = options.cursor
     ? sql`(j.created_at, j.id) < (${options.cursor.timestamp}::timestamp, ${options.cursor.id}::uuid)`
     : sql`true`;
+  const status = options.status ? sql`j.status = ${options.status}` : sql`true`;
   return sql`select to_jsonb(j) as job,
     l.name as "leadName", l.phone as "leadPhone", l.email as "leadEmail",
     l.street_address as "leadStreetAddress", l.city as "leadCity", l.state as "leadState", l.postal_code as "leadPostalCode",
@@ -175,7 +177,7 @@ export function buildJobFinancialQuery(
         and not jsonb_path_exists(e.packages, '$[*].items[*] ? (@.optional == true)')
         and not jsonb_path_exists(e.packages, '$[*].lineItems[*] ? (@.optional == true)')
     ) expected on true
-    where j.org_id = ${orgId} and ${filter} and ${cursor}
+    where j.org_id = ${orgId} and ${filter} and ${cursor} and ${status}
     order by j.created_at desc, j.id desc limit ${options.jobId ? 1 : (options.limit ?? 50) + 1}`;
 }
 
@@ -307,6 +309,10 @@ jobsApp.get('/', async (c) => {
   const db = createDb(c.env.DATABASE_URL);
 
   const limit = Number(c.req.query("limit") ?? 50);
+  const status = c.req.query('status');
+  if (status && !['deposit_pending', 'scheduled', 'in_progress', 'punch_list', 'completed', 'cancelled'].includes(status)) {
+    return c.json({ error: 'Choose a valid job status.', code: 'INVALID_JOB_STATUS' }, 400);
+  }
   if (!Number.isInteger(limit) || limit < 1 || limit > 100)
     return c.json(
       { error: "Use a limit between 1 and 100.", code: "INVALID_JOB_LIMIT" },
@@ -330,7 +336,7 @@ jobsApp.get('/', async (c) => {
     cursor = { timestamp, id };
   }
   const result = await db.execute(
-    buildJobFinancialQuery(orgId, { limit, cursor }),
+    buildJobFinancialQuery(orgId, { limit, cursor, status }),
   );
   const rows = result.rows as unknown as JobFinancialRow[];
   const page = rows.slice(0, limit);

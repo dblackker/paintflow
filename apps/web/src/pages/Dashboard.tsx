@@ -6,6 +6,7 @@ import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
+import { DashboardInsights } from '@/components/dashboard/DashboardInsights';
 import { apiJson, formatAddress, formatMoney, formatPhone, labelize } from '@/lib/api';
 
 interface DashboardStats {
@@ -177,6 +178,7 @@ export function Dashboard() {
   const [error, setError] = useState<unknown>(null);
   const [setupPrompt, setSetupPrompt] = useState(false);
   const [applyingRecommendation, setApplyingRecommendation] = useState('');
+  const [insightsRefresh, setInsightsRefresh] = useState(0);
 
   const visibleQuickActions = useMemo(() => quickActions
     .map((entry) => ({ ...entry, action: catalogById.get(entry.id) }))
@@ -189,18 +191,19 @@ export function Dashboard() {
     try {
       const [statsResponse, activityResponse, recommendationsResponse, quickActionsResponse, orgResponse] = await Promise.all([
         apiJson<{ data: DashboardStats }>('/v1/dashboard/stats'),
-        apiJson<{ data: Activity[] }>('/v1/activities/feed?limit=5'),
-        apiJson<{ data: Recommendation[] }>('/v1/dashboard/recommendations'),
-        apiJson<{ data: { actions: QuickActionPreference[] } }>('/v1/settings/dashboard-actions'),
+        apiJson<{ data: Activity[] }>('/v1/activities/feed?limit=5').catch(() => null),
+        apiJson<{ data: Recommendation[] }>('/v1/dashboard/recommendations').catch(() => null),
+        apiJson<{ data: { actions: QuickActionPreference[] } }>('/v1/settings/dashboard-actions').catch(() => null),
         apiJson<{ data: { companyName?: string | null; onboardingCompletedAt?: string | null } }>('/v1/settings/org').catch(() => null),
       ]);
 
       setStats(statsResponse.data);
-      setRecentActivity(activityResponse.data || statsResponse.data.recentActivity || []);
-      setRecommendations(recommendationsResponse.data || []);
-      setQuickActions(mergeQuickActionPreferences(quickActionsResponse.data.actions));
+      setRecentActivity(activityResponse?.data || statsResponse.data.recentActivity || []);
+      if (recommendationsResponse) setRecommendations(recommendationsResponse.data || []);
+      if (quickActionsResponse) setQuickActions(mergeQuickActionPreferences(quickActionsResponse.data.actions));
       setSetupPrompt(Boolean(orgResponse && orgResponse.data.companyName && !orgResponse.data.onboardingCompletedAt));
       setError(null);
+      setInsightsRefresh((value) => value + 1);
     } catch (err) {
       setError(err);
     } finally {
@@ -331,9 +334,11 @@ export function Dashboard() {
 
       <section className="dashboard-metrics mb-6 grid grid-cols-3 gap-2 sm:gap-4 md:gap-6">
         <MetricCard to="/leads" label="Active leads" value={stats.activeLeads} action="Open leads" />
-        <MetricCard to="/estimates" label="Estimates sent" value={stats.estimatesSent} action="Review estimates" />
+        <MetricCard to="/estimates" label="Sent this month" value={stats.estimatesSent} action="Review estimates" />
         <MetricCard to="/calendar" label="Jobs this month" value={stats.jobsThisMonth} action="Open schedule" />
       </section>
+
+      <DashboardInsights refreshKey={insightsRefresh} />
 
       {hasNoData && (
         <section className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-5 sm:p-6">

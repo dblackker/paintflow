@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AddressInline } from '@/components/AddressInline';
 import { Badge, StatusBadge } from '@/components/Badge';
 import { CrewTimecardModal, CrewTimecardPayload } from '@/components/CrewTimecardModal';
 import { EmptyState } from '@/components/EmptyState';
 import { Icon } from '@/components/Icon';
 import { Button } from "@/components/Button";
-import { Input } from '@/components/Input';
+import { Input, Select } from '@/components/Input';
 import { ServiceErrorState } from '@/components/ServiceErrorState';
 import { apiJson } from '@/lib/api';
 import {
@@ -127,6 +127,9 @@ function laborHoursLabel(value: unknown) {
 }
 
 export function JobsList() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const status = searchParams.get('status') || '';
+  const statusQuery = status ? `status=${encodeURIComponent(status)}` : '';
   const [jobs, setJobs] = useState<Job[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,39 +143,45 @@ export function JobsList() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState('');
   const loadMoreBusy = useRef(false);
+  const loadGeneration = useRef(0);
 
   async function loadJobs() {
+    const generation = ++loadGeneration.current;
     setIsLoading(true);
     try {
       const [jobsResponse, membersResponse] = await Promise.all([
-        apiJson<JobsResponse>('/v1/jobs'),
+        apiJson<JobsResponse>(`/v1/jobs${statusQuery ? `?${statusQuery}` : ''}`),
         apiJson<{ data: TeamMember[] }>('/v1/team/members').catch(() => ({ data: [] })),
       ]);
+      if (generation !== loadGeneration.current) return;
       setJobs(jobsResponse.data || []);
       setNextCursor(jobsResponse.nextCursor ?? null);
       setMoreError('');
       setTeamMembers(membersResponse.data || []);
       setError('');
     } catch (err) {
+      if (generation !== loadGeneration.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load jobs');
     } finally {
-      setIsLoading(false);
+      if (generation === loadGeneration.current) setIsLoading(false);
     }
   }
 
   useEffect(() => {
     loadJobs();
-  }, []);
+  }, [status]);
 
   async function loadMore() {
     if (!nextCursor || loadMoreBusy.current || isLoading) return;
     loadMoreBusy.current = true;
     setLoadingMore(true);
     setMoreError('');
+    const generation = loadGeneration.current;
     try {
       const response = await apiJson<JobsResponse>(
-        `/v1/jobs?cursor=${encodeURIComponent(nextCursor)}`,
+        `/v1/jobs?${statusQuery ? `${statusQuery}&` : ''}cursor=${encodeURIComponent(nextCursor)}`,
       );
+      if (generation !== loadGeneration.current) return;
       setJobs((previous) => [
         ...previous,
         ...response.data.filter(
@@ -181,6 +190,7 @@ export function JobsList() {
       ]);
       setNextCursor(response.nextCursor ?? null);
     } catch (err) {
+      if (generation !== loadGeneration.current) return;
       setMoreError(
         err instanceof Error
           ? err.message
@@ -307,6 +317,17 @@ export function JobsList() {
       </div>
 
       <div className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
+        <div className="mb-3">
+          <Select label="Job status" value={status} onChange={(event) => {
+            const next = new URLSearchParams(searchParams);
+            if (event.target.value) next.set('status', event.target.value); else next.delete('status');
+            setSearchParams(next);
+          }}>
+            <option value="">All jobs</option><option value="deposit_pending">Awaiting deposit</option>
+            <option value="scheduled">Scheduled</option><option value="in_progress">In production</option>
+            <option value="punch_list">Punch list</option><option value="completed">Completed</option><option value="cancelled">Canceled</option>
+          </Select>
+        </div>
         <Input
           type="search"
           placeholder="Search customer, jobsite, status, or job number"
@@ -322,7 +343,7 @@ export function JobsList() {
         </div>
       )}
       {error && !jobs.length ? null : filteredJobs.length === 0 ? (
-        jobs.length === 0 ? (
+        jobs.length === 0 && !status ? (
           <EmptyState
             title="No jobs yet"
             description="A signed estimate becomes production work here. From there you can schedule, log crew time, add photos, and track margin."

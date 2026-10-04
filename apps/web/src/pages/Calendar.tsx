@@ -721,7 +721,7 @@ export function Calendar() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-4" padding="none">
+        <Card id="needs-scheduling" className="lg:col-span-4" padding="none">
           <CardHeader className="border-b border-gray-200 px-4 py-3" title="Needs scheduling" description="Active jobs without production dates." />
           <CardContent className="relative grid gap-3 p-3 sm:p-4">
             {isInitialCalendarLoading ? (
