@@ -589,3 +589,15 @@ The accepted-delivery outbox caps provider attempts at eight and the recovery wi
 5. Promote only after team acceptance, with version-preserving rollback compatibility. Do not reinterpret issued/signed history or claim measured estimating accuracy/variance improvement before qualified contractor observations exist.
 
 Explicit color-separation editing and safe native-v2 template entry are implemented, not remaining software gaps. Target-margin assistance is deferred under section 7.4, and mixed-pack optimization remains the later PE09 subtask. Contractor paint-pricing/productivity calibration, dated acquisition-cost verification, physical-device/network pilots and live-provider deployment checks are pending limitations/release gates, not product non-goals or claims of measured accuracy. Section 12's restraint remains unchanged; no general CSV/customer export, new photo storage or AI measurement/pricing feature was added.
+
+### 13.5 Company Rate Defaults Compatibility Fix
+
+Production Rates (`/production-rates`) is the company-level pricebook. Migration 0033 stores an empty coat table (`{}`) on existing legacy-per-coat rates. That means use the saved units/hour rate for each coat, not an incomplete custom pass table. V2 now handles that representation without requiring owners to edit existing rates. Nonempty partial pass tables still fail with an actionable Production Rates message; incomplete complete-system tables remain invalid.
+
+Signup and explicit sample setup now share `STARTER_PRODUCTION_RATES` in `packages/core/src/estimation-rate-defaults.ts`. Demo seed rates use the same exact-decimal coat-table builder while preserving their configured selling rates and output. Each includes positive one-, two-, and three-coat complete-system values. Examples: walls 400/200/133.333333 sqft per labor-hour, ceilings 300/150/100, trim 80/40/26.666667 linear feet, and doors 4/2/1.333333 doors (both faces). These assume equal-speed passes and are starting allowances, not field-calibrated productivity. Prep, setup and masking remain separate operations.
+
+New-company rates inherit the company's selling labor rate, have sample/unreviewed provenance, and leave burdened cost unknown until configured. Existing custom rates, historical snapshots and signed agreements are not updated or repriced. No data migration or destructive demo reseed is needed to fix existing empty tables; the improved demo definitions take effect on the next deliberate seed run.
+
+Regression coverage uses actual PostgreSQL JSON storage, authoritative draft saves, all starter/demo substrates at one through three coats, and browser fixtures containing the database's empty-table defaults. It also rejects incomplete custom tables before they can produce an estimate.
+
+Local validation: 284 unit tests, 110 PostgreSQL integration tests, and 54 estimator browser cases pass, with no skips. API/web type checks, full build, and unchanged typography/button lint budgets pass. GitHub CI remains the merge gate; no live provider calls or destructive database reseed were performed.

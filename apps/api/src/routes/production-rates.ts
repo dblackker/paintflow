@@ -4,6 +4,7 @@ import { createDb } from '@crewmodo/db';
 import { productionRates } from '@crewmodo/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { EstimationInputError, formatEstimationMinor } from '../../../../packages/core/src/estimation';
+import { STARTER_PRODUCTION_RATES } from '../../../../packages/core/src/estimation-rate-defaults';
 import { resolveProductionEstimation, productionEstimationFieldErrors } from '../lib/production-estimation';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -69,6 +70,15 @@ export const productionRateSchema = rateFields.superRefine((rate, ctx) => {
       message: 'Enter a complete-system rate for the default coat count.',
     });
   }
+  if (rate.rateBasis === 'legacy_per_coat' && Object.keys(rate.coatRates).length > 0) {
+    for (let pass = 1; pass <= rate.coats; pass++) {
+      if (!rate.coatRates[String(pass)]) ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['coatRates', String(pass)],
+        message: `Enter a rate for application pass ${pass}, or leave the table empty to use units/hour per coat.`,
+      });
+    }
+  }
 });
 
 export function normalizeProductionRate(
@@ -90,34 +100,7 @@ export function normalizeProductionRate(
   };
 }
 
-// Examples only: complete-system tables are explicit, not recommended crew rates.
-export const SAMPLE_PRODUCTION_RATES = [
-  ['walls', 'drywall', 'sqft', 400, 'brush_roll', 'Interior walls - roll'],
-  ['ceilings', 'drywall', 'sqft', 300, 'brush_roll', 'Ceilings - roll'],
-  ['trim', 'wood', 'linear_ft', 80, 'brush_roll', 'Baseboards, crown molding'],
-  ['doors', 'wood', 'each', 4, 'brush_roll', 'Interior door (both sides)'],
-  ['cabinets', 'wood', 'each', 0.5, 'brush_roll', 'Cabinet door/drawer front'],
-  ['exterior_siding', 'wood', 'sqft', 200, 'spray_only', 'Exterior siding - spray'],
-  ['exterior_soffit', 'wood or aluminum', 'sqft', 125, 'brush_roll', 'Exterior soffits'],
-  ['exterior_fascia', 'wood or composite', 'linear_ft', 55, 'brush_roll', 'Exterior fascia boards'],
-  ['exterior_trim', 'window and door trim', 'linear_ft', 50, 'brush_roll', 'Exterior window and door trim'],
-  ['exterior_corner_boards', 'wood or composite', 'linear_ft', 50, 'brush_roll', 'Exterior corner boards'],
-].map(([category, surfaceType, unit, output, applicationMethod, description]) => ({
-  ...normalizeProductionRate({
-    category,
-    surfaceType,
-    unit,
-    ratePerHour: output,
-    description,
-    applicationMethod,
-    rateBasis: 'complete_system',
-    sellingRateSource: 'inherit',
-    coats: 2,
-    coatRates: { '1': String(output), '2': String(Number(output) / 2), '3': (Number(output) / 3).toFixed(6) },
-  }),
-  provenance: 'sample',
-  reviewedAt: null,
-}));
+export const SAMPLE_PRODUCTION_RATES = STARTER_PRODUCTION_RATES;
 
 const pricebookAccess = requireOrgPermission(
   ['manage_settings'],

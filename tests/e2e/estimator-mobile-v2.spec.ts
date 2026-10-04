@@ -12,7 +12,7 @@ const rates = [
   { id: '10000000-0000-4000-8000-000000000002', category: 'interior', surfaceType: 'ceilings', description: 'Ceiling', unit: 'sqft', ratePerHour: '100', coats: 2 },
   { id: '10000000-0000-4000-8000-000000000003', category: 'interior', surfaceType: 'trim', description: 'Trim', unit: 'linear_ft', ratePerHour: '60', coats: 2 },
   { id: '10000000-0000-4000-8000-000000000004', category: 'interior', surfaceType: 'doors', description: 'Doors', unit: 'each', ratePerHour: '2', coats: 2 },
-];
+].map((rate) => ({ ...rate, coatRates: {} }));
 const materials = [
   { id: finishId, name: 'Professional Interior Washable Acrylic Finish With A Very Long Product Name And Detailed Contractor Specification', brand: 'Synthetic Brand', category: 'paint', unit: 'gallon', coverageSqFt: '350', costPerUnit: '52.50', markupPercent: '30' },
   { id: primerId, name: 'Bonding Primer', category: 'primer', unit: 'gallon', coverageSqFt: '300', costPerUnit: '30' },

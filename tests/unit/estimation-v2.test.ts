@@ -102,6 +102,34 @@ test('successive-pass rates add prep, masking, and cut-in once instead of multip
   assert.deepEqual(three.items[0].operations!.slice(1).map((operation) => operation.hours), ['4', '2', '1']);
 });
 
+test('empty database coat tables preserve the single legacy rate for every coat count', () => {
+  for (const coats of [1, 2, 3]) {
+    const build = (coatRates?: Record<string, string>) => wall('legacy', {
+      quantity: '400', coats,
+      labor: { productionRatePerHour: '400', rateBasis: 'legacy_per_coat', coatRates, sellingRate: '65', burdenedRate: '30' },
+    });
+    const result = calculate([build({})]);
+    const withoutTable = calculate([build(undefined)]);
+    assert.deepEqual(result.totals, withoutTable.totals, 'Empty metadata should have no financial effect');
+    assert.deepEqual(result.purchaseGroups, withoutTable.purchaseGroups);
+    assert.equal(result.totals.hours, String(coats));
+    assert.equal(result.totals.laborMinor, coats * 6500);
+    const legacy = (coatRates?: Record<string, string>) => ({
+      ...build(coatRates), material: paint({ coveragePerPack: '400', coveragePerGallon: undefined }),
+    });
+    assert.deepEqual(calculateProductionEstimate({ surfaces: [legacy({})] }), calculateProductionEstimate({ surfaces: [legacy(undefined)] }));
+  }
+});
+
+test('partial custom pass tables and empty complete-system tables still fail closed', () => {
+  assert.throws(() => calculate([wall('custom', {
+    labor: { productionRatePerHour: '400', rateBasis: 'legacy_per_coat', coatRates: { '1': '400' }, sellingRate: '65' },
+  })]), /application pass 2.*Production Rates/);
+  assert.throws(() => calculate([wall('custom', {
+    labor: { productionRatePerHour: '400', rateBasis: 'complete_system', coatRates: {}, sellingRate: '65' },
+  })]), /selected coat count/);
+});
+
 test('method-calibrated catalog rate has no universal spray boost or heavy prep multiplier', () => {
   const request: ProductionPreviewRequest = { calculationVersion: 'repaint-v2', items: [{
     id: 'room', productionRateId: 'wall', quantity: '768', coats: 2, prepLevel: 'heavy', applicationMethod: 'spray_only',

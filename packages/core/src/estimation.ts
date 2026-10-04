@@ -576,15 +576,18 @@ function operationHours(operation: EstimationOperation, surface: EstimationSurfa
     if (rateBasis === 'hours_per_item' && (operation.unit ?? surface.unit) !== 'each') {
       throw new EstimationInputError(`${field}.unit`, 'Hours per item requires an item-count measurement.');
     }
-    if (rateBasis === 'legacy_per_coat' && labor.coatRates != null) {
+    // The database's empty-table default means the saved single per-coat rate.
+    const coatRates = rateBasis === 'legacy_per_coat' && labor.coatRates != null && Object.keys(labor.coatRates).length === 0
+      ? undefined : labor.coatRates;
+    if (rateBasis === 'legacy_per_coat' && coatRates != null) {
       hours = ZERO;
       for (let coat = 1; coat <= coats; coat++) {
-        const value = labor.coatRates[String(coat)];
-        if (value == null) throw new EstimationInputError(`${field}.coatRates.${coat}`, 'Provide a rate for every application pass.');
+        const value = coatRates[String(coat)];
+        if (value == null) throw new EstimationInputError(`${field}.coatRates.${coat}`, `The company production rate is missing application pass ${coat}. Review it in Production Rates.`);
         hours = add(hours, divide(quantity, decimal(value, `${field}.coatRates.${coat}`, { positive: true })));
       }
     } else {
-      const value = labor.coatRates == null ? labor.productionRatePerHour : labor.coatRates[String(coats)];
+      const value = coatRates == null ? labor.productionRatePerHour : coatRates[String(coats)];
       if (value == null) throw new EstimationInputError(`${field}.coatRates.${coats}`, 'Provide a calibrated rate for the selected coat count.');
       const rate = decimal(value, `${field}.rate`, { positive: true });
       selectedRate = decimalText(rate);
