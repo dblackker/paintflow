@@ -1,3 +1,5 @@
+import { starterCoatRates } from '../../../core/src/estimation-rate-defaults';
+
 export const goldenSeed = {
   organization: {
     name: 'Golden Brush Painting',
@@ -61,7 +63,15 @@ export const goldenSeed = {
     { key: 'siding', category: 'exterior', surfaceType: 'siding', unit: 'sqft', ratePerHour: '210.00', hourlyRate: '76.00', prepMultiplier: '1.25', coats: 2, description: 'Exterior siding, spray and back-roll' },
     { key: 'soffits', category: 'exterior', surfaceType: 'soffits', unit: 'sqft', ratePerHour: '120.00', hourlyRate: '76.00', prepMultiplier: '1.15', coats: 2, description: 'Exterior soffits' },
     { key: 'fascia', category: 'exterior', surfaceType: 'fascia', unit: 'linear_ft', ratePerHour: '52.00', hourlyRate: '76.00', prepMultiplier: '1.20', coats: 2, description: 'Exterior fascia boards' },
-  ],
+  ].map((rate) => ({
+    ...rate,
+    rateBasis: 'complete_system' as const,
+    coatRates: starterCoatRates(rate.ratePerHour),
+    applicationMethod: rate.key === 'siding' ? 'spray_backroll' as const : 'brush_roll' as const,
+    sellingRateSource: 'override' as const,
+    provenance: 'sample' as const,
+    reviewedAt: null,
+  })),
   materials: [
     { key: 'wallPaint', name: 'Regal Select Interior Matte', category: 'paint', brand: 'Benjamin Moore', unit: 'gallon', costPerUnit: '48.00', markupPercent: '32.00', coverageSqFt: '380.00', supplier: 'NorCal Paint Supply', sku: 'BM-REG-MATTE' },
     { key: 'trimPaint', name: 'ProClassic Waterborne Semi-Gloss', category: 'paint', brand: 'Sherwin-Williams', unit: 'gallon', costPerUnit: '56.00', markupPercent: '32.00', coverageSqFt: '350.00', supplier: 'Sherwin-Williams', sku: 'SW-PROCLASSIC-SG' },

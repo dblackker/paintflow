@@ -74,6 +74,12 @@ test('hours/item needs each and an explicit rate for the selected complete coat 
   }
 });
 
+test('legacy rate writes allow an empty table but reject incomplete custom passes', () => {
+  assert.equal(productionRateSchema.safeParse({ ...legacy, coatRates: {} }).success, true);
+  assert.equal(productionRateSchema.safeParse({ ...legacy, coatRates: { '1': '200' } }).success, false);
+  assert.equal(productionRateSchema.safeParse({ ...legacy, coatRates: { '1': '200', '2': '250' } }).success, true);
+});
+
 test('invalid numbers, null/blank/overflow prices, precision, enums and coat counts fail validation', () => {
   const patches = [
     { category: ' ' },
@@ -137,7 +143,7 @@ test('partial edits preserve existing basis, cost, calibration and provenance; r
   assert.equal(legacyEdit.rateBasis, 'legacy_per_coat');
 });
 
-test('new samples explicitly inherit sell, have calibrated complete tables and remain unreviewed', () => {
+test('new samples explicitly inherit sell, have complete starter tables and remain unreviewed', () => {
   assert.equal(SAMPLE_PRODUCTION_RATES.length, 10);
   for (const rate of SAMPLE_PRODUCTION_RATES) {
     assert.equal(rate.provenance, 'sample');
@@ -151,7 +157,7 @@ test('new samples explicitly inherit sell, have calibrated complete tables and r
   }
   assert.equal(
     SAMPLE_PRODUCTION_RATES.find((rate) => rate.category === 'exterior_siding')?.applicationMethod,
-    'spray_only',
+    'spray_backroll',
   );
 });
 

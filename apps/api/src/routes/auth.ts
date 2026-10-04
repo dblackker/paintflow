@@ -21,7 +21,7 @@ import {
 import { and, desc, eq } from 'drizzle-orm';
 import { sendEmail } from '../lib/email';
 import Stripe from 'stripe';
-import { PLAN_DEFINITIONS, TRIAL_DAYS, normalizePlanKey, planFeaturesPayload, type PlanKey } from '@crewmodo/core';
+import { PLAN_DEFINITIONS, TRIAL_DAYS, normalizePlanKey, planFeaturesPayload, STARTER_PRODUCTION_RATES, type PlanKey } from '@crewmodo/core';
 
 const auth = new Hono<{ Bindings: Env }>();
 
@@ -31,19 +31,6 @@ const DEFAULT_LEAD_SOURCES = [
   { name: 'Google Ads', type: 'paid_search', cost: '0.00' },
   { name: 'Referral', type: 'referral', cost: '0.00' },
   { name: 'Repeat customer', type: 'repeat', cost: '0.00' },
-];
-
-const DEFAULT_PRODUCTION_RATES = [
-  { category: 'walls', surfaceType: 'interior drywall', unit: 'sqft', ratePerHour: '400.00', hourlyRate: '65.00', prepMultiplier: '1.00', coats: 2, description: 'Interior walls, brush and roll, standard prep' },
-  { category: 'ceilings', surfaceType: 'interior drywall', unit: 'sqft', ratePerHour: '300.00', hourlyRate: '65.00', prepMultiplier: '1.10', coats: 2, description: 'Flat ceilings, standard prep' },
-  { category: 'trim', surfaceType: 'painted wood', unit: 'linear_ft', ratePerHour: '80.00', hourlyRate: '65.00', prepMultiplier: '1.25', coats: 2, description: 'Baseboards, casing, and crown trim' },
-  { category: 'doors', surfaceType: 'interior wood', unit: 'each', ratePerHour: '4.00', hourlyRate: '65.00', prepMultiplier: '1.15', coats: 2, description: 'Interior slab door, both sides' },
-  { category: 'cabinets', surfaceType: 'wood cabinet fronts', unit: 'each', ratePerHour: '0.50', hourlyRate: '75.00', prepMultiplier: '1.60', coats: 2, description: 'Cabinet door or drawer front with heavy prep' },
-  { category: 'exterior_siding', surfaceType: 'exterior siding', unit: 'sqft', ratePerHour: '200.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior siding, spray and back-roll where needed' },
-  { category: 'exterior_soffit', surfaceType: 'wood or aluminum', unit: 'sqft', ratePerHour: '125.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior soffits' },
-  { category: 'exterior_fascia', surfaceType: 'wood or composite', unit: 'linear_ft', ratePerHour: '55.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior fascia boards' },
-  { category: 'exterior_trim', surfaceType: 'window and door trim', unit: 'linear_ft', ratePerHour: '50.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior window and door trim' },
-  { category: 'exterior_corner_boards', surfaceType: 'wood or composite', unit: 'linear_ft', ratePerHour: '50.00', hourlyRate: '75.00', prepMultiplier: '1.35', coats: 2, description: 'Exterior corner boards' },
 ];
 
 const DEFAULT_ESTIMATE_TEMPLATES = [
@@ -624,7 +611,7 @@ async function seedWorkspaceDefaults(
   );
 
   await db.insert(productionRates).values(
-    DEFAULT_PRODUCTION_RATES.map((rate) => ({ orgId, ...rate }))
+    STARTER_PRODUCTION_RATES.map((rate) => ({ orgId, ...rate }))
   );
 
   await db.insert(estimateTemplates).values(
