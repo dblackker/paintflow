@@ -1,13 +1,40 @@
 import { Hono } from 'hono';
 import { createDb } from '@crewmodo/db';
 import { activities, emailSends, estimates, jobs, leads, messages, timeEntries } from '@crewmodo/db/schema';
-import { eq, and, gte, count, desc } from 'drizzle-orm';
+import { eq, and, gte, inArray, count, desc } from 'drizzle-orm';
+import { z } from 'zod';
+import { dashboardInsights, dashboardRange } from '../../../../packages/core/src/dashboard-insights';
+import { buildDashboardInsightsQuery } from '../lib/dashboard-insights';
+import { requireOrgPermission } from '../middleware/financial-access';
+import { queueActionEvent } from '../lib/action-telemetry';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
 
 const dashboard = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 dashboard.use('*', authMiddleware);
+
+const insightsQuery = z.object({
+  weeks: z.enum(['4', '8', '12']).default('8'),
+  timeZone: z.string().min(1).max(100).default('UTC').refine((value) => {
+    if (!/^(?:UTC|[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)+)$/.test(value)) return false;
+    try { new Intl.DateTimeFormat('en-US', { timeZone: value }).format(); return true; } catch { return false; }
+  }, 'Choose a valid timezone.'),
+});
+
+dashboard.get('/insights', requireOrgPermission(
+  ['view_reports', 'manage_leads', 'manage_estimates', 'manage_jobs'],
+  'Ask an owner for permission to view sales and operations insights.',
+), async (c) => {
+  const parsed = insightsQuery.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: 'Choose 4, 8, or 12 weeks and a valid timezone.', code: 'INVALID_INSIGHTS_RANGE' }, 400);
+  const range = dashboardRange(Number(parsed.data.weeks) as 4 | 8 | 12, parsed.data.timeZone);
+  const db = createDb(c.env.DATABASE_URL);
+  const result = await db.execute(buildDashboardInsightsQuery(c.get('orgId'), range));
+  c.header('Cache-Control', 'private, no-store');
+  queueActionEvent(c, { action: 'dashboard.insights.viewed', orgId: c.get('orgId'), actorId: c.get('userId'), entityId: `${range.startDate}:${range.weeks}`, occurredAt: range.asOf });
+  return c.json({ data: dashboardInsights(range, result.rows[0]) });
+});
 
 function estimateActivityLabel(status: string, sentAt?: Date | null) {
   if (status === 'accepted') return 'Estimate accepted';
@@ -50,7 +77,7 @@ dashboard.get('/stats', async (c) => {
   const activeLeads = await db
     .select({ count: count() })
     .from(leads)
-    .where(and(eq(leads.orgId, orgId), eq(leads.status, 'new')));
+    .where(and(eq(leads.orgId, orgId), inArray(leads.status, ['new', 'contacted', 'estimate_sent'])));
   
   // Estimates sent this month
   const startOfMonth = new Date();

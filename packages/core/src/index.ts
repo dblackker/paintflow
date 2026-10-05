@@ -3,6 +3,7 @@ export * from './margin';
 export * from './plans';
 export * from './estimation';
 export * from './estimation-rate-defaults';
+export * from './dashboard-insights';
 export * from './estimation-production';
 export * from './reporting';
 export * from './supplier-extraction';
