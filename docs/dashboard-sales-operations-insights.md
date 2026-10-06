@@ -29,13 +29,24 @@ Crewmodo adapts these patterns for short mobile sessions: weekly intake, a compa
 - Operations drilldowns link to server-filtered, cursor-paginated job lists or the calendar's scheduling queue. Filters persist on subsequent pages, rather than filtering only the first 50 loaded jobs.
 - The optional PostHog `dashboard.insights.viewed` milestone uses existing opaque tenant/actor IDs. It sends no names, addresses, lead counts, money, or timezone values; telemetry failure never blocks the report.
 
+## Owner Workday Overview
+
+The home page now prioritizes daily work before historical reporting. This aligns with [Jobber's dashboard](https://help.getjobber.com/en/articles/dashboard/) and [Housecall Pro's Home page](https://help.housecallpro.com/en/articles/6974306-homepage-overview-faq): actionable appointments, open items, balances, and recent activity rather than a wall of charts.
+
+- A single configurable shortcut group replaces duplicated quick actions. Four shortcuts stay visible; the rest use progressive disclosure. Cancelling customization discards edits, saving is single-flight, and organization ordering/visibility survives reloads. The shared dialog supplies focus trapping, background scroll locking, and mobile bottom-sheet behavior.
+- `GET /v1/dashboard/overview` returns bounded lists (four jobs/four tasks) with complete queue counts. Today follows the viewer's timezone, including 23/25-hour DST days. Multi-day jobs follow the calendar's weekday scheduling; explicit weekend-only work remains visible. Jobsite addresses take priority over customer mailing addresses. A company with existing customers is not treated as new just because recent counts are zero.
+- `GET /v1/dashboard/collections` independently requires invoice/settings financial permissions. Open customer invoices use the existing disposition-aware payment ledger, not invoice face values or net cash alone. Paid, closed, draft, legacy-refund-review, and in-flight-refund balances are not shown as collectible. Invoice totals aggregate as Postgres numeric values; overdue means a due calendar date strictly before today. This is **issued invoice receivables**, not revenue, unsigned proposal value, or future unissued milestones.
+- Needs attention surfaces overdue/due-today tasks, new inquiries, past-due invoices, and existing recommendations. Recommendations remain reviewable/manual actions; no email or financial operation runs automatically.
+- Weekly leads, the cohort funnel, and the operations queues remain below the workday sections. Setup stays compact; the old administration directory is replaced by Reports/Settings links. Recent activity keeps its shared timeline.
+- Refreshing preserves previously loaded content; optional service failures explain their own missing/stale data without hiding the entire dashboard. Financial access denial hides the monetary section, rather than presenting false zeros. Opt-in `dashboard.overview.viewed` telemetry uses opaque IDs and no names, addresses, counts, location, or money.
+
 ## Follow-Ups
 
 Customer records are the current lead unit. A future opportunity/project entity would allow repeat customers' distinct projects to have their own cohort and conversion history. Historical point-in-time funnels, staff/source comparisons, targets, and true stage-duration reports require stable event history and should not be inferred from `updated_at`.
 
 ## Validation
 
-- 288 unit tests and 117 real PostgreSQL integration tests passed, including tenant isolation, empty weeks, revisions, DST boundaries, authentication, invalid ranges, and job-filter pagination.
-- 24 dashboard browser checks passed across Chromium, mobile Chromium, and WebKit, at 360/390/768/1440px. Tests cover period changes, stable refreshing, outage recovery, empty cohorts, accessible chart descriptions, no horizontal overflow, and filtered-job navigation.
+- 288 unit tests and 123 real PostgreSQL integration tests passed, including tenant isolation, empty weeks, revisions, DST boundaries, authentication, invalid ranges, job-filter pagination, bounded daily queues, and disposition-aware invoice balances.
+- 45 dashboard browser checks passed across Chromium, mobile Chromium, and WebKit at 360/390/768/1440px: period changes, stable refreshing, outage recovery, empty cohorts, accessible chart descriptions, no horizontal overflow, filtered-job navigation, financial permissions, contextual activity links, and shortcut draft/cancel/single-flight save behavior.
 - API/web type checks, the full build, typography lint (unchanged 310-warning budget), button lint (unchanged 21-warning budget), and diff checks passed.
-- A separate unmocked local demo-login smoke test rendered both charts and the operations queue against the dev database with zero page errors and no mobile overflow. Existing demo customers outside the recent date window correctly produce zero new leads; no records were altered to fabricate recent activity.
+- A separate unmocked local demo-login smoke test received HTTP 200 from overview, collections, and insights, with zero page errors and no mobile overflow. Existing demo customers outside the recent date window correctly produce zero new leads; no business records were altered to fabricate recent activity.

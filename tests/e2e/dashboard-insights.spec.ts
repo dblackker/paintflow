@@ -34,6 +34,8 @@ async function fixture(page: Page) {
       return reply(route, { data: insight(Number(url.searchParams.get('weeks')) as DashboardWeeks, state.empty) });
     }
     if (url.pathname === '/v1/dashboard/stats') return reply(route, { data: { activeLeads: state.empty ? 0 : 14, estimatesSent: 10, jobsThisMonth: 6 } });
+    if (url.pathname === '/v1/dashboard/overview') return reply(route, { data: { date: '2026-10-04', timeZone: 'America/Los_Angeles', totalCustomers: state.empty ? 0 : 20, newLeads: 2, awaitingApproval: 10, overdueTasks: 0, dueToday: 0, todayJobCount: 0, todayJobs: [], tasks: [] } });
+    if (url.pathname === '/v1/dashboard/collections') return reply(route, { data: { invoiceCount: 2, outstanding: '800.00', overdueCount: 0, overdue: '0.00', reviewCount: 0 } });
     if (url.pathname === '/v1/dashboard/recommendations' || url.pathname === '/v1/activities/feed' || url.pathname === '/v1/settings/dashboard-actions') {
       if (state.failOptional) return reply(route, { error: 'Synthetic optional service outage' }, 503);
       return reply(route, { data: url.pathname.endsWith('dashboard-actions') ? { actions: [] } : [] });
