@@ -1,10 +1,13 @@
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowRight,
   BarChart3,
   Bell,
   BriefcaseBusiness,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
@@ -52,6 +55,8 @@ interface IconProps {
 }
 
 const icons: Record<string, LucideIcon> = {
+  'arrow-up': ArrowUp,
+  'arrow-down': ArrowDown,
   'arrow-right': ArrowRight,
   'bar-chart': BarChart3,
   bell: Bell,
@@ -59,6 +64,7 @@ const icons: Record<string, LucideIcon> = {
   calendar: CalendarDays,
   check: Check,
   'chevron-left': ChevronLeft,
+  'chevron-down': ChevronDown,
   'chevron-right': ChevronRight,
   clock: Clock3,
   close: X,

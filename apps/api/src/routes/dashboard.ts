@@ -5,7 +5,8 @@ import { eq, and, gte, inArray, count, desc } from 'drizzle-orm';
 import { z } from 'zod';
 import { dashboardInsights, dashboardRange } from '../../../../packages/core/src/dashboard-insights';
 import { buildDashboardInsightsQuery } from '../lib/dashboard-insights';
-import { requireOrgPermission } from '../middleware/financial-access';
+import { buildDashboardCollectionsQuery, buildDashboardOverviewQuery } from '../lib/dashboard-overview';
+import { financialAccess, requireOrgPermission } from '../middleware/financial-access';
 import { queueActionEvent } from '../lib/action-telemetry';
 import type { Env, Variables } from '../types';
 import { authMiddleware } from '../middleware/tenant';
@@ -20,6 +21,32 @@ const insightsQuery = z.object({
     if (!/^(?:UTC|[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)+)$/.test(value)) return false;
     try { new Intl.DateTimeFormat('en-US', { timeZone: value }).format(); return true; } catch { return false; }
   }, 'Choose a valid timezone.'),
+});
+
+dashboard.get('/overview', requireOrgPermission(
+  ['view_reports', 'manage_leads', 'manage_estimates', 'manage_jobs', 'manage_invoices'],
+  'Ask an owner for permission to view the workday overview.',
+), async (c) => {
+  const parsed = insightsQuery.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: 'Choose a valid timezone.', code: 'INVALID_DASHBOARD_RANGE' }, 400);
+  const range = dashboardRange(4, parsed.data.timeZone);
+  const result = await createDb(c.env.DATABASE_URL).execute(buildDashboardOverviewQuery(c.get('orgId'), range));
+  const row = result.rows[0];
+  c.header('Cache-Control', 'private, no-store');
+  queueActionEvent(c, { action: 'dashboard.overview.viewed', orgId: c.get('orgId'), actorId: c.get('userId'), entityId: range.endDate, occurredAt: range.asOf });
+  return c.json({ data: { ...row, date: range.endDate, timeZone: range.timeZone,
+    totalCustomers: Number(row.totalCustomers), newLeads: Number(row.newLeads), awaitingApproval: Number(row.awaitingApproval),
+    overdueTasks: Number(row.overdueTasks), dueToday: Number(row.dueToday), todayJobCount: Number(row.todayJobCount) } });
+});
+
+dashboard.get('/collections', financialAccess, async (c) => {
+  const parsed = insightsQuery.safeParse(c.req.query());
+  if (!parsed.success) return c.json({ error: 'Choose a valid timezone.', code: 'INVALID_DASHBOARD_RANGE' }, 400);
+  const range = dashboardRange(4, parsed.data.timeZone);
+  const result = await createDb(c.env.DATABASE_URL).execute(buildDashboardCollectionsQuery(c.get('orgId'), range.endDate));
+  const row = result.rows[0];
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({ data: { ...row, invoiceCount: Number(row.invoiceCount), overdueCount: Number(row.overdueCount), reviewCount: Number(row.reviewCount) } });
 });
 
 dashboard.get('/insights', requireOrgPermission(

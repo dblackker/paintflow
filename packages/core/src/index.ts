@@ -4,6 +4,7 @@ export * from './plans';
 export * from './estimation';
 export * from './estimation-rate-defaults';
 export * from './dashboard-insights';
+export * from './dashboard-overview';
 export * from './estimation-production';
 export * from './reporting';
 export * from './supplier-extraction';

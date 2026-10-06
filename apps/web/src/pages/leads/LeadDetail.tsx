@@ -618,7 +618,7 @@ export function LeadDetail() {
             </ul>
           </SectionCard>
 
-          <SectionCard title="Activities">
+          <SectionCard id="customer-activity" title="Activities">
             <form className="space-y-3 border-b p-4" onSubmit={submitActivity}>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Select

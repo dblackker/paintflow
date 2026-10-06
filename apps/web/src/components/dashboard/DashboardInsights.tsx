@@ -56,7 +56,7 @@ export function DashboardInsights({ refreshKey = 0 }: { refreshKey?: number }) {
     <section className="dashboard-insights" aria-label="Sales and operations insights">
       <header className="dashboard-insights-heading">
         <div>
-          <h2 className="pf-section-title">Sales &amp; operations</h2>
+          <h2 className="pf-section-title">Business performance</h2>
           <p className="pf-meta">{data ? `${date(data.range.startDate)} - ${date(data.range.endDate)}` : 'Lead trends and production queues'}</p>
         </div>
         <div className="dashboard-range">
